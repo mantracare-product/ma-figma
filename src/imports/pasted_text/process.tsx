@@ -1,0 +1,28 @@
+In Process.tsx, add a new workflow step called "Time Control" with these precise changes:
+
+Step 1: Register the step in both allSteps arrays
+There are two allSteps arrays in the file — one inside the drawer body's IIFE that renders the filtered step list, and one inside the footer "Add Step" button's onClick handler. Add an entry to both with key "timecontrol", name "Time Control", desc "Set time intervals, auto hangup rules, and silence detection for this stage.", iconKey "clock", cats array containing "all" and "workflow", and popular set to false.
+
+Step 2: Add six new state variables
+Near the other step-detail state variables, add tcTimeIntervalsEnabled as boolean useState defaulting to false, tcTimeIntervals as an array useState defaulting to empty array where each item has id as number, startTime as string, endTime as string, countryCode as string, and phoneNumber as string. Add tcAutoHangupEnabled as boolean useState defaulting to false, tcHangupMessage as string useState defaulting to empty string, tcSilenceEnabled as boolean useState defaulting to false, and tcSilenceDuration as number useState defaulting to 1.
+
+Step 3: Register all six in resetStepDetailState
+Inside the resetStepDetailState function, add reset calls for all six: set tcTimeIntervalsEnabled to false, set tcTimeIntervals to empty array, set tcAutoHangupEnabled to false, set tcHangupMessage to empty string, set tcSilenceEnabled to false, set tcSilenceDuration to 1.
+
+Step 4: Add the JSX block in the step detail drawer body
+Place a new conditional block after the scheduleappointment block and before the smartcallanalysis block, checking currentEditingStep.stepKey === "timecontrol". Inside it render a div with space-y-3 containing three collapsible accordion sections described below.
+
+Section A — Time Intervals:
+Render a rounded bordered div. Its header row is a flex div with justify-between and items-center padding 4, with a hover:bg-muted/20 cursor-pointer style. Clicking the header div only closes the section if already open — so attach an onClick that calls setTcTimeIntervalsEnabled(false) only when it's currently true. On the left of the header show a Clock icon with text-primary color and a bold small label "Time Intervals". On the right show a toggle switch bound to tcTimeIntervalsEnabled and setTcTimeIntervalsEnabled — wrap it in its own label with onClick e.stopPropagation() so clicking the toggle doesn't bubble to the header's close handler.
+When tcTimeIntervalsEnabled is true, show the expanded body below a top border. The body has a flex row with "Time Intervals" label on the left and an "Add Interval" button on the right — clicking it pushes a new object into tcTimeIntervals with id: Date.now(), empty startTime, empty endTime, countryCode defaulting to "+1", and empty phoneNumber. If tcTimeIntervals is empty show a small centered muted hint text. Map over tcTimeIntervals and for each render a bordered rounded card containing: a two-column grid with a Start Time input of type "time" and an End Time input of type "time", both updating their respective field in the matching array item by id. Below that row render a flex row with a country code select offering US +1, UK +44, IN +91, AU +61 options, a phone number tel input, and a "Remove" button that filters that item out of the array. If there is at least one interval, show a right-aligned blue Save button below the list that calls toast.success("Time intervals saved").
+
+Section B — Auto Hangup after interaction ends:
+Same accordion pattern. Header has a PhoneCall icon, bold label "Auto Hangup after interaction ends", and an Info icon with a tooltip saying "Automatically end the call when interaction completes". Toggle switch on the right with e.stopPropagation(). Header onClick closes if already enabled.
+When tcAutoHangupEnabled is true, show expanded body with a "Hangup Message" bold label, a small muted description saying "This message will be spoken before automatically ending the call", a resizable textarea with placeholder "Enter the message to be spoken before hanging up" bound to tcHangupMessage and setTcHangupMessage with 4 rows. Below it a right-aligned blue Save button calling toast.success("Auto hangup message saved").
+
+Section C — Auto Hangup after silence:
+Same accordion pattern. Header has a Clock icon, bold label "Auto Hangup after silence", and an Info icon with tooltip "Set timeout duration for silence detection". On the right side, when tcSilenceEnabled is true also show a small muted text displaying the current tcSilenceDuration value followed by "Minute" or "Minutes" depending on whether it equals 1 — wrap both the text and the toggle in a flex div with onClick e.stopPropagation(). Header onClick closes if already enabled.
+When tcSilenceEnabled is true, show expanded body with a "Silence Duration (Minutes)" bold label, a small muted description saying "Set how many minutes of silence before the call is automatically ended", a number input with min of 1 bound to tcSilenceDuration and setTcSilenceDuration parsing the value as integer with fallback 1. Below it a right-aligned blue Save button calling toast.success("Silence duration saved").
+
+Step 5: No exclusions needed
+Do not add "timecontrol" to any exclusion list. The Execution section and Conditions section already render for all steps not in their respective exclusion lists, so they will appear automatically for this new step.

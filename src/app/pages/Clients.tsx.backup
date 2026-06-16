@@ -1,0 +1,3261 @@
+import { useState, useRef, useEffect } from "react";
+import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users } from "lucide-react";
+import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
+import { Button } from "../components/ui/Button";
+import { Input } from "../components/ui/Input";
+import { Modal } from "../components/ui/Modal";
+import { Drawer } from "../components/ui/Drawer";
+import { Tooltip } from "../components/ui/Tooltip";
+import { toast } from "sonner";
+import PageHeader from "../components/layout/PageHeader";
+
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  countryCode: string;
+  countryFlag: string;
+  processes: string[];
+  process: string; // Primary/latest process
+  stage: string;
+  responsible?: string;
+  lastContact: string;
+  status: string;
+  companyName?: string;
+  jobPosition?: string;
+  numberOfEmployees?: string;
+}
+
+const initialClients: Client[] = [
+  // US Clients (12 total)
+  { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], process: "Patient Intake", stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
+  { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], process: "Patient Intake", stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
+  { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], process: "Follow-up Calls", stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
+  { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], process: "Appointment Scheduling", stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  { id: "CL-005", name: "Jessica Brown", email: "jbrown@email.com", phone: "5555678901", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Insurance Verification"], process: "Insurance Verification", stage: "Document Check", responsible: "Robert Wilson", lastContact: "2024-03-28", status: "Inactive" },
+  { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], process: "Follow-up Calls", stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], process: "Billing Support", stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
+  { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], process: "Patient Intake", stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], process: "Appointment Scheduling", stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-010", name: "Christopher Lee", email: "c.lee@email.com", phone: "5550123456", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], process: "Patient Intake", stage: "Insurance Verification", responsible: "Sarah Johnson", lastContact: "2024-04-07", status: "Inactive" },
+  { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], process: "Patient Intake", stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], process: "Insurance Verification", stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
+
+  // India Clients (10 total)
+  { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], process: "Patient Intake", stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], process: "Follow-up Calls", stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], process: "Billing Support", stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
+  { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], process: "Appointment Scheduling", stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-017", name: "Sneha Gupta", email: "sneha.g@email.com", phone: "9345678901", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], process: "Patient Intake", stage: "Initial Contact", responsible: "John Smith", lastContact: "2024-03-25", status: "Inactive" },
+  { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], process: "Follow-up Calls", stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], process: "Insurance Verification", stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], process: "Patient Intake", stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], process: "Appointment Scheduling", stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-022", name: "Aditya Mehta", email: "aditya.m@email.com", phone: "9890123456", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], process: "Follow-up Calls", stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-03-30", status: "Inactive" },
+
+  // UAE Clients (5 total)
+  { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], process: "Patient Intake", stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], process: "Follow-up Calls", stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
+  { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], process: "Appointment Scheduling", stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-026", name: "Layla Khalifa", email: "layla.k@email.com", phone: "504567890", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake"], process: "Patient Intake", stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-03-20", status: "Inactive" },
+  { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], process: "Follow-up Calls", stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
+
+  // UK Clients (3 total)
+  { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], process: "Patient Intake", stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-029", name: "Charlotte Evans", email: "charlotte.e@email.com", phone: "7423456789", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Insurance Verification"], process: "Insurance Verification", stage: "Approval", responsible: "Robert Wilson", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-030", name: "William Davies", email: "william.d@email.com", phone: "7434567890", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Billing Support", "Follow-up Calls"], process: "Billing Support", stage: "Payment Reminder", responsible: "Jessica Brown", lastContact: "2024-03-18", status: "Inactive" },
+];
+
+interface DraggableColumnHeaderProps {
+  columnKey: string;
+  index: number;
+  label: string;
+  moveColumn: (dragIndex: number, hoverIndex: number) => void;
+}
+
+const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ columnKey, index, label, moveColumn }) => {
+  const ref = useRef<HTMLTableCellElement>(null);
+
+  const [{ isDragging }, drag] = useDrag({
+    type: 'COLUMN',
+    item: { index, columnKey },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging(),
+    }),
+  });
+
+  const [, drop] = useDrop({
+    accept: 'COLUMN',
+    hover: (item: { index: number; columnKey: string }, monitor) => {
+      if (!ref.current) return;
+      const dragIndex = item.index;
+      const hoverIndex = index;
+      if (dragIndex === hoverIndex) return;
+
+      moveColumn(dragIndex, hoverIndex);
+      item.index = hoverIndex;
+    },
+  });
+
+  drag(drop(ref));
+
+  return (
+    <th
+      ref={ref}
+      className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap cursor-move"
+      style={{
+        color: '#FFFFFF',
+        fontFamily: 'Outfit, sans-serif',
+        opacity: isDragging ? 0.5 : 1,
+      }}
+    >
+      <div className="flex items-center gap-2">
+        <GripVertical className="w-4 h-4 opacity-50" />
+        {label}
+      </div>
+    </th>
+  );
+};
+
+export default function Clients() {
+  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showColumnToggle, setShowColumnToggle] = useState(false);
+  const [newClient, setNewClient] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    countryCode: "+1",
+    countryFlag: "🇺🇸",
+    process: "",
+    stage: [] as string[],
+    responsible: "",
+    preferredCallingTime: "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    inquiryType: "",
+    source: "",
+    referring: "",
+    companyName: "",
+    jobPosition: "",
+    numberOfEmployees: "",
+  });
+  const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
+  const [dateRange, setDateRange] = useState("Last 7 days");
+  const [showBulkActionsDropdown, setShowBulkActionsDropdown] = useState(false);
+  const [showBulkStageDropdown, setShowBulkStageDropdown] = useState(false);
+  const [isBulkEditMode, setIsBulkEditMode] = useState(false);
+  const [editedClients, setEditedClients] = useState<{[key: string]: {name?: string, email?: string, phone?: string}}>({});
+
+  // Schedule Call Modal
+  const [showScheduleCallModal, setShowScheduleCallModal] = useState(false);
+  const [selectedClientForScheduling, setSelectedClientForScheduling] = useState<Client | null>(null);
+  const [scheduledDate, setScheduledDate] = useState("");
+  const [scheduledTime, setScheduledTime] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+
+  // Client Profile Drawer
+  const [showProfileDrawer, setShowProfileDrawer] = useState(false);
+  const [selectedClientForProfile, setSelectedClientForProfile] = useState<Client | null>(null);
+  const [editingProcesses, setEditingProcesses] = useState(false);
+  const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
+  const [processSearchQuery, setProcessSearchQuery] = useState("");
+  const [selectedProcesses, setSelectedProcesses] = useState<string[]>([]);
+
+  // Client Profile Action Modals
+  const [showEditClientModal, setShowEditClientModal] = useState(false);
+  const [showSendMessageModal, setShowSendMessageModal] = useState(false);
+  const [showScheduleCallFromProfile, setShowScheduleCallFromProfile] = useState(false);
+  const [showUpdateStageModal, setShowUpdateStageModal] = useState(false);
+
+  // Edit Client Form State
+  const [editClientForm, setEditClientForm] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    location: "New York, NY",
+    status: "Active"
+  });
+
+  // Message Form State
+  const [messageForm, setMessageForm] = useState({
+    message: ""
+  });
+
+  // Update Stage Form State
+  const [selectedStage, setSelectedStage] = useState("");
+
+  // Process Tab state for drawer activity
+  const [activeProcessTabDrawer, setActiveProcessTabDrawer] = useState<string>("all");
+
+  // Client Profile Drawer Tab state
+  const [activeProfileTab, setActiveProfileTab] = useState<"profile" | "activity" | "processes" | "notes">("profile");
+
+  // Table scroll state
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+  const [showScrollLeftIndicator, setShowScrollLeftIndicator] = useState(false);
+  const scrollIntervalRef = useRef<number | null>(null);
+
+  // Call Details Drawer (from Client Profile)
+  const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState({
+    name: true,
+    email: true,
+    phone: true,
+    process: true,
+    responsible: true,
+    lastContact: true,
+    status: true,
+  });
+
+  const [columnOrder, setColumnOrder] = useState<string[]>([
+    'name',
+    'email',
+    'phone',
+    'process',
+    'responsible',
+    'lastContact',
+    'status',
+  ]);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+  const totalRecords = 5380; // Mock total for demonstration
+
+  // Selection state
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+  // Bulk action modals
+  const [showTriggerCallsModal, setShowTriggerCallsModal] = useState(false);
+  const [scheduleOption, setScheduleOption] = useState<"immediate" | "scheduled">("immediate");
+  const [triggerScheduledDate, setTriggerScheduledDate] = useState("");
+  const [triggerScheduledTime, setTriggerScheduledTime] = useState("");
+
+  // Process and Stage mapping
+  const processStages: { [key: string]: string[] } = {
+    "Patient Intake": ["Initial Contact", "Insurance Verify", "Schedule Appt", "Appointment"],
+    "Follow-up Calls": ["Initial Contact", "Appointment", "Completed"],
+    "Billing Support": ["Initial Contact", "Billing Inquiry", "Issue Resolution", "Payment Reminder"],
+    "Appointment Scheduling": ["Initial Contact", "Slot Selection", "Confirmation", "Completed"],
+    "Insurance Verification": ["Initial Contact", "Document Check", "Verification", "Approval"],
+  };
+
+  const availableProcesses = Object.keys(processStages);
+
+  // Combined stages for Add New Client modal and process editing
+  const combinedStages = [
+    "Patient Intake: Initial Contact",
+    "Patient Intake: Insurance Verify",
+    "Patient Intake: Schedule Appointment",
+    "Follow-up Calls: Post-Visit Check",
+    "Follow-up Calls: Medication Reminder",
+    "Billing Support: Initial Contact",
+    "Billing Support: Billing Inquiry",
+    "Billing Support: Issue Resolution",
+    "Billing Support: Payment Reminder",
+    "Appointment Scheduling: Initial Contact",
+    "Appointment Scheduling: Slot Selection",
+    "Appointment Scheduling: Confirmation",
+    "Insurance Verification: Initial Contact",
+    "Insurance Verification: Document Check",
+    "Insurance Verification: Verification",
+  ];
+
+  // Team members / Employees list
+  const teamMembers = [
+    "John Smith",
+    "Sarah Johnson",
+    "Michael Chen",
+    "Emily Davis",
+    "Robert Wilson",
+    "Jessica Brown",
+    "David Martinez",
+    "Amanda Taylor",
+  ];
+
+  const countries = [
+    { code: "+1", flag: "🇺🇸", name: "United States" },
+    { code: "+1", flag: "🇨🇦", name: "Canada" },
+    { code: "+91", flag: "🇮🇳", name: "India" },
+    { code: "+44", flag: "🇬🇧", name: "United Kingdom" },
+    { code: "+61", flag: "🇦🇺", name: "Australia" },
+  ];
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (processDropdownOpen && !target.closest('.process-dropdown-container')) {
+        setProcessDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [processDropdownOpen]);
+
+  // Check if table needs horizontal scroll
+  useEffect(() => {
+    const checkScroll = () => {
+      if (tableScrollRef.current) {
+        const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+        const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
+        const canScrollLeft = scrollLeft > 10;
+        setShowScrollIndicator(canScrollRight);
+        setShowScrollLeftIndicator(canScrollLeft);
+      }
+    };
+
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+
+    return () => {
+      window.removeEventListener('resize', checkScroll);
+      if (scrollIntervalRef.current) {
+        clearInterval(scrollIntervalRef.current);
+      }
+    };
+  }, [clients]);
+
+  const handleScrollRightMouseEnter = () => {
+    scrollIntervalRef.current = window.setInterval(() => {
+      if (tableScrollRef.current) {
+        tableScrollRef.current.scrollLeft += 5;
+        const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+        if (scrollLeft >= scrollWidth - clientWidth) {
+          if (scrollIntervalRef.current) {
+            clearInterval(scrollIntervalRef.current);
+            scrollIntervalRef.current = null;
+          }
+        }
+      }
+    }, 20);
+  };
+
+  const handleScrollLeftMouseEnter = () => {
+    scrollIntervalRef.current = window.setInterval(() => {
+      if (tableScrollRef.current) {
+        tableScrollRef.current.scrollLeft -= 5;
+        if (tableScrollRef.current.scrollLeft <= 0) {
+          if (scrollIntervalRef.current) {
+            clearInterval(scrollIntervalRef.current);
+            scrollIntervalRef.current = null;
+          }
+        }
+      }
+    }, 20);
+  };
+
+  const handleScrollMouseLeave = () => {
+    if (scrollIntervalRef.current) {
+      clearInterval(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+  };
+
+  const moveClient = (dragIndex: number, hoverIndex: number) => {
+    const draggedClient = paginatedClients[dragIndex];
+    const updatedClients = [...paginatedClients];
+    updatedClients.splice(dragIndex, 1);
+    updatedClients.splice(hoverIndex, 0, draggedClient);
+
+    // Update the main clients array
+    const startIndex = (currentPage - 1) * rowsPerPage;
+    const newClients = [...clients];
+    const paginatedUpdated = updatedClients.map((c, idx) => {
+      const globalIndex = startIndex + idx;
+      return newClients[globalIndex];
+    });
+
+    updatedClients.forEach((client, idx) => {
+      newClients[startIndex + idx] = client;
+    });
+
+    setClients(newClients);
+  };
+
+  const moveColumn = (dragIndex: number, hoverIndex: number) => {
+    const newColumnOrder = [...columnOrder];
+    const [draggedColumn] = newColumnOrder.splice(dragIndex, 1);
+    newColumnOrder.splice(hoverIndex, 0, draggedColumn);
+    setColumnOrder(newColumnOrder);
+  };
+
+  const renderCell = (columnKey: string, client: Client) => {
+    switch (columnKey) {
+      case 'name':
+        return (
+          <td key="name" className="px-4 py-2.5 whitespace-nowrap">
+            {isBulkEditMode && selectedRows.has(client.id) ? (
+              <input
+                type="text"
+                value={editedClients[client.id]?.name ?? client.name}
+                onChange={(e) => handleEditClient(client.id, 'name', e.target.value)}
+                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
+              />
+            ) : (
+              <span className="font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{client.name}</span>
+            )}
+          </td>
+        );
+      case 'email':
+        return (
+          <td key="email" className="px-4 py-2.5 whitespace-nowrap">
+            {isBulkEditMode && selectedRows.has(client.id) ? (
+              <input
+                type="email"
+                value={editedClients[client.id]?.email ?? client.email}
+                onChange={(e) => handleEditClient(client.id, 'email', e.target.value)}
+                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              />
+            ) : (
+              <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{client.email}</span>
+            )}
+          </td>
+        );
+      case 'phone':
+        return (
+          <td key="phone" className="px-4 py-2.5 whitespace-nowrap">
+            {isBulkEditMode && selectedRows.has(client.id) ? (
+              <input
+                type="tel"
+                value={editedClients[client.id]?.phone ?? client.phone}
+                onChange={(e) => handleEditClient(client.id, 'phone', e.target.value)}
+                className="w-full px-3 py-1.5 bg-input-background border-2 border-primary/50 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              />
+            ) : (
+              <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{client.phone}</span>
+            )}
+          </td>
+        );
+      case 'process':
+        return (
+          <td key="process" className="px-4 py-2.5 text-sm whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            {client.process}
+          </td>
+        );
+      case 'responsible':
+        return (
+          <td key="responsible" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+            {client.responsible || '-'}
+          </td>
+        );
+      case 'lastContact':
+        return (
+          <td key="lastContact" className="px-4 py-2.5 text-xs whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+            {client.lastContact}
+          </td>
+        );
+      case 'status':
+        return (
+          <td key="status" className="px-4 py-2.5 whitespace-nowrap">
+            <span
+              className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                client.status === "Active"
+                  ? "bg-success-bg text-success"
+                  : client.status === "Pending"
+                  ? "bg-warning-bg text-warning"
+                  : "bg-muted text-muted-foreground"
+              }`}
+            >
+              {client.status}
+            </span>
+          </td>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const handleAddClient = () => {
+    // Validate required fields
+    if (!newClient.name || !newClient.phone || newClient.stage.length === 0 || !newClient.responsible) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+
+    // Validate email format if provided
+    if (newClient.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newClient.email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    // Extract process from first selected stage
+    const firstStage = newClient.stage[0];
+    const extractedProcess = firstStage.split(":")[0].trim();
+
+    const client: Client = {
+      id: String(clients.length + 1),
+      name: newClient.name,
+      email: newClient.email,
+      phone: `${newClient.countryCode} ${newClient.phone}`,
+      country: "United States",
+      countryCode: newClient.countryCode,
+      countryFlag: newClient.countryFlag,
+      processes: [extractedProcess],
+      process: extractedProcess,
+      stage: newClient.stage.join(", "),
+      responsible: newClient.responsible,
+      lastContact: new Date().toISOString().split("T")[0],
+      status: "Active",
+    };
+
+    setClients([client, ...clients]);
+
+    // Reset form
+    setNewClient({
+      name: "",
+      email: "",
+      phone: "",
+      countryCode: "+1",
+      countryFlag: "🇺🇸",
+      process: "",
+      stage: [] as string[],
+      responsible: "",
+      preferredCallingTime: "",
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      inquiryType: "",
+      source: "",
+      referring: "",
+      companyName: "",
+      jobPosition: "",
+      numberOfEmployees: "",
+    });
+    setShowAdditionalDetails(false);
+    setShowAddModal(false);
+
+    toast.success("Client added successfully");
+  };
+
+  const handleDeleteClient = (id: string) => {
+    setClients(clients.filter((c) => c.id !== id));
+    toast.success("Client deleted");
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+
+  const handleImport = () => {
+    if (!selectedFile) {
+      toast.error("Please select a file to import");
+      return;
+    }
+
+    // Simulate import process
+    toast.success(`Importing clients from ${selectedFile.name}...`);
+    setShowImportModal(false);
+    setSelectedFile(null);
+  };
+
+  const handleDownloadTemplate = () => {
+    // In a real app, this would download an actual CSV file
+    toast.success("Sample CSV template downloaded");
+  };
+
+  const handleEnterBulkEdit = () => {
+    setIsBulkEditMode(true);
+    setShowBulkActionsDropdown(false);
+    // Initialize edited clients with current values
+    const initialEdits: {[key: string]: {name?: string, email?: string, phone?: string}} = {};
+    Array.from(selectedRows).forEach(id => {
+      const client = clients.find(c => c.id === id);
+      if (client) {
+        initialEdits[id] = {
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+        };
+      }
+    });
+    setEditedClients(initialEdits);
+  };
+
+  const handleSaveBulkEdit = () => {
+    // Apply changes to clients
+    const updatedClients = clients.map(client => {
+      if (editedClients[client.id]) {
+        return {
+          ...client,
+          name: editedClients[client.id].name || client.name,
+          email: editedClients[client.id].email || client.email,
+          phone: editedClients[client.id].phone || client.phone,
+        };
+      }
+      return client;
+    });
+    setClients(updatedClients);
+    setIsBulkEditMode(false);
+    setEditedClients({});
+    toast.success(`${selectedRows.size} client(s) updated successfully`);
+  };
+
+  const handleCancelBulkEdit = () => {
+    setIsBulkEditMode(false);
+    setEditedClients({});
+  };
+
+  const handleEditClient = (id: string, field: 'name' | 'email' | 'phone', value: string) => {
+    setEditedClients(prev => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        [field]: value,
+      }
+    }));
+  };
+
+  const handleOpenScheduleModal = (client: Client) => {
+    setSelectedClientForScheduling(client);
+    // Set default date to today
+    const today = new Date();
+    setScheduledDate(today.toISOString().split("T")[0]);
+    setScheduledTime("09:00");
+    setSelectedMonth(today.getMonth());
+    setSelectedYear(today.getFullYear());
+    setShowScheduleCallModal(true);
+  };
+
+  const handleScheduleCall = () => {
+    if (!selectedClientForScheduling || !scheduledDate || !scheduledTime) {
+      toast.error("Please select date and time");
+      return;
+    }
+
+    // In a real app, this would save to backend
+    toast.success("Call scheduled successfully");
+    setShowScheduleCallModal(false);
+    setSelectedClientForScheduling(null);
+    setScheduledDate("");
+    setScheduledTime("");
+  };
+
+  const handleToggleProcess = (processName: string) => {
+    setSelectedProcesses(prev =>
+      prev.includes(processName)
+        ? prev.filter(p => p !== processName)
+        : [...prev, processName]
+    );
+  };
+
+  const handleSaveProcesses = () => {
+    if (!selectedClientForProfile) return;
+
+    const updatedClients = clients.map(c =>
+      c.id === selectedClientForProfile.id
+        ? { ...c, processes: selectedProcesses, process: selectedProcesses[0] || c.process }
+        : c
+    );
+
+    setClients(updatedClients);
+    setSelectedClientForProfile({
+      ...selectedClientForProfile,
+      processes: selectedProcesses,
+      process: selectedProcesses[0] || selectedClientForProfile.process
+    });
+    setEditingProcesses(false);
+    setProcessDropdownOpen(false);
+    toast.success("Processes updated successfully");
+  };
+
+  const handleOpenEditClient = () => {
+    if (!selectedClientForProfile) return;
+    setEditClientForm({
+      name: selectedClientForProfile.name,
+      email: selectedClientForProfile.email,
+      phone: selectedClientForProfile.phone,
+      location: "New York, NY",
+      status: selectedClientForProfile.status
+    });
+    setShowEditClientModal(true);
+  };
+
+  const handleSaveEditClient = () => {
+    if (!selectedClientForProfile) return;
+
+    const updatedClients = clients.map(c =>
+      c.id === selectedClientForProfile.id
+        ? { ...c, name: editClientForm.name, email: editClientForm.email, phone: editClientForm.phone, status: editClientForm.status }
+        : c
+    );
+
+    setClients(updatedClients);
+    setSelectedClientForProfile({
+      ...selectedClientForProfile,
+      name: editClientForm.name,
+      email: editClientForm.email,
+      phone: editClientForm.phone,
+      status: editClientForm.status
+    });
+    setShowEditClientModal(false);
+    toast.success("Client information updated successfully");
+  };
+
+  const handleCallNow = () => {
+    if (!selectedClientForProfile) return;
+    toast.success(`Calling ${selectedClientForProfile.name}...`);
+  };
+
+  const handleSendMessage = () => {
+    if (!selectedClientForProfile) return;
+    setMessageForm({ message: "" });
+    setShowSendMessageModal(true);
+  };
+
+  const handleSendMessageSubmit = () => {
+    if (!messageForm.message.trim()) {
+      toast.error("Please enter a message");
+      return;
+    }
+    setShowSendMessageModal(false);
+    toast.success("Message sent successfully");
+    setMessageForm({ message: "" });
+  };
+
+  const handleOpenScheduleCallFromProfile = () => {
+    if (!selectedClientForProfile) return;
+    setSelectedClientForScheduling(selectedClientForProfile);
+    setShowScheduleCallFromProfile(true);
+    setScheduledDate("");
+    setScheduledTime("");
+  };
+
+  const handleSaveScheduleCallFromProfile = () => {
+    if (!scheduledDate || !scheduledTime) {
+      toast.error("Please select both date and time");
+      return;
+    }
+    setShowScheduleCallFromProfile(false);
+    toast.success("Call scheduled successfully");
+    setScheduledDate("");
+    setScheduledTime("");
+  };
+
+  const handleOpenUpdateStage = () => {
+    if (!selectedClientForProfile) return;
+    setSelectedStage(selectedClientForProfile.stage);
+    setShowUpdateStageModal(true);
+  };
+
+  const handleSaveUpdateStage = () => {
+    if (!selectedClientForProfile || !selectedStage) return;
+
+    const updatedClients = clients.map(c =>
+      c.id === selectedClientForProfile.id
+        ? { ...c, stage: selectedStage }
+        : c
+    );
+
+    setClients(updatedClients);
+    setSelectedClientForProfile({
+      ...selectedClientForProfile,
+      stage: selectedStage
+    });
+    setShowUpdateStageModal(false);
+    toast.success("Stage updated successfully");
+  };
+
+  const handleViewCallDetails = (callId: string) => {
+    setSelectedCallId(callId);
+    setShowCallDetailsFromProfile(true);
+  };
+
+  // Mock data for drawer - Sarah Johnson's processes and activities
+  const drawerClientProcesses = selectedClientForProfile ? (() => {
+    // Extract unique headings from processes (part before colon)
+    const headings = new Set<string>();
+    selectedClientForProfile.processes.forEach((processName) => {
+      const parts = processName.split(':');
+      if (parts.length >= 1) {
+        headings.add(parts[0].trim());
+      }
+    });
+
+    return Array.from(headings).map((heading, idx) => ({
+      id: `process-${idx + 1}`,
+      name: heading,
+      currentStage: idx === 0 ? "Insurance Verification" : "Billing Inquiry",
+      lastActivity: "Apr 10, 2024"
+    }));
+  })() : [];
+
+  const drawerActivityItems = selectedClientForProfile ? (() => {
+    // Helper function to find process ID by heading
+    const findProcessId = (heading: string) => {
+      const process = drawerClientProcesses.find(p => p.name === heading);
+      return process?.id || "process-1";
+    };
+
+    return [
+      {
+        id: "act-1",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "outbound_call" as const,
+        date: "Apr 10, 2024",
+        time: "2:30 PM",
+        title: "Outbound Call Completed",
+        stage: "Insurance Verification",
+        duration: "4:32",
+        status: "Completed",
+        callId: "call-001",
+      },
+      {
+        id: "act-2",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "stage_change" as const,
+        date: "Apr 8, 2024",
+        time: "10:15 AM",
+        title: "Stage Changed",
+        description: "Moved from Initial Contact → Insurance Verification",
+      },
+      {
+        id: "act-3",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "outbound_call" as const,
+        date: "Apr 8, 2024",
+        time: "9:30 AM",
+        title: "Outbound Call Completed",
+        stage: "Initial Contact",
+        duration: "3:15",
+        status: "Completed",
+        callId: "call-002",
+      },
+      {
+        id: "act-4",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "failed_call" as const,
+        date: "Apr 7, 2024",
+        time: "5:20 PM",
+        title: "Outbound Call Failed",
+        stage: "Initial Contact",
+        duration: "0:00",
+        status: "Failed",
+        callId: "call-003",
+      },
+      {
+        id: "act-5",
+        processId: findProcessId("Follow-up Calls"),
+        processName: "Follow-up Calls",
+        type: "inbound_call" as const,
+        date: "Apr 10, 2024",
+        time: "1:45 PM",
+        title: "Inbound Call Received",
+        stage: "Follow-up",
+        duration: "5:05",
+        status: "Completed",
+        callId: "call-006",
+      },
+    ];
+  })() : [];
+
+  const getDrawerActivityCount = (processId: string) => {
+    if (processId === "all") return drawerActivityItems.length;
+    return drawerActivityItems.filter(item => item.processId === processId).length;
+  };
+
+  const filteredDrawerActivities = activeProcessTabDrawer === "all"
+    ? drawerActivityItems
+    : drawerActivityItems.filter(item => item.processId === activeProcessTabDrawer);
+
+  const selectedDrawerProcess = drawerClientProcesses.find(p => p.id === activeProcessTabDrawer);
+
+  const getDrawerActivityIcon = (type: string) => {
+    switch (type) {
+      case "outbound_call": return <PhoneOutgoing className="w-5 h-5" />;
+      case "inbound_call": return <PhoneIncoming className="w-5 h-5" />;
+      case "failed_call": return <PhoneOff className="w-5 h-5" />;
+      case "stage_change": return <Settings className="w-5 h-5" />;
+      case "call_scheduled": return <CalendarClock className="w-5 h-5" />;
+      default: return <Clock className="w-5 h-5" />;
+    }
+  };
+
+  const getDrawerActivityColor = (type: string) => {
+    switch (type) {
+      case "outbound_call":
+      case "inbound_call":
+        return "text-secondary bg-secondary/10";
+      case "failed_call":
+        return "text-destructive bg-destructive/10";
+      case "stage_change":
+        return "text-primary bg-primary/10";
+      case "call_scheduled":
+        return "text-warning bg-warning/10";
+      default:
+        return "text-muted-foreground bg-muted";
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type === "text/csv" || file.name.endsWith('.csv')) {
+        setSelectedFile(file);
+      } else {
+        toast.error("Please upload a CSV file");
+      }
+    }
+  };
+
+  const handleExport = () => {
+    setIsExporting(true);
+    toast.loading("Exporting data...");
+
+    // Simulate export process
+    setTimeout(() => {
+      setIsExporting(false);
+      toast.dismiss();
+      toast.success("Clients data exported successfully");
+      // In a real app, this would trigger a file download
+    }, 2000);
+  };
+
+  // Selection handlers
+  const handleSelectAll = () => {
+    const currentPageClients = paginatedClients.map((c) => c.id);
+    if (currentPageClients.every((id) => selectedRows.has(id))) {
+      // Deselect all on current page
+      setSelectedRows(new Set([...selectedRows].filter((id) => !currentPageClients.includes(id))));
+    } else {
+      // Select all on current page
+      setSelectedRows(new Set([...selectedRows, ...currentPageClients]));
+    }
+  };
+
+  const handleSelectRow = (id: string) => {
+    const newSelected = new Set(selectedRows);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedRows(newSelected);
+  };
+
+  const handleRowsPerPageChange = (newRowsPerPage: number) => {
+    setRowsPerPage(newRowsPerPage);
+    setCurrentPage(1); // Reset to first page
+  };
+
+  // Bulk actions
+  const handleTriggerCalls = () => {
+    const count = selectedRows.size;
+    if (scheduleOption === "immediate") {
+      toast.success(`${count} call${count > 1 ? 's' : ''} triggered successfully`);
+    } else {
+      toast.success(`${count} call${count > 1 ? 's' : ''} scheduled for ${triggerScheduledDate} at ${triggerScheduledTime}`);
+    }
+    setSelectedRows(new Set());
+    setShowTriggerCallsModal(false);
+    setScheduleOption("immediate");
+    setTriggerScheduledDate("");
+    setTriggerScheduledTime("");
+  };
+
+  const handleClearSelection = () => {
+    setSelectedRows(new Set());
+  };
+
+  // Pagination logic
+  const filteredClients = clients.filter((client) =>
+    client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.phone.includes(searchQuery)
+  );
+
+  const totalPages = Math.ceil(totalRecords / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const endIndex = Math.min(startIndex + rowsPerPage, totalRecords);
+  const paginatedClients = filteredClients.slice(0, rowsPerPage); // Show only first page of filtered results
+
+  // Check if all rows on current page are selected
+  const currentPageClientIds = paginatedClients.map((c) => c.id);
+  const allSelected = currentPageClientIds.length > 0 && currentPageClientIds.every((id) => selectedRows.has(id));
+  const someSelected = currentPageClientIds.some((id) => selectedRows.has(id)) && !allSelected;
+
+  return (
+    <DndProvider backend={HTML5Backend}>
+      <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
+        <div className="py-6 px-[150px] space-y-8">
+        <PageHeader
+          title="Clients"
+          subtitle="Manage your clients"
+        />
+
+      {/* Action Bar */}
+      <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex-1 min-w-64">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search clients..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 bg-input-background border border-input rounded-xl"
+              />
+            </div>
+          </div>
+
+          <Tooltip text="Filter">
+            <div className="relative">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowFilterPanel(!showFilterPanel);
+                  setShowColumnToggle(false);
+                }}
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+
+              {showFilterPanel && (
+              <div className="absolute right-0 mt-2 w-80 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
+                <h3 className="font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Filters</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Created within</label>
+                    <select
+                      value={dateRange}
+                      onChange={(e) => setDateRange(e.target.value)}
+                      className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+                    >
+                      <option>Last 7 days</option>
+                      <option>Last 30 days</option>
+                      <option>Custom</option>
+                    </select>
+                  </div>
+                  {dateRange === "Custom" && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Start Date</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                          />
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>End Date</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                          />
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Process</label>
+                    <select className="w-full px-4 py-2 bg-input-background border border-input rounded-xl">
+                      <option>All Processes</option>
+                      <option>Patient Intake</option>
+                      <option>Follow-up Calls</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>Status</label>
+                    <select className="w-full px-4 py-2 bg-input-background border border-input rounded-xl">
+                      <option>All Status</option>
+                      <option>Active</option>
+                      <option>Pending</option>
+                      <option>Inactive</option>
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="primary" size="sm" onClick={() => setShowFilterPanel(false)}>Apply</Button>
+                    <Button variant="outline" size="sm">Reset</Button>
+                  </div>
+                </div>
+              </div>
+              )}
+            </div>
+          </Tooltip>
+
+          <Tooltip text="Customize Columns">
+            <div className="relative">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowColumnToggle(!showColumnToggle);
+                  setShowFilterPanel(false);
+                }}
+              >
+                <SettingsIcon className="w-4 h-4" />
+              </Button>
+
+              {showColumnToggle && (
+              <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
+                <h3 className="font-semibold mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
+                <div className="space-y-2">
+                  {Object.keys(visibleColumns).map((col) => (
+                    <label key={col} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={visibleColumns[col as keyof typeof visibleColumns]}
+                        onChange={(e) =>
+                          setVisibleColumns({
+                            ...visibleColumns,
+                            [col]: e.target.checked,
+                          })
+                        }
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>{col}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              )}
+            </div>
+          </Tooltip>
+
+          <Tooltip text="Add Client">
+            <Button variant="primary" onClick={() => setShowAddModal(true)}>
+              <Plus className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip text="Import">
+            <Button variant="outline" onClick={() => setShowImportModal(true)}>
+              <Upload className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+
+          <Tooltip text="Export">
+            <Button variant="outline" onClick={handleExport} loading={isExporting}>
+              <Download className="w-4 h-4" />
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
+
+      {/* Bulk Action Bar */}
+      {selectedRows.size > 0 && (
+        <div className="bg-card rounded-xl border border-border shadow-sm">
+          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                {selectedRows.size} selected
+              </span>
+              <button
+                onClick={handleClearSelection}
+                className="text-xs hover:text-foreground transition-colors"
+                style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}
+              >
+                Clear selection
+              </button>
+            </div>
+            <div className="flex items-center gap-2">
+              {!isBulkEditMode ? (
+                <>
+                  <div className="relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowBulkActionsDropdown(!showBulkActionsDropdown)}
+                    >
+                      <List className="w-3.5 h-3.5" />
+                      Select action
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </Button>
+
+                    {showBulkActionsDropdown && (
+                      <div className="absolute right-0 mt-2 w-64 bg-card border border-border rounded-xl shadow-lg z-50 py-1">
+                        {[
+                          { label: "Add task", icon: FileText },
+                          { label: "Change stage", icon: ArrowRight },
+                          { label: "Move to pipeline", icon: List },
+                          { label: "Change responsible person", icon: User },
+                          { label: "Add observers", icon: Eye },
+                          { label: "Update report data", icon: FileText },
+                          { label: "Schedule bulk dialing", icon: Phone },
+                          { label: "Make public", icon: Eye },
+                          { label: "Restart automation rules", icon: Play },
+                          { label: "Add to exceptions", icon: Settings },
+                        ].map((action, index) => {
+                          const Icon = action.icon;
+                          return (
+                            <button
+                              key={index}
+                              onClick={() => {
+                                if (action.label === "Change stage") {
+                                  setShowBulkActionsDropdown(false);
+                                  setShowBulkStageDropdown(true);
+                                } else {
+                                  setShowBulkActionsDropdown(false);
+                                  toast.info(`${action.label} - Coming soon`);
+                                }
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left"
+                            >
+                              <Icon className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-sm text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {action.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {showBulkStageDropdown && (
+                      <div className="absolute right-0 mt-2 w-72 bg-card border border-border rounded-xl shadow-lg z-50 py-1">
+                        <div className="px-4 py-2.5 border-b border-border">
+                          <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            Select Stage
+                          </span>
+                        </div>
+                        {combinedStages.map((stage, index) => (
+                          <button
+                            key={index}
+                            onClick={() => {
+                              // Apply stage to all selected clients
+                              setClients(prev => prev.map(client =>
+                                selectedRows.has(client.id)
+                                  ? { ...client, stage }
+                                  : client
+                              ));
+                              setShowBulkStageDropdown(false);
+                              toast.success(`Stage updated to "${stage}" for ${selectedRows.size} client(s)`);
+                            }}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left"
+                          >
+                            <span className="text-sm text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              {stage}
+                            </span>
+                          </button>
+                        ))}
+                        <div className="border-t border-border mt-1 pt-1">
+                          <button
+                            onClick={() => setShowBulkStageDropdown(false)}
+                            className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition-colors text-left"
+                          >
+                            <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Cancel
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setShowTriggerCallsModal(true)}
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    Trigger Calls
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEnterBulkEdit}
+                  >
+                    <Edit className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelBulkEdit}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleSaveBulkEdit}
+                  >
+                    Save
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
+        <div
+          ref={tableScrollRef}
+          className="overflow-x-auto scrollbar-hide"
+          onScroll={() => {
+            if (tableScrollRef.current) {
+              const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+              const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
+              const canScrollLeft = scrollLeft > 10;
+              setShowScrollIndicator(canScrollRight);
+              setShowScrollLeftIndicator(canScrollLeft);
+            }
+          }}
+        >
+          <table className="w-full min-w-[1200px]">
+            <thead className="border-b border-border" style={{ backgroundColor: '#314158' }}>
+              <tr>
+                <th className="px-4 py-2.5 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={handleSelectAll}
+                    className="w-4 h-4 cursor-pointer"
+                  />
+                </th>
+                {columnOrder.map((columnKey, index) => {
+                  const columnLabels: { [key: string]: string } = {
+                    name: 'Name',
+                    email: 'Email',
+                    phone: 'Phone',
+                    process: 'Process',
+                    responsible: 'Responsible',
+                    lastContact: 'Last Contact',
+                    status: 'Status',
+                  };
+
+                  return visibleColumns[columnKey as keyof typeof visibleColumns] ? (
+                    <DraggableColumnHeader
+                      key={columnKey}
+                      columnKey={columnKey}
+                      index={index}
+                      label={columnLabels[columnKey]}
+                      moveColumn={moveColumn}
+                    />
+                  ) : null;
+                })}
+                <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider whitespace-nowrap" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {paginatedClients.map((client) => (
+                <tr
+                  key={client.id}
+                  className={`transition-colors ${
+                    selectedRows.has(client.id)
+                      ? "bg-[#E8F0FE]"
+                      : "hover:bg-[#F1F5F9]"
+                  }`}
+                >
+                  <td className="px-4 py-2.5">
+                    <input
+                      type="checkbox"
+                      checked={selectedRows.has(client.id)}
+                      onChange={() => handleSelectRow(client.id)}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </td>
+                  {columnOrder.map((columnKey) =>
+                    visibleColumns[columnKey as keyof typeof visibleColumns] ? renderCell(columnKey, client) : null
+                  )}
+                  <td className="px-4 py-2.5 whitespace-nowrap">
+                    <div className="flex items-center justify-center gap-1">
+                      <Tooltip text="View Profile">
+                        <button
+                          onClick={() => {
+                            setSelectedClientForProfile(client);
+                            setActiveProcessTabDrawer("all");
+                            setSelectedProcesses(client.processes);
+                            setEditingProcesses(false);
+                            setShowProfileDrawer(true);
+                          }}
+                          className="p-1.5 hover:bg-muted rounded-lg transition-colors"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip text="Schedule Call">
+                        <button
+                          onClick={() => handleOpenScheduleModal(client)}
+                          className="p-1.5 hover:bg-muted rounded-lg transition-colors"
+                        >
+                          <Phone className="w-4 h-4 text-primary" />
+                        </button>
+                      </Tooltip>
+                      <Tooltip text="Delete">
+                        <button
+                          onClick={() => handleDeleteClient(client.id)}
+                          className="p-1.5 hover:bg-muted rounded-lg transition-colors text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </Tooltip>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Scroll Right Indicator */}
+        {showScrollIndicator && (
+          <div
+            className="absolute right-0 top-0 w-20 bg-gradient-to-l from-white via-white/90 to-transparent flex items-center justify-center pointer-events-auto z-10"
+            style={{ height: 'calc(100% - 56px)' }}
+          >
+            <button
+              onMouseEnter={handleScrollRightMouseEnter}
+              onMouseLeave={handleScrollMouseLeave}
+              className="w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center hover:shadow-lg hover:scale-105 transition-all"
+              style={{ border: '1px solid #CBD5E1' }}
+            >
+              <ChevronRight className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+        )}
+
+        {/* Scroll Left Indicator */}
+        {showScrollLeftIndicator && (
+          <div
+            className="absolute left-0 top-0 w-20 bg-gradient-to-r from-white via-white/90 to-transparent flex items-center justify-center pointer-events-auto z-10"
+            style={{ height: 'calc(100% - 56px)' }}
+          >
+            <button
+              onMouseEnter={handleScrollLeftMouseEnter}
+              onMouseLeave={handleScrollMouseLeave}
+              className="w-10 h-10 bg-white rounded-full shadow-md flex items-center justify-center hover:shadow-lg hover:scale-105 transition-all"
+              style={{ border: '1px solid #CBD5E1' }}
+            >
+              <ChevronLeft className="w-5 h-5 text-slate-500" />
+            </button>
+          </div>
+        )}
+
+        {/* Pagination Controls */}
+        <div className="border-t border-border px-4 py-3">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
+                  className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
+                >
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Tooltip text="First Page">
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronsLeft className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip text="Previous Page">
+                <button
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                Page {currentPage} of {totalPages}
+              </span>
+              <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                {currentPage}/{totalPages}
+              </span>
+              <Tooltip text="Next Page">
+                <button
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+              <Tooltip text="Last Page">
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <ChevronsRight className="w-3.5 h-3.5" />
+                </button>
+              </Tooltip>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Add Client Modal */}
+      <Modal
+        isOpen={showAddModal}
+        onClose={() => {
+          setShowAddModal(false);
+          setShowAdditionalDetails(false);
+        }}
+        title="Add New Client"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddModal(false);
+                setShowAdditionalDetails(false);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleAddClient}
+              disabled={!newClient.name || !newClient.phone || newClient.stage.length === 0 || !newClient.responsible}
+            >
+              Add Client
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          {/* Section 1: Client Information (Primary) */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Client Information</h3>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Client Name <span className="text-destructive">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newClient.name}
+                  onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                  placeholder="Enter client name"
+                  className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Phone Number <span className="text-destructive">*</span>
+                </label>
+                <div className="flex gap-2">
+                  <select
+                    value={`${newClient.countryFlag}|${newClient.countryCode}`}
+                    onChange={(e) => {
+                      const [flag, code] = e.target.value.split("|");
+                      setNewClient({ ...newClient, countryFlag: flag, countryCode: code });
+                    }}
+                    className="w-32 px-3 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    {countries.map((country) => (
+                      <option key={`${country.flag}-${country.code}`} value={`${country.flag}|${country.code}`}>
+                        {country.flag} {country.code}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    type="tel"
+                    value={newClient.phone}
+                    onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                    placeholder="5551234567"
+                    className="flex-1 px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Email Address</label>
+                <input
+                  type="email"
+                  value={newClient.email}
+                  onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                  placeholder="client@email.com"
+                  className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border/50"></div>
+
+          {/* Section 2: Process Details */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
+                <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Process Details</h3>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Stage <span className="text-destructive">*</span>
+              </label>
+
+              {/* Selected stages as capsules */}
+              {newClient.stage.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+                  {newClient.stage.map((selectedStage) => (
+                    <div
+                      key={selectedStage}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-primary/15 to-primary/10 text-primary rounded-lg text-sm font-medium border border-primary/30 shadow-sm hover:shadow-md transition-all"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <span>{selectedStage}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNewClient({
+                            ...newClient,
+                            stage: newClient.stage.filter((s) => s !== selectedStage),
+                          });
+                        }}
+                        className="hover:bg-primary/30 rounded-full p-1 transition-all hover:scale-110"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Dropdown to add stages */}
+              <div className="relative">
+                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                <select
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value && !newClient.stage.includes(e.target.value)) {
+                      setNewClient({
+                        ...newClient,
+                        stage: [...newClient.stage, e.target.value],
+                      });
+                    }
+                  }}
+                  className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  <option value="">Select stage to add...</option>
+                  {combinedStages
+                    .filter((stage) => !newClient.stage.includes(stage))
+                    .map((stage) => (
+                      <option key={stage} value={stage}>
+                        {stage}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border/50"></div>
+
+          {/* Section 3: Responsible Person */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Assignment</h3>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Responsible <span className="text-destructive">*</span>
+              </label>
+              <div className="relative">
+                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <select
+                  value={newClient.responsible}
+                  onChange={(e) => setNewClient({ ...newClient, responsible: e.target.value })}
+                  className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                >
+                  <option value="">Select team member...</option>
+                  {teamMembers.map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-border/50"></div>
+
+          {/* Progressive Disclosure Toggle */}
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowAdditionalDetails(!showAdditionalDetails)}
+              className="flex items-center justify-between w-full px-5 py-4 bg-gradient-to-r from-muted/40 to-muted/20 hover:from-muted/60 hover:to-muted/30 rounded-xl transition-all border border-border/50 hover:border-border shadow-sm hover:shadow"
+            >
+              <div className="flex items-center gap-3">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                  showAdditionalDetails ? "bg-primary/10" : "bg-muted/50"
+                }`}>
+                  <svg className={`w-4 h-4 transition-colors ${
+                    showAdditionalDetails ? "text-primary" : "text-muted-foreground"
+                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                  </svg>
+                </div>
+                <span className="text-sm font-semibold text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Additional Details (Optional)</span>
+              </div>
+              <svg
+                className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${
+                  showAdditionalDetails ? "rotate-180" : ""
+                }`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          </div>
+
+          {showAdditionalDetails && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200 p-4 bg-muted/10 rounded-xl border border-border/30">
+              {/* Section 3: Call Preferences */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-success/10 flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Call Preferences</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Preferred Calling Time</label>
+                    <input
+                      type="time"
+                      value={newClient.preferredCallingTime}
+                      onChange={(e) => setNewClient({ ...newClient, preferredCallingTime: e.target.value })}
+                      className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Timezone</label>
+                    <select
+                      value={newClient.timezone}
+                      onChange={(e) => setNewClient({ ...newClient, timezone: e.target.value })}
+                      className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <option value="America/New_York">Eastern Time (ET)</option>
+                      <option value="America/Chicago">Central Time (CT)</option>
+                      <option value="America/Denver">Mountain Time (MT)</option>
+                      <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                      <option value="America/Anchorage">Alaska Time (AKT)</option>
+                      <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
+                      <option value="Asia/Kolkata">India Standard Time (IST)</option>
+                      <option value="Europe/London">Greenwich Mean Time (GMT)</option>
+                      <option value="Australia/Sydney">Australian Eastern Time (AET)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border/50"></div>
+
+              {/* Section 4: Business / Context Info */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Business & Context Info</h3>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Source</label>
+                  <input
+                    type="text"
+                    value={newClient.source}
+                    onChange={(e) => setNewClient({ ...newClient, source: e.target.value })}
+                    placeholder="e.g., Website, Referral, Social"
+                    className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-border/50"></div>
+
+              {/* Section 5: Company Details */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center">
+                    <svg className="w-3.5 h-3.5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Company Details</h3>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Company Name</label>
+                    <input
+                      type="text"
+                      value={newClient.companyName}
+                      onChange={(e) => setNewClient({ ...newClient, companyName: e.target.value })}
+                      placeholder="Company name"
+                      className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Job Position</label>
+                      <input
+                        type="text"
+                        value={newClient.jobPosition}
+                        onChange={(e) => setNewClient({ ...newClient, jobPosition: e.target.value })}
+                        placeholder="Job title"
+                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Number of Employees</label>
+                      <input
+                        type="number"
+                        value={newClient.numberOfEmployees}
+                        onChange={(e) => setNewClient({ ...newClient, numberOfEmployees: e.target.value })}
+                        placeholder="e.g., 50"
+                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </Modal>
+
+      {/* Import Clients Modal */}
+      <Modal
+        isOpen={showImportModal}
+        onClose={() => {
+          setShowImportModal(false);
+          setSelectedFile(null);
+        }}
+        title="Import Clients"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => {
+              setShowImportModal(false);
+              setSelectedFile(null);
+            }}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleImport}>
+              Import
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Upload a CSV file to import clients. Make sure your file follows the correct format.
+          </p>
+
+          {/* Template Download Box */}
+          <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-foreground">Need a template?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                <Download className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* File Upload - Drag and Drop */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+            <div
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
+                isDragging
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-input-background"
+              }`}
+            >
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleFileSelect}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                id="file-upload"
+              />
+              <div className="flex flex-col items-center gap-2">
+                <Upload className="w-8 h-8 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-medium">
+                    <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
+                      Click to upload
+                    </label>
+                    {" "}or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
+                </div>
+              </div>
+            </div>
+            {selectedFile && (
+              <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-medium">{selectedFile.name}</span>
+                </div>
+                <button
+                  onClick={() => setSelectedFile(null)}
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
+
+      {/* Schedule Call Drawer */}
+      {showScheduleCallModal && (
+        <>
+          {/* Overlay */}
+          <div
+            className="fixed inset-0 bg-black/30 z-40"
+            onClick={() => {
+              setShowScheduleCallModal(false);
+              setSelectedClientForScheduling(null);
+              setScheduledDate("");
+              setScheduledTime("");
+            }}
+          />
+
+          {/* Drawer */}
+          <div className="fixed right-0 top-0 h-full w-[440px] bg-white z-50 shadow-xl flex flex-col animate-slide-in-right">
+            {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-gray-700" />
+                <h2 className="text-base font-bold text-gray-900">Schedule Call</h2>
+              </div>
+              <button
+                onClick={() => {
+                  setShowScheduleCallModal(false);
+                  setSelectedClientForScheduling(null);
+                  setScheduledDate("");
+                  setScheduledTime("");
+                }}
+                className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
+              >
+                <X className="w-4 h-4 text-white" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+        {selectedClientForScheduling && (
+          <>
+            {/* Section 1: Select Client */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <User className="w-4 h-4 text-gray-500" />
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Client</h3>
+              </div>
+              <div className="relative p-4 bg-gradient-to-br from-blue-700 to-blue-600 rounded-lg">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                    <User className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-bold text-white text-[15px]">{selectedClientForScheduling.name}</p>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium">
+                        LEAD
+                      </span>
+                    </div>
+                    <p className="text-xs text-blue-100">
+                      • Since {selectedClientForScheduling.lastContact}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowScheduleCallModal(false);
+                      setSelectedClientForScheduling(null);
+                    }}
+                    className="text-[13px] text-white hover:underline"
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Contact Details */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact Details</h3>
+              <div className="space-y-2">
+                <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
+                  <Phone className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-gray-900">{selectedClientForScheduling.phone || "Not provided"}</span>
+                </div>
+                <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
+                  <Mail className="w-4 h-4 text-red-500" />
+                  <span className="text-sm text-gray-900">{selectedClientForScheduling.email || "Not provided"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 3: Pipeline Info */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pipeline Info</h3>
+              <div className="grid grid-cols-2 border border-gray-200 rounded-lg overflow-hidden">
+                <div className="p-3">
+                  <p className="text-[11px] text-gray-500 mb-1">Process</p>
+                  <p className="text-sm font-bold text-gray-900">{selectedClientForScheduling.process}</p>
+                </div>
+                <div className="p-3 border-l border-gray-200">
+                  <p className="text-[11px] text-gray-500 mb-1">Current Stage</p>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                    <p className="text-sm font-bold text-gray-900">{selectedClientForScheduling.stage}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 4: Select Date & Time */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-teal-600" />
+                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Date & Time</h3>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg p-4">
+                {/* Month/Year Selector */}
+                <div className="flex items-center justify-between mb-4">
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                    className="text-sm font-bold text-gray-900 border-none bg-transparent focus:outline-none cursor-pointer"
+                  >
+                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month, idx) => (
+                      <option key={idx} value={idx}>{month.substring(0, 3)}</option>
+                    ))}
+                  </select>
+                  <span className="text-sm font-bold text-gray-900">{selectedYear}</span>
+                </div>
+
+                {/* Calendar View */}
+                <div className="mb-4">
+                  <div className="grid grid-cols-7 gap-1 mb-2">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                      <div key={day} className="text-center text-xs text-gray-500 py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1">
+                    {(() => {
+                      const firstDay = new Date(selectedYear, selectedMonth, 1).getDay();
+                      const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                      const today = new Date();
+                      const days = [];
+
+                      // Empty cells for days before month starts
+                      for (let i = 0; i < firstDay; i++) {
+                        days.push(
+                          <div key={`empty-${i}`} className="aspect-square"></div>
+                        );
+                      }
+
+                      // Days of the month
+                      for (let day = 1; day <= daysInMonth; day++) {
+                        const date = new Date(selectedYear, selectedMonth, day);
+                        const dateString = date.toISOString().split("T")[0];
+                        const isSelected = scheduledDate === dateString;
+                        const isPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                        const isToday = date.toDateString() === today.toDateString();
+
+                        days.push(
+                          <button
+                            key={day}
+                            onClick={() => !isPast && setScheduledDate(dateString)}
+                            disabled={isPast}
+                            className={`aspect-square flex items-center justify-center text-[13px] transition-colors ${
+                              isSelected || isToday
+                                ? "bg-blue-600 text-white rounded-full font-semibold"
+                                : isPast
+                                ? "text-gray-300 cursor-not-allowed"
+                                : "text-gray-700 hover:bg-blue-100 rounded-full"
+                            }`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      }
+
+                      return days;
+                    })()}
+                  </div>
+                </div>
+
+                {/* Time Picker */}
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-[11px] text-gray-500 text-center font-semibold mb-3 tracking-wide">24H FORMAT</p>
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <input
+                      type="number"
+                      min="0"
+                      max="23"
+                      value={scheduledTime ? scheduledTime.split(":")[0] : "14"}
+                      onChange={(e) => {
+                        const hours = e.target.value.padStart(2, "0");
+                        const minutes = scheduledTime ? scheduledTime.split(":")[1] : "00";
+                        setScheduledTime(`${hours}:${minutes}`);
+                      }}
+                      className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-2xl font-bold text-gray-400">:</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max="59"
+                      value={scheduledTime ? scheduledTime.split(":")[1] : "00"}
+                      onChange={(e) => {
+                        const hours = scheduledTime ? scheduledTime.split(":")[0] : "14";
+                        const minutes = e.target.value.padStart(2, "0");
+                        setScheduledTime(`${hours}:${minutes}`);
+                      }}
+                      className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Selected Summary */}
+                  {scheduledDate && scheduledTime && (
+                    <p className="text-xs text-blue-600 text-center">
+                      {new Date(scheduledDate).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })} at {scheduledTime} IST
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* No Phone Warning */}
+            {!selectedClientForScheduling.phone && (
+              <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <svg
+                  className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+                <div>
+                  <p className="text-sm font-medium text-red-900">No Phone Number</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    This client doesn't have a phone number. Please add one before scheduling a call.
+                  </p>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+            </div>
+
+            {/* Fixed Footer */}
+            <div className="border-t border-gray-200 px-4 py-3.5 flex items-center justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowScheduleCallModal(false);
+                  setSelectedClientForScheduling(null);
+                  setScheduledDate("");
+                  setScheduledTime("");
+                }}
+                className="border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg text-sm"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleScheduleCall}
+                disabled={!selectedClientForScheduling?.phone || !scheduledDate || !scheduledTime}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold"
+              >
+                Schedule
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Trigger Calls Modal */}
+      <Modal
+        isOpen={showTriggerCallsModal}
+        onClose={() => {
+          setShowTriggerCallsModal(false);
+          setScheduleOption("immediate");
+          setTriggerScheduledDate("");
+          setTriggerScheduledTime("");
+        }}
+        title="Trigger Calls"
+        footer={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowTriggerCallsModal(false);
+                setScheduleOption("immediate");
+                setTriggerScheduledDate("");
+                setTriggerScheduledTime("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleTriggerCalls}
+              disabled={scheduleOption === "scheduled" && (!triggerScheduledDate || !triggerScheduledTime)}
+            >
+              Confirm
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            You are about to trigger calls for <span className="font-semibold text-foreground">{selectedRows.size}</span> client{selectedRows.size > 1 ? 's' : ''}
+          </p>
+
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+              <input
+                type="radio"
+                name="schedule"
+                checked={scheduleOption === "immediate"}
+                onChange={() => setScheduleOption("immediate")}
+                className="w-4 h-4"
+              />
+              <div>
+                <p className="font-medium">Start Immediately</p>
+                <p className="text-xs text-muted-foreground">Calls will be triggered right away</p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+              <input
+                type="radio"
+                name="schedule"
+                checked={scheduleOption === "scheduled"}
+                onChange={() => setScheduleOption("scheduled")}
+                className="w-4 h-4"
+              />
+              <div className="flex-1">
+                <p className="font-medium">Schedule for Later</p>
+                <p className="text-xs text-muted-foreground mb-3">Choose a specific date and time</p>
+
+                {scheduleOption === "scheduled" && (
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Date</label>
+                      <div className="relative">
+                        <input
+                          type="date"
+                          value={triggerScheduledDate}
+                          onChange={(e) => setTriggerScheduledDate(e.target.value)}
+                          className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                        />
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Time</label>
+                      <input
+                        type="time"
+                        value={triggerScheduledTime}
+                        onChange={(e) => setTriggerScheduledTime(e.target.value)}
+                        className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </label>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Client Profile Drawer */}
+      <Drawer
+        isOpen={showProfileDrawer}
+        onClose={() => {
+          setShowProfileDrawer(false);
+          setSelectedClientForProfile(null);
+          setActiveProcessTabDrawer("all");
+          setActiveProfileTab("profile");
+          setEditingProcesses(false);
+        }}
+        title="Client Profile"
+      >
+        {selectedClientForProfile && (
+          <div className="space-y-0">
+            {/* Client Header */}
+            <div className="p-6 border-b border-border">
+              <div className="flex items-center gap-4">
+                <div className="w-16 h-16 bg-gradient-to-br from-primary to-primary-hover text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-lg" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  {selectedClientForProfile.name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{selectedClientForProfile.name}</h2>
+                    <Tooltip text="Edit Client">
+                      <button
+                        onClick={handleOpenEditClient}
+                        className="p-1.5 hover:bg-muted rounded-lg transition-colors hover:text-foreground cursor-pointer"
+                        style={{ color: '#64748B' }}
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    </Tooltip>
+                  </div>
+                  <span className={`inline-block px-3 py-1 rounded-full text-sm font-medium mt-1 ${
+                    selectedClientForProfile.status === "Active"
+                      ? "bg-success-bg text-success"
+                      : selectedClientForProfile.status === "Pending"
+                      ? "bg-warning-bg text-warning"
+                      : "bg-muted"
+                  }`} style={{ fontFamily: 'Outfit, sans-serif', color: selectedClientForProfile.status === "Active" || selectedClientForProfile.status === "Pending" ? undefined : '#64748B' }}>
+                    {selectedClientForProfile.status}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tab Navigation */}
+            <div className="border-b border-border overflow-x-auto">
+              <div className="flex">
+                {[
+                  { id: "profile" as const, label: "Profile" },
+                  { id: "activity" as const, label: "Activity" },
+                  { id: "processes" as const, label: "Processes" },
+                  { id: "notes" as const, label: "Notes" }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveProfileTab(tab.id)}
+                    className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${
+                      activeProfileTab === tab.id
+                        ? "border-b-2 border-primary text-primary"
+                        : "hover:text-foreground"
+                    }`}
+                    style={{
+                      fontFamily: 'Outfit, sans-serif',
+                      color: activeProfileTab === tab.id ? undefined : '#64748B'
+                    }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Tab Content */}
+            <div className="p-6">
+              {/* Profile Tab */}
+              {activeProfileTab === "profile" && (
+                <div className="space-y-4 max-w-2xl">
+                  {/* Contact Info */}
+                  <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                    <Mail className="w-5 h-5" />
+                    <span style={{ fontFamily: 'Outfit, sans-serif' }}>{selectedClientForProfile.email}</span>
+                  </div>
+                  <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                    <Phone className="w-5 h-5" />
+                    <span style={{ fontFamily: 'Outfit, sans-serif' }}>{selectedClientForProfile.phone}</span>
+                  </div>
+                  <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                    <MapPin className="w-5 h-5" />
+                    <span style={{ fontFamily: 'Outfit, sans-serif' }}>New York, NY</span>
+                  </div>
+
+                  {/* Company Details */}
+                  {selectedClientForProfile.companyName && (
+                    <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                      <Building className="w-5 h-5" />
+                      <span style={{ fontFamily: 'Outfit, sans-serif' }}>{selectedClientForProfile.companyName}</span>
+                    </div>
+                  )}
+                  {selectedClientForProfile.jobPosition && (
+                    <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                      <Briefcase className="w-5 h-5" />
+                      <span style={{ fontFamily: 'Outfit, sans-serif' }}>{selectedClientForProfile.jobPosition}</span>
+                    </div>
+                  )}
+                  {selectedClientForProfile.numberOfEmployees && (
+                    <div className="flex items-center gap-3" style={{ color: '#64748B' }}>
+                      <Users className="w-5 h-5" />
+                      <span style={{ fontFamily: 'Outfit, sans-serif' }}>{selectedClientForProfile.numberOfEmployees} employees</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Activity Tab */}
+              {activeProfileTab === "activity" && (
+                <div className="space-y-6">
+                  {/* Process Filter Chips */}
+                  <div className="flex flex-wrap gap-2">
+                  {!editingProcesses && (
+                    <button
+                      onClick={() => {
+                        setEditingProcesses(true);
+                        setSelectedProcesses(selectedClientForProfile.processes);
+                      }}
+                      className="text-sm text-primary hover:text-primary-hover transition-colors flex items-center gap-1.5"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <Edit className="w-4 h-4" />
+                      Edit
+                    </button>
+                  )}
+                </div>
+
+                {editingProcesses ? (
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <label className="block text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                        Stage <span className="text-destructive">*</span>
+                      </label>
+                      <div className="relative process-dropdown-container">
+                        <button
+                          type="button"
+                          onClick={() => setProcessDropdownOpen(!processDropdownOpen)}
+                          className="w-full px-4 py-2.5 border-2 border-primary rounded-lg text-left text-sm flex items-center gap-2 hover:border-primary/80 transition-colors"
+                          style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          Select stage to add...
+                        </button>
+                        {processDropdownOpen && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-[300px] overflow-hidden">
+                            <div className="sticky top-0 bg-primary text-white px-4 py-2.5 text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Select stage to add...
+                            </div>
+                            <div className="overflow-y-auto max-h-[260px]">
+                              {combinedStages.map((stage) => (
+                                <div
+                                  key={stage}
+                                  onClick={() => handleToggleProcess(stage)}
+                                  className={`px-4 py-2.5 text-sm cursor-pointer transition-colors ${
+                                    selectedProcesses.includes(stage)
+                                      ? 'bg-primary/10 text-primary font-medium'
+                                      : 'hover:bg-slate-50 text-slate-700'
+                                  }`}
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {stage}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {selectedProcesses.length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {selectedProcesses.map((process) => (
+                            <span
+                              key={process}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {process}
+                              <button
+                                onClick={() => handleToggleProcess(process)}
+                                className="hover:bg-primary/20 rounded-full p-0.5 transition-colors"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSaveProcesses}
+                        disabled={selectedProcesses.length === 0}
+                      >
+                        Save Changes
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setEditingProcesses(false);
+                          setProcessDropdownOpen(false);
+                          setSelectedProcesses(selectedClientForProfile.processes);
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {(() => {
+                      // Group processes by the prefix (before the colon)
+                      const grouped: { [key: string]: string[] } = {};
+                      selectedClientForProfile.processes.forEach((process) => {
+                        const parts = process.split(':');
+                        if (parts.length === 2) {
+                          const heading = parts[0].trim();
+                          const badge = parts[1].trim();
+                          if (!grouped[heading]) {
+                            grouped[heading] = [];
+                          }
+                          grouped[heading].push(badge);
+                        }
+                      });
+
+                      return Object.entries(grouped).map(([heading, badges]) => (
+                        <div key={heading}>
+                          <h4 className="text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                            {heading}
+                          </h4>
+                          <div className="flex flex-wrap gap-2">
+                            {badges.map((badge, index) => (
+                              <span
+                                key={`${heading}-${index}`}
+                                className="inline-flex items-center px-3 py-1.5 bg-primary/10 text-primary rounded-lg text-sm font-medium"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              >
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ));
+                    })()}
+                  </div>
+                )}
+              </div>
+
+            </div>
+
+            {/* Activity Section with Process Tabs */}
+            <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+              <h3 className="text-xl font-semibold mb-6" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Activity</h3>
+
+              {/* Process Tabs */}
+              {drawerClientProcesses.length > 0 && (
+                <div className="flex flex-wrap gap-2.5 mb-6">
+                  {/* All Tab */}
+                  <button
+                    onClick={() => setActiveProcessTabDrawer("all")}
+                    className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center gap-2 shadow-sm hover:shadow-md ${
+                      activeProcessTabDrawer === "all"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted hover:bg-muted/80"
+                    }`}
+                    style={{ fontFamily: 'Outfit, sans-serif', color: activeProcessTabDrawer === "all" ? undefined : '#64748B' }}
+                  >
+                    All
+                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                      activeProcessTabDrawer === "all"
+                        ? "bg-primary-foreground/20 text-primary-foreground"
+                        : "bg-background/50 text-foreground"
+                    }`} style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                      {getDrawerActivityCount("all")}
+                    </span>
+                  </button>
+
+                  {/* Process-specific Tabs */}
+                  {drawerClientProcesses.map((process) => (
+                    <button
+                      key={process.id}
+                      onClick={() => setActiveProcessTabDrawer(process.id)}
+                      className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all flex items-center gap-2 shadow-sm hover:shadow-md ${
+                        activeProcessTabDrawer === process.id
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted hover:bg-muted/80"
+                      }`}
+                      style={{ fontFamily: 'Outfit, sans-serif', color: activeProcessTabDrawer === process.id ? undefined : '#64748B' }}
+                    >
+                      {process.name}
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        activeProcessTabDrawer === process.id
+                          ? "bg-primary-foreground/20 text-primary-foreground"
+                          : "bg-background/50 text-foreground"
+                      }`} style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        {getDrawerActivityCount(process.id)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected Process Info (only show for specific processes, not "All") */}
+              {selectedDrawerProcess && activeProcessTabDrawer !== "all" && (
+                <div className="bg-muted/50 border border-border rounded-xl p-5 mb-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Current Stage</p>
+                      <p className="font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{selectedDrawerProcess.currentStage}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Last Activity</p>
+                      <p className="font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{selectedDrawerProcess.lastActivity}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Activity List */}
+              <div className="space-y-3">
+                {filteredDrawerActivities.length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>No activity for this process yet</p>
+                  </div>
+                ) : (
+                  filteredDrawerActivities.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 border border-border rounded-xl hover:bg-muted/30 transition-all shadow-sm hover:shadow-md"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        {/* Left: Icon + Content */}
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getDrawerActivityColor(item.type)}`}>
+                            {getDrawerActivityIcon(item.type)}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{item.title}</p>
+                              <span className="text-xs" style={{ color: '#64748B' }}>•</span>
+                              <p className="text-xs whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{item.date} {item.time}</p>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              {activeProcessTabDrawer === "all" && (
+                                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                  <span className="font-medium text-primary">{item.processName}</span>
+                                </span>
+                              )}
+                              {item.duration && (
+                                <>
+                                  {activeProcessTabDrawer === "all" && (
+                                    <span className="text-xs" style={{ color: '#64748B' }}>•</span>
+                                  )}
+                                  <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{item.duration}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: Status + Play Button */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          {item.status && (
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap ${
+                              item.status === "Completed"
+                                ? "bg-success/10 text-success"
+                                : item.status === "Failed"
+                                ? "bg-destructive/10 text-destructive"
+                                : "bg-muted"
+                            }`} style={{ fontFamily: 'Outfit, sans-serif', color: item.status === "Completed" || item.status === "Failed" ? undefined : '#64748B' }}>
+                              {item.status}
+                            </span>
+                          )}
+
+                          {(item.type === "outbound_call" || item.type === "inbound_call") &&
+                           item.status === "Completed" &&
+                           item.callId && (
+                            <Tooltip text="View recording & transcription">
+                              <button
+                                onClick={() => handleViewCallDetails(item.callId)}
+                                className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
+                              >
+                                <Play className="w-4 h-4" />
+                              </button>
+                            </Tooltip>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Add Note Section */}
+            <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+              <h3 className="text-xl font-semibold mb-5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Note</h3>
+              <div className="space-y-4">
+                <textarea
+                  placeholder="Enter note about this client..."
+                  className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none"
+                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  rows={4}
+                />
+                <Button variant="primary" className="w-full justify-center shadow-md hover:shadow-lg transition-shadow">
+                  <MessageSquare className="w-4 h-4" />
+                  Add Note
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </Drawer>
+
+      {/* Call Details Drawer (from Client Profile Activity) */}
+      <Drawer
+        isOpen={showCallDetailsFromProfile}
+        onClose={() => {
+          setShowCallDetailsFromProfile(false);
+          setSelectedCallId(null);
+          setIsPlayingRecording(false);
+          setPlaybackSpeed(1);
+        }}
+        title={
+          <>
+            <h2 className="text-xl font-semibold text-foreground">Call Details</h2>
+            {selectedCallId && (
+              <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium">
+                #{selectedCallId}
+              </span>
+            )}
+          </>
+        }
+      >
+        {selectedCallId && (
+          <div className="space-y-6">
+
+            {/* Summary */}
+            <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+              <h2 className="text-lg font-semibold mb-4">Summary</h2>
+              <div className="space-y-4">
+                {/* Row 1 */}
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Client</p>
+                    <p className="font-semibold text-sm">{selectedClientForProfile?.name || "Client Name"}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Call Time</p>
+                    <p className="font-semibold text-sm">Apr 10, 2:30 PM</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Type</p>
+                    <span className="inline-flex items-center px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">
+                      Outbound
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Current Stage</p>
+                    <p className="font-semibold text-sm">{selectedClientForProfile?.stage || "Insurance Verification"}</p>
+                  </div>
+                </div>
+
+                {/* Row 2 */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Call Status</p>
+                    <span className="inline-flex items-center px-2.5 py-0.5 bg-success/10 text-success rounded-full text-xs font-medium">
+                      Completed
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Duration</p>
+                    <p className="font-semibold text-sm">4m 32s</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Recording Player */}
+            <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Recording</h2>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs text-muted-foreground mr-2">Speed:</span>
+                  {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
+                    <button
+                      key={speed}
+                      onClick={() => setPlaybackSpeed(speed)}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                        playbackSpeed === speed
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                    >
+                      {speed}x
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
+                  <button
+                    onClick={() => setIsPlayingRecording(!isPlayingRecording)}
+                    className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
+                  >
+                    {isPlayingRecording ? (
+                      <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                      </svg>
+                    ) : (
+                      <Play className="w-6 h-6 ml-1" />
+                    )}
+                  </button>
+                  <div className="flex-1">
+                    <div className="h-2 bg-border rounded-full overflow-hidden">
+                      <div className="h-full bg-primary w-1/3" />
+                    </div>
+                    <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                      <span>1:30</span>
+                      <span>4:32</span>
+                    </div>
+                  </div>
+                  <Tooltip text="Download Recording">
+                    <Button variant="ghost" size="sm">
+                      <Download className="w-4 h-4" />
+                    </Button>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
+
+            {/* Transcript */}
+            <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold">Transcript</h2>
+                <Tooltip text="Download Transcript">
+                  <Button variant="outline" size="sm">
+                    <FileText className="w-4 h-4" />
+                  </Button>
+                </Tooltip>
+              </div>
+              <div className="space-y-4 max-h-96 overflow-y-auto">
+                <div className="space-y-4">
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      AI
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">AI Agent</span>
+                        <span className="text-xs text-muted-foreground">00:05</span>
+                      </div>
+                      <p className="text-sm">Hello, this is MantraAssist calling for {selectedClientForProfile?.name}. Am I speaking with them?</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-secondary/10 text-secondary rounded-full flex items-center justify-center text-xs font-semibold">
+                      {selectedClientForProfile?.name?.split(' ').map(n => n[0]).join('') || 'CL'}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">{selectedClientForProfile?.name}</span>
+                        <span className="text-xs text-muted-foreground">00:12</span>
+                      </div>
+                      <p className="text-sm">Yes, this is {selectedClientForProfile?.name?.split(' ')[0]} speaking.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      AI
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">AI Agent</span>
+                        <span className="text-xs text-muted-foreground">00:16</span>
+                      </div>
+                      <p className="text-sm">Great! I'm calling to help with your insurance verification. Do you have a few minutes to discuss?</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-secondary/10 text-secondary rounded-full flex items-center justify-center text-xs font-semibold">
+                      {selectedClientForProfile?.name?.split(' ').map(n => n[0]).join('') || 'CL'}
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">{selectedClientForProfile?.name}</span>
+                        <span className="text-xs text-muted-foreground">00:20</span>
+                      </div>
+                      <p className="text-sm">Sure, I have some time now.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <div className="flex-shrink-0 w-8 h-8 bg-primary/10 text-primary rounded-full flex items-center justify-center text-xs font-semibold">
+                      AI
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm">AI Agent</span>
+                        <span className="text-xs text-muted-foreground">00:24</span>
+                      </div>
+                      <p className="text-sm">Perfect! I'll need to verify a few details about your insurance coverage...</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+      </Drawer>
+
+      {/* Edit Client Modal */}
+      <Modal
+        isOpen={showEditClientModal}
+        onClose={() => setShowEditClientModal(false)}
+        title="Edit Client Information"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setShowEditClientModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveEditClient}
+            >
+              Save Changes
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Name</label>
+            <Input
+              value={editClientForm.name}
+              onChange={(e) => setEditClientForm({ ...editClientForm, name: e.target.value })}
+              placeholder="Enter client name"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Email</label>
+            <Input
+              type="email"
+              value={editClientForm.email}
+              onChange={(e) => setEditClientForm({ ...editClientForm, email: e.target.value })}
+              placeholder="Enter email address"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Phone</label>
+            <Input
+              value={editClientForm.phone}
+              onChange={(e) => setEditClientForm({ ...editClientForm, phone: e.target.value })}
+              placeholder="Enter phone number"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Location</label>
+            <Input
+              value={editClientForm.location}
+              onChange={(e) => setEditClientForm({ ...editClientForm, location: e.target.value })}
+              placeholder="Enter location"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Status</label>
+            <select
+              value={editClientForm.status}
+              onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value })}
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+            >
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+              <option value="Pending">Pending</option>
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Send Message Modal */}
+      <Modal
+        isOpen={showSendMessageModal}
+        onClose={() => setShowSendMessageModal(false)}
+        title={selectedClientForProfile ? `Send Message to ${selectedClientForProfile.name}` : "Send Message"}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setShowSendMessageModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSendMessageSubmit}
+            >
+              Send
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Recipient</label>
+            <Input
+              value={selectedClientForProfile?.name || ""}
+              disabled
+              className="bg-muted"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Phone Number</label>
+            <Input
+              value={selectedClientForProfile?.phone || ""}
+              disabled
+              className="bg-muted"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Message</label>
+            <textarea
+              value={messageForm.message}
+              onChange={(e) => setMessageForm({ message: e.target.value })}
+              placeholder="Type your message here..."
+              rows={5}
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Schedule Call From Profile Modal */}
+      <Modal
+        isOpen={showScheduleCallFromProfile}
+        onClose={() => setShowScheduleCallFromProfile(false)}
+        title={selectedClientForProfile ? `Schedule Call with ${selectedClientForProfile.name}` : "Schedule Call"}
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setShowScheduleCallFromProfile(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveScheduleCallFromProfile}
+            >
+              Schedule Call
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Client Name</label>
+            <Input
+              value={selectedClientForProfile?.name || ""}
+              disabled
+              className="bg-muted"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Date</label>
+            <Input
+              type="date"
+              value={scheduledDate}
+              onChange={(e) => setScheduledDate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Time</label>
+            <Input
+              type="time"
+              value={scheduledTime}
+              onChange={(e) => setScheduledTime(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
+            <textarea
+              placeholder="Add any notes about this call..."
+              rows={3}
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
+            />
+          </div>
+        </div>
+      </Modal>
+
+      {/* Update Stage Modal */}
+      <Modal
+        isOpen={showUpdateStageModal}
+        onClose={() => setShowUpdateStageModal(false)}
+        title="Update Client Stage"
+        actions={
+          <>
+            <Button
+              variant="outline"
+              onClick={() => setShowUpdateStageModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleSaveUpdateStage}
+            >
+              Update Stage
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Client Name</label>
+            <Input
+              value={selectedClientForProfile?.name || ""}
+              disabled
+              className="bg-muted"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Current Process</label>
+            <Input
+              value={selectedClientForProfile?.process || ""}
+              disabled
+              className="bg-muted"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Select New Stage</label>
+            <select
+              value={selectedStage}
+              onChange={(e) => setSelectedStage(e.target.value)}
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+            >
+              <option value="">Select a stage</option>
+              {selectedClientForProfile && processStages[selectedClientForProfile.process]?.map((stage) => (
+                <option key={stage} value={stage}>{stage}</option>
+              ))}
+            </select>
+          </div>
+          <div className="bg-muted/50 border border-border rounded-lg p-4">
+            <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+              <strong>Current Stage:</strong> {selectedClientForProfile?.stage}
+            </p>
+          </div>
+        </div>
+      </Modal>
+      </div>
+    </div>
+    </DndProvider>
+  );
+}

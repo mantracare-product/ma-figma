@@ -1,0 +1,219 @@
+Here is the precise, detailed Figma prompt:
+
+---
+
+## Figma Prompt: Redesign "Collect Information (Intake Form)" Section — Inline Template Selector
+
+**Location:** Process page → Stage detail panel → **"Collect Information (Intake Form)"** accordion section
+
+---
+
+## REMOVE ENTIRELY:
+
+- The blue info banner: *"Teach your AI Receptionist how to intelligently collect information."* — delete this div completely
+- The empty state illustration (document icon + "No data")
+- The `+ Add Form` split button at the bottom
+
+---
+
+## REPLACE WITH THIS EXACT LAYOUT:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Select the form to collect caller information   │
+│  from during the call                            │
+│  ┌─────────────────────────────────── + Add ─┐  │
+│  │  No form selected yet                      │  │
+│  └────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## ELEMENT 1 — Instructional Label
+
+- Text: **"Select the form to collect caller information from during the call"**
+- Font size: 13px, color `#374151`, font-weight 500
+- Margin-bottom: 8px
+- No icon, no banner background — plain label only
+
+---
+
+## ELEMENT 2 — Clickable Selector Row
+
+**Default / empty state (no form selected yet):**
+
+- Full width container
+- Height: 42px
+- Border: `1px dashed #D1D5DB`, border-radius 8px, background `#FAFAFA`
+- Left: text **"No form selected yet"** — color `#9CA3AF`, font size 13px, padding-left 12px
+- Right: **"+ Add"** button — fill `#2563EB`, white text, font size 12px, font-weight 600, border-radius 6px, padding 5px 12px, margin-right 8px
+- Entire row is clickable (cursor: pointer)
+- Hover state: border `1px dashed #2563EB`, background `#F0F7FF`
+
+---
+
+## POPUP — Template Selector Modal
+
+**Triggered by:** Clicking anywhere on the selector row or the `+ Add` button
+
+**Modal container:**
+- Centered overlay, dim background `rgba(0,0,0,0.35)`
+- Width: **560px**, height: auto (hugs content)
+- Background white, border-radius 12px
+- Box shadow: `0px 8px 32px rgba(0,0,0,0.16)`
+- Padding: 24px
+
+**Modal header:**
+- Title: **"Choose a form template"** — font size 17px, font-weight 700, color `#111827`
+- Subtitle: *"Select a pre-built form to collect information from callers"* — font size 13px, color `#6B7280`, margin-top 4px
+- Close `×` top-right, color `#6B7280`, 18px
+
+**Separator:** `1px #F3F4F6` below header, margin 16px 0
+
+---
+
+### Template Cards Grid (2 columns, inside modal):
+
+Gap: 12px, padding 0
+
+Each card — **horizontal rectangle, width > height:**
+- Width: 100% of column (~240px), Height: ~80px
+- Border: `1px #E5E7EB`, border-radius 10px, background white
+- Padding: 14px 16px
+- Layout: horizontal auto-layout
+
+**Card left side (icon column, 36px wide):**
+- Icon circle: 32×32px, border-radius 50%
+- Background: unique per template (see below)
+- Icon: white, 16px
+
+**Card right side (text column):**
+- Template name: font size 13px, font-weight 700, color `#111827`
+- Description: font size 11px, color `#6B7280`, margin-top 2px, max 2 lines
+- Field count: font size 11px, color `#9CA3AF`, margin-top 4px — e.g. *"4 fields"*
+
+**Hover state:** border `1.5px #2563EB`, background `#F8FBFF`
+
+**Selected state:**
+- Border `2px #2563EB`, background `#EFF6FF`
+- Top-right corner: filled checkmark badge — circle 18×18px, fill `#2563EB`, white `✓` inside, positioned absolute top-right of card
+
+---
+
+### 5 Template Cards with Meaningful Info:
+
+**Card 1 — Contact Form**
+- Icon background: `#DBEAFE` (light blue), icon: message/chat `#2563EB`
+- Name: **"Contact Form"**
+- Description: *"Captures name, email, phone and a message from the caller"*
+- Fields: *"4 fields"*
+
+**Card 2 — Appointment Booking**
+- Icon background: `#D1FAE5` (light green), icon: calendar `#059669`
+- Name: **"Appointment Booking"**
+- Description: *"Collects scheduling details — preferred date, time slot and contact info"*
+- Fields: *"5 fields"*
+
+**Card 3 — Lead Generation**
+- Icon background: `#EDE9FE` (light purple), icon: briefcase `#7C3AED`
+- Name: **"Lead Generation"**
+- Description: *"Gathers company name, role and pain points for B2B qualification"*
+- Fields: *"5 fields"*
+
+**Card 4 — Quote Request**
+- Icon background: `#FEF3C7` (light amber), icon: document/tag `#D97706`
+- Name: **"Quote Request"**
+- Description: *"Collects project details and budget range for service inquiries"*
+- Fields: *"5 fields"*
+
+**Card 5 — Event Registration**
+- Icon background: `#FCE7F3` (light pink), icon: ticket/star `#DB2777`
+- Name: **"Event Registration"**
+- Description: *"Captures attendee count and dietary needs for event sign-ups"*
+- Fields: *"5 fields"*
+
+Cards 1–4 fill the 2-column grid (2 rows × 2 columns). Card 5 spans full width on the third row OR sits alone in the left column of row 3 — do not stretch to fill.
+
+---
+
+**Modal footer:**
+- Separator `1px #F3F4F6` above footer
+- Right-aligned buttons:
+  - **"Cancel"** — border `1px #D1D5DB`, white, text `#374151`, border-radius 8px, padding 9px 20px
+  - **"Select Form"** — fill `#2563EB`, white text, border-radius 8px, padding 9px 22px, font-weight 600
+    - **Disabled** (opacity 40%, non-clickable) until a card is selected
+    - **Enabled** once a card is clicked
+
+---
+
+## STATE 2 — After Template Selected
+
+**Triggered by:** Clicking "Select Form" in the modal
+
+**The selector row transforms into a filled info card:**
+
+Replace the dashed empty row with:
+
+```
+┌──────────────────────────────────────────────┐
+│  🔵  Contact Form                    ✓  Edit │
+│      4 fields · Name, Email, Phone, Message  │
+└──────────────────────────────────────────────┘
+```
+
+**Selected form card specs:**
+- Width: 100%, Height: ~64px
+- Border: `1.5px solid #2563EB`, border-radius 8px, background `#EFF6FF`
+- Padding: 12px 14px
+- Layout: horizontal auto-layout, align-items center
+
+**Left: Icon circle** — 32×32px, same background color as the template card icon bg, icon in matching color, border-radius 50%
+
+**Center (text column, flex-grow):**
+- Row 1: Template name — font size 13px, font-weight 700, color `#111827`
+- Row 2: Field summary — font size 11px, color `#6B7280` — e.g. *"4 fields · Name, Email, Phone, Message"*
+
+**Right side:**
+- **Green checkmark** `✓` — circle 18×18px, fill `#10B981`, white tick — confirms selection
+- Gap 8px
+- **"Edit"** text button — color `#2563EB`, font size 12px, font-weight 600, no border, padding 0
+
+Clicking **"Edit"** reopens the template selector modal with the current selection pre-highlighted.
+
+---
+
+## FULL SECTION FINAL LAYOUT (no empty space):
+
+```
+┌─ Accordion Header ──────────────────────────────────┐
+│  💡 Collect Information (Intake Form)   ⓘ      ∧  │
+└─────────────────────────────────────────────────────┘
+┌─ Accordion Body (auto-height, no min-height) ───────┐
+│                                                      │
+│  Select the form to collect caller information       │
+│  from during the call                                │
+│                                                      │
+│  [Empty: dashed row "No form selected yet" + Add]   │
+│  OR                                                  │
+│  [Selected: filled card with icon + name + fields]  │
+│                                                      │
+└─────────────────────────────────────────────────────┘
+```
+
+- Body uses **vertical auto-layout, hug contents** — zero empty space
+- No min-height, no spacers, no empty state illustrations
+- Section collapses to just the label + selector row when no form is chosen
+
+---
+
+## Summary of States:
+
+| State | What shows in body |
+|---|---|
+| Default | Label + dashed empty selector row with "+ Add" |
+| Modal open | Template picker popup with 5 cards |
+| Card hovered | Blue border highlight on card |
+| Card selected | Blue border + checkmark badge on card, "Select Form" button enabled |
+| After selection | Filled info card: icon + name + field summary + ✓ + Edit |
+| Edit clicked | Modal reopens with current selection pre-highlighted |

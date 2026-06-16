@@ -1,0 +1,1365 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router";
+import {
+  Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
+  MessageSquare, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
+  Play, ChevronDown, Download, ArrowLeft
+} from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { Tooltip } from "../components/ui/Tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { toast } from "sonner";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Client {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  country: string;
+  countryCode: string;
+  countryFlag: string;
+  processes: string[];
+  stage: string;
+  responsible?: string;
+  lastContact: string;
+  status: string;
+  companyName?: string;
+  jobPosition?: string;
+  numberOfEmployees?: string;
+}
+
+// ─── Data ─────────────────────────────────────────────────────────────────────
+
+const initialClients: Client[] = [
+  { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
+  { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
+  { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
+  { id: "CL-004", name: "Robert Wilson", email: "rwilson@email.com", phone: "5554567890", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  { id: "CL-005", name: "Jessica Brown", email: "jbrown@email.com", phone: "5555678901", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Insurance Verification"], stage: "Document Check", responsible: "Robert Wilson", lastContact: "2024-03-28", status: "Inactive" },
+  { id: "CL-006", name: "David Martinez", email: "d.martinez@email.com", phone: "5556789012", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-007", name: "Lisa Anderson", email: "l.anderson@email.com", phone: "5557890123", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active", companyName: "MediCare Group", jobPosition: "CFO", numberOfEmployees: "501-1000" },
+  { id: "CL-008", name: "James Taylor", email: "jtaylor@email.com", phone: "5558901234", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Amanda Taylor", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-009", name: "Amanda Clark", email: "a.clark@email.com", phone: "5559012345", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "John Smith", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-010", name: "Christopher Lee", email: "c.lee@email.com", phone: "5550123456", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Insurance Verification", responsible: "Sarah Johnson", lastContact: "2024-04-07", status: "Inactive" },
+  { id: "CL-011", name: "Jennifer White", email: "j.white@email.com", phone: "5551234568", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support", "Patient Intake"], stage: "Initial Contact", responsible: "Michael Chen", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-012", name: "Matthew Lewis", email: "m.lewis@email.com", phone: "5552345679", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Insurance Verification"], stage: "Approval", responsible: "Emily Davis", lastContact: "2024-04-06", status: "Active" },
+  { id: "CL-013", name: "Priya Sharma", email: "priya.sharma@email.com", phone: "9820172818", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-014", name: "Rahul Patel", email: "rahul.p@email.com", phone: "9876543210", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-015", name: "Ananya Reddy", email: "ananya.r@email.com", phone: "9123456789", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Billing Support", "Patient Intake"], stage: "Issue Resolution", responsible: "David Martinez", lastContact: "2024-04-10", status: "Active" },
+  { id: "CL-016", name: "Vikram Singh", email: "vikram.s@email.com", phone: "9234567890", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "Amanda Taylor", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-017", name: "Sneha Gupta", email: "sneha.g@email.com", phone: "9345678901", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "John Smith", lastContact: "2024-03-25", status: "Inactive" },
+  { id: "CL-018", name: "Arjun Desai", email: "arjun.d@email.com", phone: "9456789012", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Sarah Johnson", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-019", name: "Kavya Iyer", email: "kavya.i@email.com", phone: "9567890123", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Insurance Verification", "Patient Intake"], stage: "Document Check", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-020", name: "Rohan Kumar", email: "rohan.k@email.com", phone: "9678901234", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Patient Intake"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-08", status: "Active" },
+  { id: "CL-021", name: "Deepika Nair", email: "deepika.n@email.com", phone: "9789012345", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Appointment Scheduling", "Follow-up Calls"], stage: "Confirmation", responsible: "Robert Wilson", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-022", name: "Aditya Mehta", email: "aditya.m@email.com", phone: "9890123456", country: "IN", countryCode: "+91", countryFlag: "🇮🇳", processes: ["Follow-up Calls"], stage: "Follow-up", responsible: "Jessica Brown", lastContact: "2024-03-30", status: "Inactive" },
+  { id: "CL-023", name: "Ahmed Al-Mansoori", email: "ahmed.am@email.com", phone: "501234567", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake", "Insurance Verification"], stage: "Insurance Verification", responsible: "David Martinez", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-024", name: "Fatima Hassan", email: "fatima.h@email.com", phone: "502345678", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Amanda Taylor", lastContact: "2024-04-10", status: "Active" },
+  { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
+  { id: "CL-026", name: "Layla Khalifa", email: "layla.k@email.com", phone: "504567890", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-03-20", status: "Inactive" },
+  { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
+  { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
+  { id: "CL-029", name: "Charlotte Evans", email: "charlotte.e@email.com", phone: "7423456789", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Insurance Verification"], stage: "Approval", responsible: "Robert Wilson", lastContact: "2024-04-13", status: "Active" },
+  { id: "CL-030", name: "William Davies", email: "william.d@email.com", phone: "7434567890", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Billing Support", "Follow-up Calls"], stage: "Payment Reminder", responsible: "Jessica Brown", lastContact: "2024-03-18", status: "Inactive" },
+];
+
+const processStages: { [key: string]: string[] } = {
+  "Patient Intake": ["Initial Contact", "Insurance Verify", "Schedule Appt", "Appointment"],
+  "Follow-up Calls": ["Initial Contact", "Appointment", "Completed"],
+  "Billing Support": ["Initial Contact", "Billing Inquiry", "Issue Resolution", "Payment Reminder"],
+  "Appointment Scheduling": ["Initial Contact", "Slot Selection", "Confirmation", "Completed"],
+  "Insurance Verification": ["Initial Contact", "Document Check", "Verification", "Approval"],
+};
+
+const availableProcesses = [
+  "Patient Intake",
+  "Follow-up Calls",
+  "Billing Support",
+  "Appointment Scheduling",
+  "Insurance Verification",
+];
+
+const getStagesForProcess = (processName: string) => {
+  const stageMapping: { [key: string]: Array<{ id: string; label: string; fullLabel?: string; category: string }> } = {
+    "Patient Intake": [
+      { id: "1", label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
+      { id: "2", label: "Insurance Verification", fullLabel: "Patient Intake: Insurance Verification", category: "Patient Intake" },
+      { id: "3", label: "Appointment Scheduled", fullLabel: "Patient Intake: Appointment Scheduled", category: "Patient Intake" },
+      { id: "4", label: "Completed", fullLabel: "Patient Intake: Completed", category: "Patient Intake" },
+    ],
+    "Follow-up Calls": [
+      { id: "1", label: "Initial Contact", fullLabel: "Follow-up Calls: Initial Contact", category: "Follow-up Calls" },
+      { id: "2", label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
+      { id: "3", label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
+      { id: "4", label: "Completed", fullLabel: "Follow-up Calls: Completed", category: "Follow-up Calls" },
+    ],
+    "Billing Support": [
+      { id: "1", label: "Initial Contact", fullLabel: "Billing Support: Initial Contact", category: "Billing Support" },
+      { id: "2", label: "Billing Inquiry", fullLabel: "Billing Support: Billing Inquiry", category: "Billing Support" },
+      { id: "3", label: "Issue Resolution", fullLabel: "Billing Support: Issue Resolution", category: "Billing Support" },
+      { id: "4", label: "Payment Reminder", fullLabel: "Billing Support: Payment Reminder", category: "Billing Support" },
+    ],
+    "Appointment Scheduling": [
+      { id: "1", label: "Initial Contact", fullLabel: "Appointment Scheduling: Initial Contact", category: "Appointment Scheduling" },
+      { id: "2", label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
+      { id: "3", label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
+      { id: "4", label: "Completed", fullLabel: "Appointment Scheduling: Completed", category: "Appointment Scheduling" },
+    ],
+    "Insurance Verification": [
+      { id: "1", label: "Initial Contact", fullLabel: "Insurance Verification: Initial Contact", category: "Insurance Verification" },
+      { id: "2", label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
+      { id: "3", label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
+      { id: "4", label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
+    ],
+  };
+  return stageMapping[processName] || stageMapping["Patient Intake"];
+};
+
+const combinedStages = [
+  "Patient Intake: Initial Contact",
+  "Patient Intake: Insurance Verify",
+  "Patient Intake: Schedule Appointment",
+  "Follow-up Calls: Post-Visit Check",
+  "Follow-up Calls: Medication Reminder",
+  "Billing Support: Initial Contact",
+  "Billing Support: Billing Inquiry",
+  "Billing Support: Issue Resolution",
+  "Billing Support: Payment Reminder",
+  "Appointment Scheduling: Initial Contact",
+  "Appointment Scheduling: Slot Selection",
+  "Appointment Scheduling: Confirmation",
+  "Insurance Verification: Initial Contact",
+  "Insurance Verification: Document Check",
+  "Insurance Verification: Verification",
+];
+
+const teamMembers = [
+  "John Smith",
+  "Sarah Johnson",
+  "Michael Chen",
+  "Emily Davis",
+  "Robert Wilson",
+  "Jessica Brown",
+  "David Martinez",
+  "Amanda Taylor",
+];
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function ClientProfile() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
+  const [clients, setClients] = useState<Client[]>(initialClients);
+  const client = clients.find((c) => c.id === id) ?? null;
+
+  // All state variables verbatim from Clients.tsx drawer
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "notes">("overview");
+  const [activeProcessTabDrawer, setActiveProcessTabDrawer] = useState<string>("all");
+  const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
+  const [editingProcesses, setEditingProcesses] = useState(false);
+  const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
+  const [drawerProcessStages, setDrawerProcessStages] = useState<Record<string, string>>({});
+  const [hoveredStage, setHoveredStage] = useState<string | null>(null);
+  const [showFieldPicker, setShowFieldPicker] = useState(false);
+  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
+  const [showCreateField, setShowCreateField] = useState(false);
+  const [newFieldName, setNewFieldName] = useState("");
+  const [newFieldType, setNewFieldType] = useState("");
+  const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
+  const [fieldRequired, setFieldRequired] = useState(false);
+  const [fieldMultiple, setFieldMultiple] = useState(false);
+  const [fieldShowAlways, setFieldShowAlways] = useState(true);
+  const [fieldTooltip, setFieldTooltip] = useState(false);
+  const [fieldVisibleToSelected, setFieldVisibleToSelected] = useState(false);
+  const [fieldNameError, setFieldNameError] = useState(false);
+  const [fieldTypeError, setFieldTypeError] = useState(false);
+  const [customFields, setCustomFields] = useState<Array<{ name: string; value: string; type?: string }>>([]);
+  const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>([]);
+  const [fieldSearchQuery, setFieldSearchQuery] = useState("");
+  const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+
+  // Initialize selectedProcesses and drawerProcessStages from client
+  useEffect(() => {
+    if (client) {
+      setSelectedProcesses(client.processes);
+      const initialStages: Record<string, string> = {};
+      const headings = new Set<string>();
+      client.processes.forEach((processName) => {
+        const parts = processName.split(":");
+        if (parts.length >= 1) headings.add(parts[0].trim());
+      });
+      Array.from(headings).forEach((heading, idx) => {
+        const processId = `process-${idx + 1}`;
+        initialStages[processId] = idx === 0 ? "Insurance Verification" : "Initial Contact";
+      });
+      setDrawerProcessStages(initialStages);
+    }
+  }, [clientId]);
+
+  // Close field picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (processDropdownOpen && !target.closest(".process-dropdown-container")) {
+        setProcessDropdownOpen(false);
+      }
+      if (showFieldPicker && !target.closest(".field-picker-container")) {
+        setShowFieldPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [processDropdownOpen, showFieldPicker]);
+
+  if (!client) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-lg font-semibold" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
+            Client not found
+          </p>
+          <button
+            onClick={() => navigate("/clients")}
+            className="mt-4 text-sm"
+            style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif" }}
+          >
+            ← Back to Clients
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Derived data (verbatim from Clients.tsx) ─────────────────────────────
+
+  const drawerClientProcesses = (() => {
+    const headings = new Set<string>();
+    client.processes.forEach((processName) => {
+      const parts = processName.split(":");
+      if (parts.length >= 1) headings.add(parts[0].trim());
+    });
+    return Array.from(headings).map((heading, idx) => ({
+      id: `process-${idx + 1}`,
+      name: heading,
+      currentStage: idx === 0 ? "Insurance Verification" : "Billing Inquiry",
+      lastActivity: "Apr 10, 2024",
+      status: "In Progress" as "In Progress" | "Completed" | "Pending" | "On Hold",
+      created: idx === 0 ? "2024-03-15 09:30" : "2024-04-01 14:20",
+      responsible: idx === 0 ? "John Smith" : "Emily Davis",
+    }));
+  })();
+
+  const drawerActivityItems = (() => {
+    const findProcessId = (heading: string) => {
+      const process = drawerClientProcesses.find((p) => p.name === heading);
+      return process?.id || "process-1";
+    };
+    return [
+      {
+        id: "act-1",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "outbound_call" as const,
+        date: "Apr 10, 2024",
+        time: "2:30 PM",
+        title: "Outbound Call Completed",
+        stage: "Insurance Verification",
+        duration: "4:32",
+        status: "Completed",
+        callId: "call-001",
+      },
+      {
+        id: "act-2",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "stage_change" as const,
+        date: "Apr 8, 2024",
+        time: "10:15 AM",
+        title: "Stage Changed",
+        description: "Moved from Initial Contact → Insurance Verification",
+      },
+      {
+        id: "act-3",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "outbound_call" as const,
+        date: "Apr 8, 2024",
+        time: "9:30 AM",
+        title: "Outbound Call Completed",
+        stage: "Initial Contact",
+        duration: "3:15",
+        status: "Completed",
+        callId: "call-002",
+      },
+      {
+        id: "act-4",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "failed_call" as const,
+        date: "Apr 7, 2024",
+        time: "5:20 PM",
+        title: "Outbound Call Failed",
+        stage: "Initial Contact",
+        duration: "0:00",
+        status: "Failed",
+        callId: "call-003",
+      },
+      {
+        id: "act-5",
+        processId: findProcessId("Follow-up Calls"),
+        processName: "Follow-up Calls",
+        type: "inbound_call" as const,
+        date: "Apr 10, 2024",
+        time: "1:45 PM",
+        title: "Inbound Call Received",
+        stage: "Follow-up",
+        duration: "5:05",
+        status: "Completed",
+        callId: "call-006",
+      },
+    ];
+  })();
+
+  const getDrawerActivityCount = (processId: string) => {
+    if (processId === "all") return drawerActivityItems.length;
+    return drawerActivityItems.filter((item) => item.processId === processId).length;
+  };
+
+  const filteredDrawerActivities =
+    activeProcessTabDrawer === "all"
+      ? drawerActivityItems
+      : drawerActivityItems.filter((item) => item.processId === activeProcessTabDrawer);
+
+  const selectedDrawerProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
+
+  const getDrawerActivityIcon = (type: string) => {
+    switch (type) {
+      case "outbound_call": return <PhoneOutgoing className="w-5 h-5" />;
+      case "inbound_call": return <PhoneIncoming className="w-5 h-5" />;
+      case "failed_call": return <PhoneOff className="w-5 h-5" />;
+      case "stage_change": return <Settings className="w-5 h-5" />;
+      case "call_scheduled": return <CalendarClock className="w-5 h-5" />;
+      default: return <Clock className="w-5 h-5" />;
+    }
+  };
+
+  const getDrawerActivityColor = (type: string) => {
+    switch (type) {
+      case "outbound_call":
+      case "inbound_call":
+        return "text-secondary bg-secondary/10";
+      case "failed_call":
+        return "text-destructive bg-destructive/10";
+      case "stage_change":
+        return "text-primary bg-primary/10";
+      case "call_scheduled":
+        return "text-warning bg-warning/10";
+      default:
+        return "text-muted-foreground bg-muted";
+    }
+  };
+
+  // ─── Render ───────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-6 px-[150px]">
+      {/* Back button */}
+      <button
+        onClick={() => navigate("/clients")}
+        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Clients
+      </button>
+
+      {/* White card */}
+      <div className="max-w-5xl mx-auto bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+
+        {/* Hero: client identity */}
+        <div className="p-6 border-b border-border">
+          <div className="flex items-start gap-4">
+            <div
+              className="w-16 h-16 bg-gradient-to-br from-primary to-primary-hover text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-lg"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              {client.name.split(" ").map((n) => n[0]).join("").toUpperCase()}
+            </div>
+            <div className="flex-1">
+              <h2 className="text-xl font-bold mb-1" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
+                {client.name}
+              </h2>
+              <span
+                className="inline-block px-2.5 py-1.5 text-[11px] font-bold"
+                style={{
+                  fontFamily: "Outfit, sans-serif",
+                  backgroundColor:
+                    client.status === "Active" ? "#DCFCE7" : client.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                  color:
+                    client.status === "Active" ? "#10B981" : client.status === "Pending" ? "#F59E0B" : "#6B7280",
+                  borderRadius: "6px",
+                  padding: "6px 10px",
+                }}
+              >
+                {client.status}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="border-b border-border overflow-x-auto">
+          <div className="flex">
+            {(
+              [
+                { id: "overview" as const, label: "Overview" },
+                { id: "processes" as const, label: "Processes" },
+                { id: "activity" as const, label: "Activity" },
+                { id: "notes" as const, label: "Notes" },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveProfileTab(tab.id)}
+                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${
+                  activeProfileTab === tab.id
+                    ? "border-b-2 border-primary text-primary"
+                    : "hover:text-foreground"
+                }`}
+                style={{
+                  fontFamily: "Outfit, sans-serif",
+                  color: activeProfileTab === tab.id ? undefined : "#6B7280",
+                }}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-6 relative">
+
+          {/* ── Overview Tab ── */}
+          {activeProfileTab === "overview" && (
+            <div className="space-y-6">
+              <div className="space-y-0">
+                <div className="space-y-3">
+                  {/* NAME */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      NAME
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={client.name}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* STATUS */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      STATUS
+                    </label>
+                    <select
+                      defaultValue={client.status}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    >
+                      <option>Active</option>
+                      <option>Inactive</option>
+                      <option>Pending</option>
+                    </select>
+                  </div>
+
+                  {/* PROCESSES */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      PROCESSES
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {selectedProcesses && selectedProcesses.length > 0 ? (
+                        selectedProcesses.map((process, idx) => (
+                          <div
+                            key={idx}
+                            className="group relative px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap select-none transition-all"
+                            style={{ backgroundColor: "#4F8EF7", color: "#ffffff", fontFamily: "Outfit, sans-serif", borderRadius: "20px" }}
+                          >
+                            <span className="pr-5">{process}</span>
+                            <button
+                              onClick={() => {
+                                const updated = selectedProcesses.filter((_, i) => i !== idx);
+                                setSelectedProcesses(updated);
+                                setClients((prev) =>
+                                  prev.map((c) => (c.id === client.id ? { ...c, processes: updated } : c))
+                                );
+                                toast.success("Process removed");
+                              }}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/20"
+                            >
+                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))
+                      ) : (
+                        <span className="text-sm" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>
+                          No processes assigned
+                        </span>
+                      )}
+                      <DropdownMenu open={processDropdownOpen} onOpenChange={setProcessDropdownOpen}>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            className="px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap select-none transition-all hover:bg-gray-100"
+                            style={{ backgroundColor: "#F3F4F6", color: "#6B7280", fontFamily: "Outfit, sans-serif", borderRadius: "20px", border: "1px solid #E5E7EB" }}
+                          >
+                            + Add Process
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56">
+                          {availableProcesses
+                            .filter((p) => !selectedProcesses.includes(p))
+                            .map((process) => (
+                              <DropdownMenuItem
+                                key={process}
+                                onClick={() => {
+                                  const updated = [...selectedProcesses, process];
+                                  setSelectedProcesses(updated);
+                                  setClients((prev) =>
+                                    prev.map((c) => (c.id === client.id ? { ...c, processes: updated } : c))
+                                  );
+                                  toast.success(`${process} added`);
+                                  setProcessDropdownOpen(false);
+                                }}
+                              >
+                                {process}
+                              </DropdownMenuItem>
+                            ))}
+                          {availableProcesses.filter((p) => !selectedProcesses.includes(p)).length === 0 && (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">All processes assigned</div>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+
+                  {/* EMAIL */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      EMAIL
+                    </label>
+                    <input
+                      type="email"
+                      defaultValue={client.email}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* PHONE */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      PHONE
+                    </label>
+                    <input
+                      type="tel"
+                      defaultValue={client.phone}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* LOCATION */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      LOCATION
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue="New York, NY"
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* COMPANY */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      COMPANY
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={client.companyName || ""}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* ROLE */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      ROLE
+                    </label>
+                    <input
+                      type="text"
+                      defaultValue={client.jobPosition || ""}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* Custom fields */}
+                  {customFields.map((field, index) => (
+                    <div key={index} className="flex flex-col gap-1.5">
+                      <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                        {field.name.toUpperCase()}
+                      </label>
+                      <input
+                        type="text"
+                        defaultValue={field.value}
+                        className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                        style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                        onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                        onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Field action links */}
+                <div className="pt-6 mt-6 border-t border-border">
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={() => setShowSelectFieldModal(true)}
+                      className="text-sm font-medium transition-colors"
+                      style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+                    >
+                      Select field
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowCreateField(true);
+                        setNewFieldName("");
+                        setNewFieldType("");
+                        setSelectedFieldType(null);
+                        setFieldNameError(false);
+                        setFieldTypeError(false);
+                      }}
+                      className="text-sm font-medium transition-colors"
+                      style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+                    >
+                      Create field
+                    </button>
+                  </div>
+                </div>
+
+                {/* Save / Discard Buttons */}
+                <div className="flex gap-3 pt-6 mt-6">
+                  <button
+                    onClick={() => toast.success("Changes saved successfully")}
+                    className="flex-1 py-3 text-white font-bold rounded transition-colors hover:opacity-90"
+                    style={{ backgroundColor: "#4F8EF7", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
+                  >
+                    Save Changes
+                  </button>
+                  <button
+                    onClick={() => navigate("/clients")}
+                    className="px-6 py-3 border font-medium rounded transition-colors hover:bg-gray-50"
+                    style={{ borderColor: "#E5E7EB", color: "#6B7280", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
+                  >
+                    Discard
+                  </button>
+                </div>
+
+                {/* Create Field Popup Overlay */}
+                {showCreateField && (
+                  <>
+                    <div
+                      className="absolute inset-0 z-40"
+                      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
+                      onClick={() => setShowCreateField(false)}
+                    />
+                    <div
+                      className="absolute left-6 right-6 top-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl z-50 p-6"
+                      style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
+                          Create Custom Field
+                        </h3>
+                        <button onClick={() => setShowCreateField(false)} className="hover:bg-gray-100 p-1 rounded transition-colors">
+                          <X className="w-5 h-5" style={{ color: "#6B7280" }} />
+                        </button>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                          Field Name
+                        </label>
+                        <input
+                          type="text"
+                          value={newFieldName}
+                          onChange={(e) => { setNewFieldName(e.target.value); setFieldNameError(false); }}
+                          placeholder="e.g. Insurance ID"
+                          className="w-full px-3 py-2 bg-white border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                          style={{ borderColor: fieldNameError ? "#DC2626" : "#E5E7EB", height: "40px", fontFamily: "Outfit, sans-serif" }}
+                        />
+                        {fieldNameError && <p className="text-xs mt-1" style={{ color: "#DC2626", fontFamily: "Outfit, sans-serif" }}>Field name is required</p>}
+                      </div>
+
+                      <div className="mt-3">
+                        <label className="block text-sm font-medium mb-2" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                          Field Type
+                        </label>
+                        <select
+                          value={selectedFieldType || ""}
+                          onChange={(e) => { setSelectedFieldType(e.target.value); setNewFieldType(e.target.value); setFieldTypeError(false); }}
+                          className="w-full px-3 py-2 bg-white border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+                          style={{ borderColor: fieldTypeError ? "#DC2626" : "#E5E7EB", height: "40px", fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <option value="">Select field type</option>
+                          <option value="String">String</option>
+                          <option value="List">List</option>
+                          <option value="Date/Time">Date/Time</option>
+                          <option value="Date">Date</option>
+                          <option value="Book a Resource">Book a Resource</option>
+                          <option value="Address">Address</option>
+                          <option value="Link">Link</option>
+                          <option value="File">File</option>
+                          <option value="Money">Money</option>
+                          <option value="Yes/No">Yes/No</option>
+                          <option value="Number">Number</option>
+                          <option value="WhatsApp Link">WhatsApp Link</option>
+                        </select>
+                        {fieldTypeError && <p className="text-xs mt-1" style={{ color: "#DC2626", fontFamily: "Outfit, sans-serif" }}>Please select a field type</p>}
+                      </div>
+
+                      <div className="mb-3 mt-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={fieldMultiple} onChange={(e) => setFieldMultiple(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
+                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Multiple</span>
+                        </label>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={fieldShowAlways} onChange={(e) => setFieldShowAlways(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
+                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Show always</span>
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-xs cursor-help" style={{ backgroundColor: "#E5E7EB", color: "#6B7280" }} title="Field will always appear in the profile regardless of stage">i</span>
+                        </label>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={fieldTooltip} onChange={(e) => setFieldTooltip(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
+                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Enable field tooltip</span>
+                        </label>
+                      </div>
+
+                      <div className="mb-4">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="checkbox" checked={fieldVisibleToSelected} onChange={(e) => setFieldVisibleToSelected(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
+                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Make this field visible to selected users only</span>
+                        </label>
+                      </div>
+
+                      <div className="my-4 border-t" style={{ borderColor: "#E5E7EB" }} />
+
+                      <div className="flex items-center gap-3 pt-2">
+                        <button
+                          onClick={() => { setShowCreateField(false); setNewFieldName(""); setNewFieldType(""); setSelectedFieldType(null); setFieldNameError(false); setFieldTypeError(false); }}
+                          className="flex-1 px-4 py-2.5 border rounded-md text-sm font-medium transition-colors hover:bg-gray-50"
+                          style={{ borderColor: "#E5E7EB", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!newFieldName.trim()) { setFieldNameError(true); return; }
+                            if (!newFieldType) { setFieldTypeError(true); return; }
+                            setCustomFields([...customFields, { name: newFieldName, value: "", type: newFieldType }]);
+                            setShowCreateField(false);
+                            setNewFieldName(""); setNewFieldType(""); setSelectedFieldType(null);
+                            setFieldNameError(false); setFieldTypeError(false);
+                            toast.success("Field created successfully");
+                          }}
+                          disabled={!newFieldName.trim() || !newFieldType}
+                          className="flex-1 px-4 py-2.5 text-white rounded-md text-sm font-bold transition-colors"
+                          style={{
+                            backgroundColor: !newFieldName.trim() || !newFieldType ? "#9CA3AF" : "#4F8EF7",
+                            fontFamily: "Outfit, sans-serif",
+                            cursor: !newFieldName.trim() || !newFieldType ? "not-allowed" : "pointer",
+                            opacity: !newFieldName.trim() || !newFieldType ? 0.6 : 1,
+                          }}
+                        >
+                          Create Field
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Processes Tab ── */}
+          {activeProfileTab === "processes" && (
+            <div className="space-y-4">
+              {(() => {
+                const processToShow = activeProcessTabDrawer === "all" ? drawerClientProcesses[0]?.name : activeProcessTabDrawer;
+                const selectedProcess = drawerClientProcesses.find((p) => p.name === processToShow);
+                if (!selectedProcess) {
+                  return <div className="text-center py-8 text-muted-foreground">No process selected</div>;
+                }
+
+                const processActivities = drawerActivityItems.filter((item) => item.processId === selectedProcess.id);
+                const lastActivity = processActivities.length > 0 ? processActivities[0] : null;
+
+                return (
+                  <div
+                    key={selectedProcess.id}
+                    style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}
+                  >
+                    <div className="p-5 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <h3 style={{ fontFamily: "DM Sans, sans-serif", fontSize: "16px", fontWeight: "bold", color: "#1F2937", marginBottom: "8px" }}>
+                            {selectedProcess.name}
+                          </h3>
+                        </div>
+                      </div>
+
+                      {/* STAGE */}
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                          STAGE
+                        </label>
+                        <div className="flex items-center gap-3">
+                          {(() => {
+                            const currentStage = drawerProcessStages[selectedProcess.id] || selectedProcess.currentStage;
+                            const stages = getStagesForProcess(selectedProcess.name);
+                            const currentIndex = stages.findIndex((s) => s.label === currentStage);
+                            return (
+                              <>
+                                <div className="flex items-center" style={{ gap: "4px" }}>
+                                  {stages.map((stage, index) => {
+                                    const isFilled = index <= currentIndex;
+                                    const stageKey = `${selectedProcess.id}-${index}`;
+                                    return (
+                                      <div key={stage.id} style={{ position: "relative" }}>
+                                        <button
+                                          onClick={() => { setDrawerProcessStages((prev) => ({ ...prev, [selectedProcess.id]: stage.label })); toast.success(`Stage updated to ${stage.label}`); }}
+                                          onMouseEnter={() => setHoveredStage(stageKey)}
+                                          onMouseLeave={() => setHoveredStage(null)}
+                                          style={{ width: "28px", height: "8px", borderRadius: "2px", backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB", border: isFilled ? "none" : "1px solid #D1D5DB", cursor: "pointer", transition: "all 0.2s", padding: 0 }}
+                                          className="hover:opacity-80"
+                                        />
+                                        {hoveredStage === stageKey && (
+                                          <div style={{ position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "11px", borderRadius: "4px", padding: "3px 8px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none", fontFamily: "Outfit, sans-serif" }}>
+                                            {stage.label}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <span style={{ fontSize: "14px", fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                  {currentStage}
+                                </span>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+
+                      {/* STATUS */}
+                      <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                          STATUS
+                        </label>
+                        <div className="relative inline-block" style={{ width: "fit-content" }}>
+                          <button
+                            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
+                            style={{
+                              backgroundColor: selectedProcess.status === "Completed" ? "#D1FAE5" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                              color: selectedProcess.status === "Completed" ? "#065F46" : selectedProcess.status === "In Progress" ? "#C2410C" : selectedProcess.status === "Pending" ? "#92400E" : "#6B7280",
+                              border: `1px solid ${selectedProcess.status === "Completed" ? "#A7F3D0" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FDE68A" : "#E5E7EB"}`,
+                              fontFamily: "Outfit, sans-serif",
+                            }}
+                          >
+                            {selectedProcess.status} <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* DATE and TIME */}
+                      <div className="border-t border-border pt-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>DATE</label>
+                          <input
+                            type="date"
+                            defaultValue="2024-03-15"
+                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                          />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>TIME</label>
+                          <input
+                            type="time"
+                            defaultValue="09:30"
+                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                          />
+                        </div>
+                      </div>
+
+                      {/* RESPONSIBLE */}
+                      <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>RESPONSIBLE</label>
+                        <div className="relative inline-block" style={{ width: "fit-content" }}>
+                          <button className="text-sm text-foreground hover:text-primary flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                            {selectedProcess.responsible || "John Smith"} <ChevronDown className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* LAST ACTIVITY */}
+                      {lastActivity && (
+                        <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>LAST ACTIVITY</label>
+                          <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "16px", rowGap: "8px", fontSize: "12px" }}>
+                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Date & Time:</div>
+                              <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{lastActivity.date} at {lastActivity.time}</div>
+
+                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Created By:</div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <div style={{ width: "20px", height: "20px", backgroundColor: "#4F8EF7", color: "#FFFFFF", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "bold", fontFamily: "DM Sans, sans-serif" }}>
+                                  {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI" : "JS"}
+                                </div>
+                                <span style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                  {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI Agent" : "John Smith"}
+                                </span>
+                              </div>
+
+                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Event Type:</div>
+                              <div>
+                                <span style={{
+                                  padding: "2px 8px",
+                                  borderRadius: "4px",
+                                  fontSize: "10px",
+                                  fontWeight: "700",
+                                  backgroundColor: lastActivity.type === "stage_change" ? "#4F8EF7" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "#10B981" : "#F59E0B",
+                                  color: "#FFFFFF",
+                                  fontFamily: "Outfit, sans-serif",
+                                }}>
+                                  {lastActivity.type === "stage_change" ? "Stage changed" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Activity created" : "Call scheduled"}
+                                </span>
+                              </div>
+
+                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Description:</div>
+                              <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                {(lastActivity as any).description || (lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Contact customer: Call for update" : "New → Can't Contact")}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* ── Activity Tab ── */}
+          {activeProfileTab === "activity" && (
+            <div className="space-y-6">
+              {/* Process Filter Chips */}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => { setActiveProcessTabDrawer("all"); setShowCallDetailsFromProfile(false); }}
+                  className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${activeProcessTabDrawer === "all" ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80"}`}
+                  style={{ fontFamily: "Outfit, sans-serif", color: activeProcessTabDrawer === "all" ? undefined : "#6B7280" }}
+                >
+                  All
+                </button>
+                {drawerClientProcesses.map((process) => (
+                  <button
+                    key={process.id}
+                    onClick={() => { setActiveProcessTabDrawer(process.id); setShowCallDetailsFromProfile(false); }}
+                    className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${activeProcessTabDrawer === process.id ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80"}`}
+                    style={{ fontFamily: "Outfit, sans-serif", color: activeProcessTabDrawer === process.id ? undefined : "#6B7280" }}
+                  >
+                    {process.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Activity List */}
+              <div className="space-y-3">
+                {filteredDrawerActivities.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>No activity for this process yet</p>
+                  </div>
+                ) : (
+                  filteredDrawerActivities.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-4 border border-border rounded-xl hover:bg-muted/30 transition-all cursor-pointer"
+                      onClick={() => {
+                        if ((item as any).callId) {
+                          setSelectedCallId((item as any).callId);
+                          setShowCallDetailsFromProfile(true);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getDrawerActivityColor(item.type)}`}>
+                          {getDrawerActivityIcon(item.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="font-medium text-sm" style={{ fontFamily: "DM Sans, sans-serif" }}>{item.title}</p>
+                              {(item as any).description && (
+                                <p className="text-xs mt-0.5" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{(item as any).description}</p>
+                              )}
+                            </div>
+                            <div className="flex-shrink-0 text-right">
+                              <p className="text-xs whitespace-nowrap" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{item.date}</p>
+                              <p className="text-xs whitespace-nowrap" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{item.time}</p>
+                            </div>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 mt-2">
+                            {activeProcessTabDrawer === "all" && (
+                              <span className="text-xs" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                                Process: <span className="font-medium text-primary">{item.processName}</span>
+                              </span>
+                            )}
+                            {(item as any).duration && (
+                              <span className="text-xs" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                                Duration: <span className="font-medium">{(item as any).duration}</span>
+                              </span>
+                            )}
+                            {(item as any).status && (
+                              <span
+                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                                  (item as any).status === "Completed"
+                                    ? "bg-success/10 text-success"
+                                    : (item as any).status === "Failed"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-muted"
+                                }`}
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                {(item as any).status}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Call Details — inline collapsible panel */}
+              {showCallDetailsFromProfile && selectedCallId && (
+                <div className="mt-4 space-y-6 border-t border-border pt-6">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-3">
+                      <h2 className="text-xl font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}>Call Details</h2>
+                      <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        #{selectedCallId}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => { setShowCallDetailsFromProfile(false); setSelectedCallId(null); setIsPlayingRecording(false); setPlaybackSpeed(1); }}
+                      className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" style={{ color: "#6B7280" }} />
+                    </button>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+                    <h2 className="text-lg font-semibold mb-4" style={{ fontFamily: "DM Sans, sans-serif" }}>Summary</h2>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Client</p>
+                          <p className="font-semibold text-sm">{client.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Call Time</p>
+                          <p className="font-semibold text-sm">Apr 10, 2:30 PM</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Type</p>
+                          <span className="inline-flex items-center px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">Outbound</span>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Current Stage</p>
+                          <p className="font-semibold text-sm">{client.stage || "Insurance Verification"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Call Status</p>
+                          <span className="inline-flex items-center px-2.5 py-0.5 bg-success/10 text-success rounded-full text-xs font-medium">Completed</span>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground mb-1">Duration</p>
+                          <p className="font-semibold text-sm">4m 32s</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Recording Player */}
+                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Recording</h2>
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground mr-2">Speed:</span>
+                        {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
+                          <button
+                            key={speed}
+                            onClick={() => setPlaybackSpeed(speed)}
+                            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
+                          >
+                            {speed}x
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
+                        <button
+                          onClick={() => setIsPlayingRecording(!isPlayingRecording)}
+                          className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
+                        >
+                          {isPlayingRecording ? (
+                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                            </svg>
+                          ) : (
+                            <Play className="w-6 h-6 ml-1" />
+                          )}
+                        </button>
+                        <div className="flex-1">
+                          <div className="h-2 bg-border rounded-full overflow-hidden">
+                            <div className="h-full bg-primary w-1/3" />
+                          </div>
+                          <div className="flex justify-between mt-2 text-sm text-muted-foreground">
+                            <span>1:30</span>
+                            <span>4:32</span>
+                          </div>
+                        </div>
+                        <Tooltip text="Download Recording">
+                          <Button variant="ghost" size="sm">
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Transcript */}
+                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <h2 className="text-lg font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Transcript</h2>
+                      <Tooltip text="Download Transcript">
+                        <Button variant="outline" size="sm">
+                          <FileText className="w-4 h-4" />
+                        </Button>
+                      </Tooltip>
+                    </div>
+                    <div className="space-y-4 max-h-96 overflow-y-auto">
+                      <div className="space-y-4">
+                        {[
+                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:05", text: `Hello, this is MantraAssist calling for ${client.name}. Am I speaking with them?` },
+                          { role: "client", initials: client.name.split(" ").map((n) => n[0]).join("") || "CL", name: client.name, ts: "00:12", text: `Yes, this is ${client.name.split(" ")[0]} speaking.` },
+                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:16", text: "Great! I'm calling to help with your insurance verification. Do you have a few minutes to discuss?" },
+                          { role: "client", initials: client.name.split(" ").map((n) => n[0]).join("") || "CL", name: client.name, ts: "00:20", text: "Sure, I have some time now." },
+                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:24", text: "Perfect! I'll need to verify a few details about your insurance coverage..." },
+                        ].map((msg, i) => (
+                          <div key={i} className="flex gap-3">
+                            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${msg.role === "AI" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"}`}>
+                              {msg.initials}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-semibold text-sm">{msg.name}</span>
+                                <span className="text-xs text-muted-foreground">{msg.ts}</span>
+                              </div>
+                              <p className="text-sm">{msg.text}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Notes Tab ── */}
+          {activeProfileTab === "notes" && (
+            <div className="space-y-4">
+              <textarea
+                placeholder="Enter note about this client..."
+                className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+                rows={5}
+              />
+              <Button variant="primary" className="w-full justify-center">
+                <MessageSquare className="w-4 h-4" />
+                Add Note
+              </Button>
+            </div>
+          )}
+
+          {/* ── Select Fields Modal ── */}
+          {showSelectFieldModal && (
+            <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
+              <div
+                className="bg-white rounded-lg shadow-xl border"
+                style={{ borderColor: "#E5E7EB", borderRadius: "8px", width: "calc(100% - 64px)", maxWidth: "600px", maxHeight: "420px", overflow: "hidden", display: "flex", flexDirection: "column" }}
+              >
+                <div className="p-4 border-b" style={{ borderColor: "#E5E7EB" }}>
+                  <h3 className="text-base font-bold mb-3" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Select fields</h3>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
+                    <input
+                      type="text"
+                      value={fieldSearchQuery}
+                      onChange={(e) => setFieldSearchQuery(e.target.value)}
+                      placeholder="Find field..."
+                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
+                      style={{ borderColor: "#E5E7EB", fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </div>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-bold mb-2" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>About Client</h4>
+                    <div className="grid grid-cols-3 gap-2">
+                      {["Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process"].map((field) => (
+                        <label key={field} className="flex items-center gap-2 p-2 hover:bg-muted/30 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedFieldsForModal.includes(field)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSelectedFieldsForModal([...selectedFieldsForModal, field]);
+                              else setSelectedFieldsForModal(selectedFieldsForModal.filter((f) => f !== field));
+                            }}
+                            className="w-4 h-4"
+                          />
+                          <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>{field}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  {customFields.length > 0 && (
+                    <div>
+                      <h4 className="text-sm font-bold mb-2" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>More</h4>
+                      <div className="grid grid-cols-3 gap-2">
+                        {customFields.map((field, index) => (
+                          <label key={index} className="flex items-center gap-2 p-2 hover:bg-muted/30 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedFieldsForModal.includes(field.name)}
+                              onChange={(e) => {
+                                if (e.target.checked) setSelectedFieldsForModal([...selectedFieldsForModal, field.name]);
+                                else setSelectedFieldsForModal(selectedFieldsForModal.filter((f) => f !== field.name));
+                              }}
+                              className="w-4 h-4"
+                            />
+                            <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>{field.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="p-4 border-t flex items-center justify-between" style={{ borderColor: "#E5E7EB" }}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedFieldsForModal.length === 9 + customFields.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedFieldsForModal(["Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process", ...customFields.map((f) => f.name)]);
+                        } else {
+                          setSelectedFieldsForModal([]);
+                        }
+                      }}
+                      className="w-4 h-4"
+                    />
+                    <span className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>select all</span>
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => { setShowSelectFieldModal(false); setSelectedFieldsForModal([]); }} className="text-sm px-4" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                      CANCEL
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newFields = selectedFieldsForModal
+                          .filter((fieldName) => !customFields.some((f) => f.name === fieldName))
+                          .map((fieldName) => ({ name: fieldName, value: "—" }));
+                        setCustomFields([...customFields, ...newFields]);
+                        setShowSelectFieldModal(false);
+                        setSelectedFieldsForModal([]);
+                        toast.success("Fields added to overview");
+                      }}
+                      className="px-6 py-2 text-xs font-bold uppercase tracking-wide text-white rounded transition-colors"
+                      style={{ backgroundColor: "#4F8EF7", height: "36px", width: "80px", borderRadius: "6px", fontFamily: "Outfit, sans-serif" }}
+                    >
+                      SELECT
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

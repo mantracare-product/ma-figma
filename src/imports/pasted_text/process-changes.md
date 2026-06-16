@@ -1,0 +1,26 @@
+In Process.tsx, make the following precise changes:
+
+Step 1: Remove four steps from both allSteps arrays
+There are two allSteps arrays in the file — one in the drawer body IIFE and one in the footer "Add Step" button's onClick handler. In both arrays, remove the entries with key "wait", key "end", key "bookappointment", and key "reschedule". Do not remove any other steps.
+
+Step 2: Remove the "Wait / Delay" step JSX block from the step detail drawer body
+Find the block that checks currentEditingStep.stepKey === "wait" and renders the delay value input and delay unit select. Remove that entire conditional block entirely.
+
+Step 3: Remove the "Book Appointment / Reschedule Appointment" step JSX block from the step detail drawer body
+Find the block that checks currentEditingStep.stepKey === "bookappointment" || currentEditingStep.stepKey === "reschedule" and renders the User select and Appointment Details select. Remove that entire conditional block entirely.
+
+Step 4: Restructure the Execution, Delay, and Conditions sections in the step detail drawer body
+Currently the Execution section renders first, then step-specific content, then Conditions at the bottom. Replace this arrangement with a new top section that always renders for every step except those currently excluded from Execution (only "endworkflow" is excluded — keep that exclusion). The new top section renders three things in this order: Execution row, then Delay row, then Conditions row. After these three rows, the step-specific content renders below as before.
+The new layout for the top section is a single div with a clean form structure containing these three labeled rows, stacked vertically with space-y-6:
+Execution row — keep it exactly as it is now: a label "Execution" and the button that opens the timing modal showing "Wait", "In Parallel", or "End Flow" based on the current executionType value.
+Delay row — render a label "Delay" and a single inline flex container with two parts side by side. The left part is a number input bound to delayValue and setDelayValue, styled with no right border radius so it visually connects to the right part. The right part is a styled clickable button that displays the current delayUnit value. When this button is clicked it toggles a small absolutely positioned dropdown below it showing options: Second, Minute, Hour, Day, Week, Month. Clicking an option sets delayUnit to that value and closes the dropdown. The button has a left border and no left border radius to visually connect it to the number input, making the two parts appear as one combined field. Add a new boolean state delayUnitDropdownOpen defaulting to false to control this dropdown visibility. Add setDelayUnitDropdownOpen(false) to resetStepDetailState.
+Conditions row — render a label row that contains the text "Conditions (Optional)" and immediately to its right a small Info icon. On hover over the Info icon show a tooltip with the text: "Add conditions to run this step only when specific criteria are met. Without conditions, this step applies to all contacts by default." Below the label row, render the existing conditions mapping JSX exactly as it currently exists — the conditions array map with field, operator, and value selects, the delete button per condition, the AND/OR toggle between conditions, and the Add Condition button. Move this entire block from its current position at the bottom of the drawer body to here. Remove the standalone Conditions section that currently renders at the very bottom of the drawer body after all step-specific content blocks.
+
+Step 5: Add "End Flow" option to the Execution timing modal
+Currently the Execution Timing Modal has two radio options: "Wait" and "In Parallel". Add a third radio option below "In Parallel" with value "end". Its label text is "End Flow" and its description is "Terminate the workflow after this step completes, marking the contact as done." Update the executionType state type from "wait" | "parallel" to "wait" | "parallel" | "end". Update the display button in the drawer body that shows the current execution type: when executionType is "end" display the text "End Flow", when "wait" display "Wait", when "parallel" display "In Parallel".
+
+Step 6: Clean up the footer allSteps array
+Confirm the second allSteps array inside the footer "Add Step" button's onClick handler also does not contain entries with key "wait", "end", "bookappointment", or "reschedule". This was stated in Step 1 but applies to both locations explicitly.
+
+Step 7: No other changes
+Do not change any other step-specific content blocks, drawer headers, drawer footers, the step list drawer, or any modals outside the Execution Timing Modal. The only changes are: remove four steps from both step lists, remove two step-specific JSX blocks from the drawer body, restructure the top three fields into Execution plus Delay plus Conditions in that order before all step-specific content, add End Flow as a third radio in the timing modal, and add the unit dropdown toggle for the delay field.

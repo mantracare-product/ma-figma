@@ -1,0 +1,1974 @@
+import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router";
+import {
+  Search, Plus, Eye, MoreVertical, Copy, FileText, X,
+  Edit2, Share2, Trash2, ArrowLeft, ChevronRight, Type,
+  Mail, Phone, AlignLeft, Hash, Link2, Info, GripVertical,
+  ChevronUp, ChevronDown, Pencil
+} from "lucide-react";
+import { Button } from "../components/ui/Button";
+import { toast } from "sonner";
+
+// ─── Data ────────────────────────────────────────────────────────────────────
+
+type FieldDef = {
+  label: string;
+  type: "text" | "email" | "tel" | "textarea" | "number" | "url" | "select";
+  placeholder?: string;
+  required?: boolean;
+};
+
+type Form = {
+  id: number;
+  name: string;
+  formType: "standard" | "intake";
+  createdBy: string;
+  fieldCount: number;
+  fields: FieldDef[];
+  status: "live" | "draft";
+  submissions: number;
+  enabled: boolean;
+  description: string;
+  createdAt: string;
+};
+
+type Submission = {
+  id: number;
+  formId: number;
+  name: string;
+  email: string;
+  date: string;
+  status?: string;
+  fields: Record<string, string>;
+};
+
+type FlowStep = { formId: number; required: boolean };
+type IntakeFlow = {
+  id: number;
+  name: string;
+  groups: string[];
+  steps: FlowStep[];
+  welcomeMessage: string;
+  senderName: string;
+  hasActiveClients: boolean;
+  createdAt: string;
+};
+
+const INITIAL_FORMS: Form[] = [
+  {
+    id: 1,
+    name: "Contact Us",
+    formType: "standard",
+    createdBy: "Admin User",
+    fieldCount: 4,
+    fields: [
+      { label: "Full Name", type: "text", placeholder: "e.g. Jane Smith", required: true },
+      { label: "Email", type: "email", placeholder: "you@company.com", required: true },
+      { label: "Phone", type: "tel", placeholder: "+1 (555) 000-0000" },
+      { label: "Message", type: "textarea", placeholder: "How can we help you?" },
+    ],
+    status: "live",
+    submissions: 12,
+    enabled: true,
+    description: "General contact inquiries routed directly into your AI brain.",
+    createdAt: "May 3, 2026",
+  },
+  {
+    id: 2,
+    name: "Book a Demo",
+    formType: "standard",
+    createdBy: "Admin User",
+    fieldCount: 6,
+    fields: [
+      { label: "First Name", type: "text", placeholder: "First name", required: true },
+      { label: "Last Name", type: "text", placeholder: "Last name", required: true },
+      { label: "Work Email", type: "email", placeholder: "you@company.com", required: true },
+      { label: "Company", type: "text", placeholder: "Your company name" },
+      { label: "Team Size", type: "select", placeholder: "Select team size" },
+      { label: "What are you looking for?", type: "textarea", placeholder: "Tell us about your use case" },
+    ],
+    status: "live",
+    submissions: 34,
+    enabled: true,
+    description: "Qualified demo requests with team context, synced to your pipeline.",
+    createdAt: "Apr 18, 2026",
+  },
+  {
+    id: 3,
+    name: "Support Request",
+    formType: "standard",
+    createdBy: "Admin User",
+    fieldCount: 5,
+    fields: [
+      { label: "Full Name", type: "text", placeholder: "Your name", required: true },
+      { label: "Email", type: "email", placeholder: "you@company.com", required: true },
+      { label: "Subject", type: "text", placeholder: "Brief description of issue" },
+      { label: "Priority", type: "select", placeholder: "Low / Medium / High" },
+      { label: "Description", type: "textarea", placeholder: "Describe the issue in detail" },
+    ],
+    status: "draft",
+    submissions: 0,
+    enabled: false,
+    description: "Customer support intake — not yet published.",
+    createdAt: "Jun 10, 2026",
+  },
+  {
+    id: 4,
+    name: "Newsletter Signup",
+    formType: "standard",
+    createdBy: "Admin User",
+    fieldCount: 2,
+    fields: [
+      { label: "Name", type: "text", placeholder: "Your name", required: true },
+      { label: "Email", type: "email", placeholder: "you@company.com", required: true },
+    ],
+    status: "live",
+    submissions: 89,
+    enabled: true,
+    description: "One-click newsletter opt-in. Subscribers are tagged and enrolled automatically.",
+    createdAt: "Mar 22, 2026",
+  },
+  {
+    id: 5,
+    name: "Patient Intake Form",
+    formType: "intake",
+    createdBy: "Admin User",
+    fieldCount: 7,
+    fields: [
+      { label: "Full Name", type: "text", placeholder: "e.g. Jane Smith", required: true },
+      { label: "Date of Birth", type: "text", placeholder: "MM/DD/YYYY", required: true },
+      { label: "Email", type: "email", placeholder: "you@example.com", required: true },
+      { label: "Phone", type: "tel", placeholder: "+1 (555) 000-0000" },
+      { label: "Primary Insurance", type: "text", placeholder: "Insurance provider name" },
+      { label: "Medical History", type: "textarea", placeholder: "Please describe any relevant medical history" },
+      { label: "Consent to Treatment", type: "select", placeholder: "Yes / No" },
+    ],
+    status: "live",
+    submissions: 23,
+    enabled: true,
+    description: "New patient onboarding — collects health history, consent, and contact preferences.",
+    createdAt: "Jun 1, 2026",
+  },
+];
+
+const INITIAL_FLOWS: IntakeFlow[] = [
+  {
+    id: 1,
+    name: "New Patient Onboarding",
+    groups: ["New Leads"],
+    steps: [
+      { formId: 1, required: true },
+      { formId: 5, required: true },
+    ],
+    welcomeMessage: "Welcome to our practice! We're excited to have you. Please take a moment to complete the following forms before your first appointment.",
+    senderName: "Dr. Sarah Kim",
+    hasActiveClients: true,
+    createdAt: "Jun 1, 2026",
+  },
+  {
+    id: 2,
+    name: "Demo Request Flow",
+    groups: ["New Leads", "Returning Clients"],
+    steps: [
+      { formId: 2, required: true },
+    ],
+    welcomeMessage: "Hi! Thank you for your interest in booking a demo. Please fill out the form below and we'll be in touch shortly.",
+    senderName: "The Sales Team",
+    hasActiveClients: false,
+    createdAt: "May 15, 2026",
+  },
+];
+
+const DUMMY_SUBMISSIONS: Submission[] = [
+  {
+    id: 1, formId: 1, name: "Sarah Johnson", email: "sarah@example.com", date: "Jun 12, 2026", status: "completed",
+    fields: { "Full Name": "Sarah Johnson", "Email": "sarah@example.com", "Phone": "+1 555-0101", "Message": "I'd like to learn more about your AI features." },
+  },
+  {
+    id: 2, formId: 2, name: "Marcus Lee", email: "marcus@techcorp.io", date: "Jun 11, 2026", status: "sent",
+    fields: { "First Name": "Marcus", "Last Name": "Lee", "Work Email": "marcus@techcorp.io", "Company": "TechCorp", "Team Size": "11–50", "What are you looking for?": "We need an AI receptionist for our support team." },
+  },
+  {
+    id: 3, formId: 4, name: "Priya Nair", email: "priya@designstudio.com", date: "Jun 11, 2026", status: "completed",
+    fields: { "Name": "Priya Nair", "Email": "priya@designstudio.com" },
+  },
+  {
+    id: 4, formId: 1, name: "Daniel Torres", email: "daniel.t@gmail.com", date: "Jun 10, 2026", status: "pending",
+    fields: { "Full Name": "Daniel Torres", "Email": "daniel.t@gmail.com", "Phone": "+1 555-0202", "Message": "Can you integrate with HubSpot?" },
+  },
+  {
+    id: 5, formId: 2, name: "Amara Osei", email: "amara@venture.co", date: "Jun 9, 2026", status: "completed",
+    fields: { "First Name": "Amara", "Last Name": "Osei", "Work Email": "amara@venture.co", "Company": "Venture Co", "Team Size": "51–200", "What are you looking for?": "Interested in enterprise pricing." },
+  },
+  {
+    id: 6, formId: 4, name: "Lena Fischer", email: "lena@studio.de", date: "Jun 8, 2026", status: "sent",
+    fields: { "Name": "Lena Fischer", "Email": "lena@studio.de" },
+  },
+  {
+    id: 7, formId: 1, name: "Noah Williams", email: "noah@wills.co", date: "Jun 7, 2026", status: "failed",
+    fields: { "Full Name": "Noah Williams", "Email": "noah@wills.co", "Phone": "+1 555-0303", "Message": "Looking for a demo of your CRM tools." },
+  },
+  {
+    id: 8, formId: 2, name: "Chloe Dupont", email: "chloe@agence.fr", date: "Jun 5, 2026", status: "pending",
+    fields: { "First Name": "Chloe", "Last Name": "Dupont", "Work Email": "chloe@agence.fr", "Company": "Agence Dupont", "Team Size": "1–10", "What are you looking for?": "Small agency needing AI scheduling." },
+  },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function fieldTypeLabel(type: FieldDef["type"]) {
+  const map: Record<string, string> = {
+    text: "Text", email: "Email", tel: "Phone", textarea: "Long text",
+    number: "Number", url: "URL", select: "Dropdown",
+  };
+  return map[type] ?? type;
+}
+
+function fieldTypeIcon(type: FieldDef["type"]) {
+  switch (type) {
+    case "email": return <Mail className="w-3.5 h-3.5" />;
+    case "tel": return <Phone className="w-3.5 h-3.5" />;
+    case "textarea": return <AlignLeft className="w-3.5 h-3.5" />;
+    case "number": return <Hash className="w-3.5 h-3.5" />;
+    case "url": return <Link2 className="w-3.5 h-3.5" />;
+    default: return <Type className="w-3.5 h-3.5" />;
+  }
+}
+
+function ordinalSuffix(n: number): string {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (suffixes[(v - 20) % 10] || suffixes[v] || suffixes[0]);
+}
+
+function getInitials(name: string): string {
+  return name.split(" ").map(p => p[0]).join("").slice(0, 2).toUpperCase();
+}
+
+function StatusBadge({ status }: { status: "live" | "draft" }) {
+  if (status === "live") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+        <span className="w-1.5 h-1.5 rounded-full bg-green-600" />
+        Live
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+      Draft
+    </span>
+  );
+}
+
+// ─── Sub-views ───────────────────────────────────────────────────────────────
+
+// Submission detail drawer
+function SubmissionDrawer({ submission, formName, onClose }: {
+  submission: Submission | null;
+  formName: string;
+  onClose: () => void;
+}) {
+  if (!submission) return null;
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[480px] bg-white shadow-2xl flex flex-col">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide mb-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+              Submission #{submission.id}
+            </p>
+            <h2 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+              {submission.name}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
+          >
+            <X className="w-5 h-5 text-muted-foreground" />
+          </button>
+        </div>
+        <div className="px-6 py-3 bg-gray-50 border-b border-border flex items-center gap-4 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+          <span className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" />{formName}</span>
+          <span>·</span>
+          <span>{submission.date}</span>
+        </div>
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {Object.entries(submission.fields).map(([label, value]) => (
+            <div key={label} className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                {label}
+              </p>
+              <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+        <div className="px-6 py-4 border-t border-border">
+          <button
+            className="w-full py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:bg-black/90 transition-colors"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+            onClick={() => { toast.success("Opened contact profile"); onClose(); }}
+          >
+            View Contact Profile
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+const SELECT_STYLE = "px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer min-w-[140px]";
+const SELECT_INLINE = { fontFamily: "Outfit, sans-serif", color: "#64748B" };
+
+function SubStatusBadge({ status }: { status?: string }) {
+  const map: Record<string, { bg: string; text: string; label: string }> = {
+    completed: { bg: "bg-green-100", text: "text-green-700", label: "Completed" },
+    sent:      { bg: "bg-blue-100",  text: "text-blue-700",  label: "Sent"      },
+    pending:   { bg: "bg-amber-100", text: "text-amber-700", label: "Pending"   },
+    failed:    { bg: "bg-red-100",   text: "text-red-700",   label: "Failed"    },
+  };
+  const s = status && map[status] ? map[status] : { bg: "bg-gray-100", text: "text-gray-600", label: "—" };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.bg} ${s.text}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+      {s.label}
+    </span>
+  );
+}
+
+// Submissions Tab
+function SubmissionsTab({ submissions, forms }: { submissions: Submission[]; forms: Form[] }) {
+  const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
+  const [subSearch, setSubSearch] = useState("");
+  const [subFormFilter, setSubFormFilter] = useState("all");
+  const [subStatusFilter, setSubStatusFilter] = useState("all");
+  const formName = (id: number) => forms.find(f => f.id === id)?.name ?? "Unknown";
+
+  const filteredSubs = submissions.filter(sub => {
+    const matchesSearch = subSearch === "" ||
+      sub.name.toLowerCase().includes(subSearch.toLowerCase()) ||
+      sub.email.toLowerCase().includes(subSearch.toLowerCase());
+    const matchesForm = subFormFilter === "all" || sub.formId === parseInt(subFormFilter);
+    const matchesStatus = subStatusFilter === "all" || sub.status === subStatusFilter;
+    return matchesSearch && matchesForm && matchesStatus;
+  });
+
+  return (
+    <>
+      {/* Filter bar */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search submissions…"
+            value={subSearch}
+            onChange={e => setSubSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          />
+        </div>
+        <div className="shrink-0">
+          <select value={subFormFilter} onChange={e => setSubFormFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
+            <option value="all">All Forms</option>
+            <option value="1">Contact Us</option>
+            <option value="2">Book a Demo</option>
+            <option value="3">Support Request</option>
+            <option value="4">Newsletter Signup</option>
+          </select>
+        </div>
+        <div className="shrink-0">
+          <select value={subStatusFilter} onChange={e => setSubStatusFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
+            <option value="all">Filter</option>
+            <option value="completed">Completed</option>
+            <option value="sent">Sent</option>
+            <option value="pending">Pending</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border bg-gray-50">
+              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
+              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
+              <th className="px-5 py-3"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredSubs.map((sub, i) => (
+              <tr
+                key={sub.id}
+                className={`transition-colors hover:bg-gray-50/60 ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
+              >
+                <td className="px-5 py-3.5 text-sm font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                  {sub.name}
+                </td>
+                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                  {sub.email}
+                </td>
+                <td className="px-5 py-3.5">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                    {formName(sub.formId)}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  {sub.date}
+                </td>
+                <td className="px-5 py-3.5">
+                  <SubStatusBadge status={sub.status} />
+                </td>
+                <td className="px-5 py-3.5 text-right">
+                  <button
+                    onClick={() => setSelectedSub(sub)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors"
+                    style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                  >
+                    View
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {filteredSubs.length === 0 && (
+          <div className="py-16 text-center">
+            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>No submissions found.</p>
+          </div>
+        )}
+      </div>
+
+      <SubmissionDrawer
+        submission={selectedSub}
+        formName={selectedSub ? formName(selectedSub.formId) : ""}
+        onClose={() => setSelectedSub(null)}
+      />
+    </>
+  );
+}
+
+// Form Detail + Preview (merged)
+function FormDetailView({
+  form,
+  onBack,
+  onEdit,
+}: {
+  form: Form;
+  onBack: () => void;
+  onEdit: () => void;
+}) {
+  const formUrl = `https://app.myaifrontdesk.com/forms/form-${form.id}`;
+  const embedCode = `<iframe src="${formUrl}" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+
+  return (
+    <div className="space-y-5">
+      {/* Top bar */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 text-sm hover:text-foreground transition-colors"
+          style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Forms
+        </button>
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
+          style={{ fontFamily: "DM Sans, sans-serif" }}
+        >
+          <Edit2 className="w-4 h-4" />
+          Edit
+        </button>
+      </div>
+
+      {/* Title row */}
+      <div>
+        <div className="flex items-center gap-3 flex-wrap mb-1">
+          <h2 className="text-2xl font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+            {form.name}
+          </h2>
+          <StatusBadge status={form.status} />
+          <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+            Last edited {form.createdAt}
+          </span>
+        </div>
+        <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+          {form.description}
+        </p>
+      </div>
+
+      <div className="h-px bg-border" />
+
+      {/* Live banner */}
+      {form.status === "live" && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <p className="text-sm font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                Your form is live
+              </p>
+              <p className="text-xs mt-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                Embed on your website or share the link to start collecting submissions.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-green-200 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#16a34a" }}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                  Create
+                </span>
+                <div className="w-6 h-px bg-green-300" />
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white border border-green-200 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#16a34a" }}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                  Publish
+                </span>
+              </div>
+              <button
+                onClick={() => { navigator.clipboard.writeText(embedCode); toast.success("Embed code copied"); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-black text-white rounded-lg hover:bg-black/90 transition-colors text-xs font-semibold"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Share / Embed
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg border border-green-200 px-3 py-2 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 min-w-0">
+              <Link2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+              <span className="text-xs font-mono truncate" style={{ color: "#64748B" }}>{formUrl}</span>
+            </div>
+            <button
+              onClick={() => { navigator.clipboard.writeText(formUrl); toast.success("Link copied to clipboard"); }}
+              className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg transition-colors border border-border shrink-0"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Copy className="w-3 h-3" />
+              Copy link
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg border border-green-200 p-3">
+            <div className="bg-gray-50 rounded-lg p-3 mb-3">
+              <code className="text-xs break-all leading-relaxed" style={{ fontFamily: "monospace", color: "#64748B" }}>
+                {embedCode}
+              </code>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => { navigator.clipboard.writeText(embedCode); toast.success("Embed code copied"); }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-black text-white rounded-lg hover:bg-black/90 transition-colors"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <Copy className="w-3 h-3" />
+                Copy embed code
+              </button>
+              <button
+                onClick={() => toast.info("Opening email client...")}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors hover:text-foreground"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                Email to developer
+              </button>
+              <label className="flex items-center gap-1.5 ml-auto cursor-pointer">
+                <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
+                <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>My form is embedded</span>
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Draft banner */}
+      {form.status === "draft" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+              This form is a draft
+            </p>
+            <p className="text-xs mt-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+              Publish it to start collecting submissions and generate an embed link.
+            </p>
+          </div>
+          <button
+            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black text-white text-xs font-semibold rounded-lg hover:bg-black/90 transition-colors"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+            onClick={() => toast.success("Form published!")}
+          >
+            Publish form
+          </button>
+        </div>
+      )}
+
+      <div className="h-px bg-border" />
+
+      {/* Form fields */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+            Form Fields
+          </h3>
+          <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+            {form.fields.length}
+          </span>
+        </div>
+        <div className="space-y-2.5">
+          {form.fields.map((field, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded-xl border border-border p-4 flex items-center justify-between shadow-sm"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center text-muted-foreground">
+                  {fieldTypeIcon(field.type)}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                    {field.label}
+                    {field.required && <span className="ml-1 text-red-400">*</span>}
+                  </p>
+                  {field.placeholder && (
+                    <p className="text-xs mt-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      {field.placeholder}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <span className="text-xs px-2 py-1 rounded-md bg-gray-100 font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                {fieldTypeLabel(field.type)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Form Detail Drawer ───────────────────────────────────────────────────────
+
+function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClose: () => void; onEdit: (f: Form) => void }) {
+  const [tab, setTab] = useState<"overview" | "preview">("overview");
+  const [previewVals, setPreviewVals] = useState<Record<string, string>>({});
+
+  if (!form) return null;
+
+  const formUrl = `https://app.myaifrontdesk.com/forms/form-${form.id}`;
+  const embedCode = `<iframe src="${formUrl}" width="100%" height="600px" style="border: none; border-radius: 8px;"></iframe>`;
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      {/* Drawer */}
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[680px] bg-white shadow-2xl flex flex-col">
+        {/* Top bar */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-wrap">
+          <h2 className="text-base font-bold mr-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{form.name}</h2>
+          <StatusBadge status={form.status} />
+          <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>Last edited {form.createdAt}</span>
+          <button
+            onClick={() => onEdit(form)}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            <Edit2 className="w-3 h-3" />Edit
+          </button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-5 px-6 border-b border-border">
+          {(["overview", "preview"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`pb-2 pt-2 px-1 text-xs font-medium transition-colors relative capitalize ${tab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {t === "overview" ? "Overview" : "Preview"}
+              {tab === t && <div className="absolute bottom-0 left-0 right-0 h-px bg-primary rounded-t" />}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {tab === "overview" ? (
+            <div className="px-6 py-5 space-y-5">
+              {/* Block 1 — Description */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>DESCRIPTION</p>
+                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>{form.description}</p>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Block 2 — Form Fields */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>FORM FIELDS</p>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-lg text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                  <FileText className="w-3.5 h-3.5" />
+                  {form.fields.length}
+                </div>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Block 3 — Created By */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>CREATED BY</p>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                    {getInitials(form.createdBy)}
+                  </div>
+                  <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>{form.createdBy}</span>
+                </div>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Block 4 — Created On */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>CREATED ON</p>
+                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>{form.createdAt}</p>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Block 5 — Live Link or Draft notice */}
+              {form.status === "live" ? (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>LIVE LINK</p>
+                  <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 border border-border rounded-lg">
+                    <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs font-mono truncate flex-1" style={{ color: "#64748B" }}>{formUrl}</span>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(formUrl); toast.success("Link copied to clipboard"); }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg border border-border shrink-0 transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Copy className="w-3 h-3" /> Copy link
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>STATUS</p>
+                  <div className="flex items-center justify-between px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                    <span className="text-xs text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>This form is a draft — publish it to get a live link.</span>
+                    <button
+                      onClick={() => toast.success("Form published!")}
+                      className="px-3 py-1.5 bg-black text-white text-xs font-semibold rounded-lg hover:bg-black/90 transition-colors shrink-0 ml-3"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Publish form
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {form.status === "live" && (
+                <>
+                  <div className="h-px bg-border" />
+
+                  {/* Block 6 — Embed Code */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>EMBED CODE</p>
+                    <div className="bg-gray-50 border border-border rounded-lg p-3 space-y-3">
+                      <code className="text-xs break-all leading-relaxed font-mono block" style={{ color: "#64748B" }}>{embedCode}</code>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(embedCode); toast.success("Embed code copied"); }}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-black text-white rounded-lg hover:bg-black/90 transition-colors"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <Copy className="w-3 h-3" /> Copy embed code
+                        </button>
+                        <button
+                          onClick={() => toast.info("Opening email client...")}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:text-foreground transition-colors"
+                          style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                        >
+                          <Mail className="w-3.5 h-3.5" /> Email to developer
+                        </button>
+                        <label className="flex items-center gap-1.5 ml-auto cursor-pointer">
+                          <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
+                          <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>My form is embedded</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            /* Preview tab */
+            <div className="px-6 py-5 space-y-5">
+              <h3 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{form.name}</h3>
+              <div className="space-y-4">
+                {form.fields.map((field, idx) => {
+                  const key = `drawer-${field.label}`;
+                  const val = previewVals[key] || "";
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <label className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                        {field.label}{field.required && <span className="ml-1 text-red-400">*</span>}
+                      </label>
+                      {field.type === "textarea" ? (
+                        <textarea
+                          value={val}
+                          onChange={e => setPreviewVals(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          rows={3}
+                          className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        />
+                      ) : field.type === "select" ? (
+                        <select
+                          value={val}
+                          onChange={e => setPreviewVals(prev => ({ ...prev, [key]: e.target.value }))}
+                          className={SELECT_STYLE + " w-full"}
+                          style={SELECT_INLINE}
+                        >
+                          <option value="">{field.placeholder || "Select…"}</option>
+                        </select>
+                      ) : (
+                        <input
+                          type={field.type}
+                          value={val}
+                          onChange={e => setPreviewVals(prev => ({ ...prev, [key]: e.target.value }))}
+                          placeholder={field.placeholder}
+                          className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <button
+                disabled
+                className="w-full py-2.5 rounded-lg bg-gray-100 text-sm font-semibold text-muted-foreground cursor-not-allowed"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                Submit (preview only)
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function WebForms() {
+  const navigate = useNavigate();
+  const [mainTab, setMainTab] = useState<"submissions" | "forms">("forms");
+  const [drawerForm, setDrawerForm] = useState<Form | null>(null);
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [forms, setForms] = useState<Form[]>(INITIAL_FORMS);
+  // Forms sub-tab
+  const [formsSubTab, setFormsSubTab] = useState<"forms" | "flows">("forms");
+
+  // Forms table state
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [formSearch, setFormSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "standard" | "intake">("all");
+  const [sortCol, setSortCol] = useState<"name" | "submissions" | "lastUpdated">("lastUpdated");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  // Flows state
+  const [flows, setFlows] = useState<IntakeFlow[]>(INITIAL_FLOWS);
+  const [flowSearch, setFlowSearch] = useState("");
+  const [createFlowOpen, setCreateFlowOpen] = useState(false);
+  const [activeFlow, setActiveFlow] = useState<IntakeFlow | null>(null);
+  const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
+  const [flowDropdownId, setFlowDropdownId] = useState<number | null>(null);
+
+  // Create flow modal state
+  const [newFlowName, setNewFlowName] = useState("");
+  const [newFlowNameError, setNewFlowNameError] = useState(false);
+
+  // Flow detail state
+  const [editingFlowName, setEditingFlowName] = useState(false);
+  const [flowNameDraft, setFlowNameDraft] = useState("");
+  const [flowNameError, setFlowNameError] = useState(false);
+
+  // Add form to flow state
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"existing" | "new">("existing");
+  const [addFormId, setAddFormId] = useState<number | null>(null);
+  const [addRequired, setAddRequired] = useState(true);
+  const [addNewTitle, setAddNewTitle] = useState("");
+  const [addConfirmOpen, setAddConfirmOpen] = useState(false);
+
+  // Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewStep, setPreviewStep] = useState(0);
+  const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
+  const [editingWelcome, setEditingWelcome] = useState(false);
+  const [welcomeDraft, setWelcomeDraft] = useState("");
+
+  // Drag state for flow steps
+  const dragStepIndex = useRef<number | null>(null);
+
+  // Reset search when switching sub-tabs
+  useEffect(() => {
+    if (formsSubTab === "forms") setFlowSearch("");
+    if (formsSubTab === "flows") setFormSearch("");
+  }, [formsSubTab]);
+
+  const stats = {
+    submissions7d: 47,
+    submissionsPrior7d: 31,
+    activeForms: { total: 3, live: 3, draft: 1 },
+    topPerformer: { name: "Newsletter Signup", total: 89 },
+    submissionUsage: { current: 135, limit: 300, status: "On track" },
+  };
+
+
+  // Forms table filtered+sorted
+  const displayForms = forms
+    .filter(f =>
+      f.name.toLowerCase().includes(formSearch.toLowerCase()) &&
+      (typeFilter === "all" || f.formType === typeFilter)
+    )
+    .sort((a, b) => {
+      let aVal: string | number;
+      let bVal: string | number;
+      if (sortCol === "name") { aVal = a.name.toLowerCase(); bVal = b.name.toLowerCase(); }
+      else if (sortCol === "submissions") { aVal = a.submissions; bVal = b.submissions; }
+      else { aVal = a.createdAt; bVal = b.createdAt; }
+      if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+
+  const handleSortCol = (col: "name" | "submissions" | "lastUpdated") => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortCol(col); setSortDir("desc"); }
+  };
+
+  const handlePreviewClick = (form: Form) => {
+    setDrawerForm(form);
+    setOpenDropdownId(null);
+  };
+
+  const handleDelete = (formId: number) => {
+    const usedInFlows = flows.filter(fl => fl.steps.some(s => s.formId === formId));
+    if (usedInFlows.length > 0) {
+      const confirmed = window.confirm(
+        `This form is used in ${usedInFlows.length} intake flow(s). Deleting it will remove it from those flows too. Continue?`
+      );
+      if (!confirmed) return;
+      setFlows(flows.map(fl => ({ ...fl, steps: fl.steps.filter(s => s.formId !== formId) })));
+    }
+    setForms(forms.filter(f => f.id !== formId));
+    setOpenDropdownId(null);
+    toast.success("Form deleted");
+  };
+
+  const handleToggle = (formId: number) => {
+    const form = forms.find(f => f.id === formId);
+    setForms(forms.map(f => f.id === formId ? { ...f, enabled: !f.enabled } : f));
+    toast.success(`${form?.name} ${form?.enabled ? "disabled" : "enabled"}`);
+  };
+
+  const handleEdit = (form: Form) => {
+    navigate("/web-forms/builder", { state: { form } });
+  };
+
+  // Drag handlers for flow steps
+  const handleStepDragStart = (idx: number) => {
+    dragStepIndex.current = idx;
+  };
+
+  const handleStepDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (dragStepIndex.current === null || dragStepIndex.current === idx) return;
+  };
+
+  const handleStepDrop = (idx: number) => {
+    if (dragStepIndex.current === null || !activeFlow) return;
+    const from = dragStepIndex.current;
+    if (from === idx) return;
+    const newSteps = [...activeFlow.steps];
+    const [moved] = newSteps.splice(from, 1);
+    newSteps.splice(idx, 0, moved);
+    setActiveFlow({ ...activeFlow, steps: newSteps });
+    dragStepIndex.current = null;
+  };
+
+  // Create flow handler
+  const handleCreateFlow = () => {
+    if (!newFlowName.trim()) { setNewFlowNameError(true); return; }
+    const newFlow: IntakeFlow = {
+      id: Date.now(),
+      name: newFlowName.trim(),
+      groups: [],
+      steps: [],
+      welcomeMessage: "Welcome! Please complete the following forms at your convenience.",
+      senderName: "Admin User",
+      hasActiveClients: false,
+      createdAt: "Jun 16, 2026",
+    };
+    setFlows(prev => [...prev, newFlow]);
+    setCreateFlowOpen(false);
+    setNewFlowName("");
+    setNewFlowNameError(false);
+    setActiveFlow(newFlow);
+  };
+
+  // Save flow name
+  const handleFlowNameSave = () => {
+    if (!activeFlow) return;
+    if (!flowNameDraft.trim()) { setFlowNameError(true); return; }
+    setActiveFlow({ ...activeFlow, name: flowNameDraft.trim() });
+    setFlows(flows.map(fl => fl.id === activeFlow.id ? { ...fl, name: flowNameDraft.trim() } : fl));
+    setEditingFlowName(false);
+    setFlowNameError(false);
+  };
+
+  // Add form to flow
+  const doAddFormToFlow = () => {
+    if (!activeFlow) return;
+    if (addMode === "existing" && addFormId !== null) {
+      const updated = { ...activeFlow, steps: [...activeFlow.steps, { formId: addFormId, required: addRequired }] };
+      setActiveFlow(updated);
+      setFlows(flows.map(fl => fl.id === activeFlow.id ? updated : fl));
+      toast.success("Form added to flow");
+      setAddOpen(false);
+      setAddFormId(null);
+      setAddRequired(true);
+      setAddConfirmOpen(false);
+    } else if (addMode === "new" && addNewTitle.trim()) {
+      const newForm: Form = {
+        id: Date.now(),
+        name: addNewTitle.trim(),
+        formType: "standard",
+        createdBy: "Admin User",
+        fieldCount: 0,
+        fields: [],
+        status: "draft",
+        submissions: 0,
+        enabled: true,
+        description: "",
+        createdAt: "Jun 16, 2026",
+      };
+      setForms(prev => [...prev, newForm]);
+      const updated = { ...activeFlow, steps: [...activeFlow.steps, { formId: newForm.id, required: addRequired }] };
+      setActiveFlow(updated);
+      setFlows(flows.map(fl => fl.id === activeFlow.id ? updated : fl));
+      setAddOpen(false);
+      setAddNewTitle("");
+      setAddRequired(true);
+      setAddConfirmOpen(false);
+      navigate("/web-forms/builder", { state: { form: newForm } });
+    }
+  };
+
+  const handleAddFormClick = () => {
+    if (activeFlow?.hasActiveClients) {
+      setAddConfirmOpen(true);
+    } else {
+      doAddFormToFlow();
+    }
+  };
+
+
+  // Preview: get form for current step
+  const previewForms = activeFlow ? activeFlow.steps.map(s => forms.find(f => f.id === s.formId)).filter(Boolean) as Form[] : [];
+  const totalPreviewSteps = previewForms.length; // step 0 = welcome, steps 1..N = forms
+  const currentPreviewForm = previewStep > 0 ? previewForms[previewStep - 1] : null;
+  const currentStepConfig = previewStep > 0 ? activeFlow?.steps[previewStep - 1] : null;
+
+  const isPreviewStepValid = () => {
+    if (previewStep === 0) return true;
+    if (!currentPreviewForm) return true;
+    const requiredFields = currentPreviewForm.fields.filter(f => f.required);
+    return requiredFields.every(f => (previewValues[`${previewStep}-${f.label}`] || "").trim() !== "");
+  };
+
+  return (
+    <div className="h-full overflow-auto">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+              Web Forms
+            </h1>
+            <p className="text-base" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+              Embeddable forms that route into your AI brain. Each submission becomes a contact and triggers any matching sequence.
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            onClick={() => navigate("/web-forms/new")}
+            className="flex items-center gap-2 bg-black hover:bg-black/90 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shrink-0 mt-1"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            <Plus className="w-4 h-4" />
+            New form
+          </Button>
+        </div>
+
+        {/* Stats Cards — thin capsule style */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
+            <span className="text-xs font-semibold uppercase tracking-wide shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>SUBMISSIONS — 7D</span>
+            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissions7d}</span>
+            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>vs prior 7d: {stats.submissionsPrior7d}</span>
+          </div>
+          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
+            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>ACTIVE FORMS</span>
+            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.activeForms.total}</span>
+            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.activeForms.live} live · {stats.activeForms.draft} draft</span>
+          </div>
+          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
+            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>TOP PERFORMER</span>
+            <span className="text-sm font-bold flex-1 text-center truncate" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.topPerformer.name}</span>
+            <span className="text-xs shrink-0 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.topPerformer.total} submissions</span>
+          </div>
+          <div className="bg-white border border-border shadow-sm rounded-2xl px-5 py-2.5 flex items-center gap-4">
+            <span className="text-xs font-semibold uppercase tracking-wide shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>USAGE</span>
+            <span className="text-xl font-bold flex-1 text-center" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{stats.submissionUsage.current}<span className="text-base font-normal text-muted-foreground">/{stats.submissionUsage.limit}</span></span>
+            <span className="text-xs shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>{stats.submissionUsage.status}</span>
+          </div>
+        </div>
+
+        {/* Top-level Tabs */}
+        <div className="border-b border-border">
+          <div className="flex items-center gap-8">
+            {(["submissions", "forms"] as const).map(tab => (
+              <button
+                key={tab}
+                onClick={() => setMainTab(tab)}
+                className={`pb-3 px-1 text-sm font-medium transition-colors relative capitalize ${
+                  mainTab === tab ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {tab}
+                {mainTab === tab && (
+                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab Content */}
+        {mainTab === "submissions" && (
+          <SubmissionsTab submissions={DUMMY_SUBMISSIONS} forms={forms} />
+        )}
+
+        {mainTab === "forms" && (
+          <>
+            {/* Secondary sub-tab row */}
+            <div className="flex items-center gap-6 border-b border-border -mt-2 mb-2">
+              {(["forms", "flows"] as const).map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setFormsSubTab(sub)}
+                  className={`pb-2 px-1 text-xs font-medium transition-colors relative ${
+                    formsSubTab === sub ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {sub === "forms" ? "Forms" : "Intake Flows"}
+                  {formsSubTab === sub && (
+                    <div className="absolute bottom-0 left-0 right-0 h-px bg-primary rounded-t" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Forms sub-tab ── */}
+            {formsSubTab === "forms" && (
+              <div className="space-y-4">
+                {/* Info banner */}
+                {!bannerDismissed && (
+                  <div className="flex items-start gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <Info className="w-4 h-4 text-blue-500 mt-0.5 shrink-0" />
+                    <p className="text-sm flex-1" style={{ fontFamily: "Outfit, sans-serif", color: "#1e40af" }}>
+                      These templates are a starting point — review and customize them to match your process before publishing.
+                    </p>
+                    <button onClick={() => setBannerDismissed(true)} className="shrink-0 p-0.5 rounded hover:bg-blue-100 transition-colors">
+                      <X className="w-4 h-4 text-blue-400" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Filter bar */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="relative flex-1 min-w-[200px]">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Search forms…"
+                      value={formSearch}
+                      onChange={e => setFormSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </div>
+                  {/* Type segmented control */}
+                  <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
+                    {(["all", "standard", "intake"] as const).map(t => (
+                      <button
+                        key={t}
+                        onClick={() => setTypeFilter(t)}
+                        className={`px-3 py-2 text-xs font-medium transition-colors ${
+                          typeFilter === t ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                        }`}
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        {t === "all" ? "All Types" : t === "standard" ? "Standard" : "Intake"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Forms table */}
+                <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border bg-gray-50">
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Type</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("name")}>
+                            Name {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("submissions")}>
+                            Submissions {sortCol === "submissions" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("lastUpdated")}>
+                            Last Updated {sortCol === "lastUpdated" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
+                          </button>
+                        </th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayForms.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-12 text-center text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                            No forms found
+                          </td>
+                        </tr>
+                      ) : displayForms.map((form, i) => (
+                        <tr
+                          key={form.id}
+                          onClick={() => handlePreviewClick(form)}
+                          className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < displayForms.length - 1 ? "border-b border-border" : ""}`}
+                        >
+                          {/* Type */}
+                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                            {form.formType === "intake" ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>Intake</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>Standard</span>
+                            )}
+                          </td>
+                          {/* Name */}
+                          <td className="px-4 py-3.5">
+                            <span
+                              className="text-sm font-medium cursor-pointer hover:underline"
+                              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                              onClick={e => { e.stopPropagation(); handlePreviewClick(form); }}
+                            >
+                              {form.name}
+                            </span>
+                          </td>
+                          {/* Status */}
+                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                            <StatusBadge status={form.status} />
+                          </td>
+                          {/* Submissions */}
+                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                            {form.submissions}
+                          </td>
+                          {/* Created By */}
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                {getInitials(form.createdBy)}
+                              </div>
+                              <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{form.createdBy}</span>
+                            </div>
+                          </td>
+                          {/* Last Updated */}
+                          <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                            {form.createdAt}
+                          </td>
+                          {/* Enabled toggle */}
+                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                            <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
+                              <div className="relative">
+                                <input type="checkbox" checked={form.enabled} onChange={() => handleToggle(form.id)} className="sr-only peer" />
+                                <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
+                              </div>
+                            </label>
+                          </td>
+                          {/* Actions */}
+                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                            <div className="relative">
+                              <button
+                                onClick={e => { e.stopPropagation(); setOpenDropdownId(openDropdownId === form.id ? null : form.id); }}
+                                className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
+                              >
+                                <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
+                              </button>
+                              {openDropdownId === form.id && (
+                                <>
+                                  <div className="fixed inset-0 z-10" onClick={() => setOpenDropdownId(null)} />
+                                  <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
+                                    <button onClick={() => handlePreviewClick(form)} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                      <Eye className="w-4 h-4 text-muted-foreground" />View details
+                                    </button>
+                                    <button onClick={() => { setOpenDropdownId(null); handleEdit(form); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                      <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
+                                    </button>
+                                    <button onClick={() => { setOpenDropdownId(null); toast.info(`Sharing ${form.name}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                      <Share2 className="w-4 h-4 text-muted-foreground" />Share
+                                    </button>
+                                    <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
+                                      <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── Intake Flows sub-tab ── */}
+            {formsSubTab === "flows" && (
+              <div className="space-y-4">
+                {/* Flow detail view */}
+                {activeFlow !== null ? (
+                  <div className="space-y-6">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <button
+                          onClick={() => { setActiveFlow(null); setEditingFlowName(false); setAddOpen(false); }}
+                          className="flex items-center gap-1.5 text-sm shrink-0 hover:text-foreground transition-colors"
+                          style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                        >
+                          <ArrowLeft className="w-4 h-4" />
+                          Back to Intake Flows
+                        </button>
+                        <span style={{ color: "#94A3B8" }}>·</span>
+                        {editingFlowName ? (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <div className="flex-1 min-w-0">
+                              <input
+                                autoFocus
+                                value={flowNameDraft}
+                                onChange={e => { setFlowNameDraft(e.target.value); setFlowNameError(false); }}
+                                onBlur={handleFlowNameSave}
+                                onKeyDown={e => {
+                                  if (e.key === "Enter") handleFlowNameSave();
+                                  if (e.key === "Escape") { setEditingFlowName(false); setFlowNameError(false); }
+                                }}
+                                className="px-2 py-1 border border-border rounded-lg text-base font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 w-full"
+                                style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                              />
+                              {flowNameError && <p className="text-xs text-red-500 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>Flow name can't be empty</p>}
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingFlowName(true); setFlowNameDraft(activeFlow.name); setFlowNameError(false); }}
+                            className="flex items-center gap-2 group hover:text-[#020817] transition-colors"
+                          >
+                            <h2 className="text-lg font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{activeFlow.name}</h2>
+                            <Pencil className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity" style={{ color: "#64748B" }} />
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => { setPreviewOpen(true); setPreviewStep(0); setPreviewValues({}); }}
+                        className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        <Eye className="w-4 h-4" />
+                        Preview
+                      </button>
+                    </div>
+
+                    {/* Order of Forms */}
+                    <div className="bg-white rounded-xl border border-border shadow-sm p-5 space-y-4">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Order of Forms</h3>
+                        <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{activeFlow.steps.length}</span>
+                      </div>
+
+                      {activeFlow.steps.length === 0 ? (
+                        <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>This flow has no forms yet.</p>
+                      ) : (
+                        <div className="space-y-0">
+                          {activeFlow.steps.map((step, idx) => {
+                            const stepForm = forms.find(f => f.id === step.formId);
+                            return (
+                              <div key={`${step.formId}-${idx}`} className="flex gap-3">
+                                {/* Left connector line */}
+                                <div className="flex flex-col items-center w-6 shrink-0">
+                                  <div className="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold shrink-0 mt-3" style={{ fontFamily: "DM Sans, sans-serif", color: "#64748B" }}>
+                                    {idx + 1}
+                                  </div>
+                                  {idx < activeFlow.steps.length - 1 && (
+                                    <div className="w-px flex-1 bg-gray-200 mt-1 mb-1" />
+                                  )}
+                                </div>
+                                {/* Step card */}
+                                <div
+                                  className="flex-1 flex items-center justify-between gap-3 py-3 px-4 mb-2 bg-gray-50 rounded-xl border border-border"
+                                  draggable
+                                  onDragStart={() => handleStepDragStart(idx)}
+                                  onDragOver={e => handleStepDragOver(e, idx)}
+                                  onDrop={() => handleStepDrop(idx)}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <GripVertical className="w-4 h-4 shrink-0 cursor-grab" style={{ color: "#94A3B8" }} />
+                                    <div>
+                                      <p className="text-xs font-medium mb-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                                        {ordinalSuffix(idx + 1)} form
+                                      </p>
+                                      <p className="text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                                        {stepForm?.name ?? `Form #${step.formId}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-4 shrink-0">
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={step.required}
+                                        onChange={e => {
+                                          const newSteps = activeFlow.steps.map((s, i) => i === idx ? { ...s, required: e.target.checked } : s);
+                                          const updated = { ...activeFlow, steps: newSteps };
+                                          setActiveFlow(updated);
+                                          setFlows(flows.map(fl => fl.id === activeFlow.id ? updated : fl));
+                                        }}
+                                        className="rounded border-gray-300"
+                                      />
+                                      <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Required</span>
+                                    </label>
+                                    {stepForm && (
+                                      <button
+                                        onClick={() => setDrawerForm(stepForm)}
+                                        className="text-xs font-medium hover:underline"
+                                        style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                                      >
+                                        View
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() => {
+                                        const newSteps = activeFlow.steps.filter((_, i) => i !== idx);
+                                        const updated = { ...activeFlow, steps: newSteps };
+                                        setActiveFlow(updated);
+                                        setFlows(flows.map(fl => fl.id === activeFlow.id ? updated : fl));
+                                      }}
+                                      className="text-xs font-medium hover:underline"
+                                      style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Add a form control */}
+                      {!addOpen ? (
+                        <button
+                          onClick={() => { setAddOpen(true); setAddMode("existing"); setAddFormId(null); setAddNewTitle(""); setAddRequired(true); }}
+                          className="flex items-center gap-2 text-sm font-medium hover:text-foreground transition-colors"
+                          style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          Add a Form to this Intake Flow
+                        </button>
+                      ) : (
+                        <div className="border border-border rounded-xl p-4 space-y-3 bg-gray-50">
+                          {addMode === "existing" ? (
+                            <>
+                              <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Select an existing form</p>
+                              <select
+                                value={addFormId ?? ""}
+                                onChange={e => setAddFormId(e.target.value ? Number(e.target.value) : null)}
+                                className={SELECT_STYLE + " w-full"}
+                                style={SELECT_INLINE}
+                              >
+                                <option value="">Choose a form…</option>
+                                {forms.filter(f => !activeFlow.steps.some(s => s.formId === f.id)).map(f => (
+                                  <option key={f.id} value={f.id}>{f.name}</option>
+                                ))}
+                              </select>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={addRequired} onChange={e => setAddRequired(e.target.checked)} className="rounded border-gray-300" />
+                                <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>Set form as required</span>
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  disabled={addFormId === null || addConfirmOpen}
+                                  onClick={handleAddFormClick}
+                                  className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  Add
+                                </button>
+                                <button onClick={() => setAddOpen(false)} className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Cancel</button>
+                              </div>
+                              <button onClick={() => setAddMode("new")} className="text-xs underline" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                Or create a new form
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Create a new form</p>
+                              <input
+                                type="text"
+                                placeholder="New form title"
+                                value={addNewTitle}
+                                onChange={e => setAddNewTitle(e.target.value)}
+                                className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              />
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={addRequired} onChange={e => setAddRequired(e.target.checked)} className="rounded border-gray-300" />
+                                <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>Set form as required</span>
+                              </label>
+                              <div className="flex items-center gap-3">
+                                <button
+                                  disabled={!addNewTitle.trim() || addConfirmOpen}
+                                  onClick={handleAddFormClick}
+                                  className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  Add
+                                </button>
+                                <button onClick={() => setAddOpen(false)} className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Cancel</button>
+                              </div>
+                              <button onClick={() => setAddMode("existing")} className="text-xs underline" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                Or use an existing form
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add confirmation modal */}
+                    {addConfirmOpen && (
+                      <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+                        <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-4">
+                          <h3 className="text-base font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Add New Form to Intake Flow</h3>
+                          <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                            Clients who have already started or completed this flow won't automatically be prompted for the new form. You can send a completion request separately after adding.
+                          </p>
+                          <div className="flex gap-3 justify-end">
+                            <button onClick={() => setAddConfirmOpen(false)} className="px-4 py-2 border border-border rounded-lg text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Cancel</button>
+                            <button
+                              onClick={() => { setAddConfirmOpen(false); doAddFormToFlow(); }}
+                              className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 transition-colors"
+                              style={{ fontFamily: "DM Sans, sans-serif" }}
+                            >
+                              Add Form to Intake Flow
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  /* ── Flows list view ── */
+                  <div className="space-y-4">
+                    {/* Sub-header */}
+                    <div className="flex items-center gap-3">
+                      <div className="relative flex-1 min-w-[200px]">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input
+                          type="text"
+                          placeholder="Search intake flows…"
+                          value={flowSearch}
+                          onChange={e => setFlowSearch(e.target.value)}
+                          className="w-full pl-10 pr-4 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        />
+                      </div>
+                      <button
+                        onClick={() => setCreateFlowOpen(true)}
+                        className="flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors shrink-0"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        <Plus className="w-4 h-4" />
+                        Create intake flow
+                      </button>
+                    </div>
+
+                    {/* Flows table or empty state */}
+                    {flows.filter(fl => fl.name.toLowerCase().includes(flowSearch.toLowerCase())).length === 0 ? (
+                      <div className="bg-white rounded-xl border border-border shadow-sm p-12 text-center space-y-4">
+                        <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto">
+                          <FileText className="w-6 h-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                          No intake flows yet — create one to guide new contacts through a sequence of forms automatically
+                        </p>
+                        <button
+                          onClick={() => setCreateFlowOpen(true)}
+                          className="inline-flex items-center gap-2 bg-black text-white rounded-lg px-4 py-2 text-sm font-semibold hover:bg-black/90 transition-colors"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create intake flow
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border bg-gray-50">
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Forms</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created On</th>
+                              <th className="px-5 py-3"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {flows
+                              .filter(fl => fl.name.toLowerCase().includes(flowSearch.toLowerCase()))
+                              .map((flow, i, arr) => (
+                                <>
+                                  <tr
+                                    key={flow.id}
+                                    className={`transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 || expandedFlowId === flow.id ? "border-b border-border" : ""}`}
+                                  >
+                                    <td className="px-5 py-3.5">
+                                      <button
+                                        onClick={() => setActiveFlow(flow)}
+                                        className="text-sm font-medium hover:underline text-left"
+                                        style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                                      >
+                                        {flow.name}
+                                      </button>
+                                    </td>
+                                    <td className="px-5 py-3.5">
+                                      <button
+                                        onClick={() => setExpandedFlowId(expandedFlowId === flow.id ? null : flow.id)}
+                                        className="inline-flex items-center gap-1.5"
+                                      >
+                                        <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                          {flow.steps.length}
+                                        </span>
+                                        {expandedFlowId === flow.id ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                                      </button>
+                                    </td>
+                                    <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                                      {flow.createdAt}
+                                    </td>
+                                    <td className="px-5 py-3.5">
+                                      <div className="relative flex justify-end">
+                                        <button
+                                          onClick={e => { e.stopPropagation(); setFlowDropdownId(flowDropdownId === flow.id ? null : flow.id); }}
+                                          className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
+                                        >
+                                          <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
+                                        </button>
+                                        {flowDropdownId === flow.id && (
+                                          <>
+                                            <div className="fixed inset-0 z-10" onClick={() => setFlowDropdownId(null)} />
+                                            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
+                                              <button onClick={() => { setFlowDropdownId(null); setActiveFlow(flow); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                                <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
+                                              </button>
+                                              <button onClick={() => {
+                                                const dup: IntakeFlow = { ...flow, id: Date.now(), name: flow.name + " (Copy)", createdAt: "Jun 16, 2026" };
+                                                setFlows(prev => [...prev, dup]);
+                                                setFlowDropdownId(null);
+                                                toast.success("Flow duplicated");
+                                              }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                                <Copy className="w-4 h-4 text-muted-foreground" />Duplicate
+                                              </button>
+                                              <button onClick={() => {
+                                                setFlows(flows.filter(fl => fl.id !== flow.id));
+                                                setFlowDropdownId(null);
+                                                toast.success("Flow deleted");
+                                              }} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
+                                                <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
+                                              </button>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  {expandedFlowId === flow.id && (
+                                    <tr key={`${flow.id}-expanded`} className={i < arr.length - 1 ? "border-b border-border" : ""}>
+                                      <td colSpan={4} className="px-5 py-3 bg-gray-50">
+                                        {flow.steps.length === 0 ? (
+                                          <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>No forms in this flow.</p>
+                                        ) : (
+                                          <ul className="space-y-1">
+                                            {flow.steps.map((step, idx) => {
+                                              const sf = forms.find(f => f.id === step.formId);
+                                              return (
+                                                <li key={idx} className="flex items-center gap-2 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                                                  {sf?.name ?? `Form #${step.formId}`}
+                                                  {step.required && <span className="text-red-400">*</span>}
+                                                </li>
+                                              );
+                                            })}
+                                          </ul>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Create Flow Modal */}
+      {createFlowOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full mx-4 shadow-2xl space-y-5">
+            <h3 className="text-lg font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Create Intake Flow</h3>
+            <div className="space-y-1">
+              <label className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                Name <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="text"
+                value={newFlowName}
+                onChange={e => { setNewFlowName(e.target.value); setNewFlowNameError(false); }}
+                placeholder="e.g. New Patient Onboarding"
+                className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+              {newFlowNameError && <p className="text-xs text-red-500 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>Give this flow a name</p>}
+            </div>
+            <div className="flex gap-3 justify-end pt-2">
+              <button
+                onClick={() => { setCreateFlowOpen(false); setNewFlowName(""); setNewFlowNameError(false); }}
+                className="px-4 py-2 border border-border rounded-lg text-sm"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateFlow}
+                className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 transition-colors"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                Create
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Form detail drawer */}
+      <FormDetailDrawer
+        form={drawerForm}
+        onClose={() => setDrawerForm(null)}
+        onEdit={f => { setDrawerForm(null); handleEdit(f); }}
+      />
+
+      {/* Preview overlay */}
+      {previewOpen && activeFlow && (
+        <div className="fixed inset-0 z-50 bg-white flex flex-col">
+          {/* Top bar */}
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <button
+              disabled={previewStep === 0}
+              onClick={() => setPreviewStep(s => Math.max(0, s - 1))}
+              className="flex items-center gap-1.5 text-sm disabled:opacity-40 hover:text-foreground transition-colors"
+              style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </button>
+            <p className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+              Step {previewStep} of {totalPreviewSteps}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={!isPreviewStepValid() || (previewStep === 0 && totalPreviewSteps === 0)}
+                onClick={() => {
+                  if (previewStep >= totalPreviewSteps) {
+                    setPreviewOpen(false);
+                  } else {
+                    setPreviewStep(s => s + 1);
+                  }
+                }}
+                className="px-4 py-1.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-black/90 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                {previewStep >= totalPreviewSteps ? "Finish Preview" : "Next"}
+              </button>
+              <button
+                onClick={() => setPreviewOpen(false)}
+                className="flex items-center gap-1.5 text-sm hover:text-foreground transition-colors"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+              >
+                Close Preview
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-auto flex items-start justify-center px-6 py-10">
+            <div className="w-full max-w-xl">
+              {previewStep === 0 ? (
+                /* Welcome screen */
+                <div className="bg-white rounded-2xl border border-border shadow-sm p-8 space-y-5 text-center">
+                  <h2 className="text-2xl font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                    Welcome [Client Name],
+                  </h2>
+                  {editingWelcome ? (
+                    <textarea
+                      autoFocus
+                      value={welcomeDraft}
+                      onChange={e => setWelcomeDraft(e.target.value)}
+                      onBlur={() => {
+                        setActiveFlow({ ...activeFlow, welcomeMessage: welcomeDraft });
+                        setFlows(flows.map(fl => fl.id === activeFlow.id ? { ...fl, welcomeMessage: welcomeDraft } : fl));
+                        setEditingWelcome(false);
+                      }}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  ) : (
+                    <div className="group relative">
+                      <p className="text-base" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                        {activeFlow.welcomeMessage}
+                      </p>
+                      <button
+                        onClick={() => { setEditingWelcome(true); setWelcomeDraft(activeFlow.welcomeMessage); }}
+                        className="absolute top-0 right-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <Pencil className="w-3.5 h-3.5" style={{ color: "#64748B" }} />
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-sm italic" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                    — {activeFlow.senderName}
+                  </p>
+                  {totalPreviewSteps === 0 && (
+                    <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      Add a form to preview it here
+                    </p>
+                  )}
+                </div>
+              ) : currentPreviewForm ? (
+                /* Form step */
+                <div className="bg-white rounded-2xl border border-border shadow-sm p-8 space-y-5">
+                  <h2 className="text-xl font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                    {currentPreviewForm.name}
+                  </h2>
+                  <div className="space-y-4">
+                    {currentPreviewForm.fields.map((field, idx) => {
+                      const key = `${previewStep}-${field.label}`;
+                      const val = previewValues[key] || "";
+                      return (
+                        <div key={idx} className="space-y-1">
+                          <label className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                            {field.label}
+                            {field.required && <span className="ml-1 text-red-400">*</span>}
+                          </label>
+                          {field.type === "textarea" ? (
+                            <textarea
+                              value={val}
+                              onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                              placeholder={field.placeholder}
+                              rows={3}
+                              className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            />
+                          ) : field.type === "select" ? (
+                            <select
+                              value={val}
+                              onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                              className={SELECT_STYLE + " w-full"}
+                              style={SELECT_INLINE}
+                            >
+                              <option value="">{field.placeholder || "Select…"}</option>
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type}
+                              value={val}
+                              onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                              placeholder={field.placeholder}
+                              className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
