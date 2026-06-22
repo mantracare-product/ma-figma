@@ -303,7 +303,7 @@ interface Integration {
   id: string;
   name: string;
   description: string;
-  category: "ehr" | "crm" | "telephony" | "mailbox" | "sms";
+  category: "ehr" | "crm" | "telephony" | "mailbox" | "sms" | "marketing";
   connected: boolean;
   credentials?: Record<string, string>;
   processes?: string[];
@@ -698,6 +698,14 @@ export default function Settings() {
   useEffect(() => {
     setCollapsed(true);
   }, [setCollapsed]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, []);
 
   // Privacy State
   // Verify Caller ID State
@@ -1763,6 +1771,14 @@ export default function Settings() {
       setSalesforceConnectionTested(false);
       setSalesforceSelectedProcesses([]);
     }
+    // If Meta Lead Ads is already connected, mark as tested and load saved forms
+    if (integration.id === "meta-leads" && integration.connected) {
+      setMetaLeadFormsConnectionTested(true);
+      setMetaSelectedForms(integration.processes || []);
+    } else if (integration.id === "meta-leads") {
+      setMetaLeadFormsConnectionTested(false);
+      setMetaSelectedForms([]);
+    }
     setShowIntegrationModal(true);
   };
 
@@ -1797,6 +1813,35 @@ export default function Settings() {
       }
     }
 
+    // Meta Lead Ads-specific validation
+    if (selectedIntegration.id === "meta-leads") {
+      // Check required fields
+      if (!integrationCredentials.appId || !integrationCredentials.appSecret || !integrationCredentials.pageAccessToken || !integrationCredentials.adAccountId || !integrationCredentials.pageId) {
+        toast.error("Please fill in all required fields");
+        return;
+      }
+
+      // Check if connection was tested
+      if (!metaLeadFormsConnectionTested) {
+        toast.error("Test connection before saving");
+        return;
+      }
+
+      // Check if at least one form is selected
+      if (metaSelectedForms.length === 0) {
+        toast.error("Select at least one form");
+        return;
+      }
+    }
+
+    // WhatsApp Business-specific validation
+    if (selectedIntegration.id === "whatsapp-business") {
+      if (!integrationCredentials.phoneNumberId || !integrationCredentials.wabaId || !integrationCredentials.accessToken) {
+        toast.error("Please fill in all required fields");
+        return;
+      }
+    }
+
     setIntegrations((prev) =>
       prev.map((int) =>
         int.id === selectedIntegration.id
@@ -1804,7 +1849,11 @@ export default function Settings() {
               ...int,
               connected: true,
               credentials: integrationCredentials,
-              processes: selectedIntegration.id === "salesforce" ? salesforceSelectedProcesses : undefined,
+              processes: selectedIntegration.id === "salesforce" 
+                ? salesforceSelectedProcesses 
+                : selectedIntegration.id === "meta-leads"
+                ? metaSelectedForms
+                : undefined,
             }
           : int
       )
@@ -1830,6 +1879,11 @@ export default function Settings() {
         setSalesforceConnectionTested(false);
         setSalesforceSelectedProcesses([]);
         setSalesforceProcessValidationError("");
+      }
+      // Reset Meta Lead Ads-specific states
+      if (selectedIntegration.id === "meta-leads") {
+        setMetaLeadFormsConnectionTested(false);
+        setMetaSelectedForms([]);
       }
     }
   };
@@ -1886,6 +1940,19 @@ export default function Settings() {
         const processSection = document.getElementById("salesforce-process-section");
         if (processSection) {
           processSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        }
+      }, 300);
+    }
+
+    // For Meta Lead Ads, mark connection as tested to show form selection
+    if (selectedIntegration?.id === "meta-leads") {
+      setMetaLeadFormsConnectionTested(true);
+
+      // Auto-scroll to form selection after a short delay
+      setTimeout(() => {
+        const formSection = document.getElementById("meta-leads-form-section");
+        if (formSection) {
+          formSection.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       }, 300);
     }
@@ -2153,6 +2220,79 @@ export default function Settings() {
         { name: "apiKey", label: "API Key", type: "password", placeholder: "Enter API key", tooltip: "Authentication key (if applicable)" },
         { name: "authToken", label: "Auth Token", type: "password", placeholder: "Enter auth token", tooltip: "Secret token (if required)" },
       ],
+      "meta-leads": [
+        {
+          name: "appId",
+          label: "App ID *",
+          placeholder: "Enter your Meta App ID",
+          tooltip: "Found in Meta Developer Portal → Your App → Settings → Basic"
+        },
+        {
+          name: "appSecret",
+          label: "App Secret *",
+          type: "password",
+          placeholder: "Enter your Meta App Secret",
+          tooltip: "Found in Meta Developer Portal → Your App → Settings → Basic"
+        },
+        {
+          name: "pageAccessToken",
+          label: "Page Access Token *",
+          type: "password",
+          placeholder: "Enter your Page Access Token",
+          tooltip: "Generated from Meta Business Suite → System Users → Generate Token. Requires ads_read, leads_retrieval, pages_read_engagement permissions"
+        },
+        {
+          name: "adAccountId",
+          label: "Ad Account ID *",
+          placeholder: "act_XXXXXXXXXXXXXXXXX",
+          tooltip: "Found in Meta Ads Manager → Account Overview. Always starts with 'act_'"
+        },
+        {
+          name: "pageId",
+          label: "Facebook Page ID *",
+          placeholder: "Enter your Facebook Page ID",
+          tooltip: "Found in Facebook Page Settings → About → Page ID. Used to route incoming leads to your organization."
+        },
+        {
+          name: "webhookVerifyToken",
+          label: "Webhook Verify Token",
+          placeholder: "Create a secret string e.g. mantraassist_meta_verify",
+          tooltip: "A secret string you define. MantraAssist will use this to verify webhook requests from Meta are genuine."
+        },
+      ],
+      "whatsapp-business": [
+        {
+          name: "phoneNumberId",
+          label: "Phone Number ID *",
+          placeholder: "Enter WhatsApp Phone Number ID",
+          tooltip: "Found in Meta Developer Portal → WhatsApp → Getting Started. This is the ID of your WhatsApp Business phone number, not the number itself."
+        },
+        {
+          name: "wabaId",
+          label: "WhatsApp Business Account ID *",
+          placeholder: "Enter WABA ID",
+          tooltip: "Found in Meta Business Manager → WhatsApp Accounts. This is your top-level WhatsApp Business Account."
+        },
+        {
+          name: "accessToken",
+          label: "Permanent Access Token *",
+          type: "password",
+          placeholder: "Enter permanent access token",
+          tooltip: "Generate a permanent token from Meta Business Manager → System Users → Assign Assets (WhatsApp) → Generate Token. Use a System User token, not a personal token."
+        },
+        {
+          name: "webhookVerifyToken",
+          label: "Webhook Verify Token",
+          placeholder: "Create a secret string e.g. mantraassist_wa_verify",
+          tooltip: "A secret string you define. MantraAssist registers this with Meta so only genuine WhatsApp webhooks are accepted."
+        },
+        {
+          name: "defaultProcessId",
+          label: "Default Process",
+          placeholder: "e.g. Ad Lead Acquisition",
+          tooltip: "When a new WhatsApp contact is received, automatically assign them to this process in MantraAssist."
+        },
+      ],
     };
 
     return fields[integrationId] || [];
@@ -2183,8 +2323,19 @@ export default function Settings() {
 
     // SMS
     { id: "twilio-sms", name: "Twilio", description: "Cloud communications platform for SMS", category: "sms", connected: false },
+
+    // Marketing
+    { id: "meta-leads", name: "Meta Lead Ads", description: "Pull leads from your Meta Ad campaigns automatically", category: "marketing", connected: false },
+    { id: "whatsapp-business", name: "WhatsApp Business", description: "Connect WhatsApp Business API to receive and send messages", category: "marketing", connected: false },
   ]);
-  const [integrationTab, setIntegrationTab] = useState<"ehr" | "crm" | "telephony" | "mailbox" | "sms">("ehr");
+  const [integrationTab, setIntegrationTab] = useState<"ehr" | "crm" | "telephony" | "mailbox" | "sms" | "marketing">("ehr");
+  const [metaLeadFormsConnectionTested, setMetaLeadFormsConnectionTested] = useState(false);
+  const [metaSelectedForms, setMetaSelectedForms] = useState<string[]>([]);
+  const [metaMockForms] = useState([
+    { id: "form_001", label: "Patient Intake Form — Campaign A" },
+    { id: "form_002", label: "Free Consultation — Campaign B" },
+    { id: "form_003", label: "Summer Offer Form — Campaign C" },
+  ]);
   // Mailbox Modal State
   const [showMailboxModal, setShowMailboxModal] = useState(false);
   const [selectedMailboxProvider, setSelectedMailboxProvider] = useState<"gmail" | "outlook" | null>(null);
@@ -6270,6 +6421,16 @@ export default function Settings() {
                   >
                     SMS
                   </button>
+                  <button
+                    onClick={() => setIntegrationTab("marketing")}
+                    className={`pb-3 px-1 border-b-2 transition-colors ${
+                      integrationTab === "marketing"
+                        ? "border-primary text-primary font-medium"
+                        : "border-transparent text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    Marketing
+                  </button>
                 </div>
               </div>
 
@@ -6331,6 +6492,20 @@ export default function Settings() {
                             </svg>
                           </div>
                         )}
+                        {integration.id === "meta-leads" && (
+                          <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#1877F2] flex items-center justify-center shadow-sm">
+                            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white">
+                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                          </div>
+                        )}
+                        {integration.id === "whatsapp-business" && (
+                          <div className="w-10 h-10 flex-shrink-0 rounded-lg bg-[#25D366] flex items-center justify-center shadow-sm">
+                            <svg viewBox="0 0 24 24" className="w-6 h-6" fill="white">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                            </svg>
+                          </div>
+                        )}
                         <div>
                           <h3 className="font-semibold text-base">{integration.name}</h3>
                           <p className="text-sm text-muted-foreground mt-1">{integration.description}</p>
@@ -6377,6 +6552,17 @@ export default function Settings() {
                             <Button variant="outline" size="sm">Manage</Button>
                           ) : (
                             <Button variant="primary" size="sm" onClick={() => setShowSMSModal(true)}>
+                              Connect
+                            </Button>
+                          )
+                        ) : integration.category === "marketing" ? (
+                          integration.connected ? (
+                            <Button variant="outline" size="sm" onClick={() => handleManageIntegration(integration)}>
+                              Manage
+                            </Button>
+                          ) : (
+                            <Button variant="primary" size="sm" onClick={() => handleConnectIntegration(integration)}>
+                              <LinkIcon className="w-4 h-4" />
                               Connect
                             </Button>
                           )
@@ -8949,6 +9135,11 @@ export default function Settings() {
             setSalesforceSelectedProcesses([]);
             setSalesforceProcessValidationError("");
           }
+          // Reset meta-leads states when closing
+          if (selectedIntegration?.id === "meta-leads" && !selectedIntegration?.connected) {
+            setMetaLeadFormsConnectionTested(false);
+            setMetaSelectedForms([]);
+          }
         }}
         title={`Configure ${selectedIntegration?.name || "Provider"}`}
       >
@@ -9080,6 +9271,66 @@ export default function Settings() {
               </div>
             </div>
 
+            {selectedIntegration?.id === "meta-leads" && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                  <p className="text-sm font-semibold text-blue-900">Webhook Endpoint (Auto-generated)</p>
+                </div>
+                <p className="text-xs text-blue-700">
+                  After saving, register this URL in Meta Developer Portal → Webhooks:
+                </p>
+                <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2">
+                  <code className="text-xs text-blue-800 flex-1 break-all">
+                    https://app.mantraassist.com/api/webhooks/meta-leads
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText("https://app.mantraassist.com/api/webhooks/meta-leads");
+                      toast.success("Webhook URL copied");
+                    }}
+                    className="flex-shrink-0 text-blue-600 hover:text-blue-800"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-blue-600">
+                  Subscribe to: <strong>leadgen</strong> field under <strong>Page</strong> object.
+                </p>
+              </div>
+            )}
+
+            {selectedIntegration?.id === "whatsapp-business" && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <p className="text-sm font-semibold text-green-900">Webhook Endpoint (Auto-generated)</p>
+                </div>
+                <p className="text-xs text-green-700">
+                  After saving, register this URL in Meta Developer Portal → WhatsApp → Configuration:
+                </p>
+                <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-3 py-2">
+                  <code className="text-xs text-green-800 flex-1 break-all">
+                    https://app.mantraassist.com/api/webhooks/whatsapp
+                  </code>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText("https://app.mantraassist.com/api/webhooks/whatsapp");
+                      toast.success("Webhook URL copied");
+                    }}
+                    className="flex-shrink-0 text-green-600 hover:text-green-800"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+                <p className="text-xs text-green-600">
+                  Subscribe to: <strong>messages</strong> field under <strong>WhatsApp Business Account</strong> object.
+                </p>
+              </div>
+            )}
+
             {/* Test Connection Status */}
             {testConnectionStatus === "success" && (
               <div className="p-3 bg-success/10 border border-success/20 rounded-xl">
@@ -9156,6 +9407,64 @@ export default function Settings() {
                             className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-md font-medium"
                           >
                             {process?.label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Meta Lead Ads Form Selection Section */}
+            {selectedIntegration.id === "meta-leads" && (
+              <div id="meta-leads-form-section" className={`border-t border-border pt-6 ${!metaLeadFormsConnectionTested ? "opacity-50 pointer-events-none" : ""}`}>
+                {/* Warning if not tested */}
+                {!metaLeadFormsConnectionTested && testConnectionStatus !== "success" && (
+                  <div className="p-3 bg-warning/10 border border-warning/20 rounded-xl mb-4">
+                    <div className="flex items-center gap-2 text-warning">
+                      <AlertCircle className="w-4 h-4" />
+                      <p className="text-sm font-medium">Test connection to enable form selection</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Form Selection</h3>
+                    <Tooltip text="Select the lead forms that should pull leads from Meta into MantraAssist.">
+                      <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                    </Tooltip>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <label className="block text-sm font-medium">Select Forms</label>
+                      <Tooltip text="Select one or more lead forms.">
+                        <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                      </Tooltip>
+                    </div>
+                    <ProcessCheckboxDropdown
+                      selectedProcesses={metaSelectedForms}
+                      onChange={(forms) => {
+                        setMetaSelectedForms(forms);
+                      }}
+                      availableProcesses={metaMockForms}
+                      disabled={!metaLeadFormsConnectionTested}
+                    />
+                  </div>
+
+                  {/* Selected Forms Display */}
+                  {metaSelectedForms.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {metaSelectedForms.map((formId) => {
+                        const form = metaMockForms.find((f) => f.id === formId);
+                        return (
+                          <span
+                            key={formId}
+                            className="px-2 py-1 bg-primary/10 text-primary text-xs rounded-md font-medium"
+                          >
+                            {form?.label}
                           </span>
                         );
                       })}
