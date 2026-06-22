@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -16,6 +16,7 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Filter,
   CheckCircle,
   XCircle,
@@ -25,7 +26,6 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
-import AppointmentFilterModal from "../components/appointments/AppointmentFilterModal";
 
 interface Appointment {
   id: number;
@@ -137,8 +137,8 @@ export default function Appointments() {
   const [editingRows, setEditingRows] = useState<{ [key: number]: Appointment }>({});
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
-  const [filterDate, setFilterDate] = useState<string>("Week");
-  const [filterProvider, setFilterProvider] = useState<number | "all">("all");
+  const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+  const [filterDate, setFilterDate] = useState<string>("This Week");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [appointmentFormData, setAppointmentFormData] = useState({
     clientName: "",
@@ -150,6 +150,12 @@ export default function Appointments() {
     time: "",
     notes: "",
   });
+
+  const [devUserRole, setDevUserRole] = useState<"admin" | "provider">("admin");
+  const currentProviderUser: Employee = employees[0];
+  const effectiveEmployeeFilter = devUserRole === "provider" ? currentProviderUser.id : selectedEmployee;
+  const currentCalendarViewMode = calendarViewMode;
+
 
   // Booking workflow state
   const [bookingStep, setBookingStep] = useState(1);
@@ -287,7 +293,7 @@ export default function Appointments() {
   const getAppointmentsForDate = (date: string) => {
     return appointments.filter((apt) => {
       const matchesDate = apt.date === date;
-      const matchesEmployee = selectedEmployee === "all" || apt.employeeId === selectedEmployee;
+      const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
       return matchesDate && matchesEmployee;
     });
   };
@@ -370,7 +376,7 @@ export default function Appointments() {
   const resetBookingWorkflow = () => {
     setBookingStep(1);
     setSelectedClient(null);
-    setSelectedProvider(null);
+    setSelectedProvider(devUserRole === "provider" ? currentProviderUser : null);
     setSelectedDate(formatDate(new Date()));
     setSelectedTime("");
     setSessionType("video");
@@ -426,12 +432,12 @@ export default function Appointments() {
       appointments.map((a) =>
         a.id === selectedAppointment.id
           ? {
-              ...a,
-              ...appointmentFormData,
-              employeeId: Number(appointmentFormData.employeeId),
-              serviceId: Number(appointmentFormData.serviceId),
-              duration: service?.duration || a.duration,
-            }
+            ...a,
+            ...appointmentFormData,
+            employeeId: Number(appointmentFormData.employeeId),
+            serviceId: Number(appointmentFormData.serviceId),
+            duration: service?.duration || a.duration,
+          }
           : a
       )
     );
@@ -483,7 +489,7 @@ export default function Appointments() {
     const matchesSearch =
       apt.clientName.toLowerCase().includes(searchQuery.toLowerCase()) ||
       apt.clientEmail.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesEmployee = selectedEmployee === "all" || apt.employeeId === selectedEmployee;
+    const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
 
     // Filter by list view tab (only applies when in list view)
     let matchesTab = true;
@@ -555,17 +561,60 @@ export default function Appointments() {
     }
   };
 
+  const statsSource = devUserRole === "provider"
+    ? appointments.filter((a) => a.employeeId === currentProviderUser.id)
+    : appointments;
+
   const stats = {
-    total: appointments.length,
-    scheduled: appointments.filter((a) => a.status === "scheduled").length,
-    completed: appointments.filter((a) => a.status === "completed").length,
-    cancelled: appointments.filter((a) => a.status === "cancelled").length,
+    total: statsSource.length,
+    scheduled: statsSource.filter((a) => a.status === "scheduled").length,
+    completed: statsSource.filter((a) => a.status === "completed").length,
+    cancelled: statsSource.filter((a) => a.status === "cancelled").length,
   };
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
       <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Appointments" subtitle="Manage and schedule appointments" />
+        <PageHeader title="Appointments" subtitle="Manage and schedule appointments">
+          {/* DEV ONLY: Role toggle for testing admin vs provider booking flow */}
+          <div className="flex items-center gap-3">
+            <span style={{ fontSize: '11px', color: '#9CA3AF', fontStyle: 'italic', fontFamily: 'Outfit, sans-serif' }}>
+              Dev only — view as:
+            </span>
+            <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+              <button
+                onClick={() => setDevUserRole("admin")}
+                style={{
+                  height: '28px',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: devUserRole === "admin" ? "#FFFFFF" : "#6B7280",
+                  backgroundColor: devUserRole === "admin" ? "#1A73E8" : "#FFFFFF",
+                  border: 'none',
+                  fontFamily: 'Outfit, sans-serif',
+                }}
+              >
+                Admin
+              </button>
+              <button
+                onClick={() => setDevUserRole("provider")}
+                style={{
+                  height: '28px',
+                  padding: '0 12px',
+                  fontSize: '12px',
+                  fontWeight: 500,
+                  color: devUserRole === "provider" ? "#FFFFFF" : "#6B7280",
+                  backgroundColor: devUserRole === "provider" ? "#1A73E8" : "#FFFFFF",
+                  border: 'none',
+                  fontFamily: 'Outfit, sans-serif',
+                }}
+              >
+                Individual Provider
+              </button>
+            </div>
+          </div>
+        </PageHeader>
 
         {/* Stats Capsules */}
         <div className="flex items-center gap-3">
@@ -639,14 +688,111 @@ export default function Appointments() {
             />
           </div>
 
-          <button
-            onClick={() => setShowFilterModal(true)}
-            className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-white hover:bg-gray-50 transition-colors"
-            style={{ height: '36px' }}
-          >
-            <Filter className="w-4 h-4 text-muted-foreground" />
-            <span>All Employees</span>
-          </button>
+          {devUserRole === "admin" && (
+            <div className="relative">
+              <button
+                onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
+                style={{ height: '36px' }}
+              >
+                <User className="w-4 h-4 text-muted-foreground" />
+                <span>{selectedEmployee === "all" ? "All Providers" : employees.find(e => e.id === selectedEmployee)?.name}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+              {showProviderDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowProviderDropdown(false)} />
+                  <div
+                    className="absolute left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1"
+                    style={{ width: '220px', top: '100%' }}
+                  >
+                    <button
+                      onClick={() => { setSelectedEmployee("all"); setShowProviderDropdown(false); }}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === "all" ? "text-blue-600 font-semibold" : "text-slate-700"}`}
+                    >
+                      All Providers
+                    </button>
+                    {employees.map((emp) => (
+                      <button
+                        key={emp.id}
+                        onClick={() => { setSelectedEmployee(emp.id); setShowProviderDropdown(false); }}
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === emp.id ? "text-blue-600 font-semibold" : "text-slate-700"}`}
+                      >
+                        {emp.name}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="relative">
+            <button
+              onClick={() => setShowFilterModal(!showFilterModal)}
+              className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
+              style={{ height: '36px' }}
+            >
+              <Filter className="w-4 h-4 text-muted-foreground" />
+              <span>Filters</span>
+            </button>
+            {showFilterModal && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowFilterModal(false)} />
+                <div
+                  className="absolute right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-4"
+                  style={{ width: '320px', top: '100%' }}
+                >
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">Date Range</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {["Today", "This Week", "This Month", "Custom"].map((opt) => (
+                        <button
+                          key={opt}
+                          onClick={() => setFilterDate(opt)}
+                          className={`px-3 py-2 rounded-lg text-xs font-medium border ${filterDate === opt ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            }`}
+                        >
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                    {filterDate === "Custom" && (
+                      <div className="flex gap-2 mt-2">
+                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">Status</label>
+                    <div className="flex flex-wrap gap-2">
+                      {["All", "Scheduled", "Completed", "Cancelled", "No-show", "Pending"].map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => setFilterStatus(status)}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border ${filterStatus === status ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                            }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowFilterModal(false);
+                      toast.success("Filters applied");
+                    }}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
+                    style={{ background: 'linear-gradient(to right, #06B6D4, #1A73E8)' }}
+                  >
+                    Apply Filters
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             <button
@@ -702,7 +848,7 @@ export default function Appointments() {
         {view === "calendar" && (
           <div className="bg-white rounded-2xl border border-border shadow-sm p-6">
             {/* DAY VIEW */}
-            {calendarViewMode === "day" && (
+            {currentCalendarViewMode === "day" && (
               <>
                 {/* Day View Header */}
                 <div className="flex items-center justify-between mb-6">
@@ -883,7 +1029,7 @@ export default function Appointments() {
             )}
 
             {/* WEEK VIEW */}
-            {calendarViewMode === "week" && (() => {
+            {currentCalendarViewMode === "week" && (() => {
               const weekDates = getWeekDates(currentDate);
               const todayStr = formatDate(new Date());
 
@@ -1114,11 +1260,11 @@ export default function Appointments() {
             })()}
 
             {/* SCHEDULE VIEW */}
-            {calendarViewMode === "schedule" && (() => {
+            {currentCalendarViewMode === "schedule" && (() => {
               // Get all appointments for the current month, grouped by date
               const monthAppointments = appointments.filter((apt) => {
                 const aptDate = new Date(apt.date + "T00:00:00");
-                const matchesEmployee = selectedEmployee === "all" || apt.employeeId === selectedEmployee;
+                const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
                 return aptDate.getMonth() === month && aptDate.getFullYear() === year && matchesEmployee;
               });
 
@@ -1382,7 +1528,7 @@ export default function Appointments() {
             })()}
 
             {/* MONTH VIEW */}
-            {calendarViewMode === "month" && (
+            {currentCalendarViewMode === "month" && (
               <>
                 {/* Calendar Header */}
                 <div className="flex items-center justify-between mb-6">
@@ -1548,8 +1694,8 @@ export default function Appointments() {
                           {dayAppointments.slice(0, 2).map((apt) => {
                             const statusColor =
                               apt.status === "completed" ? "#22C55E" :
-                              apt.status === "scheduled" ? "#3B82F6" :
-                              "#F97316";
+                                apt.status === "scheduled" ? "#3B82F6" :
+                                  "#F97316";
 
                             return (
                               <div
@@ -1640,10 +1786,10 @@ export default function Appointments() {
               }}
             >
               {[
-                { key: "upcoming", label: "Upcoming", count: appointments.filter(a => a.status === "scheduled").length },
-                { key: "done", label: "Done", count: appointments.filter(a => a.status === "completed").length },
-                { key: "pending", label: "Pending", count: appointments.filter(a => a.status === "pending-accept").length },
-                { key: "all", label: "All", count: appointments.length },
+                { key: "upcoming", label: "Upcoming", count: statsSource.filter(a => a.status === "scheduled").length },
+                { key: "done", label: "Done", count: statsSource.filter(a => a.status === "completed").length },
+                { key: "pending", label: "Pending", count: statsSource.filter(a => a.status === "pending-accept").length },
+                { key: "all", label: "All", count: statsSource.length },
               ].map((tab) => (
                 <button
                   key={tab.key}
@@ -2140,23 +2286,6 @@ export default function Appointments() {
         )}
       </div>
 
-      {/* Filter Modal */}
-      <AppointmentFilterModal
-        isOpen={showFilterModal}
-        onClose={() => setShowFilterModal(false)}
-        filterDate={filterDate}
-        setFilterDate={setFilterDate}
-        filterProvider={filterProvider}
-        setFilterProvider={setFilterProvider}
-        filterStatus={filterStatus}
-        setFilterStatus={setFilterStatus}
-        employees={employees}
-        onApply={() => {
-          // Apply filters
-          setSelectedEmployee(filterProvider);
-          toast.success("Filters applied");
-        }}
-      />
 
       {/* Multi-Step Booking Modal */}
       <Modal
@@ -2167,10 +2296,10 @@ export default function Appointments() {
         }}
         title={
           bookingStep === 1 ? "Choose Client" :
-          bookingStep === 2 ? "Choose Provider" :
-          bookingStep === 3 ? "Select Date & Time" :
-          bookingStep === 4 ? "Confirm Booking" :
-          ""
+            bookingStep === 2 ? "Choose Provider" :
+              bookingStep === 3 ? "Select Date & Time" :
+                bookingStep === 4 ? "Confirm Booking" :
+                  ""
         }
         maxWidth="md-plus"
         footer={
@@ -2205,7 +2334,7 @@ export default function Appointments() {
             <div className="w-full flex gap-3">
               <Button
                 variant="outline"
-                onClick={() => setBookingStep(2)}
+                onClick={() => setBookingStep(devUserRole === "provider" ? 1 : 2)}
                 className="flex-1 py-3 rounded-xl font-semibold"
               >
                 Back
@@ -2241,7 +2370,7 @@ export default function Appointments() {
             <div className="w-full">
               <Button
                 variant="primary"
-                onClick={() => setBookingStep(2)}
+                onClick={() => setBookingStep(devUserRole === "provider" ? 3 : 2)}
                 disabled={!selectedClient}
                 className="w-full py-3 rounded-xl font-semibold"
               >
@@ -2274,9 +2403,8 @@ export default function Appointments() {
                 </div>
                 <button
                   onClick={() => setShowClientFilters(!showClientFilters)}
-                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
-                    showClientFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${showClientFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   <Filter className="w-4 h-4" />
@@ -2379,11 +2507,10 @@ export default function Appointments() {
                   <div
                     key={client.id}
                     onClick={() => setSelectedClient(client)}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedClient?.id === client.id
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedClient?.id === client.id
                         ? "border-cyan-500 bg-cyan-50/50 shadow-sm"
                         : "border-slate-200 bg-white hover:border-cyan-300 hover:shadow-sm"
-                    }`}
+                      }`}
                   >
                     <div className="w-11 h-11 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-sm">
                       <span className="text-sm font-bold text-white" style={{ fontFamily: "DM Sans, sans-serif" }}>
@@ -2403,7 +2530,7 @@ export default function Appointments() {
         )}
 
         {/* Step 2: Choose Provider */}
-        {bookingStep === 2 && (
+        {bookingStep === 2 && devUserRole === "admin" && (
           <div>
             <p className="text-sm text-muted-foreground mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
               Select a healthcare provider
@@ -2425,9 +2552,8 @@ export default function Appointments() {
                 </div>
                 <button
                   onClick={() => setShowProviderFilters(!showProviderFilters)}
-                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${
-                    showProviderFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                  }`}
+                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${showProviderFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   <Filter className="w-4 h-4" />
@@ -2522,11 +2648,10 @@ export default function Appointments() {
                   <div
                     key={employee.id}
                     onClick={() => setSelectedProvider(employee)}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedProvider?.id === employee.id
+                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedProvider?.id === employee.id
                         ? "border-cyan-500 bg-cyan-50/50 shadow-sm"
                         : "border-slate-200 bg-white hover:border-cyan-300 hover:shadow-sm"
-                    }`}
+                      }`}
                   >
                     <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-sm">
                       <User className="w-5 h-5 text-white" />
@@ -2571,11 +2696,10 @@ export default function Appointments() {
                       <button
                         key={dateStr}
                         onClick={() => setSelectedDate(dateStr)}
-                        className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-xl transition-all ${
-                          isSelected
+                        className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-xl transition-all ${isSelected
                             ? "bg-cyan-500 text-white"
                             : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                        }`}
+                          }`}
                         style={{ minWidth: "70px" }}
                       >
                         <span className="text-xs font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -2607,11 +2731,10 @@ export default function Appointments() {
                     <button
                       key={time}
                       onClick={() => setSelectedTime(time)}
-                      className={`py-2.5 px-3 rounded-xl font-medium text-sm transition-all ${
-                        isSelected
+                      className={`py-2.5 px-3 rounded-xl font-medium text-sm transition-all ${isSelected
                           ? "bg-cyan-500 text-white"
                           : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                      }`}
+                        }`}
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       {time}
@@ -2629,22 +2752,20 @@ export default function Appointments() {
               <div className="flex gap-2">
                 <button
                   onClick={() => setSessionType("video")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${
-                    sessionType === "video"
+                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${sessionType === "video"
                       ? "bg-cyan-500 text-white"
                       : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                  }`}
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   Video
                 </button>
                 <button
                   onClick={() => setSessionType("inPerson")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${
-                    sessionType === "inPerson"
+                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${sessionType === "inPerson"
                       ? "bg-cyan-500 text-white"
                       : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                  }`}
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   In-Person
@@ -2907,11 +3028,10 @@ export default function Appointments() {
                   <button
                     key={status}
                     onClick={() => handleStatusChange(selectedAppointment.id, status)}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${
-                      selectedAppointment.status === status
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${selectedAppointment.status === status
                         ? "bg-primary text-white"
                         : "bg-muted text-muted-foreground hover:bg-muted/80"
-                    }`}
+                      }`}
                   >
                     {status}
                   </button>
