@@ -2026,8 +2026,8 @@ export default function Process() {
                               )}
                             </div>
 
-                            {/* Caller Pitch - Hide completely when Type is "Human Action" */}
-                            {stageType !== "Human Action" && (
+                            {/* Caller Pitch - Hide completely when Type is "Human Action" or "No action" */}
+                            {stageType !== "Human Action" && stageType !== "No action" && (
                               <div className="rounded-lg border border-border overflow-hidden">
                                 {/* Collapsible Header */}
                                 <button
