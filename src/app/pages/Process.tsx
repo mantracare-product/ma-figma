@@ -503,7 +503,7 @@ export default function Process() {
   const [currentEditingStep, setCurrentEditingStep] = useState<{ id: string; name: string; description: string; iconKey: string; stepKey?: string } | null>(null);
   const [isCreatingNewStep, setIsCreatingNewStep] = useState(false);
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
-  const [executionType, setExecutionType] = useState<"wait" | "parallel" | "end">("wait");
+  const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
   const [delayValue, setDelayValue] = useState(5);
   const [delayUnit, setDelayUnit] = useState("Minute");
   const [delayUnitDropdownOpen, setDelayUnitDropdownOpen] = useState(false);
@@ -3155,6 +3155,7 @@ export default function Process() {
                                         { key: "timecontrol", name: "Time Control", desc: "Set time intervals, auto hangup rules, and silence detection for this stage.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
                                         { key: "stagemovement", name: "Stage Movement", desc: "Move the contact to a different stage within the same or another process.", iconKey: "chevronright", cats: ["all", "workflow"], popular: false },
                                         { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                        { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                         { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
                                         { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "element"], popular: false },
                                         { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
@@ -3251,6 +3252,7 @@ export default function Process() {
                                           { key: "timecontrol", name: "Time Control", desc: "Set time intervals, auto hangup rules, and silence detection for this stage.", iconKey: "clock" },
                                           { key: "stagemovement", name: "Stage Movement", desc: "Move the contact to a different stage within the same or another process.", iconKey: "chevronright" },
                                           { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
+                                          { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
                                           { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
                                           { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
                                           { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall" },
@@ -3337,7 +3339,7 @@ export default function Process() {
                                           onClick={() => setExecutionTimingModalOpen(true)}
                                           className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
                                         >
-                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : executionType === "parallel" ? "In Parallel" : "End Flow"}</span>
+                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
                                           <ChevronRight className="w-4 h-4 text-muted-foreground" />
                                         </button>
                                       </div>
@@ -4946,6 +4948,16 @@ export default function Process() {
                                       )}
                                     </div>
                                   )}
+
+                                  {/* End Workflow Step */}
+                                  {currentEditingStep.stepKey === "endworkflow" && (
+                                    <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+                                      <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                                      <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
+                                      </p>
+                                    </div>
+                                  )}
                                 </div>
 
                                 {/* Footer */}
@@ -5028,19 +5040,6 @@ export default function Process() {
                                     <div>
                                       <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>In Parallel</p>
                                       <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will run independently alongside other active workflow steps.</p>
-                                    </div>
-                                  </label>
-                                  <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
-                                    <input
-                                      type="radio"
-                                      name="executionType"
-                                      checked={executionType === "end"}
-                                      onChange={() => setExecutionType("end")}
-                                      className="mt-0.5"
-                                    />
-                                    <div>
-                                      <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>End Flow</p>
-                                      <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Terminate the workflow after this step completes, marking the contact as done.</p>
                                     </div>
                                   </label>
                                 </div>
