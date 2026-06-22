@@ -1866,12 +1866,6 @@ export default function Appointments() {
                         appointment={apt}
                         employee={employee}
                         service={service}
-                        onAccept={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "scheduled" } : a
-                          ));
-                          toast.success("Appointment accepted!");
-                        }}
                         onCancel={(id) => {
                           setAppointments(appointments.map(a =>
                             a.id === id ? { ...a, status: "cancelled" } : a
@@ -1900,12 +1894,6 @@ export default function Appointments() {
                             a.id === id ? { ...a, status: "completed", rating: 4 } : a
                           ));
                           toast.success("Appointment marked as completed");
-                        }}
-                        onMarkNoShow={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "no-show" } : a
-                          ));
-                          toast.success("Appointment marked as no-show");
                         }}
                       />
                     );

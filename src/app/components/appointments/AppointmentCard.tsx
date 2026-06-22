@@ -34,22 +34,18 @@ interface AppointmentCardProps {
   appointment: Appointment;
   employee?: Employee;
   service?: Service;
-  onAccept?: (id: number) => void;
   onCancel?: (id: number) => void;
   onReschedule?: (id: number) => void;
   onMarkComplete?: (id: number) => void;
-  onMarkNoShow?: (id: number) => void;
 }
 
 export default function AppointmentCard({
   appointment,
   employee,
   service,
-  onAccept,
   onCancel,
   onReschedule,
   onMarkComplete,
-  onMarkNoShow,
 }: AppointmentCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
@@ -113,14 +109,8 @@ export default function AppointmentCard({
       case "reschedule":
         onReschedule?.(appointment.id);
         break;
-      case "accept":
-        onAccept?.(appointment.id);
-        break;
       case "complete":
         onMarkComplete?.(appointment.id);
-        break;
-      case "noshow":
-        onMarkNoShow?.(appointment.id);
         break;
       case "cancel":
         onCancel?.(appointment.id);
@@ -274,7 +264,7 @@ export default function AppointmentCard({
             </button>
 
             <button
-              onClick={() => handleMenuAction(appointment.status === "pending-accept" ? "accept" : "complete")}
+              onClick={() => handleMenuAction("complete")}
               className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors"
               style={{
                 height: "36px",
@@ -286,24 +276,7 @@ export default function AppointmentCard({
             >
               <Check className="w-4 h-4" style={{ color: "#22C55E" }} />
               <span style={{ fontSize: "13px", color: "#374151", fontFamily: "Outfit, sans-serif" }}>
-                {appointment.status === "pending-accept" ? "Accept" : "Mark Complete"}
-              </span>
-            </button>
-
-            <button
-              onClick={() => handleMenuAction("noshow")}
-              className="w-full flex items-center gap-2 hover:bg-gray-50 transition-colors"
-              style={{
-                height: "36px",
-                padding: "0 12px",
-                border: "none",
-                backgroundColor: "transparent",
-                cursor: "pointer",
-              }}
-            >
-              <XCircle className="w-4 h-4" style={{ color: "#F97316" }} />
-              <span style={{ fontSize: "13px", color: "#374151", fontFamily: "Outfit, sans-serif" }}>
-                No Show
+                Mark Complete
               </span>
             </button>
 
