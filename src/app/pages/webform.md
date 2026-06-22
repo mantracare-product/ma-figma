@@ -23,28 +23,12 @@ type Submission = {
   date: string;
   status?: string;
   fields: Record<string, string>;
-  metaLeadSource?: {
-    campaign: string;
-    adSet: string;
-    adName: string;
-    formName: string;
-    submittedAt: string;
-    metaLeadId: string;
-  };
 };
 
 const DUMMY_SUBMISSIONS: Submission[] = [
   {
     id: 1, clientId: "CL-001", formId: 1, name: "Sarah Johnson", email: "sarah.j@email.com", date: "Jun 12, 2026", status: "completed",
     fields: { "Full Name": "Sarah Johnson", "Email": "sarah.j@email.com", "Phone": "+1 5551234567", "Message": "I'd like to learn more about your AI features." },
-    metaLeadSource: {
-      campaign: "Healthcare June Campaign",
-      adSet: "Delhi 25-45",
-      adName: "Video Ad 1",
-      formName: "Healthcare Campaign Form",
-      submittedAt: "Jun 12, 2026 2:34 PM",
-      metaLeadId: "123456789101112",
-    },
   },
   {
     id: 2, clientId: "CL-002", formId: 2, name: "Michael Chen", email: "mchen@email.com", date: "Jun 11, 2026", status: "sent",
@@ -57,14 +41,6 @@ const DUMMY_SUBMISSIONS: Submission[] = [
   {
     id: 4, clientId: "CL-004", formId: 1, name: "Robert Wilson", email: "rwilson@email.com", date: "Jun 10, 2026", status: "pending",
     fields: { "Full Name": "Robert Wilson", "Email": "rwilson@email.com", "Phone": "+1 5554567890", "Message": "Can you integrate with HubSpot?" },
-    metaLeadSource: {
-      campaign: "Free Consultation Campaign",
-      adSet: "Mumbai 30-50",
-      adName: "Carousel Ad 2",
-      formName: "Free Consultation Ad",
-      submittedAt: "Jun 10, 2026 11:15 AM",
-      metaLeadId: "987654321098765",
-    },
   },
   {
     id: 5, clientId: "CL-005", formId: 2, name: "Jessica Brown", email: "jbrown@email.com", date: "Jun 9, 2026", status: "completed",
@@ -169,42 +145,6 @@ function SubmissionDrawer({ submission, formName, onClose }: {
           <span>{submission.date}</span>
         </div>
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-          {submission.metaLeadSource && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-              {/* Header */}
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 bg-[#1877F2] rounded-md flex items-center justify-center flex-shrink-0">
-                  <svg viewBox="0 0 12 12" className="w-3.5 h-3.5" fill="white">
-                    <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z"/>
-                  </svg>
-                </div>
-                <p className="text-xs font-semibold text-blue-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Meta Lead Source
-                </p>
-              </div>
-
-              {/* Fields grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Campaign", value: submission.metaLeadSource.campaign },
-                  { label: "Ad Set", value: submission.metaLeadSource.adSet },
-                  { label: "Ad Name", value: submission.metaLeadSource.adName },
-                  { label: "Form", value: submission.metaLeadSource.formName },
-                  { label: "Submitted At", value: submission.metaLeadSource.submittedAt },
-                  { label: "Meta Lead ID", value: submission.metaLeadSource.metaLeadId },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-white rounded-lg p-2.5 border border-blue-100">
-                    <p className="text-xs font-semibold uppercase tracking-wide mb-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#93C5FD" }}>
-                      {label}
-                    </p>
-                    <p className="text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#1e40af" }}>
-                      {value}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
           {Object.entries(submission.fields).map(([label, value]) => (
             <div key={label} className="bg-gray-50 rounded-xl p-4">
               <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
@@ -287,16 +227,10 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
         <div className="shrink-0">
           <select value={subFormFilter} onChange={e => setSubFormFilter(e.target.value)} className={SELECT_STYLE} style={SELECT_INLINE}>
             <option value="all">All Forms</option>
-            <optgroup label="Standard">
-              <option value="1">Contact Us</option>
-              <option value="2">Book a Demo</option>
-              <option value="3">Support Request</option>
-              <option value="4">Newsletter Signup</option>
-            </optgroup>
-            <optgroup label="Meta Ads">
-              <option value="10">Healthcare Campaign Form</option>
-              <option value="11">Free Consultation Ad</option>
-            </optgroup>
+            <option value="1">Contact Us</option>
+            <option value="2">Book a Demo</option>
+            <option value="3">Support Request</option>
+            <option value="4">Newsletter Signup</option>
           </select>
         </div>
         <div className="shrink-0">
@@ -317,7 +251,6 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Email</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Form</th>
-              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Source</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
               <th className="px-5 py-3"></th>
@@ -336,26 +269,9 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
                   {sub.email}
                 </td>
                 <td className="px-5 py-3.5">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                      {formName(sub.formId)}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-5 py-3.5">
-                  {sub.metaLeadSource ? (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-100 text-xs font-medium text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <svg viewBox="0 0 12 12" className="w-3 h-3" fill="currentColor">
-                        <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z"/>
-                      </svg>
-                      Meta Ads
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <FileText className="w-3 h-3" />
-                      Web Form
-                    </span>
-                  )}
+                  <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-gray-100 text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                    {formName(sub.formId)}
+                  </span>
                 </td>
                 <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                   {sub.date}
@@ -832,7 +748,7 @@ export default function WebForms() {
   // Forms table state
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [formSearch, setFormSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState<"all" | "standard" | "intake" | "meta-ads">("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | "standard" | "intake">("all");
   const [sortCol, setSortCol] = useState<"name" | "submissions" | "lastUpdated">("lastUpdated");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
@@ -1157,17 +1073,19 @@ export default function WebForms() {
         {mainTab === "forms" && (
           <>
             {/* Secondary sub-tab row */}
-            <div className="inline-flex border border-border rounded-lg overflow-hidden mb-2">
+            <div className="flex items-center gap-6 border-b border-border -mt-2 mb-2">
               {(["forms", "flows"] as const).map(sub => (
                 <button
                   key={sub}
                   onClick={() => setFormsSubTab(sub)}
-                  className={`px-4 py-2 text-xs font-medium transition-colors ${
-                    formsSubTab === sub ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                  }`}
+                  className={`pb-2 px-1 text-xs font-medium transition-colors relative ${formsSubTab === sub ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  {sub === "forms" ? "All Forms" : "Intake Flows"}
+                  {sub === "forms" ? "Forms" : "Intake Flows"}
+                  {formsSubTab === sub && (
+                    <div className="absolute bottom-0 left-0 right-0 h-px bg-primary rounded-t" />
+                  )}
                 </button>
               ))}
             </div>
@@ -1203,16 +1121,15 @@ export default function WebForms() {
                   </div>
                   {/* Type segmented control */}
                   <div className="inline-flex border border-border rounded-lg overflow-hidden shrink-0">
-                    {(["all", "standard", "intake", "meta-ads"] as const).map(t => (
+                    {(["all", "standard", "intake"] as const).map(t => (
                       <button
                         key={t}
                         onClick={() => setTypeFilter(t)}
-                        className={`px-3 py-2 text-xs font-medium transition-colors ${
-                          typeFilter === t ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                        }`}
+                        className={`px-3 py-2 text-xs font-medium transition-colors ${typeFilter === t ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                          }`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
-                        {t === "all" ? "All Types" : t === "standard" ? "Standard" : t === "intake" ? "Intake" : "Meta Ads"}
+                        {t === "all" ? "All Types" : t === "standard" ? "Standard" : "Intake"}
                       </button>
                     ))}
                   </div>
@@ -1223,12 +1140,12 @@ export default function WebForms() {
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-border bg-gray-50">
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Type</th>
                         <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                           <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("name")}>
                             Name {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Type</th>
                         <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
                         <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
                           <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("submissions")}>
@@ -1258,6 +1175,14 @@ export default function WebForms() {
                           onClick={() => handlePreviewClick(form)}
                           className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < displayForms.length - 1 ? "border-b border-border" : ""}`}
                         >
+                          {/* Type */}
+                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
+                            {form.formType === "intake" ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>Intake</span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>Standard</span>
+                            )}
+                          </td>
                           {/* Name */}
                           <td className="px-4 py-3.5">
                             <span
@@ -1267,25 +1192,6 @@ export default function WebForms() {
                             >
                               {form.name}
                             </span>
-                          </td>
-                          {/* Type */}
-                          <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
-                            {form.formType === "intake" ? (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Intake
-                              </span>
-                            ) : form.formType === "meta-ads" ? (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="currentColor">
-                                  <path d="M12 6.073c0-3.315-2.686-6-6-6S0 2.758 0 6.073c0 2.995 2.194 5.477 5.063 5.927V7.77H3.54V6.073h1.523V4.734c0-1.503.896-2.334 2.267-2.334.656 0 1.343.117 1.343.117v1.476h-.756c-.745 0-.977.462-.977.937v1.143h1.664l-.266 1.697H6.94v4.23C9.806 11.55 12 9.068 12 6.073z"/>
-                                </svg>
-                                Meta Ads
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-[#64748B]" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Standard
-                              </span>
-                            )}
                           </td>
                           {/* Status */}
                           <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>

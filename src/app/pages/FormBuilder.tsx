@@ -40,6 +40,15 @@ export default function FormBuilder() {
   const navigate = useNavigate();
   const location = useLocation();
   const template = location.state?.template as Template | undefined;
+  const existingForm = location.state?.form as {
+    id: number;
+    name: string;
+    description?: string;
+    fields?: FormField[];
+    submitButtonText?: string;
+    status?: string;
+  } | undefined;
+  const returnTo = location.state?.returnTo as { tab: string; flowId: number } | undefined;
 
   const [currentTab, setCurrentTab] = useState<"build" | "design" | "live">("build");
   const [formTitle, setFormTitle] = useState("");
@@ -56,8 +65,8 @@ export default function FormBuilder() {
   const [draggedFieldId, setDraggedFieldId] = useState<number | null>(null);
   const [dropTargetId, setDropTargetId] = useState<number | null>(null);
   const [hoveredFieldId, setHoveredFieldId] = useState<number | null>(null);
-  const [fieldValues, setFieldValues] = useState<{[key: number]: any}>({});
-  const [expandedSections, setExpandedSections] = useState<{[key: string]: boolean}>({
+  const [fieldValues, setFieldValues] = useState<{ [key: number]: any }>({});
+  const [expandedSections, setExpandedSections] = useState<{ [key: string]: boolean }>({
     general: true,
     appearance: false,
     validation: false,
@@ -84,13 +93,30 @@ export default function FormBuilder() {
       }));
 
       setFormFields(defaultFields);
+    } else if (existingForm) {
+      setFormTitle(existingForm.name);
+      setFormDescription(existingForm.description || "");
+      setSubmitButtonText(existingForm.submitButtonText || "Submit");
+      setFormFields((existingForm.fields || []).map((f: any, idx) => ({
+        id: f.id ?? (idx + 1),
+        name: f.name || f.label || "",
+        type: f.type || "text",
+        placeholder: f.placeholder || "",
+        required: f.required || false,
+        essential: f.essential || false,
+        label: f.label || f.name || "",
+        helpText: f.helpText || "",
+        options: f.options,
+        allowOther: f.allowOther || false,
+        defaultValue: f.defaultValue || "",
+      })));
     } else {
       setFormTitle("Untitled Form");
       setFormDescription("");
       setSubmitButtonText("Submit");
       setFormFields([]);
     }
-  }, [template]);
+  }, []);
 
   const handleNextTab = () => {
     if (currentTab === "build") {
@@ -110,16 +136,28 @@ export default function FormBuilder() {
 
   const handleSaveDraft = () => {
     toast.success("Form saved as draft");
-    navigate("/web-forms");
+    if (returnTo) {
+      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+    } else {
+      navigate("/web-forms");
+    }
   };
 
   const handlePublishForm = () => {
     toast.success("Form published successfully!");
-    navigate("/web-forms");
+    if (returnTo) {
+      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+    } else {
+      navigate("/web-forms");
+    }
   };
 
   const handleCancel = () => {
-    navigate("/web-forms");
+    if (returnTo) {
+      navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
+    } else {
+      navigate("/web-forms");
+    }
   };
 
   const handleAddField = (fieldType: string, fieldName: string) => {
@@ -245,11 +283,10 @@ export default function FormBuilder() {
         <div className="flex items-center justify-end gap-8 border-b border-border pb-2 mb-4">
           <button
             onClick={() => setCurrentTab("build")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${
-              currentTab === "build"
+            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "build"
                 ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
-            }`}
+              }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             Build
@@ -259,11 +296,10 @@ export default function FormBuilder() {
           </button>
           <button
             onClick={() => setCurrentTab("design")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${
-              currentTab === "design"
+            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "design"
                 ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
-            }`}
+              }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             Design & Preview
@@ -273,11 +309,10 @@ export default function FormBuilder() {
           </button>
           <button
             onClick={() => setCurrentTab("live")}
-            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${
-              currentTab === "live"
+            className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "live"
                 ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
-            }`}
+              }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
             Go Live
@@ -328,9 +363,8 @@ export default function FormBuilder() {
                 <div
                   onDragOver={handleDragOver}
                   onDrop={handleDrop}
-                  className={`space-y-3 min-h-[200px] p-4 border-2 border-dashed rounded-lg transition-colors ${
-                    draggedFieldType ? "border-primary bg-blue-50" : "border-gray-300"
-                  }`}
+                  className={`space-y-3 min-h-[200px] p-4 border-2 border-dashed rounded-lg transition-colors ${draggedFieldType ? "border-primary bg-blue-50" : "border-gray-300"
+                    }`}
                 >
                   {formFields.length === 0 ? (
                     <div className="text-center py-12">
@@ -347,7 +381,7 @@ export default function FormBuilder() {
                         isDropTarget={dropTargetId === field.id && draggedFieldId !== field.id}
                         fieldValue={fieldValues[field.id]}
                         onFieldClick={() => handleFieldClick(field)}
-                        onFieldChange={(value) => setFieldValues({...fieldValues, [field.id]: value})}
+                        onFieldChange={(value) => setFieldValues({ ...fieldValues, [field.id]: value })}
                         onDuplicate={() => handleDuplicateField(field)}
                         onDelete={() => handleDeleteField(field.id)}
                         onDragStart={(e) => handleFieldDragStart(e, field.id)}
@@ -395,17 +429,17 @@ export default function FormBuilder() {
             {currentTab === "live" && (
               <div className="space-y-6">
                 <div className="text-center py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                  Your Form is Ready!
-                </h2>
-                <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                  Review your form details below and publish it to make it live.
-                </p>
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                  <h2 className="text-2xl font-bold mb-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                    Your Form is Ready!
+                  </h2>
+                  <p className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                    Review your form details below and publish it to make it live.
+                  </p>
                 </div>
 
                 {/* Form Summary */}
@@ -416,45 +450,45 @@ export default function FormBuilder() {
                   </h3>
 
                   <div className="space-y-3">
-                  <div>
-                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Form Title
-                    </p>
-                    <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                      {formTitle}
-                    </p>
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Form Fields ({formFields.length})
-                    </p>
-                    <div className="space-y-2">
-                      {formFields.map((field) => (
-                        <div key={field.id} className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            <span style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                              {field.name}
-                            </span>
-                            <div className="flex gap-1">
-                              {field.required && (
-                                <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">
-                                  Required
-                                </span>
-                              )}
-                              {field.essential && (
-                                <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
-                                  Essential
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <span className="text-xs px-2 py-1 bg-gray-200 rounded" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                            {field.type}
-                          </span>
-                        </div>
-                      ))}
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Form Title
+                      </p>
+                      <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                        {formTitle}
+                      </p>
                     </div>
+
+                    <div>
+                      <p className="text-xs font-medium mb-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Form Fields ({formFields.length})
+                      </p>
+                      <div className="space-y-2">
+                        {formFields.map((field) => (
+                          <div key={field.id} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                {field.name}
+                              </span>
+                              <div className="flex gap-1">
+                                {field.required && (
+                                  <span className="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">
+                                    Required
+                                  </span>
+                                )}
+                                {field.essential && (
+                                  <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                                    Essential
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-1 bg-gray-200 rounded" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                              {field.type}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -467,43 +501,43 @@ export default function FormBuilder() {
                   </h3>
 
                   <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Theme
-                    </p>
-                    <p className="text-sm font-semibold capitalize" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                      {backgroundTheme}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Typography
-                    </p>
-                    <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                      {typography.split('(')[0].trim()}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Button Color
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-6 h-6 rounded border border-border"
-                        style={{ backgroundColor: buttonColor }}
-                      />
-                      <p className="text-sm font-mono font-semibold" style={{ color: '#020817' }}>
-                        {buttonColor}
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Theme
+                      </p>
+                      <p className="text-sm font-semibold capitalize" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                        {backgroundTheme}
                       </p>
                     </div>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                      Button Text
-                    </p>
-                    <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
-                      {submitButtonText}
-                    </p>
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Typography
+                      </p>
+                      <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                        {typography.split('(')[0].trim()}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Button Color
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-6 h-6 rounded border border-border"
+                          style={{ backgroundColor: buttonColor }}
+                        />
+                        <p className="text-sm font-mono font-semibold" style={{ color: '#020817' }}>
+                          {buttonColor}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                        Button Text
+                      </p>
+                      <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                        {submitButtonText}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -546,8 +580,8 @@ export default function FormBuilder() {
 
           {/* Right - Field Categories / Settings */}
           <div className="w-80 flex-shrink-0">
-              <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
-                {showFieldSettings && selectedField ? (
+            <div className="bg-white border border-border rounded-xl shadow-sm overflow-hidden">
+              {showFieldSettings && selectedField ? (
                 /* Field Settings Panel */
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4 pb-4 border-b border-border">
@@ -627,14 +661,12 @@ export default function FormBuilder() {
                             </label>
                             <button
                               onClick={() => handleUpdateField({ ...selectedField, required: !selectedField.required })}
-                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                                selectedField.required ? "bg-primary" : "bg-gray-200"
-                              }`}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${selectedField.required ? "bg-primary" : "bg-gray-200"
+                                }`}
                             >
                               <span
-                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                                  selectedField.required ? "translate-x-5" : "translate-x-0.5"
-                                }`}
+                                className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${selectedField.required ? "translate-x-5" : "translate-x-0.5"
+                                  }`}
                               />
                             </button>
                           </div>
@@ -744,14 +776,12 @@ export default function FormBuilder() {
                                 </label>
                                 <button
                                   onClick={() => handleUpdateField({ ...selectedField, allowOther: !selectedField.allowOther })}
-                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
-                                    selectedField.allowOther ? "bg-primary" : "bg-gray-200"
-                                  }`}
+                                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${selectedField.allowOther ? "bg-primary" : "bg-gray-200"
+                                    }`}
                                 >
                                   <span
-                                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
-                                      selectedField.allowOther ? "translate-x-5" : "translate-x-0.5"
-                                    }`}
+                                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${selectedField.allowOther ? "translate-x-5" : "translate-x-0.5"
+                                      }`}
                                   />
                                 </button>
                               </div>
@@ -1618,415 +1648,415 @@ export default function FormBuilder() {
                 /* Field Categories */
                 <div>
                   {/* Standard Fields */}
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                      <div className="w-1 h-4 bg-primary rounded-full"></div>
-                      Standard Fields
-                    </h4>
-                    <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
+                  <div className="p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                        <div className="w-1 h-4 bg-primary rounded-full"></div>
+                        Standard Fields
+                      </h4>
+                      <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("text", "Single Line Text")}
+                        onClick={() => handleAddField("text", "Single Line Text")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Single Line Text
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("textarea", "Paragraph Text")}
+                        onClick={() => handleAddField("textarea", "Paragraph Text")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
+                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Paragraph Text
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("select", "Dropdown")}
+                        onClick={() => handleAddField("select", "Dropdown")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
+                          <ChevronDown className="w-4 h-4 text-green-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Dropdown
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("multiselect", "Multi Select")}
+                        onClick={() => handleAddField("multiselect", "Multi Select")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                          <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Multi Select
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("checkbox", "Checkboxes")}
+                        onClick={() => handleAddField("checkbox", "Checkboxes")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
+                          <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Checkboxes
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("radio", "Radio Buttons")}
+                        onClick={() => handleAddField("radio", "Radio Buttons")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
+                          <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Radio Buttons
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("number", "Number")}
+                        onClick={() => handleAddField("number", "Number")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                          <span className="text-base font-bold text-orange-600">123</span>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Number
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("hidden", "Hidden Field")}
+                        onClick={() => handleAddField("hidden", "Hidden Field")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
+                          <EyeOff className="w-4 h-4 text-gray-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Hidden Field
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("html", "HTML Block")}
+                        onClick={() => handleAddField("html", "HTML Block")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
+                          <Code className="w-4 h-4 text-yellow-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          HTML Block
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("divider", "Section Divider")}
+                        onClick={() => handleAddField("divider", "Section Divider")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
+                          <MinusIcon className="w-4 h-4 text-slate-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Section Divider
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("pagebreak", "Page Break")}
+                        onClick={() => handleAddField("pagebreak", "Page Break")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Page Break
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("text", "Single Line Text")}
-                      onClick={() => handleAddField("text", "Single Line Text")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Single Line Text
-                      </span>
-                    </button>
+                  {/* Advanced Fields */}
+                  <div className="p-4 border-t border-border">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                        <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
+                        Advanced Fields
+                      </h4>
+                      <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </div>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("textarea", "Paragraph Text")}
-                      onClick={() => handleAddField("textarea", "Paragraph Text")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                        <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Paragraph Text
-                      </span>
-                    </button>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("name", "Name")}
+                        onClick={() => handleAddField("name", "Name")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
+                          <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Name
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("select", "Dropdown")}
-                      onClick={() => handleAddField("select", "Dropdown")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                        <ChevronDown className="w-4 h-4 text-green-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Dropdown
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("date", "Date")}
+                        onClick={() => handleAddField("date", "Date")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center group-hover:bg-cyan-100 transition-colors">
+                          <Calendar className="w-4 h-4 text-cyan-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Date
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("multiselect", "Multi Select")}
-                      onClick={() => handleAddField("multiselect", "Multi Select")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                        <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Multi Select
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("time", "Time")}
+                        onClick={() => handleAddField("time", "Time")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
+                          <Clock className="w-4 h-4 text-amber-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Time
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("checkbox", "Checkboxes")}
-                      onClick={() => handleAddField("checkbox", "Checkboxes")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
-                        <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Checkboxes
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("tel", "Phone")}
+                        onClick={() => handleAddField("tel", "Phone")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
+                          <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Phone
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("radio", "Radio Buttons")}
-                      onClick={() => handleAddField("radio", "Radio Buttons")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
-                        <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Radio Buttons
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("address", "Address")}
+                        onClick={() => handleAddField("address", "Address")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center group-hover:bg-rose-100 transition-colors">
+                          <MapPin className="w-4 h-4 text-rose-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Address
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("number", "Number")}
-                      onClick={() => handleAddField("number", "Number")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                        <span className="text-base font-bold text-orange-600">123</span>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Number
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("url", "Website")}
+                        onClick={() => handleAddField("url", "Website")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
+                          <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Website
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("hidden", "Hidden Field")}
-                      onClick={() => handleAddField("hidden", "Hidden Field")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
-                        <EyeOff className="w-4 h-4 text-gray-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Hidden Field
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("email", "Email")}
+                        onClick={() => handleAddField("email", "Email")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center group-hover:bg-sky-100 transition-colors">
+                          <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Email
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("html", "HTML Block")}
-                      onClick={() => handleAddField("html", "HTML Block")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
-                        <Code className="w-4 h-4 text-yellow-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        HTML Block
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("file", "File Upload")}
+                        onClick={() => handleAddField("file", "File Upload")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-lime-50 flex items-center justify-center group-hover:bg-lime-100 transition-colors">
+                          <Upload className="w-4 h-4 text-lime-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          File Upload
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("divider", "Section Divider")}
-                      onClick={() => handleAddField("divider", "Section Divider")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
-                        <MinusIcon className="w-4 h-4 text-slate-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Section Divider
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("captcha", "CAPTCHA")}
+                        onClick={() => handleAddField("captcha", "CAPTCHA")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-colors">
+                          <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          CAPTCHA
+                        </span>
+                      </button>
 
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("pagebreak", "Page Break")}
-                      onClick={() => handleAddField("pagebreak", "Page Break")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Page Break
-                      </span>
-                    </button>
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("password", "Password")}
+                        onClick={() => handleAddField("password", "Password")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
+                          <EyeOff className="w-4 h-4 text-purple-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Password
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("signature", "Signature")}
+                        onClick={() => handleAddField("signature", "Signature")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
+                          <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Signature
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("rating", "Rating")}
+                        onClick={() => handleAddField("rating", "Rating")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
+                          <Star className="w-4 h-4 text-yellow-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Rating
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("toggle", "Toggle Switch")}
+                        onClick={() => handleAddField("toggle", "Toggle Switch")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
+                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                          </svg>
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Toggle Switch
+                        </span>
+                      </button>
+
+                      <button
+                        draggable
+                        onDragStart={() => handleDragStart("color", "Color Picker")}
+                        onClick={() => handleAddField("color", "Color Picker")}
+                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
+                          <Palette className="w-4 h-4 text-pink-600" />
+                        </div>
+                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                          Color Picker
+                        </span>
+                      </button>
+                    </div>
                   </div>
                 </div>
-
-                {/* Advanced Fields */}
-                <div className="p-4 border-t border-border">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                      <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
-                      Advanced Fields
-                    </h4>
-                    <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("name", "Name")}
-                      onClick={() => handleAddField("name", "Name")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                        <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Name
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("date", "Date")}
-                      onClick={() => handleAddField("date", "Date")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center group-hover:bg-cyan-100 transition-colors">
-                        <Calendar className="w-4 h-4 text-cyan-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Date
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("time", "Time")}
-                      onClick={() => handleAddField("time", "Time")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
-                        <Clock className="w-4 h-4 text-amber-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Time
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("tel", "Phone")}
-                      onClick={() => handleAddField("tel", "Phone")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                        <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Phone
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("address", "Address")}
-                      onClick={() => handleAddField("address", "Address")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center group-hover:bg-rose-100 transition-colors">
-                        <MapPin className="w-4 h-4 text-rose-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Address
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("url", "Website")}
-                      onClick={() => handleAddField("url", "Website")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
-                        <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Website
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("email", "Email")}
-                      onClick={() => handleAddField("email", "Email")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center group-hover:bg-sky-100 transition-colors">
-                        <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Email
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("file", "File Upload")}
-                      onClick={() => handleAddField("file", "File Upload")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-lime-50 flex items-center justify-center group-hover:bg-lime-100 transition-colors">
-                        <Upload className="w-4 h-4 text-lime-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        File Upload
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("captcha", "CAPTCHA")}
-                      onClick={() => handleAddField("captcha", "CAPTCHA")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-colors">
-                        <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        CAPTCHA
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("password", "Password")}
-                      onClick={() => handleAddField("password", "Password")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                        <EyeOff className="w-4 h-4 text-purple-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Password
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("signature", "Signature")}
-                      onClick={() => handleAddField("signature", "Signature")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                        <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Signature
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("rating", "Rating")}
-                      onClick={() => handleAddField("rating", "Rating")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
-                        <Star className="w-4 h-4 text-yellow-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Rating
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("toggle", "Toggle Switch")}
-                      onClick={() => handleAddField("toggle", "Toggle Switch")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Toggle Switch
-                      </span>
-                    </button>
-
-                    <button
-                      draggable
-                      onDragStart={() => handleDragStart("color", "Color Picker")}
-                      onClick={() => handleAddField("color", "Color Picker")}
-                      className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                    >
-                      <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
-                        <Palette className="w-4 h-4 text-pink-600" />
-                      </div>
-                      <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        Color Picker
-                      </span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-              </div>
+              )}
+            </div>
           </div>
-          </div>
+        </div>
 
         {/* Footer Actions */}
         <div className="flex items-center justify-between pt-2 mt-4 border-t border-border">

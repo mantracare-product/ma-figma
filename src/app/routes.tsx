@@ -41,8 +41,13 @@ export const router = createBrowserRouter([
         Component: MainLayout,
         children: [
           { index: true, Component: Overview },
-          { path: "clients", Component: Clients },
-          { path: "clients/:id", Component: ClientProfile },
+          {
+            path: "clients",
+            Component: Clients,
+            children: [
+              { path: ":id", Component: ClientProfile }
+            ]
+          },
           { path: "call-logs", Component: CallLogs },
           { path: "call-logs/:id", Component: CallDetails },
           { path: "deals", Component: Deals },

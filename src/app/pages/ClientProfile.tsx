@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
-  Play, ChevronDown, Download, ArrowLeft
+  Play, ChevronDown, Download, ArrowLeft, Check
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -14,6 +14,9 @@ import {
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { Form, INITIAL_FORMS } from "../../data/forms";
+import { CLIENT_FORM_SUBMISSIONS } from "../../data/clientFormSubmissions";
+import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -153,15 +156,33 @@ const teamMembers = [
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function ClientProfile() {
-  const { id } = useParams<{ id: string }>();
+interface ClientProfileProps {
+  clientIdProp?: string;
+  onCloseOverride?: () => void;
+  initialOpenState?: { openFormsTab: boolean; formId: number; submissionDate?: string };
+}
+
+export default function ClientProfile({ clientIdProp, onCloseOverride, initialOpenState }: ClientProfileProps = {}) {
+  const { id: routeId } = useParams<{ id: string }>();
+  const id = clientIdProp ?? routeId;
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [clients, setClients] = useState<Client[]>(initialClients);
   const client = clients.find((c) => c.id === id) ?? null;
 
+  const handleClose = () => {
+    if (onCloseOverride) onCloseOverride();
+    else navigate("/clients");
+  };
+
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "notes">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes">("overview");
+  const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
+  const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
+  const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
+  const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
+  const [expandedFormGroupId, setExpandedFormGroupId] = useState<number | null>(null);
   const [activeProcessTabDrawer, setActiveProcessTabDrawer] = useState<string>("all");
   const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
   const [editingProcesses, setEditingProcesses] = useState(false);
@@ -205,7 +226,7 @@ export default function ClientProfile() {
       });
       setDrawerProcessStages(initialStages);
     }
-  }, [clientId]);
+  }, [id]);
 
   // Close field picker on outside click
   useEffect(() => {
@@ -230,7 +251,7 @@ export default function ClientProfile() {
             Client not found
           </p>
           <button
-            onClick={() => navigate("/clients")}
+            onClick={handleClose}
             className="mt-4 text-sm"
             style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif" }}
           >
@@ -343,6 +364,66 @@ export default function ClientProfile() {
 
   const selectedDrawerProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
 
+  const clientSubmissions = CLIENT_FORM_SUBMISSIONS.filter(s => s.clientId === client.id);
+  const groupedSubmissions = INITIAL_FORMS.map(form => {
+    const subs = clientSubmissions.filter(s => s.formId === form.id);
+    return { form, subs };
+  }).filter(group => group.subs.length > 0);
+
+  type FlowStepProgress = {
+    step: FlowStep;
+    form: Form | undefined;
+    done: boolean;
+    completedOn?: string;
+    submission?: (typeof CLIENT_FORM_SUBMISSIONS)[number];
+  };
+
+  type ClientFlowProgress = {
+    flow: IntakeFlow;
+    steps: FlowStepProgress[];
+    status: "completed" | "in_progress";
+    requiredDone: number;
+    requiredTotal: number;
+  };
+
+  const clientFlowProgress: ClientFlowProgress[] = INITIAL_FLOWS.map(flow => {
+    const steps: FlowStepProgress[] = flow.steps.map(step => {
+      const form = INITIAL_FORMS.find(f => f.id === step.formId);
+      const subsForStep = clientSubmissions.filter(s => s.formId === step.formId);
+      const sorted = subsForStep
+        .slice()
+        .sort((a, b) => new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime());
+      const submission = sorted[0];
+      const done = !!submission;
+      return { step, form, done, completedOn: submission?.submittedAt, submission };
+    });
+
+    const requiredSteps = steps.filter(s => s.step.required);
+    const requiredDone = requiredSteps.filter(s => s.done).length;
+    const status: "completed" | "in_progress" =
+      requiredSteps.length > 0 && requiredDone === requiredSteps.length ? "completed" : "in_progress";
+
+    return { flow, steps, status, requiredDone, requiredTotal: requiredSteps.length };
+  }).filter(progress => progress.steps.some(s => s.done));
+
+  useEffect(() => {
+    const routeState = location.state as { openFormsTab?: boolean; formId?: number; submissionDate?: string } | null;
+    const state = initialOpenState ?? routeState;
+    if (state?.openFormsTab && state.formId) {
+      setActiveProfileTab("forms");
+      setFormsTabMode("forms");
+      setExpandedFormGroupId(state.formId);
+
+      const matchingSub = CLIENT_FORM_SUBMISSIONS.find(
+        s => s.clientId === id && s.formId === state.formId && (!state.submissionDate || s.submittedAt === state.submissionDate)
+      );
+      if (matchingSub) {
+        setExpandedSubmissionId(matchingSub.id);
+      }
+      if (routeState) window.history.replaceState({}, "");
+    }
+  }, [location.state, initialOpenState, id]);
+
   const getDrawerActivityIcon = (type: string) => {
     switch (type) {
       case "outbound_call": return <PhoneOutgoing className="w-5 h-5" />;
@@ -373,22 +454,18 @@ export default function ClientProfile() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6 px-[150px]">
-      {/* Back button */}
-      <button
-        onClick={() => navigate("/clients")}
-        className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
-        style={{ fontFamily: "Outfit, sans-serif" }}
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Clients
-      </button>
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/30 z-40"
+        onClick={handleClose}
+      />
 
-      {/* White card */}
-      <div className="max-w-5xl mx-auto bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+      {/* Drawer panel */}
+      <div className="fixed right-0 top-0 h-full w-[40%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
 
         {/* Hero: client identity */}
-        <div className="p-6 border-b border-border">
+        <div className="p-6 border-b border-border flex-shrink-0">
           <div className="flex items-start gap-4">
             <div
               className="w-16 h-16 bg-gradient-to-br from-primary to-primary-hover text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-lg"
@@ -415,17 +492,24 @@ export default function ClientProfile() {
                 {client.status}
               </span>
             </div>
+            <button
+              onClick={handleClose}
+              className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0"
+            >
+              <X className="w-5 h-5" style={{ color: "#6B7280" }} />
+            </button>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="border-b border-border overflow-x-auto">
+        <div className="border-b border-border overflow-x-auto flex-shrink-0">
           <div className="flex">
             {(
               [
                 { id: "overview" as const, label: "Overview" },
                 { id: "processes" as const, label: "Processes" },
                 { id: "activity" as const, label: "Activity" },
+                { id: "forms" as const, label: "Forms" },
                 { id: "notes" as const, label: "Notes" },
               ] as const
             ).map((tab) => (
@@ -449,7 +533,7 @@ export default function ClientProfile() {
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 relative">
+        <div className="p-6 relative flex-1 overflow-y-auto">
 
           {/* ── Overview Tab ── */}
           {activeProfileTab === "overview" && (
@@ -458,7 +542,7 @@ export default function ClientProfile() {
                 <div className="space-y-3">
                   {/* NAME */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       NAME
                     </label>
                     <input
@@ -473,7 +557,7 @@ export default function ClientProfile() {
 
                   {/* STATUS */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       STATUS
                     </label>
                     <select
@@ -491,7 +575,7 @@ export default function ClientProfile() {
 
                   {/* PROCESSES */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       PROCESSES
                     </label>
                     <div className="flex flex-wrap items-center gap-2">
@@ -563,7 +647,7 @@ export default function ClientProfile() {
 
                   {/* EMAIL */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       EMAIL
                     </label>
                     <input
@@ -578,7 +662,7 @@ export default function ClientProfile() {
 
                   {/* PHONE */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       PHONE
                     </label>
                     <input
@@ -593,7 +677,7 @@ export default function ClientProfile() {
 
                   {/* LOCATION */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       LOCATION
                     </label>
                     <input
@@ -608,7 +692,7 @@ export default function ClientProfile() {
 
                   {/* COMPANY */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       COMPANY
                     </label>
                     <input
@@ -623,7 +707,7 @@ export default function ClientProfile() {
 
                   {/* ROLE */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                       ROLE
                     </label>
                     <input
@@ -639,7 +723,7 @@ export default function ClientProfile() {
                   {/* Custom fields */}
                   {customFields.map((field, index) => (
                     <div key={index} className="flex flex-col gap-1.5">
-                      <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                      <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                         {field.name.toUpperCase()}
                       </label>
                       <input
@@ -691,7 +775,7 @@ export default function ClientProfile() {
                     Save Changes
                   </button>
                   <button
-                    onClick={() => navigate("/clients")}
+                    onClick={handleClose}
                     className="px-6 py-3 border font-medium rounded transition-colors hover:bg-gray-50"
                     style={{ borderColor: "#E5E7EB", color: "#6B7280", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
                   >
@@ -835,7 +919,7 @@ export default function ClientProfile() {
             <div className="space-y-4">
               {(() => {
                 const processToShow = activeProcessTabDrawer === "all" ? drawerClientProcesses[0]?.name : activeProcessTabDrawer;
-                const selectedProcess = drawerClientProcesses.find((p) => p.name === processToShow);
+                const selectedProcess = drawerClientProcesses.find((p) => p.name === processToShow || p.id === processToShow);
                 if (!selectedProcess) {
                   return <div className="text-center py-8 text-muted-foreground">No process selected</div>;
                 }
@@ -859,7 +943,7 @@ export default function ClientProfile() {
 
                       {/* STAGE */}
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                           STAGE
                         </label>
                         <div className="flex items-center gap-3">
@@ -902,7 +986,7 @@ export default function ClientProfile() {
 
                       {/* STATUS */}
                       <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
                           STATUS
                         </label>
                         <div className="relative inline-block" style={{ width: "fit-content" }}>
@@ -923,7 +1007,7 @@ export default function ClientProfile() {
                       {/* DATE and TIME */}
                       <div className="border-t border-border pt-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>DATE</label>
+                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>DATE</label>
                           <input
                             type="date"
                             defaultValue="2024-03-15"
@@ -934,7 +1018,7 @@ export default function ClientProfile() {
                           />
                         </div>
                         <div className="flex flex-col gap-1.5">
-                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>TIME</label>
+                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>TIME</label>
                           <input
                             type="time"
                             defaultValue="09:30"
@@ -948,7 +1032,7 @@ export default function ClientProfile() {
 
                       {/* RESPONSIBLE */}
                       <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                        <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>RESPONSIBLE</label>
+                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>RESPONSIBLE</label>
                         <div className="relative inline-block" style={{ width: "fit-content" }}>
                           <button className="text-sm text-foreground hover:text-primary flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
                             {selectedProcess.responsible || "John Smith"} <ChevronDown className="w-4 h-4" />
@@ -959,7 +1043,7 @@ export default function ClientProfile() {
                       {/* LAST ACTIVITY */}
                       {lastActivity && (
                         <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                          <label className="text-xs uppercase font-semibold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>LAST ACTIVITY</label>
+                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>LAST ACTIVITY</label>
                           <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
                             <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "16px", rowGap: "8px", fontSize: "12px" }}>
                               <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Date & Time:</div>
@@ -1239,6 +1323,268 @@ export default function ClientProfile() {
             </div>
           )}
 
+          {/* ── Forms Tab ── */}
+          {activeProfileTab === "forms" && (
+            <div className="space-y-4">
+              {/* Switch bar */}
+              <div className="inline-flex border border-border rounded-lg overflow-hidden">
+                {(["forms", "flows"] as const).map(mode => (
+                  <button
+                    key={mode}
+                    onClick={() => setFormsTabMode(mode)}
+                    className={`px-4 py-2 text-xs font-semibold transition-colors ${
+                      formsTabMode === mode ? "text-white" : "bg-white text-[#6B7280] hover:bg-gray-50"
+                    }`}
+                    style={{
+                      fontFamily: "Outfit, sans-serif",
+                      backgroundColor: formsTabMode === mode ? "#4F8EF7" : undefined,
+                    }}
+                  >
+                    {mode === "forms" ? "Forms" : "Intake Flows"}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Forms mode ── */}
+              {formsTabMode === "forms" && (
+                clientSubmissions.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      No forms submitted by this client yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {groupedSubmissions.map(({ form, subs }) => {
+                      const templateId = `TPL-${String(form.id).padStart(3, "0")}`;
+                      const isGroupExpanded = expandedFormGroupId === form.id;
+                      return (
+                        <div key={form.id} className="p-5 border border-border rounded-xl bg-white space-y-3 shadow-sm">
+                          {/* Header Row */}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <h3 className="font-bold text-[16px] text-[#1F2937] truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                {form.name}
+                              </h3>
+                              <span className="px-2 py-0.5 rounded-full bg-gray-100 text-[11px] font-medium text-[#6B7280] shrink-0" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {subs.length}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => setExpandedFormGroupId(isGroupExpanded ? null : form.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors shrink-0"
+                              style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
+                            >
+                              View
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isGroupExpanded ? "rotate-180" : ""}`} />
+                            </button>
+                          </div>
+
+                          {/* Stack of Submissions */}
+                          {isGroupExpanded && (
+                            <div className="space-y-3 pt-1">
+                              {subs.map((submission) => {
+                                const isExpanded = expandedSubmissionId === submission.id;
+                                return (
+                                  <div key={submission.id} className="p-4 border border-border rounded-xl bg-white space-y-3">
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 flex-1">
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                                            Template ID
+                                          </span>
+                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                            {templateId}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                                            Status
+                                          </span>
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
+                                            submission.status === "completed" ? "bg-green-100 text-green-700"
+                                            : submission.status === "pending" ? "bg-amber-100 text-amber-700"
+                                            : "bg-red-100 text-red-700"
+                                          }`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                                            {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                                            Sent
+                                          </span>
+                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                            {submission.sentAt}
+                                          </span>
+                                        </div>
+
+                                        <div className="flex flex-col gap-0.5">
+                                          <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
+                                            Submitted
+                                          </span>
+                                          <span className="text-sm" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                            {submission.submittedAt}
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      <button
+                                        onClick={() => setExpandedSubmissionId(isExpanded ? null : submission.id)}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors shrink-0"
+                                        style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
+                                      >
+                                        View
+                                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                                      </button>
+                                    </div>
+
+                                    {/* Expanded Inline Panel */}
+                                    {isExpanded && (
+                                      <div className="mt-3 space-y-3 pt-3 border-t border-border">
+                                        {Object.entries(submission.fields).map(([label, value]) => (
+                                          <div key={label} className="bg-gray-50 rounded-xl p-4">
+                                            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                                              {label}
+                                            </p>
+                                            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                                              {value}
+                                            </p>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+
+              {/* ── Intake Flows mode (new) ── */}
+              {formsTabMode === "flows" && (
+                clientFlowProgress.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                      This client hasn't started any intake flow yet.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {clientFlowProgress.map(({ flow, steps, status, requiredDone, requiredTotal }) => {
+                      const isFlowExpanded = expandedFlowId === flow.id;
+                      return (
+                        <div key={flow.id} className="p-5 border border-border rounded-xl bg-white space-y-3 shadow-sm">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <h3 className="font-bold text-[16px] text-[#1F2937] truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                {flow.name}
+                              </h3>
+                              <span
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${
+                                  status === "completed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                                }`}
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                {status === "completed" ? "Completed" : "In Progress"}
+                              </span>
+                            </div>
+
+                            <button
+                              onClick={() => setExpandedFlowId(isFlowExpanded ? null : flow.id)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors shrink-0"
+                              style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
+                            >
+                              View
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isFlowExpanded ? "rotate-180" : ""}`} />
+                            </button>
+                          </div>
+
+                          {isFlowExpanded && (
+                            <>
+                              <p className="text-xs" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>
+                                {requiredDone} of {requiredTotal} required steps complete
+                              </p>
+
+                              <div className="space-y-0">
+                                {steps.map(({ step, form, done, completedOn, submission }, idx) => {
+                                  const stepKey = `${flow.id}-${step.formId}-${idx}`;
+                                  const isStepExpanded = expandedFlowStepId === stepKey;
+                                  return (
+                                    <div key={stepKey} className="flex gap-3">
+                                      <div className="flex flex-col items-center w-6 shrink-0">
+                                        <div
+                                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                                            done ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                                          }`}
+                                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                                        >
+                                          {done ? <Check className="w-3.5 h-3.5" /> : idx + 1}
+                                        </div>
+                                        {idx < steps.length - 1 && <div className="w-px flex-1 bg-gray-200 mt-1 mb-1" />}
+                                      </div>
+
+                                      <div className="flex-1 py-2.5 px-4 mb-2 bg-gray-50 rounded-xl border border-border">
+                                        <div className="flex items-center justify-between gap-3">
+                                          <div>
+                                            <p className="text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}>
+                                              {form?.name ?? `Form #${step.formId}`}
+                                            </p>
+                                            <p className="text-xs mt-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#9CA3AF" }}>
+                                              {step.required ? "Required" : "Optional"}
+                                              {done && <span className="ml-2" style={{ color: "#6B7280" }}>· Completed {completedOn}</span>}
+                                            </p>
+                                          </div>
+
+                                          {done && (
+                                            <button
+                                              onClick={() => setExpandedFlowStepId(isStepExpanded ? null : stepKey)}
+                                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-white transition-colors shrink-0"
+                                              style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}
+                                            >
+                                              View
+                                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isStepExpanded ? "rotate-180" : ""}`} />
+                                            </button>
+                                          )}
+                                        </div>
+
+                                        {isStepExpanded && submission && (
+                                          <div className="mt-3 space-y-3 pt-3 border-t border-border">
+                                            {Object.entries(submission.fields).map(([label, value]) => (
+                                              <div key={label} className="bg-white rounded-xl p-4 border border-border/60">
+                                                <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                                                  {label}
+                                                </p>
+                                                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                                                  {value}
+                                                </p>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
           {/* ── Notes Tab ── */}
           {activeProfileTab === "notes" && (
             <div className="space-y-4">
@@ -1360,6 +1706,6 @@ export default function ClientProfile() {
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

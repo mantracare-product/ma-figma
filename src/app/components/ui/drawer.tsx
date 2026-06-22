@@ -1,14 +1,162 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
+import { X } from "lucide-react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "./utils";
 
+interface CustomDrawerProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+  title?: React.ReactNode;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
+  maxWidth?: string;
+}
+
+type DrawerProps = CustomDrawerProps & React.ComponentProps<typeof DrawerPrimitive.Root>;
+
+function CustomSideDrawer({
+  isOpen,
+  onClose,
+  title,
+  footer,
+  children,
+  maxWidth = "sm:max-w-xl",
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  title?: React.ReactNode;
+  footer?: React.ReactNode;
+  children?: React.ReactNode;
+  maxWidth?: string;
+}) {
+  const [shouldRender, setShouldRender] = React.useState(isOpen);
+  const [animate, setAnimate] = React.useState(false);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setShouldRender(true);
+      const timer = setTimeout(() => setAnimate(true), 10);
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "hidden";
+      }
+      return () => clearTimeout(timer);
+    } else {
+      setAnimate(false);
+      const timer = setTimeout(() => setShouldRender(false), 300);
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "unset";
+      }
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  React.useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    if (isOpen) {
+      if (typeof document !== "undefined") {
+        document.addEventListener("keydown", handleEscape);
+      }
+    }
+    return () => {
+      if (typeof document !== "undefined") {
+        document.removeEventListener("keydown", handleEscape);
+      }
+    };
+  }, [isOpen, onClose]);
+
+  // Clean up overflow on unmount
+  React.useEffect(() => {
+    return () => {
+      if (typeof document !== "undefined") {
+        document.body.style.overflow = "unset";
+      }
+    };
+  }, []);
+
+  if (!shouldRender) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex justify-end overflow-hidden">
+      {/* Backdrop overlay */}
+      <div
+        className={`fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300 ease-out ${
+          animate ? "opacity-100" : "opacity-0"
+        }`}
+        onClick={onClose}
+      />
+
+      {/* Side Panel Drawer */}
+      <div
+        className={`relative w-full ${maxWidth} bg-white shadow-2xl h-full flex flex-col z-50 transform transition-transform duration-300 ease-out border-l border-gray-100 ${
+          animate ? "translate-x-0" : "translate-x-full"
+        }`}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            {typeof title === "string" ? (
+              <h2 className="text-xl font-bold text-gray-900 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {title}
+              </h2>
+            ) : (
+              title
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 transition-colors p-1 hover:bg-gray-100 rounded-lg ml-4 flex-shrink-0"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-6 min-h-0 bg-white">
+          {children}
+        </div>
+
+        {/* Footer */}
+        {footer && (
+          <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+            {footer}
+          </div>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function Drawer({
+  isOpen,
+  onClose,
+  title,
+  footer,
+  children,
+  maxWidth,
   ...props
-}: React.ComponentProps<typeof DrawerPrimitive.Root>) {
-  return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
+}: DrawerProps) {
+  if (isOpen !== undefined) {
+    return (
+      <CustomSideDrawer
+        isOpen={isOpen}
+        onClose={onClose || (() => {})}
+        title={title}
+        footer={footer}
+        maxWidth={maxWidth}
+      >
+        {children}
+      </CustomSideDrawer>
+    );
+  }
+
+  return <DrawerPrimitive.Root data-slot="drawer" {...props}>{children}</DrawerPrimitive.Root>;
 }
 
 function DrawerTrigger({
