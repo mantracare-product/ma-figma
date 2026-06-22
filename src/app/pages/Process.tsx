@@ -1905,7 +1905,7 @@ export default function Process() {
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
                             {/* Type and Right Column Field Row - Conditional Layout */}
-                            <div className={stageType === "Receive Inbound Calls" || stageType === "Human Action" ? "grid grid-cols-2 gap-4" : ""}>
+                            <div className={stageType === "Receive Inbound Calls" || stageType === "Makes AI Outbound Calls" || stageType === "Human Action" ? "grid grid-cols-2 gap-4" : ""}>
                               {/* Type Dropdown */}
                               <div className="flex flex-col">
                                 <label className="block text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
@@ -1924,12 +1924,12 @@ export default function Process() {
                                 </Select>
                               </div>
 
-                              {/* Inbound Source Multi-Select - Only show when Type is "Receive Inbound Calls" */}
-                              {stageType === "Receive Inbound Calls" && (
+                              {/* Inbound Source Multi-Select - Only show when Type is "Receive Inbound Calls" or "Makes AI Outbound Calls" */}
+                              {(stageType === "Receive Inbound Calls" || stageType === "Makes AI Outbound Calls") && (
                                 <div className="relative flex flex-col">
                                   <label className="flex items-center gap-2 text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Choose the inbound source
-                                    <Tooltip text="Select which phone numbers will trigger this stage when they receive calls">
+                                    {stageType === "Makes AI Outbound Calls" ? "Choose the outbound source" : "Choose the inbound source"}
+                                    <Tooltip text={stageType === "Makes AI Outbound Calls" ? "Select which phone numbers this stage will use to make outbound calls" : "Select which phone numbers will trigger this stage when they receive calls"}>
                                       <Info className="w-4 h-4 text-muted-foreground" />
                                     </Tooltip>
                                   </label>
