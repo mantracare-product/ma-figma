@@ -1909,7 +1909,7 @@ export default function Process() {
                               {/* Type Dropdown */}
                               <div className="flex flex-col">
                                 <label className="block text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Type
+                                  Call Actions
                                 </label>
                                 <Select value={stageType} onValueChange={setStageType}>
                                   <SelectTrigger className="h-full">
@@ -1918,7 +1918,7 @@ export default function Process() {
                                   <SelectContent>
                                     <SelectItem value="Receive Inbound Calls">Receive Inbound Calls</SelectItem>
                                     <SelectItem value="Makes AI Outbound Calls">Makes AI Outbound Calls</SelectItem>
-                                    <SelectItem value="No action">No action</SelectItem>
+                                    <SelectItem value="No action">No call</SelectItem>
                                     <SelectItem value="Human Action">Human Action</SelectItem>
                                   </SelectContent>
                                 </Select>
