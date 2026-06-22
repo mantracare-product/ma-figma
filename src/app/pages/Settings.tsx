@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
-import { Drawer } from "../components/ui/Drawer";
+import { Drawer } from "../components/ui/drawer";
 import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router";
@@ -3269,7 +3269,7 @@ export default function Settings() {
                               {user.name}
                             </button>
                             {user.calendarConnected && (
-                              <Tooltip text={`${user.connectedCalendar === 'google' ? 'Google' : 'Outlook'} Calendar Connected`} placement="top">
+                              <Tooltip text={`${user.connectedCalendar === 'google' ? 'Google' : 'Outlook'} Calendar Connected`}>
                                 <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
                                   <Calendar className="w-3 h-3" />
                                   <span className="text-xs font-medium">Cal</span>
@@ -5674,7 +5674,7 @@ export default function Settings() {
                                         Verify
                                       </button>
                                     ) : (
-                                      <Tooltip content="Verification only available for US numbers" position="right">
+                                      <Tooltip text="Verification only available for US numbers">
                                         <button
                                           disabled
                                           className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 opacity-50 cursor-not-allowed"
@@ -6711,7 +6711,7 @@ export default function Settings() {
                     <label className="block text-sm font-medium mb-2">
                       <span className="flex items-center gap-1.5">
                         Preferred Calling Time
-                        <Tooltip text="This is the default time when AI calls will be scheduled if no specific time is provided." placement="top">
+                        <Tooltip text="This is the default time when AI calls will be scheduled if no specific time is provided.">
                           <Info className="w-4 h-4 text-muted-foreground hover:text-foreground transition-colors cursor-help" />
                         </Tooltip>
                       </span>
@@ -7175,6 +7175,7 @@ export default function Settings() {
           setUserFormData({
             name: "",
             email: "",
+            role: "Agent",
             permissions: {
               dashboard: "view",
               clients: "view",
@@ -7212,6 +7213,7 @@ export default function Settings() {
                 setUserFormData({
                   name: "",
                   email: "",
+                  role: "Agent",
                   permissions: {
                     dashboard: "view",
                     clients: "view",
@@ -9084,7 +9086,7 @@ export default function Settings() {
                     onChange={(e) =>
                       setNumberFormData({
                         ...numberFormData,
-                        incomingCost: parseFloat(e.target.value) || 0,
+                        incomingCost: e.target.value,
                       })
                     }
                     placeholder="0.012"
@@ -9100,7 +9102,7 @@ export default function Settings() {
                     onChange={(e) =>
                       setNumberFormData({
                         ...numberFormData,
-                        outgoingCost: parseFloat(e.target.value) || 0,
+                        outgoingCost: e.target.value,
                       })
                     }
                     placeholder="0.015"

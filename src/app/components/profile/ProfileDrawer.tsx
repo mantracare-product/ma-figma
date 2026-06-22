@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Drawer } from "../ui/Drawer";
+import { Drawer } from "../ui/drawer";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { toast } from "sonner";

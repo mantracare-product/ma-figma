@@ -14,6 +14,7 @@ interface CustomDrawerProps {
   footer?: React.ReactNode;
   children?: React.ReactNode;
   maxWidth?: string;
+  zIndex?: number; // add this
 }
 
 type DrawerProps = CustomDrawerProps & React.ComponentProps<typeof DrawerPrimitive.Root>;
@@ -25,6 +26,7 @@ function CustomSideDrawer({
   footer,
   children,
   maxWidth = "sm:max-w-xl",
+  zIndex = 9999, // add this
 }: {
   isOpen: boolean;
   onClose: () => void;
@@ -32,6 +34,7 @@ function CustomSideDrawer({
   footer?: React.ReactNode;
   children?: React.ReactNode;
   maxWidth?: string;
+  zIndex?: number; // add this
 }) {
   const [shouldRender, setShouldRender] = React.useState(isOpen);
   const [animate, setAnimate] = React.useState(false);
@@ -82,7 +85,9 @@ function CustomSideDrawer({
   if (!shouldRender) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex justify-end overflow-hidden">
+    <div className="fixed inset-0 flex justify-end overflow-hidden"
+      style={{ zIndex: zIndex }}
+    >
       {/* Backdrop overlay */}
       <div
         className={`fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300 ease-out ${
@@ -140,6 +145,7 @@ function Drawer({
   footer,
   children,
   maxWidth,
+  zIndex, // add this
   ...props
 }: DrawerProps) {
   if (isOpen !== undefined) {
@@ -150,6 +156,7 @@ function Drawer({
         title={title}
         footer={footer}
         maxWidth={maxWidth}
+        zIndex={zIndex} // add this
       >
         {children}
       </CustomSideDrawer>

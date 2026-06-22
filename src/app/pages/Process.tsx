@@ -196,7 +196,7 @@ const DraggableStage = ({ stage, index, moveStage, onRemove, onEdit }: Draggable
   return (
     <div className="relative flex-shrink-0">
       <div
-        ref={(node) => drag(drop(node))}
+        ref={(node) => { drag(drop(node)); }}
         className="relative flex items-center gap-2 px-5 py-3 cursor-pointer transition-all shadow-md hover:shadow-lg"
         style={{
           backgroundColor: stage.color || "#22D3EE",

@@ -5,7 +5,7 @@ import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutg
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import { Modal } from "../components/ui/Modal";
-import { Drawer } from "../components/ui/Drawer";
+import { Drawer } from "../components/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -83,7 +83,7 @@ const mockClients: { [key: string]: Client } = {
 // Comprehensive call logs dataset (100 calls total)
 // Distribution: 70 Outbound, 30 Inbound | 65 Completed, 20 Failed, 15 Pending
 // All calls mapped to valid clients with correct process assignments
-const initialCallLogs: CallLog[] = [
+const initialCallLogs: (Omit<CallLog, "process"> & { process?: string })[] = [
   // Latest calls first (Apr 13-14)
   { id: "CALL-001", client: "Sarah Johnson", clientId: "CL-001", type: "Outbound", status: "Completed", lastStage: "Initial Contact", currentStage: "Insurance Verification", duration: "4:32", date: "2024-04-13 14:30", hasRecording: true, hasTranscript: true, hasScheduledCall: true },
   { id: "CALL-002", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", lastStage: "Initial Contact", currentStage: "Follow-up", duration: "3:45", date: "2024-04-13 13:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
@@ -639,8 +639,8 @@ export default function CallLogs() {
     const matchesClientFilter = activeClientId
       ? log.clientId === activeClientId
       : activeClientFilter
-      ? log.client === activeClientFilter
-      : true;
+        ? log.client === activeClientFilter
+        : true;
 
     return matchesSearch && matchesClientFilter;
   });
@@ -714,6 +714,9 @@ export default function CallLogs() {
     const newCall: CallLog = {
       id: newCallId,
       client: log.client,
+      clientId: log.clientId,
+      process: log.process || "",
+      lastStage: "",
       type: "Outbound",
       status: "Pending",
       currentStage: "Initial Contact",
@@ -791,13 +794,12 @@ export default function CallLogs() {
           />
 
           <Star
-            className={`w-6 h-6 transition-all ${
-              isFull
-                ? "fill-warning text-warning"
-                : isHalf
+            className={`w-6 h-6 transition-all ${isFull
+              ? "fill-warning text-warning"
+              : isHalf
                 ? "fill-warning text-warning"
                 : "fill-none text-muted-foreground"
-            }`}
+              }`}
             style={
               isHalf
                 ? { clipPath: 'polygon(0% 0%, 50% 0%, 50% 100%, 0% 100%)' }
@@ -841,1188 +843,1184 @@ export default function CallLogs() {
         }
       `}</style>
       <div className="py-6 px-[150px] space-y-8">
-      <PageHeader
-        title="Calls"
-        subtitle="View and analyze call history"
-      />
+        <PageHeader
+          title="Calls"
+          subtitle="View and analyze call history"
+        />
 
-      {/* Active Client Filter Banner */}
-      {activeClientFilter && (
-        <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
-              <Filter className="w-4 h-4 text-primary" />
+        {/* Active Client Filter Banner */}
+        {activeClientFilter && (
+          <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                <Filter className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">
+                  Showing call logs for <span className="font-semibold">{activeClientFilter}</span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Click the button to view all call logs
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                Showing call logs for <span className="font-semibold">{activeClientFilter}</span>
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Click the button to view all call logs
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearClientFilter}
-            className="flex items-center gap-2"
-          >
-            <X className="w-4 h-4" />
-            Clear Filter
-          </Button>
-        </div>
-      )}
-
-      {/* Action Bar */}
-      <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
-        <div className="flex items-center gap-4">
-          {/* Search Bar */}
-          <div className="flex-1 relative">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search call logs..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onFocus={() => setShowSearchModal(true)}
-                className="w-full pl-9 pr-4 py-2 bg-input-background border border-input rounded-lg text-sm"
-              />
-            </div>
-
-            {/* Advanced Search Dropdown Panel */}
-            {showSearchModal && (
-              <>
-                {/* Backdrop to close panel */}
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowSearchModal(false)}
-                />
-
-                {/* Dropdown Panel */}
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
-                  <div className="flex" style={{ maxHeight: '700px' }}>
-                    {/* Left Sidebar - Saved Searches */}
-                    <div className="w-56 border-r border-border p-4 overflow-y-auto bg-muted/30">
-                      <div className="space-y-1">
-                        <button className="w-full text-left px-3 py-2 text-sm rounded-lg bg-primary/10 text-primary font-medium">
-                          Deals in progress
-                        </button>
-                        <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
-                          Test deals
-                        </button>
-                        <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
-                          Closed deals
-                        </button>
-                        <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
-                          MC EAP
-                        </button>
-                      </div>
-                      <div className="mt-4 pt-4 border-t border-border">
-                        <button className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-2">
-                          <span className="text-base">+</span> Save filter
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Right Side - Filter Fields */}
-                    <div className="flex-1 p-6 overflow-y-auto">
-                      <div className="space-y-4">
-                        {/* Client Name */}
-                        {visibleFields.name && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Name
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter client name"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                        )}
-
-                        {/* Responsible Person - Multi-select */}
-                        {visibleFields.responsiblePerson && (
-                          <div className="relative">
-                          <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Responsible person
-                          </label>
-                          <div
-                            onClick={() => setShowResponsibleDropdown(!showResponsibleDropdown)}
-                            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer bg-white min-h-[38px] flex items-center flex-wrap gap-1"
-                          >
-                            {selectedResponsible.length === 0 ? (
-                              <span className="text-muted-foreground">Select person(s)</span>
-                            ) : (
-                              selectedResponsible.map((person) => (
-                                <span
-                                  key={person}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs"
-                                >
-                                  {person}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedResponsible(selectedResponsible.filter(p => p !== person));
-                                    }}
-                                    className="hover:text-primary-foreground"
-                                  >
-                                    &times;
-                                  </button>
-                                </span>
-                              ))
-                            )}
-                          </div>
-                          {showResponsibleDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                              {teamMembers.map((member) => (
-                                <label
-                                  key={member}
-                                  className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedResponsible.includes(member)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedResponsible([...selectedResponsible, member]);
-                                      } else {
-                                        setSelectedResponsible(selectedResponsible.filter(p => p !== member));
-                                      }
-                                    }}
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm">{member}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        )}
-
-                        {/* Stage Group - Multi-select */}
-                        {visibleFields.stageGroup && (
-                          <div className="relative">
-                          <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Stage group
-                          </label>
-                          <div
-                            onClick={() => setShowStageDropdown(!showStageDropdown)}
-                            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer bg-white min-h-[38px] flex items-center flex-wrap gap-1"
-                          >
-                            {selectedStages.length === 0 ? (
-                              <span className="text-muted-foreground">Select stage(s)</span>
-                            ) : (
-                              selectedStages.map((stage) => (
-                                <span
-                                  key={stage}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs"
-                                >
-                                  {stage}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedStages(selectedStages.filter(s => s !== stage));
-                                    }}
-                                    className="hover:text-primary-foreground"
-                                  >
-                                    &times;
-                                  </button>
-                                </span>
-                              ))
-                            )}
-                          </div>
-                          {showStageDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                              {stages.map((stage) => (
-                                <label
-                                  key={stage}
-                                  className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedStages.includes(stage)}
-                                    onChange={(e) => {
-                                      if (e.target.checked) {
-                                        setSelectedStages([...selectedStages, stage]);
-                                      } else {
-                                        setSelectedStages(selectedStages.filter(s => s !== stage));
-                                      }
-                                    }}
-                                    className="w-4 h-4"
-                                  />
-                                  <span className="text-sm">{stage}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        )}
-
-                        {/* Comment */}
-                        {visibleFields.comment && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Comment
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter comment"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                        )}
-
-                        {/* Created On */}
-                        {visibleFields.createdOn && (
-                          <div>
-                          <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Created on
-                          </label>
-                          <select
-                            value={createdOnFilter}
-                            onChange={(e) => setCreatedOnFilter(e.target.value)}
-                            className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                          >
-                            <option>Any date</option>
-                            <option>Today</option>
-                            <option>Yesterday</option>
-                            <option>Last 7 days</option>
-                            <option>Last 30 days</option>
-                            <option>Custom range</option>
-                          </select>
-
-                          {/* Custom Date Range Inputs */}
-                          {createdOnFilter === "Custom range" && (
-                            <div className="mt-3 grid grid-cols-2 gap-3">
-                              <div>
-                                <label className="block text-xs font-medium mb-1 text-muted-foreground">
-                                  From
-                                </label>
-                                <input
-                                  type="date"
-                                  value={filterStartDate}
-                                  onChange={(e) => setFilterStartDate(e.target.value)}
-                                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                />
-                              </div>
-                              <div>
-                                <label className="block text-xs font-medium mb-1 text-muted-foreground">
-                                  To
-                                </label>
-                                <input
-                                  type="date"
-                                  value={filterEndDate}
-                                  onChange={(e) => setFilterEndDate(e.target.value)}
-                                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        )}
-
-                        {/* Call Type */}
-                        {visibleFields.callType && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Call type
-                            </label>
-                            <select className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                              <option>All types</option>
-                              <option>Outbound</option>
-                              <option>Inbound</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Status */}
-                        {visibleFields.status && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Status
-                            </label>
-                            <select className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
-                              <option>All statuses</option>
-                              <option>Completed</option>
-                              <option>Failed</option>
-                              <option>Pending</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {/* Duration */}
-                        {visibleFields.duration && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Duration
-                            </label>
-                            <div className="grid grid-cols-2 gap-3">
-                              <input
-                                type="number"
-                                placeholder="Min (seconds)"
-                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                              <input
-                                type="number"
-                                placeholder="Max (seconds)"
-                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Client */}
-                        {visibleFields.client && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Client name
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter client name"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                        )}
-
-                        {/* Phone */}
-                        {visibleFields.phone && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Phone
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter phone number"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                        )}
-
-                        {/* Email */}
-                        {visibleFields.email && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Email
-                            </label>
-                            <input
-                              type="email"
-                              placeholder="Enter email"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                        )}
-
-                        {/* Notes */}
-                        {visibleFields.notes && (
-                          <div>
-                            <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Notes
-                            </label>
-                            <textarea
-                              placeholder="Enter notes"
-                              className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                              rows={3}
-                            />
-                          </div>
-                        )}
-
-                        {/* Add Field Link */}
-                        <div className="flex items-center gap-4 pt-2">
-                          <button
-                            onClick={() => setShowAddFieldModal(true)}
-                            className="text-xs text-primary hover:underline"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            Add field
-                          </button>
-                          <button
-                            onClick={handleRestoreDefaultFields}
-                            className="text-xs text-muted-foreground hover:underline"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            Restore default fields
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Search and Reset Buttons */}
-                      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-border">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleRestoreDefaultFields}
-                        >
-                          Reset
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          onClick={() => {
-                            setShowSearchModal(false);
-                            // Apply filters here
-                          }}
-                        >
-                          <Search className="w-4 h-4" />
-                          Search
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Processes Dropdown */}
-          <div className="relative">
-            <button
-              onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-              className="flex items-center gap-2 px-3 py-2 bg-white border transition-colors rounded-lg"
-              style={{
-                fontSize: '13px',
-                fontWeight: 500,
-                color: '#374151',
-                borderColor: '#D1D5DB'
-              }}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearClientFilter}
+              className="flex items-center gap-2"
             >
-              {selectedProcessFilter ? selectedProcessFilter : "Process"}
-              <ChevronDown className="w-4 h-4" />
-            </button>
-
-            {/* Processes Dropdown Menu */}
-            {showProcessesDropdown && (
-              <>
-                {/* Backdrop */}
-                <div
-                  className="fixed inset-0 z-40"
-                  onClick={() => setShowProcessesDropdown(false)}
-                />
-
-                {/* Dropdown Panel */}
-                <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-lg shadow-xl z-50 py-2">
-                  <button
-                    onClick={() => {
-                      setSelectedProcessFilter(null);
-                      setShowProcessesDropdown(false);
-                    }}
-                    className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${
-                      !selectedProcessFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                    }`}
-                  >
-                    All
-                  </button>
-                  {[
-                    'Patient Intake',
-                    'Follow-up Calls',
-                    'Insurance Verification',
-                    'Appointment Scheduling',
-                    'Payment Reminder'
-                  ].map((process) => (
-                    <button
-                      key={process}
-                      onClick={() => {
-                        setSelectedProcessFilter(process);
-                        setShowProcessesDropdown(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${
-                        selectedProcessFilter === process ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                      }`}
-                    >
-                      {process}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+              <X className="w-4 h-4" />
+              Clear Filter
+            </Button>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Add Field Modal */}
-      {showAddFieldModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-border flex items-center justify-between">
-              <h2 className="text-lg font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                Filter field settings
-              </h2>
-              <button
-                onClick={() => setShowAddFieldModal(false)}
-                className="p-1 hover:bg-muted rounded-lg transition-colors"
-              >
-                <span className="text-2xl text-muted-foreground">&times;</span>
-              </button>
-            </div>
-
-            {/* Search */}
-            <div className="px-6 py-4 border-b border-border">
-              <div className="relative max-w-xs">
+        {/* Action Bar */}
+        <div className="bg-card rounded-xl p-4 border border-border shadow-sm">
+          <div className="flex items-center gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   type="text"
-                  placeholder="Find field"
-                  value={searchFieldQuery}
-                  onChange={(e) => setSearchFieldQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="Search call logs..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setShowSearchModal(true)}
+                  className="w-full pl-9 pr-4 py-2 bg-input-background border border-input rounded-lg text-sm"
                 />
               </div>
-            </div>
 
-            {/* Fields List - All Categories */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="space-y-6">
-                {/* Group fields by category */}
-                {["Call", "Client", "Details"].map((category) => {
-                  const categoryFields = allAvailableFields
-                    .filter(field => field.category === category)
-                    .filter(field =>
-                      field.label.toLowerCase().includes(searchFieldQuery.toLowerCase())
-                    );
-
-                  if (categoryFields.length === 0) return null;
-
-                  return (
-                    <div key={category}>
-                      <h3 className="text-sm font-medium mb-3 text-muted-foreground">{category}</h3>
-                      <div className="grid grid-cols-4 gap-4">
-                        {categoryFields.map((field) => (
-                          <label
-                            key={field.id}
-                            className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={visibleFields[field.id as keyof typeof visibleFields]}
-                              onChange={(e) => {
-                                setVisibleFields({
-                                  ...visibleFields,
-                                  [field.id]: e.target.checked,
-                                });
-                              }}
-                              className="w-4 h-4"
-                            />
-                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              {field.label}
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-border flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={Object.values(visibleFields).every(v => v)}
-                  onChange={(e) => toggleAllFields(e.target.checked)}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm text-primary" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                  select all
-                </span>
-              </label>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    setVisibleFields({
-                      name: true,
-                      responsiblePerson: true,
-                      stageGroup: true,
-                      comment: true,
-                      createdOn: true,
-                      callType: false,
-                      status: false,
-                      duration: false,
-                      client: false,
-                      phone: false,
-                      email: false,
-                      notes: false,
-                    });
-                  }}
-                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                >
-                  <span className="text-lg">↻</span> default
-                </button>
-                <Button
-                  variant="outline"
-                  onClick={() => setShowAddFieldModal(false)}
-                >
-                  CANCEL
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleApplyFields}
-                >
-                  APPLY
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Action Bar */}
-      {selectedRows.size > 0 && (
-        <div className="bg-card rounded-xl border border-border shadow-sm">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground">
-                {selectedRows.size} selected
-              </span>
-              <button
-                onClick={handleClearSelection}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                Clear selection
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => setShowTriggerCallsModal(true)}
-              >
-                <Phone className="w-3.5 h-3.5" />
-                Trigger Calls
-              </Button>
-              <Tooltip text={hasScheduledCalls ? "Cancel scheduled calls" : "No scheduled calls selected"}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowCancelCallsModal(true)}
-                  disabled={!hasScheduledCalls}
-                  className="text-destructive hover:bg-destructive/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
-                >
-                  <StopCircle className="w-3.5 h-3.5" />
-                  Cancel Scheduled
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* List View */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-        <div
-          ref={tableScrollRef}
-          className="overflow-x-auto scrollbar-hide"
-          style={{ scrollBehavior: 'auto' }}
-          onScroll={() => {
-            if (tableScrollRef.current) {
-              const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-              setShowScrollIndicator(scrollWidth > clientWidth && scrollLeft < scrollWidth - clientWidth);
-              setShowScrollLeftIndicator(scrollLeft > 0);
-            }
-          }}
-        >
-          <table className="w-full">
-            <thead className="border-b border-border" style={{ backgroundColor: '#314158' }}>
-              <tr>
-                <th className="px-4 py-2.5 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected;
-                    }}
-                    onChange={handleSelectAll}
-                    className="w-4 h-4 cursor-pointer"
+              {/* Advanced Search Dropdown Panel */}
+              {showSearchModal && (
+                <>
+                  {/* Backdrop to close panel */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowSearchModal(false)}
                   />
-                </th>
-                <th className="px-2 py-2.5 w-8"></th>
-                {visibleColumns.callId && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
-                {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
-                {visibleColumns.stage && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
-                {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
-                {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
-                {visibleColumns.duration && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {paginatedLogs.map((log) => (
-                <tr
-                  key={log.id}
-                  className={`transition-colors ${
-                    selectedRows.has(log.id)
-                      ? "bg-[#E8F0FE]"
-                      : "hover:bg-[#F1F5F9]"
-                  }`}
-                >
-                  <td className="px-4 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.has(log.id)}
-                      onChange={() => handleSelectRow(log.id)}
-                      className="w-4 h-4 cursor-pointer"
-                    />
-                  </td>
-                  {/* Hamburger menu column */}
-                  <td className="px-2 py-2.5 relative">
-                    <div className="hamburger-menu-container">
-                      <button
-                        onClick={() => setOpenMenuCallId(openMenuCallId === log.id ? null : log.id)}
-                        className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                        style={{ width: '24px', height: '24px' }}
-                      >
-                        <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
-                      </button>
 
-                      {/* Hamburger menu popup */}
-                      {openMenuCallId === log.id && (
-                        <div
-                          className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                          style={{
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                            minWidth: '160px',
-                            padding: '4px'
-                          }}
-                        >
-                          <button
-                            onClick={() => {
-                              setSelectedCallForDetails(log);
-                              setShowCallDetailsDrawer(true);
-                              setOpenMenuCallId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                          >
-                            <Eye className="w-4 h-4" />
-                            <span>View</span>
+                  {/* Dropdown Panel */}
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden">
+                    <div className="flex" style={{ maxHeight: '700px' }}>
+                      {/* Left Sidebar - Saved Searches */}
+                      <div className="w-56 border-r border-border p-4 overflow-y-auto bg-muted/30">
+                        <div className="space-y-1">
+                          <button className="w-full text-left px-3 py-2 text-sm rounded-lg bg-primary/10 text-primary font-medium">
+                            Deals in progress
                           </button>
-                          <button
-                            onClick={() => {
-                              toast.info('Call feature coming soon');
-                              setOpenMenuCallId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                          >
-                            <Phone className="w-4 h-4" />
-                            <span>Call</span>
+                          <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
+                            Test deals
                           </button>
-                          <button
-                            onClick={() => {
-                              toast.success(`Call log ${log.id} deleted`);
-                              setOpenMenuCallId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Delete</span>
+                          <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
+                            Closed deals
+                          </button>
+                          <button className="w-full text-left px-3 py-2 text-sm rounded-lg hover:bg-muted transition-colors text-foreground">
+                            MC EAP
                           </button>
                         </div>
-                      )}
-                    </div>
-                  </td>
-                  {visibleColumns.callId && (
-                    <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      <button
-                        onClick={() => {
-                          setSelectedCallForDetails(log);
-                          setShowCallDetailsDrawer(true);
-                        }}
-                        className="hover:underline text-left"
-                        style={{ color: '#1A73E8', cursor: 'pointer' }}
-                      >
-                        #{log.id}
-                      </button>
-                    </td>
-                  )}
-                  {visibleColumns.client && (
-                    <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                      <div className="flex items-center" style={{ gap: '6px' }}>
-                        {log.type === "Outbound" ? (
-                          <PiPhoneOutgoing style={{ width: '14px', height: '14px', color: '#1A73E8', flexShrink: 0 }} />
-                        ) : (
-                          <PiPhoneIncoming style={{ width: '14px', height: '14px', color: '#22C55E', flexShrink: 0 }} />
-                        )}
-                        <span
-                          className="text-left"
-                          style={{ color: '#1A73E8' }}
-                        >
-                          {log.client}
-                        </span>
+                        <div className="mt-4 pt-4 border-t border-border">
+                          <button className="w-full text-left px-3 py-2 text-xs text-muted-foreground hover:text-foreground flex items-center gap-2">
+                            <span className="text-base">+</span> Save filter
+                          </button>
+                        </div>
                       </div>
-                    </td>
-                  )}
-                  {visibleColumns.stage && (
-                    <td className="px-4 py-2.5 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                      {log.lastStage && log.lastStage !== "N/A" ? (
-                        <span className="flex items-center gap-1 flex-wrap">
-                          <span style={{ color: '#94A3B8' }}>{log.lastStage}</span>
-                          <span style={{ color: '#94A3B8', margin: '0 2px' }}>→</span>
-                          <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                        </span>
-                      ) : (
-                        <span style={{ color: '#111827' }}>{log.currentStage}</span>
-                      )}
-                    </td>
-                  )}
-                  {visibleColumns.status && (
-                    <td className="px-4 py-2.5 text-center">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                        log.status === "Completed"
-                          ? "bg-success-bg text-success"
-                          : log.status === "Pending"
-                          ? "bg-warning/10 text-warning"
-                          : "bg-error-bg text-error"
-                      }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        {log.status}
-                      </span>
-                    </td>
-                  )}
-                  {visibleColumns.date && <td className="px-4 py-2.5 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
-                  {visibleColumns.duration && <td className="px-4 py-2.5 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
 
-        {/* Pagination Controls */}
-        <div className="border-t border-border px-4 py-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                  className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                >
-                  <option value={15}>15</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-              <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
-              </span>
-            </div>
+                      {/* Right Side - Filter Fields */}
+                      <div className="flex-1 p-6 overflow-y-auto">
+                        <div className="space-y-4">
+                          {/* Client Name */}
+                          {visibleFields.name && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Name
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Enter client name"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+                          )}
 
-            <div className="flex items-center gap-1">
-              <Tooltip text="First Page">
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronsLeft className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip text="Previous Page">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                Page {currentPage} of {totalPages}
-              </span>
-              <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                {currentPage}/{totalPages}
-              </span>
-              <Tooltip text="Next Page">
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip text="Last Page">
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronsRight className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
+                          {/* Responsible Person - Multi-select */}
+                          {visibleFields.responsiblePerson && (
+                            <div className="relative">
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Responsible person
+                              </label>
+                              <div
+                                onClick={() => setShowResponsibleDropdown(!showResponsibleDropdown)}
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer bg-white min-h-[38px] flex items-center flex-wrap gap-1"
+                              >
+                                {selectedResponsible.length === 0 ? (
+                                  <span className="text-muted-foreground">Select person(s)</span>
+                                ) : (
+                                  selectedResponsible.map((person) => (
+                                    <span
+                                      key={person}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs"
+                                    >
+                                      {person}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedResponsible(selectedResponsible.filter(p => p !== person));
+                                        }}
+                                        className="hover:text-primary-foreground"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                              {showResponsibleDropdown && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                                  {teamMembers.map((member) => (
+                                    <label
+                                      key={member}
+                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedResponsible.includes(member)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedResponsible([...selectedResponsible, member]);
+                                          } else {
+                                            setSelectedResponsible(selectedResponsible.filter(p => p !== member));
+                                          }
+                                        }}
+                                        className="w-4 h-4"
+                                      />
+                                      <span className="text-sm">{member}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
-        {/* Scroll Right Button - Semicircle */}
-        <button
-          className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-          style={{
-            top: '50%',
-            transform: 'translateY(-50%)',
-            height: '112px',
-            width: '40px',
-            backgroundColor: 'rgba(255, 255, 255, 0.5)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            borderTopLeftRadius: '9999px',
-            borderBottomLeftRadius: '9999px',
-            borderTopRightRadius: '0',
-            borderBottomRightRadius: '0',
-            opacity: showScrollIndicator ? 1 : 0.2,
-            pointerEvents: showScrollIndicator ? 'auto' : 'none'
-          }}
-          onMouseEnter={(e) => {
-            if (showScrollIndicator) {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1.1)';
-              }
-              handleScrollRightMouseEnter();
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-            e.currentTarget.style.boxShadow = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) {
-              (icon as SVGElement).style.transform = 'scale(1)';
-            }
-            handleScrollMouseLeave();
-          }}
-        >
-          <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-        </button>
+                          {/* Stage Group - Multi-select */}
+                          {visibleFields.stageGroup && (
+                            <div className="relative">
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Stage group
+                              </label>
+                              <div
+                                onClick={() => setShowStageDropdown(!showStageDropdown)}
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer bg-white min-h-[38px] flex items-center flex-wrap gap-1"
+                              >
+                                {selectedStages.length === 0 ? (
+                                  <span className="text-muted-foreground">Select stage(s)</span>
+                                ) : (
+                                  selectedStages.map((stage) => (
+                                    <span
+                                      key={stage}
+                                      className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-xs"
+                                    >
+                                      {stage}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedStages(selectedStages.filter(s => s !== stage));
+                                        }}
+                                        className="hover:text-primary-foreground"
+                                      >
+                                        &times;
+                                      </button>
+                                    </span>
+                                  ))
+                                )}
+                              </div>
+                              {showStageDropdown && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                                  {stages.map((stage) => (
+                                    <label
+                                      key={stage}
+                                      className="flex items-center gap-2 px-3 py-2 hover:bg-muted cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedStages.includes(stage)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedStages([...selectedStages, stage]);
+                                          } else {
+                                            setSelectedStages(selectedStages.filter(s => s !== stage));
+                                          }
+                                        }}
+                                        className="w-4 h-4"
+                                      />
+                                      <span className="text-sm">{stage}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
 
-        {/* Scroll Left Button - Semicircle */}
-        <button
-          className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-          style={{
-            top: '50%',
-            transform: 'translateY(-50%)',
-            height: '112px',
-            width: '40px',
-            backgroundColor: 'rgba(255, 255, 255, 0.5)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            borderTopRightRadius: '9999px',
-            borderBottomRightRadius: '9999px',
-            borderTopLeftRadius: '0',
-            borderBottomLeftRadius: '0',
-            opacity: showScrollLeftIndicator ? 1 : 0.2,
-            pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-          }}
-          onMouseEnter={(e) => {
-            if (showScrollLeftIndicator) {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1.1)';
-              }
-              handleScrollLeftMouseEnter();
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-            e.currentTarget.style.boxShadow = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) {
-              (icon as SVGElement).style.transform = 'scale(1)';
-            }
-            handleScrollMouseLeave();
-          }}
-        >
-          <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
-        </button>
-      </div>
+                          {/* Comment */}
+                          {visibleFields.comment && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Comment
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Enter comment"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+                          )}
 
-      {/* Trigger Calls Modal */}
-      <Modal
-        isOpen={showTriggerCallsModal}
-        onClose={() => {
-          setShowTriggerCallsModal(false);
-          setScheduleOption("immediate");
-          setScheduledDate("");
-          setScheduledTime("");
-        }}
-        title="Trigger Calls"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowTriggerCallsModal(false);
-                setScheduleOption("immediate");
-                setScheduledDate("");
-                setScheduledTime("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleBulkTriggerCalls}
-              disabled={scheduleOption === "scheduled" && (!scheduledDate || !scheduledTime)}
-            >
-              Confirm
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            You are about to trigger calls for <span className="font-semibold text-foreground">{selectedRows.size}</span> item{selectedRows.size > 1 ? 's' : ''}
-          </p>
+                          {/* Created On */}
+                          {visibleFields.createdOn && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Created on
+                              </label>
+                              <select
+                                value={createdOnFilter}
+                                onChange={(e) => setCreatedOnFilter(e.target.value)}
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              >
+                                <option>Any date</option>
+                                <option>Today</option>
+                                <option>Yesterday</option>
+                                <option>Last 7 days</option>
+                                <option>Last 30 days</option>
+                                <option>Custom range</option>
+                              </select>
 
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
-              <input
-                type="radio"
-                name="schedule"
-                checked={scheduleOption === "immediate"}
-                onChange={() => setScheduleOption("immediate")}
-                className="w-4 h-4"
-              />
-              <div>
-                <p className="font-medium">Start Immediately</p>
-                <p className="text-xs text-muted-foreground">Calls will be triggered right away</p>
-              </div>
-            </label>
+                              {/* Custom Date Range Inputs */}
+                              {createdOnFilter === "Custom range" && (
+                                <div className="mt-3 grid grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-xs font-medium mb-1 text-muted-foreground">
+                                      From
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={filterStartDate}
+                                      onChange={(e) => setFilterStartDate(e.target.value)}
+                                      className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium mb-1 text-muted-foreground">
+                                      To
+                                    </label>
+                                    <input
+                                      type="date"
+                                      value={filterEndDate}
+                                      onChange={(e) => setFilterEndDate(e.target.value)}
+                                      className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
 
-            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
-              <input
-                type="radio"
-                name="schedule"
-                checked={scheduleOption === "scheduled"}
-                onChange={() => setScheduleOption("scheduled")}
-                className="w-4 h-4"
-              />
-              <div className="flex-1">
-                <p className="font-medium">Schedule for Later</p>
-                <p className="text-xs text-muted-foreground mb-3">Choose a specific date and time</p>
+                          {/* Call Type */}
+                          {visibleFields.callType && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Call type
+                              </label>
+                              <select className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option>All types</option>
+                                <option>Outbound</option>
+                                <option>Inbound</option>
+                              </select>
+                            </div>
+                          )}
 
-                {scheduleOption === "scheduled" && (
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Date</label>
-                      <div className="relative">
-                        <input
-                          type="date"
-                          value={scheduledDate}
-                          onChange={(e) => setScheduledDate(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                        />
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          {/* Status */}
+                          {visibleFields.status && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Status
+                              </label>
+                              <select className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option>All statuses</option>
+                                <option>Completed</option>
+                                <option>Failed</option>
+                                <option>Pending</option>
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Duration */}
+                          {visibleFields.duration && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Duration
+                              </label>
+                              <div className="grid grid-cols-2 gap-3">
+                                <input
+                                  type="number"
+                                  placeholder="Min (seconds)"
+                                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                                <input
+                                  type="number"
+                                  placeholder="Max (seconds)"
+                                  className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Client */}
+                          {visibleFields.client && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Client name
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Enter client name"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+                          )}
+
+                          {/* Phone */}
+                          {visibleFields.phone && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Phone
+                              </label>
+                              <input
+                                type="text"
+                                placeholder="Enter phone number"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+                          )}
+
+                          {/* Email */}
+                          {visibleFields.email && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Email
+                              </label>
+                              <input
+                                type="email"
+                                placeholder="Enter email"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                              />
+                            </div>
+                          )}
+
+                          {/* Notes */}
+                          {visibleFields.notes && (
+                            <div>
+                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Notes
+                              </label>
+                              <textarea
+                                placeholder="Enter notes"
+                                className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                rows={3}
+                              />
+                            </div>
+                          )}
+
+                          {/* Add Field Link */}
+                          <div className="flex items-center gap-4 pt-2">
+                            <button
+                              onClick={() => setShowAddFieldModal(true)}
+                              className="text-xs text-primary hover:underline"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              Add field
+                            </button>
+                            <button
+                              onClick={handleRestoreDefaultFields}
+                              className="text-xs text-muted-foreground hover:underline"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              Restore default fields
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Search and Reset Buttons */}
+                        <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-border">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRestoreDefaultFields}
+                          >
+                            Reset
+                          </Button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => {
+                              setShowSearchModal(false);
+                              // Apply filters here
+                            }}
+                          >
+                            <Search className="w-4 h-4" />
+                            Search
+                          </Button>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Time</label>
-                      <input
-                        type="time"
-                        value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
-                        className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                      />
                     </div>
                   </div>
-                )}
-              </div>
-            </label>
-          </div>
-        </div>
-      </Modal>
+                </>
+              )}
+            </div>
 
-      {/* Cancel Scheduled Calls Modal */}
-      <Modal
-        isOpen={showCancelCallsModal}
-        onClose={() => setShowCancelCallsModal(false)}
-        title="Cancel Scheduled Calls"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setShowCancelCallsModal(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleBulkCancelCalls}
-              className="bg-destructive hover:bg-destructive/90 text-white"
-            >
-              Confirm
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            You are about to cancel <span className="font-semibold text-foreground">{selectedRows.size}</span> scheduled call{selectedRows.size > 1 ? 's' : ''}
-          </p>
-          <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-destructive">Warning</p>
-              <p className="text-sm text-destructive/80 mt-1">This action cannot be undone</p>
-            </div>
-          </div>
-        </div>
-      </Modal>
+            {/* Processes Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
+                className="flex items-center gap-2 px-3 py-2 bg-white border transition-colors rounded-lg"
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  color: '#374151',
+                  borderColor: '#D1D5DB'
+                }}
+              >
+                {selectedProcessFilter ? selectedProcessFilter : "Process"}
+                <ChevronDown className="w-4 h-4" />
+              </button>
 
-      {/* Custom Date Range Modal */}
-      <Modal
-        isOpen={showCustomDateModal}
-        onClose={() => setShowCustomDateModal(false)}
-        title="Custom Date Range"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => setShowCustomDateModal(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleApplyCustomDates}>
-              Apply
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Select a custom date range to filter call logs
-          </p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Start Date</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={customStartDate}
-                  onChange={(e) => setCustomStartDate(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                />
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">End Date</label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={customEndDate}
-                  onChange={(e) => setCustomEndDate(e.target.value)}
-                  className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                />
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-              </div>
+              {/* Processes Dropdown Menu */}
+              {showProcessesDropdown && (
+                <>
+                  {/* Backdrop */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setShowProcessesDropdown(false)}
+                  />
+
+                  {/* Dropdown Panel */}
+                  <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-lg shadow-xl z-50 py-2">
+                    <button
+                      onClick={() => {
+                        setSelectedProcessFilter(null);
+                        setShowProcessesDropdown(false);
+                      }}
+                      className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
+                        }`}
+                    >
+                      All
+                    </button>
+                    {[
+                      'Patient Intake',
+                      'Follow-up Calls',
+                      'Insurance Verification',
+                      'Appointment Scheduling',
+                      'Payment Reminder'
+                    ].map((process) => (
+                      <button
+                        key={process}
+                        onClick={() => {
+                          setSelectedProcessFilter(process);
+                          setShowProcessesDropdown(false);
+                        }}
+                        className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
+                          }`}
+                      >
+                        {process}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
-      </Modal>
+
+        {/* Add Field Modal */}
+        {showAddFieldModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+              {/* Modal Header */}
+              <div className="px-6 py-4 border-b border-border flex items-center justify-between">
+                <h2 className="text-lg font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                  Filter field settings
+                </h2>
+                <button
+                  onClick={() => setShowAddFieldModal(false)}
+                  className="p-1 hover:bg-muted rounded-lg transition-colors"
+                >
+                  <span className="text-2xl text-muted-foreground">&times;</span>
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="px-6 py-4 border-b border-border">
+                <div className="relative max-w-xs">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Find field"
+                    value={searchFieldQuery}
+                    onChange={(e) => setSearchFieldQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              {/* Fields List - All Categories */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <div className="space-y-6">
+                  {/* Group fields by category */}
+                  {["Call", "Client", "Details"].map((category) => {
+                    const categoryFields = allAvailableFields
+                      .filter(field => field.category === category)
+                      .filter(field =>
+                        field.label.toLowerCase().includes(searchFieldQuery.toLowerCase())
+                      );
+
+                    if (categoryFields.length === 0) return null;
+
+                    return (
+                      <div key={category}>
+                        <h3 className="text-sm font-medium mb-3 text-muted-foreground">{category}</h3>
+                        <div className="grid grid-cols-4 gap-4">
+                          {categoryFields.map((field) => (
+                            <label
+                              key={field.id}
+                              className="flex items-center gap-2 cursor-pointer hover:bg-muted/50 p-2 rounded transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={visibleFields[field.id as keyof typeof visibleFields]}
+                                onChange={(e) => {
+                                  setVisibleFields({
+                                    ...visibleFields,
+                                    [field.id]: e.target.checked,
+                                  });
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {field.label}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 py-4 border-t border-border flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Object.values(visibleFields).every(v => v)}
+                    onChange={(e) => toggleAllFields(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm text-primary" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    select all
+                  </span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setVisibleFields({
+                        name: true,
+                        responsiblePerson: true,
+                        stageGroup: true,
+                        comment: true,
+                        createdOn: true,
+                        callType: false,
+                        status: false,
+                        duration: false,
+                        client: false,
+                        phone: false,
+                        email: false,
+                        notes: false,
+                      });
+                    }}
+                    className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    <span className="text-lg">↻</span> default
+                  </button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddFieldModal(false)}
+                  >
+                    CANCEL
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleApplyFields}
+                  >
+                    APPLY
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Bulk Action Bar */}
+        {selectedRows.size > 0 && (
+          <div className="bg-card rounded-xl border border-border shadow-sm">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-foreground">
+                  {selectedRows.size} selected
+                </span>
+                <button
+                  onClick={handleClearSelection}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Clear selection
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowTriggerCallsModal(true)}
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  Trigger Calls
+                </Button>
+                <Tooltip text={hasScheduledCalls ? "Cancel scheduled calls" : "No scheduled calls selected"}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCancelCallsModal(true)}
+                    disabled={!hasScheduledCalls}
+                    className="text-destructive hover:bg-destructive/10 disabled:text-muted-foreground disabled:hover:bg-transparent"
+                  >
+                    <StopCircle className="w-3.5 h-3.5" />
+                    Cancel Scheduled
+                  </Button>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* List View */}
+        <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
+          <div
+            ref={tableScrollRef}
+            className="overflow-x-auto scrollbar-hide"
+            style={{ scrollBehavior: 'auto' }}
+            onScroll={() => {
+              if (tableScrollRef.current) {
+                const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+                setShowScrollIndicator(scrollWidth > clientWidth && scrollLeft < scrollWidth - clientWidth);
+                setShowScrollLeftIndicator(scrollLeft > 0);
+              }
+            }}
+          >
+            <table className="w-full">
+              <thead className="border-b border-border" style={{ backgroundColor: '#314158' }}>
+                <tr>
+                  <th className="px-4 py-2.5 w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected;
+                      }}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4 cursor-pointer"
+                    />
+                  </th>
+                  <th className="px-2 py-2.5 w-8"></th>
+                  {visibleColumns.callId && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Call ID</th>}
+                  {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
+                  {visibleColumns.stage && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
+                  {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
+                  {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>}
+                  {visibleColumns.duration && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Duration</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {paginatedLogs.map((log) => (
+                  <tr
+                    key={log.id}
+                    className={`transition-colors ${selectedRows.has(log.id)
+                      ? "bg-[#E8F0FE]"
+                      : "hover:bg-[#F1F5F9]"
+                      }`}
+                  >
+                    <td className="px-4 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedRows.has(log.id)}
+                        onChange={() => handleSelectRow(log.id)}
+                        className="w-4 h-4 cursor-pointer"
+                      />
+                    </td>
+                    {/* Hamburger menu column */}
+                    <td className="px-2 py-2.5 relative">
+                      <div className="hamburger-menu-container">
+                        <button
+                          onClick={() => setOpenMenuCallId(openMenuCallId === log.id ? null : log.id)}
+                          className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                          style={{ width: '24px', height: '24px' }}
+                        >
+                          <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
+                        </button>
+
+                        {/* Hamburger menu popup */}
+                        {openMenuCallId === log.id && (
+                          <div
+                            className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
+                            style={{
+                              boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                              minWidth: '160px',
+                              padding: '4px'
+                            }}
+                          >
+                            <button
+                              onClick={() => {
+                                setSelectedCallForDetails(log);
+                                setShowCallDetailsDrawer(true);
+                                setOpenMenuCallId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                            >
+                              <Eye className="w-4 h-4" />
+                              <span>View</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                toast.info('Call feature coming soon');
+                                setOpenMenuCallId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                            >
+                              <Phone className="w-4 h-4" />
+                              <span>Call</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                toast.success(`Call log ${log.id} deleted`);
+                                setOpenMenuCallId(null);
+                              }}
+                              className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                              style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    {visibleColumns.callId && (
+                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        <button
+                          onClick={() => {
+                            setSelectedCallForDetails(log);
+                            setShowCallDetailsDrawer(true);
+                          }}
+                          className="hover:underline text-left"
+                          style={{ color: '#1A73E8', cursor: 'pointer' }}
+                        >
+                          #{log.id}
+                        </button>
+                      </td>
+                    )}
+                    {visibleColumns.client && (
+                      <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                        <div className="flex items-center" style={{ gap: '6px' }}>
+                          {log.type === "Outbound" ? (
+                            <PiPhoneOutgoing style={{ width: '14px', height: '14px', color: '#1A73E8', flexShrink: 0 }} />
+                          ) : (
+                            <PiPhoneIncoming style={{ width: '14px', height: '14px', color: '#22C55E', flexShrink: 0 }} />
+                          )}
+                          <span
+                            className="text-left"
+                            style={{ color: '#1A73E8' }}
+                          >
+                            {log.client}
+                          </span>
+                        </div>
+                      </td>
+                    )}
+                    {visibleColumns.stage && (
+                      <td className="px-4 py-2.5 text-xs" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        {log.lastStage && log.lastStage !== "N/A" ? (
+                          <span className="flex items-center gap-1 flex-wrap">
+                            <span style={{ color: '#94A3B8' }}>{log.lastStage}</span>
+                            <span style={{ color: '#94A3B8', margin: '0 2px' }}>→</span>
+                            <span style={{ color: '#111827' }}>{log.currentStage}</span>
+                          </span>
+                        ) : (
+                          <span style={{ color: '#111827' }}>{log.currentStage}</span>
+                        )}
+                      </td>
+                    )}
+                    {visibleColumns.status && (
+                      <td className="px-4 py-2.5 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${log.status === "Completed"
+                          ? "bg-success-bg text-success"
+                          : log.status === "Pending"
+                            ? "bg-warning/10 text-warning"
+                            : "bg-error-bg text-error"
+                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          {log.status}
+                        </span>
+                      </td>
+                    )}
+                    {visibleColumns.date && <td className="px-4 py-2.5 text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.date}</td>}
+                    {visibleColumns.duration && <td className="px-4 py-2.5 text-xs text-center tabular-nums" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{log.duration}</td>}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          <div className="border-t border-border px-4 py-3">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
+                    className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
+                  >
+                    <option value={15}>15</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                  </select>
+                </div>
+                <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                  Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <Tooltip text="First Page">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronsLeft className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+                <Tooltip text="Previous Page">
+                  <button
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+                <span className="text-xs px-2 hidden sm:inline" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <span className="text-xs px-2 sm:hidden" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                  {currentPage}/{totalPages}
+                </span>
+                <Tooltip text="Next Page">
+                  <button
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+                <Tooltip text="Last Page">
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronsRight className="w-3.5 h-3.5" />
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+          </div>
+
+          {/* Scroll Right Button - Semicircle */}
+          <button
+            className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopLeftRadius: '9999px',
+              borderBottomLeftRadius: '9999px',
+              borderTopRightRadius: '0',
+              borderBottomRightRadius: '0',
+              opacity: showScrollIndicator ? 1 : 0.2,
+              pointerEvents: showScrollIndicator ? 'auto' : 'none'
+            }}
+            onMouseEnter={(e) => {
+              if (showScrollIndicator) {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
+                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) {
+                  (icon as SVGElement).style.transform = 'scale(1.1)';
+                }
+                handleScrollRightMouseEnter();
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleScrollMouseLeave();
+            }}
+          >
+            <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+
+          {/* Scroll Left Button - Semicircle */}
+          <button
+            className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+            style={{
+              top: '50%',
+              transform: 'translateY(-50%)',
+              height: '112px',
+              width: '40px',
+              backgroundColor: 'rgba(255, 255, 255, 0.5)',
+              backdropFilter: 'blur(8px)',
+              WebkitBackdropFilter: 'blur(8px)',
+              borderTopRightRadius: '9999px',
+              borderBottomRightRadius: '9999px',
+              borderTopLeftRadius: '0',
+              borderBottomLeftRadius: '0',
+              opacity: showScrollLeftIndicator ? 1 : 0.2,
+              pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
+            }}
+            onMouseEnter={(e) => {
+              if (showScrollLeftIndicator) {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
+                e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) {
+                  (icon as SVGElement).style.transform = 'scale(1.1)';
+                }
+                handleScrollLeftMouseEnter();
+              }
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+              e.currentTarget.style.boxShadow = '';
+              const icon = e.currentTarget.querySelector('svg');
+              if (icon) {
+                (icon as SVGElement).style.transform = 'scale(1)';
+              }
+              handleScrollMouseLeave();
+            }}
+          >
+            <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1e293b', opacity: 1 }} />
+          </button>
+        </div>
+
+        {/* Trigger Calls Modal */}
+        <Modal
+          isOpen={showTriggerCallsModal}
+          onClose={() => {
+            setShowTriggerCallsModal(false);
+            setScheduleOption("immediate");
+            setScheduledDate("");
+            setScheduledTime("");
+          }}
+          title="Trigger Calls"
+          footer={
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowTriggerCallsModal(false);
+                  setScheduleOption("immediate");
+                  setScheduledDate("");
+                  setScheduledTime("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleBulkTriggerCalls}
+                disabled={scheduleOption === "scheduled" && (!scheduledDate || !scheduledTime)}
+              >
+                Confirm
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              You are about to trigger calls for <span className="font-semibold text-foreground">{selectedRows.size}</span> item{selectedRows.size > 1 ? 's' : ''}
+            </p>
+
+            <div className="space-y-3">
+              <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+                <input
+                  type="radio"
+                  name="schedule"
+                  checked={scheduleOption === "immediate"}
+                  onChange={() => setScheduleOption("immediate")}
+                  className="w-4 h-4"
+                />
+                <div>
+                  <p className="font-medium">Start Immediately</p>
+                  <p className="text-xs text-muted-foreground">Calls will be triggered right away</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+                <input
+                  type="radio"
+                  name="schedule"
+                  checked={scheduleOption === "scheduled"}
+                  onChange={() => setScheduleOption("scheduled")}
+                  className="w-4 h-4"
+                />
+                <div className="flex-1">
+                  <p className="font-medium">Schedule for Later</p>
+                  <p className="text-xs text-muted-foreground mb-3">Choose a specific date and time</p>
+
+                  {scheduleOption === "scheduled" && (
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Date</label>
+                        <div className="relative">
+                          <input
+                            type="date"
+                            value={scheduledDate}
+                            onChange={(e) => setScheduledDate(e.target.value)}
+                            className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                          />
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Time</label>
+                        <input
+                          type="time"
+                          value={scheduledTime}
+                          onChange={(e) => setScheduledTime(e.target.value)}
+                          className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </label>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Cancel Scheduled Calls Modal */}
+        <Modal
+          isOpen={showCancelCallsModal}
+          onClose={() => setShowCancelCallsModal(false)}
+          title="Cancel Scheduled Calls"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowCancelCallsModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                onClick={handleBulkCancelCalls}
+                className="bg-destructive hover:bg-destructive/90 text-white"
+              >
+                Confirm
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              You are about to cancel <span className="font-semibold text-foreground">{selectedRows.size}</span> scheduled call{selectedRows.size > 1 ? 's' : ''}
+            </p>
+            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-destructive">Warning</p>
+                <p className="text-sm text-destructive/80 mt-1">This action cannot be undone</p>
+              </div>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Custom Date Range Modal */}
+        <Modal
+          isOpen={showCustomDateModal}
+          onClose={() => setShowCustomDateModal(false)}
+          title="Custom Date Range"
+          footer={
+            <>
+              <Button variant="outline" onClick={() => setShowCustomDateModal(false)}>
+                Cancel
+              </Button>
+              <Button variant="primary" onClick={handleApplyCustomDates}>
+                Apply
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Select a custom date range to filter call logs
+            </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Start Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">End Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </Modal>
       </div>
 
       {/* Call Details Drawer */}
@@ -2056,9 +2054,8 @@ export default function CallLogs() {
               <div className="flex items-center">
                 <button
                   onClick={() => setActiveDrawerTab("summary")}
-                  className={`flex-1 flex items-center justify-center text-center transition-all ${
-                    activeDrawerTab === "summary" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
+                  className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "summary" ? "text-primary" : "hover:bg-muted/30"
+                    }`}
                   style={{
                     height: '44px',
                     fontSize: '13px',
@@ -2073,9 +2070,8 @@ export default function CallLogs() {
                 </button>
                 <button
                   onClick={() => setActiveDrawerTab("call-review")}
-                  className={`flex-1 flex items-center justify-center text-center transition-all ${
-                    activeDrawerTab === "call-review" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
+                  className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "call-review" ? "text-primary" : "hover:bg-muted/30"
+                    }`}
                   style={{
                     height: '44px',
                     fontSize: '13px',
@@ -2090,9 +2086,8 @@ export default function CallLogs() {
                 </button>
                 <button
                   onClick={() => setActiveDrawerTab("review")}
-                  className={`flex-1 flex items-center justify-center text-center transition-all ${
-                    activeDrawerTab === "review" ? "text-primary" : "hover:bg-muted/30"
-                  }`}
+                  className={`flex-1 flex items-center justify-center text-center transition-all ${activeDrawerTab === "review" ? "text-primary" : "hover:bg-muted/30"
+                    }`}
                   style={{
                     height: '44px',
                     fontSize: '13px',
@@ -2129,11 +2124,10 @@ export default function CallLogs() {
                       {/* Row 1 - Column 3: Type */}
                       <div>
                         <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Type</p>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          selectedCallForDetails.type === "Outbound"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-secondary/10 text-secondary"
-                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCallForDetails.type === "Outbound"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-secondary/10 text-secondary"
+                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                           {selectedCallForDetails.type}
                         </span>
                       </div>
@@ -2145,13 +2139,12 @@ export default function CallLogs() {
                       {/* Row 2 - Column 2: Call Status */}
                       <div>
                         <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Call Status</p>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          selectedCallForDetails.status === "Completed"
-                            ? "bg-success/10 text-success"
-                            : selectedCallForDetails.status === "Failed"
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCallForDetails.status === "Completed"
+                          ? "bg-success/10 text-success"
+                          : selectedCallForDetails.status === "Failed"
                             ? "bg-destructive/10 text-destructive"
                             : "bg-warning/10 text-warning"
-                        }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                           {selectedCallForDetails.status}
                         </span>
                       </div>
@@ -2163,151 +2156,149 @@ export default function CallLogs() {
                     </div>
                   </div>
 
-            {/* Recording Player */}
-            {selectedCallForDetails.hasRecording && (
-              <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Recording</h2>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs mr-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Speed:</span>
-                    {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
-                      <button
-                        key={speed}
-                        onClick={() => setPlaybackSpeed(speed)}
-                        className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
-                          playbackSpeed === speed
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:bg-muted/80"
-                        }`}
-                      >
-                        {speed}x
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
-                    <button
-                      onClick={() => setIsPlaying(!isPlaying)}
-                      className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
-                    >
-                      {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
-                    </button>
-                    <div className="flex-1">
-                      <div className="h-2 bg-border rounded-full overflow-hidden">
-                        <div className="h-full bg-primary w-1/3" />
-                      </div>
-                      <div className="flex justify-between mt-2 text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                        <span>1:30</span>
-                        <span>{selectedCallForDetails.duration}</span>
-                      </div>
-                    </div>
-                    <Tooltip text="Download Recording">
-                      <Button variant="ghost" size="sm">
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </Tooltip>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Transcript */}
-            {selectedCallForDetails.hasTranscript && (
-              <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Transcript</h2>
-
-                {/* Speed Controls and Rating */}
-                <div className="flex items-center justify-between mb-4">
-                  {/* Playback Speed */}
-                  <div className="flex items-center gap-2">
-                    {[1, 1.25, 1.5, 2].map((speed) => (
-                      <button
-                        key={speed}
-                        onClick={() => setPlaybackSpeed(speed)}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                          playbackSpeed === speed
-                            ? "bg-muted text-foreground border border-border"
-                            : "bg-white text-muted-foreground hover:bg-muted border border-border"
-                        }`}
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        {speed}x
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Star Rating */}
-                  <div className="flex gap-1">
-                    {renderStars()}
-                  </div>
-                </div>
-
-                {/* Messages */}
-                <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
-                  {/* AI Assistant Message - Right side */}
-                  <div className="flex justify-end">
-                    <div className="max-w-[80%]">
-                      <div className="flex items-center justify-end gap-2 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          AI ASSISTANT
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-                          <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Hi kritika, this is Ria from MantraCare. Quick check-did I catch you at an okay time for thirty seconds?
-                          </p>
+                  {/* Recording Player */}
+                  {selectedCallForDetails.hasRecording && (
+                    <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+                      <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Recording</h2>
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs mr-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Speed:</span>
+                          {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
+                            <button
+                              key={speed}
+                              onClick={() => setPlaybackSpeed(speed)}
+                              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                }`}
+                            >
+                              {speed}x
+                            </button>
+                          ))}
                         </div>
-                        <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                          <Headphones className="w-4 h-4 text-white" />
+                        <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
+                          <button
+                            onClick={() => setIsPlaying(!isPlaying)}
+                            className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
+                          >
+                            {isPlaying ? <Pause className="w-6 h-6" /> : <Play className="w-6 h-6 ml-1" />}
+                          </button>
+                          <div className="flex-1">
+                            <div className="h-2 bg-border rounded-full overflow-hidden">
+                              <div className="h-full bg-primary w-1/3" />
+                            </div>
+                            <div className="flex justify-between mt-2 text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                              <span>1:30</span>
+                              <span>{selectedCallForDetails.duration}</span>
+                            </div>
+                          </div>
+                          <Tooltip text="Download Recording">
+                            <Button variant="ghost" size="sm">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </Tooltip>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
-                  {/* Client Message - Left side */}
-                  <div className="flex justify-start">
-                    <div className="max-w-[80%]">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          CLIENT
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                          <User className="w-4 h-4 text-white" />
+                  {/* Transcript */}
+                  {selectedCallForDetails.hasTranscript && (
+                    <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+                      <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Transcript</h2>
+
+                      {/* Speed Controls and Rating */}
+                      <div className="flex items-center justify-between mb-4">
+                        {/* Playback Speed */}
+                        <div className="flex items-center gap-2">
+                          {[1, 1.25, 1.5, 2].map((speed) => (
+                            <button
+                              key={speed}
+                              onClick={() => setPlaybackSpeed(speed)}
+                              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
+                                ? "bg-muted text-foreground border border-border"
+                                : "bg-white text-muted-foreground hover:bg-muted border border-border"
+                                }`}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {speed}x
+                            </button>
+                          ))}
                         </div>
-                        <div className="bg-primary text-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                          <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Hello.
-                          </p>
+
+                        {/* Star Rating */}
+                        <div className="flex gap-1">
+                          {renderStars()}
+                        </div>
+                      </div>
+
+                      {/* Messages */}
+                      <div className="space-y-4 max-h-96 overflow-y-auto pr-2">
+                        {/* AI Assistant Message - Right side */}
+                        <div className="flex justify-end">
+                          <div className="max-w-[80%]">
+                            <div className="flex items-center justify-end gap-2 mb-1">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                AI ASSISTANT
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                                <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Hi kritika, this is Ria from MantraCare. Quick check-did I catch you at an okay time for thirty seconds?
+                                </p>
+                              </div>
+                              <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
+                                <Headphones className="w-4 h-4 text-white" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Client Message - Left side */}
+                        <div className="flex justify-start">
+                          <div className="max-w-[80%]">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                CLIENT
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <div className="flex-shrink-0 w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-white" />
+                              </div>
+                              <div className="bg-primary text-white rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                                <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Hello.
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* AI Assistant Message - Right side */}
+                        <div className="flex justify-end">
+                          <div className="max-w-[80%]">
+                            <div className="flex items-center justify-end gap-2 mb-1">
+                              <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                AI ASSISTANT
+                              </span>
+                            </div>
+                            <div className="flex items-start gap-2">
+                              <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
+                                <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Hi kritika, thanks for picking up. Is now an okay time for a quick thirty seconds?
+                                </p>
+                              </div>
+                              <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
+                                <Headphones className="w-4 h-4 text-white" />
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-
-                  {/* AI Assistant Message - Right side */}
-                  <div className="flex justify-end">
-                    <div className="max-w-[80%]">
-                      <div className="flex items-center justify-end gap-2 mb-1">
-                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          AI ASSISTANT
-                        </span>
-                      </div>
-                      <div className="flex items-start gap-2">
-                        <div className="bg-[#2F3B4E] text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-sm">
-                          <p className="text-sm leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            Hi kritika, thanks for picking up. Is now an okay time for a quick thirty seconds?
-                          </p>
-                        </div>
-                        <div className="flex-shrink-0 w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-                          <Headphones className="w-4 h-4 text-white" />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+                  )}
 
                   {/* AI Summary Card */}
                   <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
@@ -2430,303 +2421,303 @@ export default function CallLogs() {
               {activeDrawerTab === "call-review" && (
                 <div className="space-y-6 p-6">
                   {/* Call Review Card */}
-            <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-              <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Review</h2>
+                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Review</h2>
 
-              <div className="space-y-6">
-                {/* Quality Metrics Cards */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
-                        <Volume2 className="w-5 h-5 text-white" />
+                    <div className="space-y-6">
+                      {/* Quality Metrics Cards */}
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
+                              <Volume2 className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Call Quality
+                              </p>
+                              <p className="text-2xl font-bold text-blue-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                9.5
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-blue-600" />
+                            <span className="text-xs text-blue-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              +12% vs avg
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-xl p-5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center shadow-md">
+                              <GitBranch className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Flow Score
+                              </p>
+                              <p className="text-2xl font-bold text-purple-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                9.2
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-purple-600" />
+                            <span className="text-xs text-purple-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              +8% vs avg
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-green-100/50 border border-green-200 rounded-xl p-5">
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center shadow-md">
+                              <Users className="w-5 h-5 text-white" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Engagement
+                              </p>
+                              <p className="text-2xl font-bold text-green-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                8.8
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <TrendingUp className="w-3 h-3 text-green-600" />
+                            <span className="text-xs text-green-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              +5% vs avg
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          Call Quality
-                        </p>
-                        <p className="text-2xl font-bold text-blue-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          9.5
-                        </p>
+
+                      {/* Performance Metrics */}
+                      <div className="bg-muted/30 rounded-xl p-6 border border-border">
+                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                          Performance Metrics
+                        </h4>
+                        <div className="space-y-4">
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
+                                Clarity
+                              </span>
+                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                95%
+                              </span>
+                            </div>
+                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
+                                style={{ width: '95%' }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
+                                Professionalism
+                              </span>
+                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                98%
+                              </span>
+                            </div>
+                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
+                                style={{ width: '98%' }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
+                                Client Engagement
+                              </span>
+                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                88%
+                              </span>
+                            </div>
+                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                              <div
+                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
+                                style={{ width: '88%' }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-blue-600" />
-                      <span className="text-xs text-blue-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        +12% vs avg
-                      </span>
+
+                      {/* Areas of Improvement */}
+                      <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5">
+                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                          Suggested Improvements
+                        </h4>
+                        <ul className="space-y-3">
+                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
+                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-amber-600 text-xs font-bold">1</span>
+                            </div>
+                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
+                              Consider reducing pause time between questions to maintain conversation momentum
+                            </span>
+                          </li>
+                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
+                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                              <span className="text-amber-600 text-xs font-bold">2</span>
+                            </div>
+                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
+                              Add more personalized context for better client connection and rapport building
+                            </span>
+                          </li>
+                        </ul>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-xl p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center shadow-md">
-                        <GitBranch className="w-5 h-5 text-white" />
+                  {/* Smart Analysis / QA */}
+                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
+                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Smart Analysis & QA</h2>
+
+                    <div className="space-y-6">
+                      {/* Customer Satisfaction */}
+                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
+                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                          Customer Satisfaction
+                        </h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          {/* Dead Air */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Dead Air
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              14.69%
+                            </p>
+                          </div>
+
+                          {/* Display Patience and Courtesy */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Display Patience and Courtesy
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              100%
+                            </p>
+                          </div>
+
+                          {/* Empathy */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Empathy
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              58.22%
+                            </p>
+                          </div>
+
+                          {/* Hold Time Violation */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Hold Time Violation
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              28.33%
+                            </p>
+                          </div>
+
+                          {/* Negative Customer Sentiment */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Negative Customer Sentiment
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              19.52%
+                            </p>
+                          </div>
+
+                          {/* Supervisor Escalation */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Supervisor Escalation
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              2.87%
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          Flow Score
-                        </p>
-                        <p className="text-2xl font-bold text-purple-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          9.2
-                        </p>
+
+                      {/* Process Adherence */}
+                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
+                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                          Process Adherence
+                        </h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          {/* Proper Call Hold */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Proper Call Hold
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              67.89%
+                            </p>
+                          </div>
+
+                          {/* Proper Call Opening */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Proper Call Opening
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              67.33%
+                            </p>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-purple-600" />
-                      <span className="text-xs text-purple-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        +8% vs avg
-                      </span>
+
+                      {/* Compliance */}
+                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
+                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                          Compliance
+                        </h4>
+                        <div className="grid grid-cols-3 gap-4">
+                          {/* Customer Verification */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Customer Verification
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              79.31%
+                            </p>
+                          </div>
+
+                          {/* Recorded Line Message */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Recorded Line Message
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              7.38%
+                            </p>
+                          </div>
+
+                          {/* Redaction */}
+                          <div className="bg-white border border-border rounded-lg p-5">
+                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Redaction
+                            </p>
+                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                              59.99%
+                            </p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-green-100/50 border border-green-200 rounded-xl p-5">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center shadow-md">
-                        <Users className="w-5 h-5 text-white" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                          Engagement
-                        </p>
-                        <p className="text-2xl font-bold text-green-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          8.8
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <TrendingUp className="w-3 h-3 text-green-600" />
-                      <span className="text-xs text-green-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        +5% vs avg
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Performance Metrics */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border">
-                  <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Performance Metrics
-                  </h4>
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                          Clarity
-                        </span>
-                        <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          95%
-                        </span>
-                      </div>
-                      <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                          style={{ width: '95%' }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                          Professionalism
-                        </span>
-                        <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          98%
-                        </span>
-                      </div>
-                      <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                          style={{ width: '98%' }}
-                        ></div>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                          Client Engagement
-                        </span>
-                        <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                          88%
-                        </span>
-                      </div>
-                      <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                        <div
-                          className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                          style={{ width: '88%' }}
-                        ></div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Areas of Improvement */}
-                <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5">
-                  <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Suggested Improvements
-                  </h4>
-                  <ul className="space-y-3">
-                    <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-amber-600 text-xs font-bold">1</span>
-                      </div>
-                      <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                        Consider reducing pause time between questions to maintain conversation momentum
-                      </span>
-                    </li>
-                    <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                      <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-amber-600 text-xs font-bold">2</span>
-                      </div>
-                      <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                        Add more personalized context for better client connection and rapport building
-                      </span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-
-            {/* Smart Analysis / QA */}
-            <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-              <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Smart Analysis & QA</h2>
-
-              <div className="space-y-6">
-                {/* Customer Satisfaction */}
-                <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                  <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Customer Satisfaction
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Dead Air */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Dead Air
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        14.69%
-                      </p>
-                    </div>
-
-                    {/* Display Patience and Courtesy */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Display Patience and Courtesy
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        100%
-                      </p>
-                    </div>
-
-                    {/* Empathy */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Empathy
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        58.22%
-                      </p>
-                    </div>
-
-                    {/* Hold Time Violation */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Hold Time Violation
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        28.33%
-                      </p>
-                    </div>
-
-                    {/* Negative Customer Sentiment */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Negative Customer Sentiment
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        19.52%
-                      </p>
-                    </div>
-
-                    {/* Supervisor Escalation */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Supervisor Escalation
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        2.87%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Process Adherence */}
-                <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                  <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Process Adherence
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Proper Call Hold */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Proper Call Hold
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        67.89%
-                      </p>
-                    </div>
-
-                    {/* Proper Call Opening */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Proper Call Opening
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        67.33%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Compliance */}
-                <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                  <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                    Compliance
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Customer Verification */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Customer Verification
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        79.31%
-                      </p>
-                    </div>
-
-                    {/* Recorded Line Message */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Recorded Line Message
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        7.38%
-                      </p>
-                    </div>
-
-                    {/* Redaction */}
-                    <div className="bg-white border border-border rounded-lg p-5">
-                      <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        Redaction
-                      </p>
-                      <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                        59.99%
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
                 </div>
               )}
 
@@ -2735,44 +2726,44 @@ export default function CallLogs() {
                   {/* Rating & Feedback Card */}
                   <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
                     <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Rating & Feedback</h2>
-              <div className="space-y-4">
-                <div>
-                  <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rating</p>
-                  <div className="flex items-center gap-3">
-                    <div className="flex gap-1">
-                      {renderStars()}
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rating</p>
+                        <div className="flex items-center gap-3">
+                          <div className="flex gap-1">
+                            {renderStars()}
+                          </div>
+                          {rating > 0 && (
+                            <span className="text-sm font-medium" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                              {rating} / 5
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-sm mb-2 block" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Feedback</label>
+                        <textarea
+                          value={callFeedback}
+                          onChange={(e) => setCallFeedback(e.target.value)}
+                          placeholder="Add feedback on what should improve and highlight important points from this call..."
+                          className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none text-sm min-h-[120px]"
+                        />
+                      </div>
+
+                      <div className="flex justify-end">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleSaveFeedback}
+                          loading={isSavingFeedback}
+                          disabled={rating === 0 && !callFeedback.trim()}
+                        >
+                          Save Feedback
+                        </Button>
+                      </div>
                     </div>
-                    {rating > 0 && (
-                      <span className="text-sm font-medium" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                        {rating} / 5
-                      </span>
-                    )}
                   </div>
-                </div>
-
-                <div>
-                  <label className="text-sm mb-2 block" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Feedback</label>
-                  <textarea
-                    value={callFeedback}
-                    onChange={(e) => setCallFeedback(e.target.value)}
-                    placeholder="Add feedback on what should improve and highlight important points from this call..."
-                    className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none text-sm min-h-[120px]"
-                  />
-                </div>
-
-                <div className="flex justify-end">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveFeedback}
-                    loading={isSavingFeedback}
-                    disabled={rating === 0 && !callFeedback.trim()}
-                  >
-                    Save Feedback
-                  </Button>
-                </div>
-              </div>
-            </div>
                 </div>
               )}
             </div>

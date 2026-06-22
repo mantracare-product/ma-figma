@@ -6,7 +6,7 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
-import { Drawer } from "../components/ui/Drawer";
+import { Drawer } from "../components/ui/drawer";
 import { Tooltip } from "../components/ui/Tooltip";
 import {
   DropdownMenu,
@@ -4129,7 +4129,7 @@ export default function Clients() {
         isOpen={showEditClientModal}
         onClose={() => setShowEditClientModal(false)}
         title="Edit Client Information"
-        actions={
+        footer={
           <>
             <Button
               variant="outline"
@@ -4200,7 +4200,7 @@ export default function Clients() {
         isOpen={showSendMessageModal}
         onClose={() => setShowSendMessageModal(false)}
         title={selectedClientForProfile ? `Send Message to ${selectedClientForProfile.name}` : "Send Message"}
-        actions={
+        footer={
           <>
             <Button
               variant="outline"
@@ -4252,7 +4252,7 @@ export default function Clients() {
         isOpen={showScheduleCallFromProfile}
         onClose={() => setShowScheduleCallFromProfile(false)}
         title={selectedClientForProfile ? `Schedule Call with ${selectedClientForProfile.name}` : "Schedule Call"}
-        actions={
+        footer={
           <>
             <Button
               variant="outline"
@@ -4310,7 +4310,7 @@ export default function Clients() {
         isOpen={showUpdateStageModal}
         onClose={() => setShowUpdateStageModal(false)}
         title="Update Client Stage"
-        actions={
+        footer={
           <>
             <Button
               variant="outline"
