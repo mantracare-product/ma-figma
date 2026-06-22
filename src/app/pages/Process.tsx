@@ -2581,6 +2581,15 @@ export default function Process() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2">
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.location.href = '/settings?tab=voice-config';
+                                  }}
+                                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                                >
+                                  <Settings className="w-4 h-4 text-gray-500" />
+                                </button>
                                 <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${aiModelExpanded ? 'rotate-180' : ''}`} />
                               </div>
                             </button>
