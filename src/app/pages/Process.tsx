@@ -341,6 +341,28 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
   );
 };
 
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall">> = {
+  "whatsapp":           ["stage", "incall", "postcall"],
+  "sms":                ["stage", "incall", "postcall"],
+  "email":              ["stage", "incall", "postcall"],
+  "processmovement":    ["stage", "postcall"],
+  "endworkflow":        ["stage", "postcall"],
+  "fieldupdate":        ["stage", "postcall"],
+  "assignhuman":        ["stage", "postcall"],
+  "crmupdate":          ["stage", "postcall"],
+  "ehrupdate":          ["stage", "postcall"],
+  "wh_trigger":         ["stage", "postcall"],
+  "triggerapi":         ["stage", "postcall"],
+  "collectinformation": ["stage", "postcall"],
+  "scheduleappointment":["stage", "postcall"],
+  "smartcallanalysis":  ["stage", "postcall"],
+  "greetingphrase":     ["incall"],
+  "transfercall":       ["incall"],
+  "bypasstohuman":      ["incall"],
+  "liveintaketicket":   ["incall"],
+  "callaction":         ["incall", "postcall"],
+};
+
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
@@ -585,6 +607,14 @@ export default function Process() {
   const [trueBranchExpanded, setTrueBranchExpanded] = useState(true);
   const [falseBranchExpanded, setFalseBranchExpanded] = useState(true);
   const [branchAddTarget, setBranchAddTarget] = useState<"true" | "false" | null>(null);
+
+  useEffect(() => {
+    if (!currentEditingStep?.stepKey) return;
+    const allowed = STEP_ALLOWED_TRIGGERS[currentEditingStep.stepKey] ?? ["stage", "incall", "postcall"];
+    if (!allowed.includes(stepTrigger)) {
+      setStepTrigger(allowed[0]);
+    }
+  }, [currentEditingStep?.stepKey, stepTrigger]);
 
   // Reset function to clear all step detail state
   const resetStepDetailState = () => {
@@ -3755,22 +3785,27 @@ export default function Process() {
                                   <div>
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
                                     <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20">
-                                      {([
-                                        { key: "stage", label: "On Entering Stage" },
-                                        { key: "incall", label: "In Call" },
-                                        { key: "postcall", label: "Post Call" },
-                                      ] as const).map((t) => (
-                                        <button
-                                          key={t.key}
-                                          onClick={() => setStepTrigger(t.key)}
-                                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                            stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                          }`}
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          {t.label}
-                                        </button>
-                                      ))}
+                                      {(() => {
+                                        const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
+                                        return ([
+                                          { key: "stage",    label: "On Entering Stage" },
+                                          { key: "incall",   label: "In Call" },
+                                          { key: "postcall", label: "Post Call" },
+                                        ] as const)
+                                          .filter(t => allowedTriggers.includes(t.key))
+                                          .map((t) => (
+                                            <button
+                                              key={t.key}
+                                              onClick={() => setStepTrigger(t.key)}
+                                              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                                stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                              }`}
+                                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                                            >
+                                              {t.label}
+                                            </button>
+                                          ));
+                                      })()}
                                     </div>
                                     <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
                                       {stepTrigger === "stage"
