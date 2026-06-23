@@ -2448,24 +2448,6 @@ export default function Process() {
                               </div>
                             )}
 
-                            {/* Outbound Calling Toggle - Only show when Type is "Makes AI Outbound Calls" */}
-                            {stageType === "Makes AI Outbound Calls" && (
-                              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border">
-                                <div>
-                                  <p className="font-medium" style={{ fontFamily: 'DM Sans, sans-serif' }}>Outbound Calling</p>
-                                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Enable automated outbound calls</p>
-                                </div>
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    className="sr-only peer"
-                                    checked={outboundCallingEnabled}
-                                    onChange={(e) => setOutboundCallingEnabled(e.target.checked)}
-                                  />
-                                  <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                                </label>
-                              </div>
-                            )}
                           </div>
 
 
