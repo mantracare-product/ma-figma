@@ -421,6 +421,27 @@ export default function Process() {
   const [webhooksEnabled, setWebhooksEnabled] = useState(false);
   const [aiSettingsEnabled, setAISettingsEnabled] = useState(false);
 
+  // Auto Hangup after interaction / Silence / Idle Messages state variables
+  const [autoHangupInteractionExpanded, setAutoHangupInteractionExpanded] = useState(false);
+  const [autoHangupInteractionEnabled, setAutoHangupInteractionEnabled] = useState(false);
+  const [autoHangupInteractionMessage, setAutoHangupInteractionMessage] = useState("");
+
+  const [autoHangupSilenceStageExpanded, setAutoHangupSilenceStageExpanded] = useState(false);
+  const [autoHangupSilenceStageEnabled, setAutoHangupSilenceStageEnabled] = useState(false);
+  const [autoHangupSilenceStageDuration, setAutoHangupSilenceStageDuration] = useState(5);
+
+  const [idleMessagesStageExpanded, setIdleMessagesStageExpanded] = useState(false);
+  const [idleMessagesStageEnabled, setIdleMessagesStageEnabled] = useState(false);
+  const [idleMessageStageText, setIdleMessageStageText] = useState("");
+  const [idleMessageStageDelay, setIdleMessageStageDelay] = useState(10);
+  const [idleHangupMessageStage, setIdleHangupMessageStage] = useState("");
+  const [idleHangupDelayStage, setIdleHangupDelayStage] = useState(20);
+
+  // Call Duration state variables
+  const [callDurationExpanded, setCallDurationExpanded] = useState(false);
+  const [callDurationMinutes, setCallDurationMinutes] = useState(5);
+  const [hangupWindowMinutes, setHangupWindowMinutes] = useState(1);
+
   // Skip day rules state
   const [selectedOffDays, setSelectedOffDays] = useState<string[]>(["Sat", "Sun"]);
   const [customOffDates, setCustomOffDates] = useState<string[]>([]);
@@ -592,10 +613,6 @@ export default function Process() {
     setTcTimeIntervalsEnabled(false);
     setTcCallDurationMinutes(5);
     setTcHangupWindowMinutes(1);
-    setTcAutoHangupEnabled(false);
-    setTcHangupMessage("");
-    setTcSilenceEnabled(false);
-    setTcSilenceDuration(1);
     setBypassStepNumbers([{ id: 1, phoneNumber: "", countryCode: "+1" }]);
   };
 
@@ -603,10 +620,6 @@ export default function Process() {
   const [tcTimeIntervalsEnabled, setTcTimeIntervalsEnabled] = useState(false);
   const [tcCallDurationMinutes, setTcCallDurationMinutes] = useState<number>(5);
   const [tcHangupWindowMinutes, setTcHangupWindowMinutes] = useState<number>(1);
-  const [tcAutoHangupEnabled, setTcAutoHangupEnabled] = useState(false);
-  const [tcHangupMessage, setTcHangupMessage] = useState("");
-  const [tcSilenceEnabled, setTcSilenceEnabled] = useState(false);
-  const [tcSilenceDuration, setTcSilenceDuration] = useState(1);
   const [ticketChecklist, setTicketChecklist] = useState<{ id: string; text: string }[]>([{ id: "check-1", text: "" }]);
   const [ticketEntries, setTicketEntries] = useState<Array<{
     taskName: string; taskDesc: string; assignee: string; deadline: string; priority: string;
@@ -2562,21 +2575,24 @@ export default function Process() {
                       {activeTab === "advanced" && (
                         <div className="space-y-4">
                           {/* AI Model */}
-                          <div className="w-full">
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
                             <button
                               onClick={() => setAiModelExpanded(!aiModelExpanded)}
-                              className="w-full flex items-center justify-between py-3 hover:bg-white/80 transition-colors rounded-xl px-4 cursor-pointer"
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
                             >
-                              <div className="flex items-center gap-3 flex-1">
-                                <div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center">
-                                  <Bot className="w-5 h-5 text-purple-600" />
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                                  <Bot className="w-5 h-5 text-blue-600" />
                                 </div>
-                                <div className="flex items-center gap-2 flex-1">
-                                  <span className="text-base font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                     AI Voice & Model
                                   </span>
-                                  <Tooltip text="Choose the AI model that powers your receptionist. Different models offer varying levels of capabilities and performance." placement="top">
-                                    <Info className="w-4 h-4 text-gray-400 cursor-help hover:text-gray-600" />
+                                  <Tooltip
+                                    text="Choose the AI model that powers your receptionist. Different models offer varying levels of capabilities and performance."
+                                    placement="top"
+                                  >
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
                                   </Tooltip>
                                 </div>
                               </div>
@@ -2586,16 +2602,18 @@ export default function Process() {
                                     e.stopPropagation();
                                     window.location.href = '/settings?tab=voice-config';
                                   }}
-                                  className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                                  className="p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
                                 >
                                   <Settings className="w-4 h-4 text-gray-500" />
                                 </button>
-                                <ChevronDown className={`w-5 h-5 text-gray-500 transition-transform ${aiModelExpanded ? 'rotate-180' : ''}`} />
+                                <ChevronDown
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${aiModelExpanded ? 'rotate-180' : ''}`}
+                                />
                               </div>
                             </button>
 
                             {aiModelExpanded && (
-                              <div className="ml-12 space-y-5 pb-4 bg-white rounded-xl p-5 border border-gray-200">
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-5 bg-gray-50/40">
                                 {/* AI Model Select */}
                                 <div>
                                   <label className="block text-sm font-semibold mb-2 text-gray-700">AI Model</label>
@@ -2658,37 +2676,143 @@ export default function Process() {
                             )}
                           </div>
 
-                          {/* Record Calls */}
-                          <div className="w-full flex items-center justify-between py-3 hover:bg-muted/20 transition-colors rounded-lg px-2">
-                            <div className="flex items-center gap-3">
-                              <Mic className="w-5 h-5 text-primary" />
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                  Record Calls
-                                </span>
-                                <Tooltip text="Enable call recording" placement="top">
-                                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                                </Tooltip>
+                          {/* ──────────────────────────── RECORD CALLS ───────────────────────── */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                            <div className="w-full flex items-center justify-between px-4 py-3">
+                              <div className="flex items-center gap-3">
+                                <Mic className="w-5 h-5 text-primary" />
+                                <div className="flex items-center gap-2">
+                                  <span
+                                    className="text-sm font-medium"
+                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    Record Calls
+                                  </span>
+                                  <Tooltip text="Enable call recording for this stage." placement="top">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+                                  </Tooltip>
+                                </div>
                               </div>
-                            </div>
-                            <label className="flex items-center cursor-pointer">
-                              <div className="relative">
+                              <label className="relative inline-flex items-center cursor-pointer">
                                 <input
                                   type="checkbox"
+                                  className="sr-only peer"
                                   checked={advancedSettings.recordCalls}
                                   onChange={(e) => {
                                     setAdvancedSettings({ ...advancedSettings, recordCalls: e.target.checked });
-                                    toast.success(e.target.checked ? "Call recording enabled" : "Call recording disabled");
+                                    toast.success(e.target.checked ? 'Call recording enabled' : 'Call recording disabled');
                                   }}
-                                  className="sr-only peer"
                                 />
-                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                              </div>
-                            </label>
+                                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                              </label>
+                            </div>
                           </div>
 
-
                           {/* Note: Advanced settings items in Stage section reference the same state as Process section */}
+
+                          {/* ──────────────────────────── CALL DURATION ───────────────────────── */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                            {/* Header Row */}
+                            <button
+                              onClick={() => setCallDurationExpanded(!callDurationExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Clock className="w-5 h-5 text-primary" />
+                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                  Call Duration
+                                </span>
+                              </div>
+                              <ChevronDown
+                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                  callDurationExpanded ? 'rotate-180' : ''
+                                }`}
+                              />
+                          </button>
+
+                          {/* Expanded Content */}
+                          {callDurationExpanded && (
+                            <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+
+                                {/* Call Duration + Hangup Window in one row */}
+                                <div className="flex items-end gap-4">
+                                  {/* Call Duration */}
+                                  <div className="flex-1">
+                                    <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Call Duration (min)
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      value={callDurationMinutes}
+                                      onChange={(e) => {
+                                        const val = parseInt(e.target.value) || 1;
+                                        setCallDurationMinutes(val);
+                                        if (hangupWindowMinutes >= val) {
+                                          setHangupWindowMinutes(val - 1 > 0 ? val - 1 : 1);
+                                        }
+                                      }}
+                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+
+                                  {/* Hangup Window */}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <label className="text-sm font-medium" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Hangup Window
+                                      </label>
+                                      <Tooltip
+                                        text="During the last X minutes of the total call duration, the AI will proactively try to wrap up the conversation and end the call gracefully. The hangup window must be less than the total call duration."
+                                        placement="top"
+                                      >
+                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+                                      </Tooltip>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Last</span>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={callDurationMinutes - 1}
+                                        value={hangupWindowMinutes}
+                                        onChange={(e) => {
+                                          const val = parseInt(e.target.value) || 1;
+                                          if (val >= callDurationMinutes) {
+                                            toast.error(`Hangup window must be less than the call duration (${callDurationMinutes} min)`);
+                                            return;
+                                          }
+                                          setHangupWindowMinutes(val);
+                                        }}
+                                        className="flex-1 min-w-0 px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                      <span className="text-sm text-gray-500 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        {hangupWindowMinutes === 1 ? 'minute' : 'minutes'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {hangupWindowMinutes >= callDurationMinutes && (
+                                  <p className="text-xs text-red-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Hangup window must be less than call duration ({callDurationMinutes} min).
+                                  </p>
+                                )}
+
+                                <div className="flex justify-end">
+                                  <button
+                                    onClick={() => toast.success("Call duration settings saved")}
+                                    className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
+                                    style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    Save
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
 
                           {/* ───────────────────────────── RETRY RULES ───────────────────────────── */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -2812,7 +2936,6 @@ export default function Process() {
                               </div>
                             )}
                           </div>
-
 
                           {/* ─────────────────────────── SKIP DAY RULES ──────────────────────────── */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
@@ -2975,7 +3098,6 @@ export default function Process() {
                             )}
                           </div>
 
-
                           {/* ──────────────────────────── DETECT VOICEMAIL ───────────────────────── */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
                             {/* Header Row */}
@@ -3058,7 +3180,275 @@ export default function Process() {
                             )}
                           </div>
 
+                          {/* ──────────────────────────── AUTO HANGUP AFTER INTERACTION ENDS ───────────────────────── */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                            {/* Header Row */}
+                            <button
+                              onClick={() => setAutoHangupInteractionExpanded(!autoHangupInteractionExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <PhoneCall className="w-5 h-5 text-primary" />
+                                <span
+                                  className="text-sm font-medium"
+                                  style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                >
+                                  Auto Hangup After Interaction Ends
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                                    autoHangupInteractionEnabled
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {autoHangupInteractionEnabled ? 'On' : 'Off'}
+                                </span>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                    autoHangupInteractionExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </div>
+                            </button>
 
+                            {/* Expanded Content */}
+                            {autoHangupInteractionExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enable Auto Hangup After Interaction Ends
+                                    </span>
+                                    <Tooltip text="Automatically end the call when the interaction is complete." placement="top">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={autoHangupInteractionEnabled}
+                                      onChange={(e) => {
+                                        setAutoHangupInteractionEnabled(e.target.checked);
+                                        toast.success(e.target.checked ? 'Auto hangup enabled' : 'Auto hangup disabled');
+                                      }}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                                  </label>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Hangup Message
+                                  </label>
+                                  <textarea
+                                    value={autoHangupInteractionMessage}
+                                    onChange={(e) => setAutoHangupInteractionMessage(e.target.value)}
+                                    placeholder="Enter the message to be spoken before hanging up"
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                    rows={3}
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ──────────────────────────── AUTO HANGUP AFTER SILENCE ───────────────────────── */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                            {/* Header Row */}
+                            <button
+                              onClick={() => setAutoHangupSilenceStageExpanded(!autoHangupSilenceStageExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Volume2 className="w-5 h-5 text-primary" />
+                                <span
+                                  className="text-sm font-medium"
+                                  style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                >
+                                  Auto Hangup After Silence
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                                    autoHangupSilenceStageEnabled
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {autoHangupSilenceStageEnabled ? 'On' : 'Off'}
+                                </span>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                    autoHangupSilenceStageExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </div>
+                            </button>
+
+                            {/* Expanded Content */}
+                            {autoHangupSilenceStageExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enable Auto Hangup After Silence
+                                    </span>
+                                    <Tooltip text="Automatically end the call when the caller is silent to avoid unnecessary call duration and reduce cost." placement="top">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={autoHangupSilenceStageEnabled}
+                                      onChange={(e) => {
+                                        setAutoHangupSilenceStageEnabled(e.target.checked);
+                                        toast.success(e.target.checked ? 'Silence hangup enabled' : 'Silence hangup disabled');
+                                      }}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                                  </label>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Silence Duration (seconds)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={autoHangupSilenceStageDuration}
+                                    onChange={(e) => setAutoHangupSilenceStageDuration(parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ──────────────────────────── IDLE MESSAGES ───────────────────────── */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                            {/* Header Row */}
+                            <button
+                              onClick={() => setIdleMessagesStageExpanded(!idleMessagesStageExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <MessageSquare className="w-5 h-5 text-primary" />
+                                <span
+                                  className="text-sm font-medium"
+                                  style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                >
+                                  Idle Messages
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                                    idleMessagesStageEnabled
+                                      ? 'bg-green-100 text-green-700'
+                                      : 'bg-gray-100 text-gray-500'
+                                  }`}
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                >
+                                  {idleMessagesStageEnabled ? 'On' : 'Off'}
+                                </span>
+                                <ChevronDown
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
+                                    idleMessagesStageExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
+                              </div>
+                            </button>
+
+                            {/* Expanded Content */}
+                            {idleMessagesStageExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enable Idle Messages
+                                    </span>
+                                    <Tooltip text="Messages the AI says when the caller has not responded." placement="top">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 transition-colors" />
+                                    </Tooltip>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={idleMessagesStageEnabled}
+                                      onChange={(e) => {
+                                        setIdleMessagesStageEnabled(e.target.checked);
+                                        toast.success(e.target.checked ? 'Idle messages enabled' : 'Idle messages disabled');
+                                      }}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                                  </label>
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Idle Message
+                                  </label>
+                                  <textarea
+                                    value={idleMessageStageText}
+                                    onChange={(e) => setIdleMessageStageText(e.target.value)}
+                                    placeholder="Are you still there?"
+                                    rows={2}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Idle Message Delay (seconds)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={idleMessageStageDelay}
+                                    onChange={(e) => setIdleMessageStageDelay(parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Idle Hangup Message
+                                  </label>
+                                  <textarea
+                                    value={idleHangupMessageStage}
+                                    onChange={(e) => setIdleHangupMessageStage(e.target.value)}
+                                    placeholder="I'll let you go now. Have a great day!"
+                                    rows={2}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors resize-none"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Idle Hangup Delay (seconds)
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    value={idleHangupDelayStage}
+                                    onChange={(e) => setIdleHangupDelayStage(parseInt(e.target.value) || 1)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -4576,123 +4966,6 @@ export default function Process() {
                                             <div className="flex justify-end">
                                               <button
                                                 onClick={() => toast.success("Call duration settings saved")}
-                                                className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
-                                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                Save
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Section B — Auto Hangup after interaction ends */}
-                                      <div className="rounded-lg border border-border overflow-hidden">
-                                        <div
-                                          className="flex items-center justify-between p-4 hover:bg-muted/20 cursor-pointer"
-                                          onClick={() => { if (tcAutoHangupEnabled) setTcAutoHangupEnabled(false); }}
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <PhoneCall className="w-4 h-4 text-primary" />
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Auto Hangup after interaction ends</span>
-                                            <div className="relative group">
-                                              <Info className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />
-                                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50">
-                                                <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                                                  Automatically end the call when interaction completes
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <label className="relative inline-flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
-                                            <input
-                                              type="checkbox"
-                                              checked={tcAutoHangupEnabled}
-                                              onChange={e => setTcAutoHangupEnabled(e.target.checked)}
-                                              className="sr-only peer"
-                                            />
-                                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                          </label>
-                                        </div>
-                                        {tcAutoHangupEnabled && (
-                                          <div className="border-t border-border p-4 space-y-3">
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Hangup Message</label>
-                                              <p className="text-xs mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This message will be spoken before automatically ending the call</p>
-                                              <textarea
-                                                value={tcHangupMessage}
-                                                onChange={e => setTcHangupMessage(e.target.value)}
-                                                placeholder="Enter the message to be spoken before hanging up"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-y outline-none focus:border-blue-500 transition-colors"
-                                                rows={4}
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-                                            <div className="flex justify-end">
-                                              <button
-                                                onClick={() => toast.success("Auto hangup message saved")}
-                                                className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
-                                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                Save
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-
-                                      {/* Section C — Auto Hangup after silence */}
-                                      <div className="rounded-lg border border-border overflow-hidden">
-                                        <div
-                                          className="flex items-center justify-between p-4 hover:bg-muted/20 cursor-pointer"
-                                          onClick={() => { if (tcSilenceEnabled) setTcSilenceEnabled(false); }}
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <Clock className="w-4 h-4 text-primary" />
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Auto Hangup after silence</span>
-                                            <div className="relative group">
-                                              <Info className="w-3.5 h-3.5" style={{ color: '#94A3B8' }} />
-                                              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-50">
-                                                <div className="bg-gray-800 text-white text-xs rounded px-2 py-1 whitespace-nowrap">
-                                                  Set timeout duration for silence detection
-                                                </div>
-                                              </div>
-                                            </div>
-                                          </div>
-                                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                                            {tcSilenceEnabled && (
-                                              <span className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                                {tcSilenceDuration} {tcSilenceDuration === 1 ? "Minute" : "Minutes"}
-                                              </span>
-                                            )}
-                                            <label className="relative inline-flex items-center cursor-pointer">
-                                              <input
-                                                type="checkbox"
-                                                checked={tcSilenceEnabled}
-                                                onChange={e => setTcSilenceEnabled(e.target.checked)}
-                                                className="sr-only peer"
-                                              />
-                                              <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                            </label>
-                                          </div>
-                                        </div>
-                                        {tcSilenceEnabled && (
-                                          <div className="border-t border-border p-4 space-y-3">
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Silence Duration (Minutes)</label>
-                                              <p className="text-xs mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Set how many minutes of silence before the call is automatically ended</p>
-                                              <input
-                                                type="number"
-                                                min={1}
-                                                value={tcSilenceDuration}
-                                                onChange={e => setTcSilenceDuration(parseInt(e.target.value) || 1)}
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-                                            <div className="flex justify-end">
-                                              <button
-                                                onClick={() => toast.success("Silence duration saved")}
                                                 className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
                                                 style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
                                               >
