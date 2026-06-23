@@ -569,6 +569,23 @@ export default function Process() {
   const [appointmentDetails, setAppointmentDetails] = useState<string>("Appointment Time");
   const [appointmentBookingMethod, setAppointmentBookingMethod] = useState<string>("");
 
+  const [conditionsEnabled, setConditionsEnabled] = useState(false);
+  const [conditionPreview, setConditionPreview] = useState("");
+
+  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "postcall">("stage");
+  const [stepActionName, setStepActionName] = useState("");
+  const [stepActionReason, setStepActionReason] = useState("");
+
+  // If Condition branch state
+  const [ifCondField, setIfCondField] = useState("Stage Name");
+  const [ifCondOperator, setIfCondOperator] = useState("Equal To");
+  const [ifCondValue, setIfCondValue] = useState("");
+  const [trueBranchSteps, setTrueBranchSteps] = useState<Array<{ id: string; name: string; description: string; iconKey: string; stepKey?: string }>>([]);
+  const [falseBranchSteps, setFalseBranchSteps] = useState<Array<{ id: string; name: string; description: string; iconKey: string; stepKey?: string }>>([]);
+  const [trueBranchExpanded, setTrueBranchExpanded] = useState(true);
+  const [falseBranchExpanded, setFalseBranchExpanded] = useState(true);
+  const [branchAddTarget, setBranchAddTarget] = useState<"true" | "false" | null>(null);
+
   // Reset function to clear all step detail state
   const resetStepDetailState = () => {
     setExecutionType("wait");
@@ -614,6 +631,27 @@ export default function Process() {
     setTcCallDurationMinutes(5);
     setTcHangupWindowMinutes(1);
     setBypassStepNumbers([{ id: 1, phoneNumber: "", countryCode: "+1" }]);
+    setConditionsEnabled(false);
+    setConditionPreview("");
+    setStepTrigger("stage");
+    setStepActionName("");
+    setStepActionReason("");
+    setIfCondField("Stage Name");
+    setIfCondOperator("Equal To");
+    setIfCondValue("");
+    setTrueBranchSteps([]);
+    setFalseBranchSteps([]);
+    setTrueBranchExpanded(true);
+    setFalseBranchExpanded(true);
+    setBranchAddTarget(null);
+  };
+
+  const buildTriggerUrl = (trigger: "incall" | "postcall", actionName: string, actionReason: string) => {
+    const executionContext = trigger === "incall" ? "in_call_action" : "post_call_action";
+    const action = actionName.trim() ? actionName.trim() : "{action}";
+    let url = `https://api.mantraassist.com/trigger?execution_context=${executionContext}&action=${action}&call_id={{call_id}}`;
+    if (actionReason.trim()) url += `&reason=${actionReason.trim()}`;
+    return url;
   };
 
   const [showCustomEmail, setShowCustomEmail] = useState(false);
@@ -2501,6 +2539,7 @@ export default function Process() {
                                             refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
                                             lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
                                             layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
+                                            gitbranch: <GitBranch className="w-4 h-4 text-white" />,
                                           };
                                           return <>{map[iconKey]}</>;
                                         };
@@ -3555,6 +3594,7 @@ export default function Process() {
                                         refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
                                         lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
                                         layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
+                                        gitbranch: <GitBranch className="w-4 h-4 text-white" />,
                                       };
                                       const filtered = allSteps.filter(s =>
                                         s.cats.includes(workflowStepCategory) &&
@@ -3683,13 +3723,27 @@ export default function Process() {
                                 <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
                                   <div className="flex items-start justify-between">
                                     <div>
-                                      <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{currentEditingStep.name}</h2>
-                                      <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{currentEditingStep.description}</p>
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          {currentEditingStep.name}
+                                        </h2>
+                                        {/* Trigger badge — mirrors manager's "Stage Enter" pill */}
+                                        <span
+                                          className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                                          style={{
+                                            backgroundColor: '#DBEAFE',
+                                            color: '#1D4ED8',
+                                            fontFamily: 'DM Sans, sans-serif'
+                                          }}
+                                        >
+                                          Stage Enter
+                                        </span>
+                                      </div>
+                                      <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        {currentEditingStep.description}
+                                      </p>
                                     </div>
-                                    <button onClick={() => {
-                                      setStepDetailDrawerOpen(false);
-                                      setIsCreatingNewStep(false);
-                                    }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
+                                    <button onClick={() => { setStepDetailDrawerOpen(false); setIsCreatingNewStep(false); }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
                                       <X className="w-5 h-5 text-muted-foreground" />
                                     </button>
                                   </div>
@@ -3697,199 +3751,265 @@ export default function Process() {
 
                                 {/* Body */}
                                 <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                                  {/* Top Section: Execution, Delay, Conditions - Common to most steps (except End Workflow) */}
-                                  {currentEditingStep.stepKey !== "endworkflow" && (
-                                    <div className="space-y-6">
-                                      {/* Execution Row */}
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                  {/* ── TRIGGER TABS (shown for ALL steps) ── */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
+                                    <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20">
+                                      {([
+                                        { key: "stage", label: "On Entering Stage" },
+                                        { key: "incall", label: "In Call" },
+                                        { key: "postcall", label: "Post Call" },
+                                      ] as const).map((t) => (
                                         <button
-                                          onClick={() => setExecutionTimingModalOpen(true)}
-                                          className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                                          key={t.key}
+                                          onClick={() => setStepTrigger(t.key)}
+                                          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                            stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                          }`}
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
                                         >
-                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
-                                          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                          {t.label}
                                         </button>
+                                      ))}
+                                    </div>
+                                    <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      {stepTrigger === "stage"
+                                        ? "Runs in sequence as part of this stage's step order, with an optional delay."
+                                        : stepTrigger === "incall"
+                                        ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
+                                        : "Fires automatically once the call has ended — no fixed position or delay."}
+                                    </p>
+                                  </div>
+
+                                  {/* ── ACTION NAME / REASON / URL (shown for incall and postcall only) ── */}
+                                  {stepTrigger !== "stage" && (
+                                    <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/10">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Action Name <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={stepActionName}
+                                          onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                          placeholder="e.g. send_followup_sms"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          Used to trigger this action via API. Use underscores, no spaces.
+                                        </p>
                                       </div>
 
-                                      {/* Delay Row */}
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
-                                        <div className="flex items-center">
-                                          <input
-                                            type="number"
-                                            value={delayValue}
-                                            onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
-                                            className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1' }}
-                                          />
-                                          <div className="relative">
-                                            <button
-                                              onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
-                                              className="px-3 py-2.5 text-sm border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '120px' }}
-                                            >
-                                              <span>{delayUnit}</span>
-                                              <ChevronDown className="w-4 h-4 ml-2 text-muted-foreground" />
-                                            </button>
-                                            {delayUnitDropdownOpen && (
-                                              <>
-                                                <div
-                                                  className="fixed inset-0 z-[40]"
-                                                  onClick={() => setDelayUnitDropdownOpen(false)}
-                                                />
-                                                <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[120px]">
-                                                  {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
-                                                    <button
-                                                      key={unit}
-                                                      onClick={() => {
-                                                        setDelayUnit(unit);
-                                                        setDelayUnitDropdownOpen(false);
-                                                      }}
-                                                      className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                    >
-                                                      {unit}
-                                                    </button>
-                                                  ))}
-                                                </div>
-                                              </>
-                                            )}
-                                          </div>
-                                        </div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
+                                        <input
+                                          type="text"
+                                          value={stepActionReason}
+                                          onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                          placeholder="e.g. caller_requested_callback"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          Optional sub-reason included in the trigger URL.
+                                        </p>
                                       </div>
 
-                                      {/* Conditions Row */}
                                       <div>
-                                        <div className="flex items-center gap-2 mb-2">
-                                          <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Conditions (Optional)</label>
-                                          <Tooltip text="Add conditions to run this step only when specific criteria are met. Without conditions, this step applies to all contacts by default." placement="top">
-                                            <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                                          </Tooltip>
-                                        </div>
-                                        <div className="space-y-3">
-                                          {conditions.map((cond, index) => (
-                                            <React.Fragment key={cond.id}>
-                                              <div className="flex items-center gap-2">
-                                                <select
-                                                  value={cond.field}
-                                                  onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option>Field</option>
-                                                  <option>Contact Person</option>
-                                                  <option>Contact Name</option>
-                                                  <option>Call Status</option>
-                                                  <option>Call Duration</option>
-                                                  <option>Country</option>
-                                                  <option>Sentiment</option>
-                                                  <option>Intent</option>
-                                                  <option>Appointment Date</option>
-                                                  <option>Appointment Time</option>
-                                                  <option>Appointment With</option>
-                                                  <option>AI Summary</option>
-                                                  <option>Call Transcription</option>
-                                                </select>
-                                                <select
-                                                  value={cond.operator}
-                                                  onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option>Operator</option>
-                                                  <option>Equals</option>
-                                                  <option>Not Equals</option>
-                                                  <option>Contains</option>
-                                                  <option>Does Not Contain</option>
-                                                  <option>Starts With</option>
-                                                  <option>Ends With</option>
-                                                  <option>Greater Than</option>
-                                                  <option>Less Than</option>
-                                                  <option>Is Empty</option>
-                                                  <option>Is Not Empty</option>
-                                                </select>
-                                                <input
-                                                  type="text"
-                                                  value={cond.value}
-                                                  onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))}
-                                                  placeholder="Value"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                {conditions.length > 1 && (
-                                                  <button
-                                                    onClick={() => {
-                                                      setConditions(prev => prev.filter(c => c.id !== cond.id));
-                                                      setConditionOperators(prev => prev.filter((_, i) => i !== index));
-                                                    }}
-                                                    className="p-2 rounded hover:bg-red-50 transition-colors"
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                )}
-                                              </div>
-
-                                              {/* AND/OR Toggle between conditions */}
-                                              {index < conditions.length - 1 && (
-                                                <div className="flex items-center justify-center py-1">
-                                                  <div className="inline-flex rounded-md border border-border bg-white">
-                                                    <button
-                                                      onClick={() => {
-                                                        const newOps = [...conditionOperators];
-                                                        newOps[index] = "AND";
-                                                        setConditionOperators(newOps);
-                                                      }}
-                                                      className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND"
-                                                        ? "bg-blue-500 text-white"
-                                                        : "text-gray-600 hover:bg-gray-50"
-                                                        }`}
-                                                      style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                                    >
-                                                      AND
-                                                    </button>
-                                                    <button
-                                                      onClick={() => {
-                                                        const newOps = [...conditionOperators];
-                                                        newOps[index] = "OR";
-                                                        setConditionOperators(newOps);
-                                                      }}
-                                                      className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR"
-                                                        ? "bg-blue-500 text-white"
-                                                        : "text-gray-600 hover:bg-gray-50"
-                                                        }`}
-                                                      style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                                    >
-                                                      OR
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              )}
-                                            </React.Fragment>
-                                          ))}
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
+                                        <div className="flex items-center gap-2">
+                                          <code
+                                            className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
+                                            style={{ fontFamily: 'monospace', color: '#020817' }}
+                                          >
+                                            {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
+                                          </code>
                                           <button
                                             onClick={() => {
-                                              setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Field", operator: "Operator", value: "" }]);
-                                              if (conditions.length > 0) {
-                                                setConditionOperators(prev => [...prev, "AND"]);
-                                              }
+                                              navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
+                                              toast.success("Trigger URL copied");
                                             }}
-                                            className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-border hover:bg-muted/20 transition-colors"
-                                            style={{ fontFamily: 'DM Sans, sans-serif', color: '#2563EB', width: '100%' }}
+                                            className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
+                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
                                           >
-                                            <Plus className="w-4 h-4" />
-                                            Add Condition
+                                            Copy
                                           </button>
                                         </div>
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          call_id is mandatory. AI must pass the active call_id when triggering this action.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ── EXECUTION + DELAY + CONDITIONS (skipped for endworkflow) ── */}
+                                  {currentEditingStep.stepKey !== "endworkflow" && (
+                                    <div className="space-y-6">
+
+                                      {/* Execution — conditional on trigger */}
+                                      {stepTrigger === "stage" ? (
+                                        <>
+                                          <div>
+                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                            <button
+                                              onClick={() => setExecutionTimingModalOpen(true)}
+                                              className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                                            >
+                                              <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
+                                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                            </button>
+                                          </div>
+
+                                          {/* Delay — keep exactly as exists today */}
+                                          <div>
+                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
+                                            <div className="flex items-center">
+                                              <input
+                                                type="number"
+                                                value={delayValue}
+                                                onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
+                                                className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1' }}
+                                              />
+                                              <div className="relative">
+                                                <button
+                                                  onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
+                                                  className="px-3 py-2.5 text-sm border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '120px' }}
+                                                >
+                                                  <span>{delayUnit}</span>
+                                                  <ChevronDown className="w-4 h-4 ml-2 text-muted-foreground" />
+                                                </button>
+                                                {delayUnitDropdownOpen && (
+                                                  <>
+                                                    <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
+                                                    <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[120px]">
+                                                      {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
+                                                        <button
+                                                          key={unit}
+                                                          onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
+                                                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                        >
+                                                          {unit}
+                                                        </button>
+                                                      ))}
+                                                    </div>
+                                                  </>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                          <div className="w-full px-4 py-3 rounded-md border border-border bg-muted/20 text-sm flex items-center gap-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                                            (Event Driven) Triggered by AI Action
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Conditions Toggle — keep exactly as exists today */}
+                                      <div>
+                                        <div className="flex items-center justify-between py-2">
+                                          <div className="flex items-center gap-2">
+                                            <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Conditions
+                                            </label>
+                                            <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
+                                          </div>
+                                          <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              className="sr-only peer"
+                                              checked={conditionsEnabled}
+                                              onChange={(e) => setConditionsEnabled(e.target.checked)}
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                                          </label>
+                                        </div>
+
+                                        {conditionsEnabled && (
+                                          <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
+                                            <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                              This step will only execute when all specified conditions are met.
+                                            </p>
+                                            {conditions.map((cond, index) => (
+                                              <React.Fragment key={cond.id}>
+                                                <div className="flex items-start gap-2">
+                                                  <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
+                                                    <option>Stage Fields</option>
+                                                    <option>Contact Fields</option>
+                                                    <option>Call Fields</option>
+                                                  </select>
+                                                  <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                    {["Stage Name","Contact Name","Call Status","Call Duration","Country","Sentiment","Intent","Appointment Date","Appointment Time","AI Summary","Call Transcription"].map(o => <option key={o}>{o}</option>)}
+                                                  </select>
+                                                  <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                    {["Equal To","Not Equal To","Contains","Does Not Contain","Starts With","Ends With","Greater Than","Less Than","Is Empty","Is Not Empty"].map(o => <option key={o}>{o}</option>)}
+                                                  </select>
+                                                  {conditions.length > 1 && (
+                                                    <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
+                                                      <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                                <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                                {index < conditions.length - 1 && (
+                                                  <div className="flex items-center justify-center py-1">
+                                                    <div className="inline-flex rounded-md border border-border bg-white">
+                                                      <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
+                                                      <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </React.Fragment>
+                                            ))}
+                                            <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              <Plus className="w-4 h-4" /> Add Condition
+                                            </button>
+                                            {conditions.some(c => c.value) && (
+                                              <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
+                                                <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
+                                                {conditions.map((cond, i) => (
+                                                  <div key={cond.id}>
+                                                    {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                    {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i-1] || 'AND'}</p>}
+                                                    <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
+                                                  </div>
+                                                ))}
+                                                <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
                                   )}
 
                                   {/* Field Update Step */}
                                   {currentEditingStep.stepKey === "fieldupdate" && (
-                                    <>
+                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select Field to Edit</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Field Category
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Stage Fields</option>
+                                          <option>Contact Fields</option>
+                                          <option>Call Fields</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Select Field to Edit
+                                        </label>
                                         <select
                                           value={fieldToEdit}
                                           onChange={e => setFieldToEdit(e.target.value)}
@@ -3897,7 +4017,7 @@ export default function Process() {
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         >
                                           <option>Select field...</option>
-                                          <option>Contact Person</option>
+                                          <option>Stage Name</option>
                                           <option>Contact Name</option>
                                           <option>Call Status</option>
                                           <option>Call Duration</option>
@@ -3906,7 +4026,6 @@ export default function Process() {
                                           <option>Intent</option>
                                           <option>Appointment Date</option>
                                           <option>Appointment Time</option>
-                                          <option>Appointment With</option>
                                           <option>AI Summary</option>
                                           <option>Call Transcription</option>
                                         </select>
@@ -3914,7 +4033,7 @@ export default function Process() {
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
                                           <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Update Value</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
                                         </div>
                                         <input
                                           type="text"
@@ -3925,24 +4044,52 @@ export default function Process() {
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
                                       </div>
-                                    </>
+                                    </div>
                                   )}
 
                                   {/* Assign to Human Step */}
                                   {currentEditingStep.stepKey === "assignhuman" && (
-                                    <div>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Assign Responsible</label>
-                                      <select
-                                        value={assignedUser}
-                                        onChange={e => setAssignedUser(e.target.value)}
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      >
-                                        <option>Select user...</option>
-                                        <option>John Smith</option>
-                                        <option>Sarah Johnson</option>
-                                        <option>Michael Chen</option>
-                                      </select>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Assign To
+                                        </label>
+                                        <select
+                                          value={assignedUser}
+                                          onChange={e => setAssignedUser(e.target.value)}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Select user...</option>
+                                          <option>John Smith</option>
+                                          <option>Sarah Johnson</option>
+                                          <option>Michael Chen</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Assignment Type
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Assign to specific user</option>
+                                          <option>Round robin</option>
+                                          <option>Least busy</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Internal Note (Optional)
+                                        </label>
+                                        <textarea
+                                          placeholder="Add context for the assigned team member..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={3}
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
                                     </div>
                                   )}
 
@@ -3964,107 +4111,176 @@ export default function Process() {
                                     </div>
                                   )}
 
-                                  {/* WhatsApp / SMS Steps */}
-                                  {(currentEditingStep.stepKey === "whatsapp" || currentEditingStep.stepKey === "sms") && (
-                                    <div>
-                                      <div className="flex items-center justify-between mb-2">
-                                        <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Template ID</label>
-                                        <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                  {/* WhatsApp Step */}
+                                  {currentEditingStep.stepKey === "whatsapp" && (
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Connected Account
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option value="">Select WhatsApp account...</option>
+                                          <option>+1 (555) 123-4567</option>
+                                        </select>
                                       </div>
-                                      <input
-                                        type="text"
-                                        value={templateId}
-                                        onChange={e => setTemplateId(e.target.value)}
-                                        placeholder="Enter template ID..."
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      />
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Template ID
+                                          </label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          value={templateId}
+                                          onChange={e => setTemplateId(e.target.value)}
+                                          placeholder="Enter WhatsApp template ID..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Message Body
+                                          </label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
+                                        </div>
+                                        <textarea
+                                          placeholder="Hello {{ContactName}}, ..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={4}
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* SMS Step */}
+                                  {currentEditingStep.stepKey === "sms" && (
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Connected Account
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option value="">Select SMS account...</option>
+                                          <option>+1 (555) 123-4567</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Message Body</label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
+                                        </div>
+                                        <textarea
+                                          value={templateId}
+                                          onChange={e => setTemplateId(e.target.value)}
+                                          placeholder="Enter SMS message..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={4}
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                        <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>Max 1000 characters.</p>
+                                      </div>
                                     </div>
                                   )}
 
                                   {/* Email Step */}
                                   {currentEditingStep.stepKey === "email" && (
                                     <div className="space-y-4">
+                                      {/* Connected Account */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Connected Account
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option value="">Select email account...</option>
+                                          <option>support@company.com</option>
+                                          <option>noreply@company.com</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Template Mode */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Template Mode
+                                        </label>
+                                        <div className="flex items-center gap-4">
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="radio"
+                                              name="emailTemplateMode"
+                                              value="rich"
+                                              defaultChecked
+                                              className="w-4 h-4 text-blue-600"
+                                              onChange={() => setShowCustomEmail(false)}
+                                            />
+                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>Rich Editor</span>
+                                          </label>
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="radio"
+                                              name="emailTemplateMode"
+                                              value="html"
+                                              className="w-4 h-4 text-blue-600"
+                                              onChange={() => setShowCustomEmail(true)}
+                                            />
+                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>HTML Source</span>
+                                          </label>
+                                        </div>
+                                      </div>
+
+                                      {/* Email Body */}
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Template ID</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Email Body</label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                            &lt;/&gt; + Variable
+                                          </button>
                                         </div>
+                                        <textarea
+                                          placeholder="Hello {{ContactName}}, ..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={5}
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+
+                                      {/* Template Identifier */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Template Identifier
+                                        </label>
                                         <input
                                           type="text"
                                           value={templateId}
                                           onChange={e => setTemplateId(e.target.value)}
-                                          placeholder="Enter template ID..."
+                                          placeholder="e.g. welcome-email, follow-up-day-3"
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
+                                        <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          Used for template identification and analytics.
+                                        </p>
                                       </div>
-                                      <div className="flex justify-end">
-                                        <button
-                                          onClick={() => setShowCustomEmail(!showCustomEmail)}
-                                          className="text-sm font-medium"
-                                          style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          {showCustomEmail ? "Use Template Instead" : "Write Custom Email"}
-                                        </button>
-                                      </div>
-                                      {showCustomEmail && (
-                                        <div className="space-y-4">
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>From</label>
-                                            <input
-                                              type="text"
-                                              placeholder="sender@example.com"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>To</label>
-                                              <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <input
-                                              type="text"
-                                              placeholder="recipient@example.com"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Subject</label>
-                                              <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <input
-                                              type="text"
-                                              placeholder="Email subject..."
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Body</label>
-                                              <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <textarea
-                                              placeholder="Write your email body here..."
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              rows={6}
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                        </div>
-                                      )}
                                     </div>
                                   )}
 
                                   {/* CRM Update Step */}
                                   {currentEditingStep.stepKey === "crmupdate" && (
-                                    <>
+                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Name</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Platform</label>
                                         <select
                                           value={crmName}
                                           onChange={e => setCrmName(e.target.value)}
@@ -4075,10 +4291,34 @@ export default function Process() {
                                           <option>Salesforce</option>
                                           <option>HubSpot</option>
                                           <option>Zoho CRM</option>
+                                          <option>Pipedrive</option>
                                         </select>
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select CRM Field to Update</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Update Record</option>
+                                          <option>Create Record</option>
+                                          <option>Create or Update</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Object</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Contact</option>
+                                          <option>Lead</option>
+                                          <option>Deal</option>
+                                          <option>Account</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
                                         <select
                                           value={crmField}
                                           onChange={e => setCrmField(e.target.value)}
@@ -4089,16 +4329,30 @@ export default function Process() {
                                           <option>Status</option>
                                           <option>Priority</option>
                                           <option>Notes</option>
+                                          <option>Stage</option>
+                                          <option>Owner</option>
                                         </select>
                                       </div>
-                                    </>
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          placeholder="Enter value or use variable..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    </div>
                                   )}
 
                                   {/* EHR Update Step */}
                                   {currentEditingStep.stepKey === "ehrupdate" && (
-                                    <>
+                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Name</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Platform</label>
                                         <select
                                           value={ehrName}
                                           onChange={e => setEhrName(e.target.value)}
@@ -4109,10 +4363,34 @@ export default function Process() {
                                           <option>Epic</option>
                                           <option>Cerner</option>
                                           <option>athenahealth</option>
+                                          <option>Meditech</option>
                                         </select>
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select EHR Field to Update</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Update Record</option>
+                                          <option>Create Record</option>
+                                          <option>Create or Update</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Object</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Patient</option>
+                                          <option>Appointment</option>
+                                          <option>Encounter</option>
+                                          <option>Medication</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
                                         <select
                                           value={ehrField}
                                           onChange={e => setEhrField(e.target.value)}
@@ -4123,18 +4401,46 @@ export default function Process() {
                                           <option>Patient Status</option>
                                           <option>Appointment Notes</option>
                                           <option>Medication</option>
+                                          <option>Visit Type</option>
+                                          <option>Provider</option>
                                         </select>
                                       </div>
-                                    </>
+                                      <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                        </div>
+                                        <input
+                                          type="text"
+                                          placeholder="Enter value or use variable..."
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    </div>
                                   )}
 
                                   {/* Trigger Webhook Step */}
                                   {currentEditingStep.stepKey === "wh_trigger" && (
-                                    <>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>HTTP Method</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          defaultValue="POST"
+                                        >
+                                          <option>GET</option>
+                                          <option>POST</option>
+                                          <option>PUT</option>
+                                          <option>PATCH</option>
+                                          <option>DELETE</option>
+                                        </select>
+                                      </div>
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
                                           <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
                                         </div>
                                         <input
                                           type="text"
@@ -4153,11 +4459,7 @@ export default function Process() {
                                               <input
                                                 type="text"
                                                 value={header.key}
-                                                onChange={e => {
-                                                  const updated = [...webhookHeaders];
-                                                  updated[index].key = e.target.value;
-                                                  setWebhookHeaders(updated);
-                                                }}
+                                                onChange={e => { const u = [...webhookHeaders]; u[index].key = e.target.value; setWebhookHeaders(u); }}
                                                 placeholder="Key"
                                                 className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                 style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
@@ -4165,20 +4467,13 @@ export default function Process() {
                                               <input
                                                 type="text"
                                                 value={header.value}
-                                                onChange={e => {
-                                                  const updated = [...webhookHeaders];
-                                                  updated[index].value = e.target.value;
-                                                  setWebhookHeaders(updated);
-                                                }}
+                                                onChange={e => { const u = [...webhookHeaders]; u[index].value = e.target.value; setWebhookHeaders(u); }}
                                                 placeholder="Value"
                                                 className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                 style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                               />
                                               {webhookHeaders.length > 1 && (
-                                                <button
-                                                  onClick={() => setWebhookHeaders(prev => prev.filter((_, i) => i !== index))}
-                                                  className="p-2 rounded hover:bg-red-50 transition-colors"
-                                                >
+                                                <button onClick={() => setWebhookHeaders(prev => prev.filter((_, i) => i !== index))} className="p-2 rounded hover:bg-red-50 transition-colors">
                                                   <Trash2 className="w-4 h-4 text-red-500" />
                                                 </button>
                                               )}
@@ -4186,29 +4481,28 @@ export default function Process() {
                                           ))}
                                           <button
                                             onClick={() => setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
-                                            className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-border hover:bg-muted/20 transition-colors"
-                                            style={{ fontFamily: 'DM Sans, sans-serif', color: '#2563EB', width: 'calc(100% - 32px)', marginLeft: '16px', marginRight: '16px' }}
+                                            className="w-full py-2 text-sm border-2 border-dashed border-gray-300 rounded-md text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
                                           >
-                                            <Plus className="w-4 h-4" />
-                                            Add Header
+                                            + Add Header
                                           </button>
                                         </div>
                                       </div>
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
                                           <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Body</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
                                         </div>
                                         <textarea
                                           value={webhookBody}
                                           onChange={e => setWebhookBody(e.target.value)}
-                                          placeholder='{"key": "value"}'
+                                          placeholder={'{"key": "value"}'}
                                           rows={4}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors font-mono"
+                                          style={{ color: '#020817' }}
                                         />
                                       </div>
-                                    </>
+                                    </div>
                                   )}
 
                                   {/* Trigger API Step */}
@@ -4311,15 +4605,14 @@ export default function Process() {
 
                                   {/* Stage Movement / Process Movement Steps */}
                                   {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
-                                    <>
+                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Process</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Target Process
+                                        </label>
                                         <select
                                           value={stepDetailProcess}
-                                          onChange={e => {
-                                            setStepDetailProcess(e.target.value);
-                                            setStepDetailStage("Select stage...");
-                                          }}
+                                          onChange={e => { setStepDetailProcess(e.target.value); setStepDetailStage("Select stage..."); }}
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         >
@@ -4329,32 +4622,38 @@ export default function Process() {
                                         </select>
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stage</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Target Stage
+                                        </label>
                                         <select
                                           value={stepDetailStage}
                                           onChange={e => setStepDetailStage(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                           disabled={stepDetailProcess === "Select process..."}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         >
                                           <option>Select stage...</option>
                                           {stepDetailProcess === "Patient Intake" && (
                                             <>
                                               <option>Initial Contact</option>
-                                              <option>Verification</option>
-                                              <option>Scheduled</option>
+                                              <option>Insurance Verify</option>
+                                              <option>Schedule Appointment</option>
                                             </>
                                           )}
                                           {stepDetailProcess === "Follow-up Calls" && (
                                             <>
-                                              <option>Pending Follow-up</option>
-                                              <option>Contacted</option>
-                                              <option>Completed</option>
+                                              <option>Post-Visit Check</option>
+                                              <option>Medication Reminder</option>
                                             </>
                                           )}
                                         </select>
                                       </div>
-                                    </>
+                                      <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                                        <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          The contact will be moved to the selected process and stage when this step executes.
+                                        </p>
+                                      </div>
+                                    </div>
                                   )}
 
                                   {/* Greeting Phrase Step */}
@@ -5202,11 +5501,29 @@ export default function Process() {
 
                                   {/* End Workflow Step */}
                                   {currentEditingStep.stepKey === "endworkflow" && (
-                                    <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
-                                      <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                                      <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
-                                      </p>
+                                    <div className="space-y-4">
+                                      <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+                                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                                        <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          End Reason (Optional)
+                                        </label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option value="">Select reason...</option>
+                                          <option>Completed Successfully</option>
+                                          <option>Contact Unresponsive</option>
+                                          <option>Goal Achieved</option>
+                                          <option>Manually Terminated</option>
+                                          <option>Condition Not Met</option>
+                                        </select>
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -5227,9 +5544,21 @@ export default function Process() {
                                   </button>
                                   <button
                                     onClick={() => {
+                                      if (stepTrigger !== "stage" && !stepActionName.trim()) {
+                                        toast.error("Action Name is required for In Call / Post Call triggers");
+                                        return;
+                                      }
                                       if (isCreatingNewStep && currentEditingStep) {
                                         // Add new step to the workflow
-                                        setWorkflowSteps(prev => [...prev, currentEditingStep]);
+                                        if (branchAddTarget === "true") {
+                                          setTrueBranchSteps(prev => [...prev, currentEditingStep]);
+                                          setBranchAddTarget(null);
+                                        } else if (branchAddTarget === "false") {
+                                          setFalseBranchSteps(prev => [...prev, currentEditingStep]);
+                                          setBranchAddTarget(null);
+                                        } else {
+                                          setWorkflowSteps(prev => [...prev, currentEditingStep]);
+                                        }
                                         setIsCreatingNewStep(false);
                                         toast.success("Step added successfully");
                                       } else {
