@@ -3524,8 +3524,6 @@ export default function Process() {
                                   <div className="flex-1 overflow-y-auto">
                                     {(() => {
                                       const allSteps = [
-                                        { key: "timecontrol", name: "Time Control", desc: "Set time intervals, auto hangup rules, and silence detection for this stage.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
-                                        { key: "stagemovement", name: "Stage Movement", desc: "Move the contact to a different stage within the same or another process.", iconKey: "chevronright", cats: ["all", "workflow"], popular: false },
                                         { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
                                         { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                         { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
@@ -3621,8 +3619,6 @@ export default function Process() {
                                     <button
                                       onClick={() => {
                                         const allSteps = [
-                                          { key: "timecontrol", name: "Time Control", desc: "Set time intervals, auto hangup rules, and silence detection for this stage.", iconKey: "clock" },
-                                          { key: "stagemovement", name: "Stage Movement", desc: "Move the contact to a different stage within the same or another process.", iconKey: "chevronright" },
                                           { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
                                           { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
                                           { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
