@@ -3558,8 +3558,6 @@ export default function Process() {
                                       { key: "crm", icon: <Database className="w-4 h-4" />, name: "CRM / EHR" },
                                       { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
                                       { key: "appointment", icon: <Calendar className="w-4 h-4" />, name: "Appointment" },
-                                      { key: "incall", icon: <Phone className="w-4 h-4" />, name: "In Call Actions" },
-                                      { key: "postcall", icon: <PhoneOff className="w-4 h-4" />, name: "Post Call Actions" },
                                     ].map((cat) => {
                                       const active = workflowStepCategory === cat.key;
                                       return (
