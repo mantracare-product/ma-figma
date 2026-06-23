@@ -342,25 +342,25 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
 };
 
 const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall">> = {
-  "whatsapp":           ["stage", "incall", "postcall"],
-  "sms":                ["stage", "incall", "postcall"],
-  "email":              ["stage", "incall", "postcall"],
-  "processmovement":    ["stage", "postcall"],
-  "endworkflow":        ["stage", "postcall"],
-  "fieldupdate":        ["stage", "postcall"],
-  "assignhuman":        ["stage", "postcall"],
-  "crmupdate":          ["stage", "postcall"],
-  "ehrupdate":          ["stage", "postcall"],
-  "wh_trigger":         ["stage", "postcall"],
-  "triggerapi":         ["stage", "postcall"],
+  "whatsapp": ["stage", "incall", "postcall"],
+  "sms": ["stage", "incall", "postcall"],
+  "email": ["stage", "incall", "postcall"],
+  "processmovement": ["stage", "postcall"],
+  "endworkflow": ["stage", "postcall"],
+  "fieldupdate": ["stage", "postcall"],
+  "assignhuman": ["stage", "postcall"],
+  "crmupdate": ["stage", "postcall"],
+  "ehrupdate": ["stage", "postcall"],
+  "wh_trigger": ["stage", "postcall"],
+  "triggerapi": ["stage", "postcall"],
   "collectinformation": ["stage", "postcall"],
-  "scheduleappointment":["stage", "postcall"],
-  "smartcallanalysis":  ["stage", "postcall"],
-  "greetingphrase":     ["incall"],
-  "transfercall":       ["incall"],
-  "bypasstohuman":      ["incall"],
-  "liveintaketicket":   ["incall"],
-  "callaction":         ["incall", "postcall"],
+  "scheduleappointment": ["stage", "postcall"],
+  "smartcallanalysis": ["stage", "postcall"],
+  "greetingphrase": ["incall"],
+  "transfercall": ["incall"],
+  "bypasstohuman": ["incall"],
+  "liveintaketicket": ["incall"],
+  "callaction": ["incall", "postcall"],
 };
 
 export default function Process() {
@@ -2775,15 +2775,14 @@ export default function Process() {
                                 </span>
                               </div>
                               <ChevronDown
-                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                  callDurationExpanded ? 'rotate-180' : ''
-                                }`}
+                                className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callDurationExpanded ? 'rotate-180' : ''
+                                  }`}
                               />
-                          </button>
+                            </button>
 
-                          {/* Expanded Content */}
-                          {callDurationExpanded && (
-                            <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                            {/* Expanded Content */}
+                            {callDurationExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
 
                                 {/* Call Duration + Hangup Window in one row */}
                                 <div className="flex items-end gap-4">
@@ -2883,19 +2882,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    retryRulesEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${retryRulesEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {retryRulesEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    retryRulesExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${retryRulesExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3006,19 +3003,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    skipDayRulesEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${skipDayRulesEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {skipDayRulesEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    skipDayRulesExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${skipDayRulesExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3070,11 +3065,10 @@ export default function Process() {
                                               isActive ? prev.filter((d) => d !== day) : [...prev, day]
                                             )
                                           }
-                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${
-                                            isActive
+                                          className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
                                               ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
                                               : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                          }`}
+                                            }`}
                                           style={{ fontFamily: 'DM Sans, sans-serif' }}
                                         >
                                           {day}
@@ -3175,19 +3169,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    detectVoicemailEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${detectVoicemailEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {detectVoicemailEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    detectVoicemailExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${detectVoicemailExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3249,19 +3241,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    autoHangupInteractionEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${autoHangupInteractionEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {autoHangupInteractionEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    autoHangupInteractionExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${autoHangupInteractionExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3326,19 +3316,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    autoHangupSilenceStageEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${autoHangupSilenceStageEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {autoHangupSilenceStageEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    autoHangupSilenceStageExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${autoHangupSilenceStageExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3403,19 +3391,17 @@ export default function Process() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
-                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${
-                                    idleMessagesStageEnabled
+                                  className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${idleMessagesStageEnabled
                                       ? 'bg-green-100 text-green-700'
                                       : 'bg-gray-100 text-gray-500'
-                                  }`}
+                                    }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
                                   {idleMessagesStageEnabled ? 'On' : 'Off'}
                                 </span>
                                 <ChevronDown
-                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${
-                                    idleMessagesStageExpanded ? 'rotate-180' : ''
-                                  }`}
+                                  className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${idleMessagesStageExpanded ? 'rotate-180' : ''
+                                    }`}
                                 />
                               </div>
                             </button>
@@ -3503,212 +3489,138 @@ export default function Process() {
                         </div>
                       )}
 
-                          {/* Automation Side Drawer */}
-                          {workflowStepsDrawerOpen && (
-                            <>
-                              {/* Backdrop */}
-                              <div
-                                className="fixed inset-0 z-40"
-                                style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                                onClick={() => setWorkflowStepsDrawerOpen(false)}
-                              />
-                              {/* Drawer panel — 50vw, full height, anchored right */}
-                              <div
-                                className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                                style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
-                              >
-                                {/* Header */}
-                                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                                  <div className="flex items-start justify-between mb-1">
-                                    <div>
-                                      <div className="flex items-center gap-2">
-                                        <Zap className="w-5 h-5" style={{ color: '#020817' }} />
-                                        <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Automation</h2>
-                                      </div>
-                                      <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Choose and configure the step before adding it to this stage.</p>
-                                    </div>
-                                    <button onClick={() => setWorkflowStepsDrawerOpen(false)} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                      <X className="w-5 h-5 text-muted-foreground" />
-                                    </button>
+                      {/* Automation Side Drawer */}
+                      {workflowStepsDrawerOpen && (
+                        <>
+                          {/* Backdrop */}
+                          <div
+                            className="fixed inset-0 z-40"
+                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
+                            onClick={() => setWorkflowStepsDrawerOpen(false)}
+                          />
+                          {/* Drawer panel — 50vw, full height, anchored right */}
+                          <div
+                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
+                            style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
+                          >
+                            {/* Header */}
+                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
+                              <div className="flex items-start justify-between mb-1">
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <Zap className="w-5 h-5" style={{ color: '#020817' }} />
+                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Add Automation</h2>
                                   </div>
-                                  {/* Search */}
-                                  <div className="relative mt-4">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <input
-                                      type="text"
-                                      value={workflowStepSearch}
-                                      onChange={e => setWorkflowStepSearch(e.target.value)}
-                                      placeholder="Search workflow steps..."
-                                      className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                  </div>
+                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Choose and configure the step before adding it to this stage.</p>
                                 </div>
+                                <button onClick={() => setWorkflowStepsDrawerOpen(false)} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
+                                  <X className="w-5 h-5 text-muted-foreground" />
+                                </button>
+                              </div>
+                              {/* Search */}
+                              <div className="relative mt-4">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                <input
+                                  type="text"
+                                  value={workflowStepSearch}
+                                  onChange={e => setWorkflowStepSearch(e.target.value)}
+                                  placeholder="Search workflow steps..."
+                                  className="w-full pl-9 pr-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                />
+                              </div>
+                            </div>
 
-                                {/* Body — two column layout */}
-                                <div className="flex flex-1 overflow-hidden">
-                                  {/* Left Sidebar */}
-                                  <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
-                                    {[
-                                      { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All Steps" },
-                                      { key: "workflow", icon: <Zap className="w-4 h-4" />, name: "Workflow Logic" },
-                                      { key: "element", icon: <LayoutGrid className="w-4 h-4" />, name: "Element Management" },
-                                      { key: "telephony", icon: <Phone className="w-4 h-4" />, name: "Telephony" },
-                                      { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                      { key: "crm", icon: <Database className="w-4 h-4" />, name: "CRM / EHR" },
-                                      { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-                                      { key: "appointment", icon: <Calendar className="w-4 h-4" />, name: "Appointment" },
-                                    ].map((cat) => {
-                                      const active = workflowStepCategory === cat.key;
-                                      return (
-                                        <button
-                                          key={cat.key}
-                                          onClick={() => setWorkflowStepCategory(cat.key)}
-                                          className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 hover:bg-muted/40"
-                                          style={{
-                                            borderLeftColor: active ? '#2563EB' : 'transparent',
-                                            backgroundColor: active ? '#EFF6FF' : 'transparent',
-                                          }}
-                                        >
-                                          <span className="flex-shrink-0" style={{ color: active ? '#2563EB' : '#64748B' }}>
-                                            {cat.icon}
-                                          </span>
-                                          <span
-                                            className="text-sm font-semibold"
-                                            style={{
-                                              color: active ? '#2563EB' : '#020817',
-                                              fontFamily: 'DM Sans, sans-serif'
-                                            }}
-                                          >
-                                            {cat.name}
-                                          </span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-
-                                  {/* Right Steps List */}
-                                  <div className="flex-1 overflow-y-auto">
-                                    {(() => {
-                                      const allSteps = [
-                                        { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                        { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                        { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
-                                        { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "element"], popular: false },
-                                        { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
-                                        { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "telephony"], popular: false },
-                                        { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                        { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                        { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-                                        { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "crm"], popular: false },
-                                        { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "crm"], popular: false },
-                                        { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                        { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
-                                        { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
-                                        { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall", cats: ["all", "incall"], popular: true },
-                                        { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "postcall"], popular: false },
-                                        { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "postcall"], popular: false },
-                                        { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "postcall"], popular: false },
-                                        { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist", cats: ["all", "incall"], popular: false },
-                                      ];
-                                      const iconMap: Record<string, React.ReactNode> = {
-                                        clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                        chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                        edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                        phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                        messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                        filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                        globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                        refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                        lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                        layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                        gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                      };
-                                      const filtered = allSteps.filter(s =>
-                                        s.cats.includes(workflowStepCategory) &&
-                                        (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
-                                      );
-                                      return filtered.map((step, i) => {
-                                        const isSelected = selectedWorkflowStepCard === step.key;
-                                        return (
-                                          <button
-                                            key={step.key}
-                                            onClick={() => setSelectedWorkflowStepCard(step.key)}
-                                            onDoubleClick={() => {
-                                              // Reset state to prevent data bleeding between steps
-                                              resetStepDetailState();
-
-                                              // Open detail drawer to configure the step before adding it
-                                              setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
-                                              setIsCreatingNewStep(true);
-                                              setWorkflowStepsDrawerOpen(false);
-                                              setStepDetailDrawerOpen(true);
-                                            }}
-                                            className="w-full flex items-start gap-4 px-5 py-4 text-left transition-colors"
-                                            style={{
-                                              borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
-                                              outline: isSelected ? '2px solid #2563EB' : 'none',
-                                              outlineOffset: '-2px',
-                                              backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
-                                            }}
-                                            onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
-                                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
-                                          >
-                                            <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
-                                              {iconMap[step.iconKey]}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                              <div className="flex items-center gap-2 flex-wrap">
-                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</span>
-                                                {step.popular && (
-                                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
-                                                )}
-                                              </div>
-                                              <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
-                                            </div>
-                                            <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
-                                          </button>
-                                        );
-                                      });
-                                    })()}
-                                  </div>
-                                </div>
-
-                                {/* Footer — only shown when a step is selected */}
-                                {selectedWorkflowStepCard && (
-                                  <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
+                            {/* Body — two column layout */}
+                            <div className="flex flex-1 overflow-hidden">
+                              {/* Left Sidebar */}
+                              <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
+                                {[
+                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All Steps" },
+                                  { key: "workflow", icon: <Zap className="w-4 h-4" />, name: "Workflow Logic" },
+                                  { key: "element", icon: <LayoutGrid className="w-4 h-4" />, name: "Element Management" },
+                                  { key: "telephony", icon: <Phone className="w-4 h-4" />, name: "Telephony" },
+                                  { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
+                                  { key: "crm", icon: <Database className="w-4 h-4" />, name: "CRM / EHR" },
+                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
+                                  { key: "appointment", icon: <Calendar className="w-4 h-4" />, name: "Appointment" },
+                                ].map((cat) => {
+                                  const active = workflowStepCategory === cat.key;
+                                  return (
                                     <button
-                                      onClick={() => setWorkflowStepsDrawerOpen(false)}
-                                      className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                      style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
+                                      key={cat.key}
+                                      onClick={() => setWorkflowStepCategory(cat.key)}
+                                      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors border-l-2 hover:bg-muted/40"
+                                      style={{
+                                        borderLeftColor: active ? '#2563EB' : 'transparent',
+                                        backgroundColor: active ? '#EFF6FF' : 'transparent',
+                                      }}
                                     >
-                                      Cancel
+                                      <span className="flex-shrink-0" style={{ color: active ? '#2563EB' : '#64748B' }}>
+                                        {cat.icon}
+                                      </span>
+                                      <span
+                                        className="text-sm font-semibold"
+                                        style={{
+                                          color: active ? '#2563EB' : '#020817',
+                                          fontFamily: 'DM Sans, sans-serif'
+                                        }}
+                                      >
+                                        {cat.name}
+                                      </span>
                                     </button>
-                                    <button
-                                      onClick={() => {
-                                        const allSteps = [
-                                          { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
-                                          { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
-                                          { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
-                                          { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
-                                          { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall" },
-                                          { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" },
-                                          { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
-                                          { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
-                                          { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail" },
-                                          { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext" },
-                                          { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist" },
-                                          { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe" },
-                                          { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
-                                          { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist" },
-                                          { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare" },
-                                          { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall" },
-                                          { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" },
-                                          { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" },
-                                          { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" },
-                                        ];
-                                        const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
-                                        if (step) {
+                                  );
+                                })}
+                              </div>
+
+                              {/* Right Steps List */}
+                              <div className="flex-1 overflow-y-auto">
+                                {(() => {
+                                  const allSteps = [
+                                    { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
+                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
+                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "element"], popular: false },
+                                    { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
+                                    { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "telephony"], popular: false },
+                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
+                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
+                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
+                                    { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "crm"], popular: false },
+                                    { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "crm"], popular: false },
+                                    { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
+                                    { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
+                                    { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
+                                    { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall", cats: ["all", "incall"], popular: true },
+                                    { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "postcall"], popular: false },
+                                    { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "postcall"], popular: false },
+                                    { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "postcall"], popular: false },
+                                    { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist", cats: ["all", "incall"], popular: false },
+                                  ];
+                                  const iconMap: Record<string, React.ReactNode> = {
+                                    clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
+                                    chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
+                                    edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
+                                    phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
+                                    messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
+                                    filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
+                                    globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
+                                    refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
+                                    lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
+                                    layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
+                                    gitbranch: <GitBranch className="w-4 h-4 text-white" />,
+                                  };
+                                  const filtered = allSteps.filter(s =>
+                                    s.cats.includes(workflowStepCategory) &&
+                                    (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
+                                  );
+                                  return filtered.map((step, i) => {
+                                    const isSelected = selectedWorkflowStepCard === step.key;
+                                    return (
+                                      <button
+                                        key={step.key}
+                                        onClick={() => setSelectedWorkflowStepCard(step.key)}
+                                        onDoubleClick={() => {
                                           // Reset state to prevent data bleeding between steps
                                           resetStepDetailState();
 
@@ -3717,1965 +3629,2044 @@ export default function Process() {
                                           setIsCreatingNewStep(true);
                                           setWorkflowStepsDrawerOpen(false);
                                           setStepDetailDrawerOpen(true);
-                                        }
-                                      }}
-                                      className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                      style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      Add Step
-                                    </button>
-                                  </div>
-                                )}
+                                        }}
+                                        className="w-full flex items-start gap-4 px-5 py-4 text-left transition-colors"
+                                        style={{
+                                          borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
+                                          outline: isSelected ? '2px solid #2563EB' : 'none',
+                                          outlineOffset: '-2px',
+                                          backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
+                                        }}
+                                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
+                                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
+                                      >
+                                        <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
+                                          {iconMap[step.iconKey]}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</span>
+                                            {step.popular && (
+                                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
+                                            )}
+                                          </div>
+                                          <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
+                                      </button>
+                                    );
+                                  });
+                                })()}
                               </div>
-                            </>
-                          )}
+                            </div>
 
-                          {/* Step Detail Drawer */}
-                          {stepDetailDrawerOpen && currentEditingStep && (
-                            <>
-                              {/* Backdrop */}
-                              <div
-                                className="fixed inset-0 z-40"
-                                style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                                onClick={() => {
-                                  setStepDetailDrawerOpen(false);
-                                  setIsCreatingNewStep(false);
-                                }}
-                              />
-                              {/* Drawer panel */}
-                              <div
-                                className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                                style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
-                              >
-                                {/* Header */}
-                                <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                                  <div className="flex items-start justify-between">
-                                    <div>
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          {currentEditingStep.name}
-                                        </h2>
-                                        {/* Trigger badge — mirrors manager's "Stage Enter" pill */}
-                                        <span
-                                          className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                                          style={{
-                                            backgroundColor: '#DBEAFE',
-                                            color: '#1D4ED8',
-                                            fontFamily: 'DM Sans, sans-serif'
-                                          }}
-                                        >
-                                          Stage Enter
-                                        </span>
-                                      </div>
-                                      <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                        {currentEditingStep.description}
-                                      </p>
-                                    </div>
-                                    <button onClick={() => { setStepDetailDrawerOpen(false); setIsCreatingNewStep(false); }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                      <X className="w-5 h-5 text-muted-foreground" />
-                                    </button>
+                            {/* Footer — only shown when a step is selected */}
+                            {selectedWorkflowStepCard && (
+                              <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
+                                <button
+                                  onClick={() => setWorkflowStepsDrawerOpen(false)}
+                                  className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
+                                  style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const allSteps = [
+                                      { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
+                                      { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
+                                      { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
+                                      { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
+                                      { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall" },
+                                      { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" },
+                                      { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
+                                      { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
+                                      { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail" },
+                                      { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext" },
+                                      { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist" },
+                                      { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe" },
+                                      { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
+                                      { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist" },
+                                      { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare" },
+                                      { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall" },
+                                      { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" },
+                                      { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" },
+                                      { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" },
+                                    ];
+                                    const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
+                                    if (step) {
+                                      // Reset state to prevent data bleeding between steps
+                                      resetStepDetailState();
+
+                                      // Open detail drawer to configure the step before adding it
+                                      setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
+                                      setIsCreatingNewStep(true);
+                                      setWorkflowStepsDrawerOpen(false);
+                                      setStepDetailDrawerOpen(true);
+                                    }
+                                  }}
+                                  className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
+                                  style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                                >
+                                  Add Step
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      {/* Step Detail Drawer */}
+                      {stepDetailDrawerOpen && currentEditingStep && (
+                        <>
+                          {/* Backdrop */}
+                          <div
+                            className="fixed inset-0 z-40"
+                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
+                            onClick={() => {
+                              setStepDetailDrawerOpen(false);
+                              setIsCreatingNewStep(false);
+                            }}
+                          />
+                          {/* Drawer panel */}
+                          <div
+                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
+                            style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
+                          >
+                            {/* Header */}
+                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
+                              <div className="flex items-start justify-between">
+                                <div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      {currentEditingStep.name}
+                                    </h2>
+                                    {/* Trigger badge — mirrors manager's "Stage Enter" pill */}
+                                    <span
+                                      className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                                      style={{
+                                        backgroundColor: '#DBEAFE',
+                                        color: '#1D4ED8',
+                                        fontFamily: 'DM Sans, sans-serif'
+                                      }}
+                                    >
+                                      Stage Enter
+                                    </span>
                                   </div>
+                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                    {currentEditingStep.description}
+                                  </p>
+                                </div>
+                                <button onClick={() => { setStepDetailDrawerOpen(false); setIsCreatingNewStep(false); }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
+                                  <X className="w-5 h-5 text-muted-foreground" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+                              {/* Trigger, Execution & Delay Row */}
+                              <div className="flex items-start gap-3">
+                                {/* Column 1 — Trigger */}
+                                <div className="flex-1">
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
+                                  <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20 w-full justify-between">
+                                    {(() => {
+                                      const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
+                                      return ([
+                                        { key: "stage",    label: "On Entering Stage" },
+                                        { key: "incall",   label: "In Call" },
+                                        { key: "postcall", label: "Post Call" },
+                                      ] as const)
+                                        .filter(t => allowedTriggers.includes(t.key))
+                                        .map((t) => (
+                                          <button
+                                            key={t.key}
+                                            onClick={() => setStepTrigger(t.key)}
+                                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                              stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                            }`}
+                                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                                          >
+                                            {t.label}
+                                          </button>
+                                        ));
+                                    })()}
+                                  </div>
+                                  <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                    {stepTrigger === "stage"
+                                      ? "Runs in sequence as part of this stage's step order, with an optional delay."
+                                      : stepTrigger === "incall"
+                                      ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
+                                      : "Fires automatically once the call has ended — no fixed position or delay."}
+                                  </p>
                                 </div>
 
-                                {/* Body */}
-                                <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                                  {/* ── TRIGGER TABS (shown for ALL steps) ── */}
+                                {/* Column 2 — Execution */}
+                                <div className={stepTrigger === "stage" ? "w-[160px] flex-shrink-0" : "w-[220px] flex-shrink-0"}>
+                                  {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
+                                    <>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                      <button
+                                        onClick={() => setExecutionTimingModalOpen(true)}
+                                        className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                                      >
+                                        <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
+                                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                                      </button>
+                                    </>
+                                  ) : (stepTrigger === "incall" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "endworkflow" ? (
+                                    <>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                      <div className="w-full px-3 py-3 rounded-md border border-border bg-muted/20 text-xs flex items-center gap-2 whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                                        <span>(Event Driven) Triggered by AI Action</span>
+                                      </div>
+                                    </>
+                                  ) : null}
+                                </div>
+
+                                {/* Column 3 — Delay */}
+                                <div className="w-[160px] flex-shrink-0">
+                                  {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
+                                    <>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
+                                      <div className="flex items-center">
+                                        <input
+                                          type="number"
+                                          value={delayValue}
+                                          onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
+                                          className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1', width: '0' }}
+                                        />
+                                        <div className="relative flex-shrink-0">
+                                          <button
+                                            onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
+                                            className="px-2 py-2.5 text-xs border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '90px' }}
+                                          >
+                                            <span className="text-xs">{delayUnit}</span>
+                                            <ChevronDown className="w-3 h-3 ml-1 text-muted-foreground" />
+                                          </button>
+                                          {delayUnitDropdownOpen && (
+                                            <>
+                                              <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
+                                              <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[120px]">
+                                                {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
+                                                  <button
+                                                    key={unit}
+                                                    onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
+                                                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                  >
+                                                    {unit}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+
+                              {/* Action Name / Reason / URL — shown for incall and postcall only */}
+                              {stepTrigger !== "stage" && (
+                                <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/10">
                                   <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
-                                    <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20">
-                                      {(() => {
-                                        const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
-                                        return ([
-                                          { key: "stage",    label: "On Entering Stage" },
-                                          { key: "incall",   label: "In Call" },
-                                          { key: "postcall", label: "Post Call" },
-                                        ] as const)
-                                          .filter(t => allowedTriggers.includes(t.key))
-                                          .map((t) => (
-                                            <button
-                                              key={t.key}
-                                              onClick={() => setStepTrigger(t.key)}
-                                              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                                stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                              }`}
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              {t.label}
-                                            </button>
-                                          ));
-                                      })()}
-                                    </div>
-                                    <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      {stepTrigger === "stage"
-                                        ? "Runs in sequence as part of this stage's step order, with an optional delay."
-                                        : stepTrigger === "incall"
-                                        ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
-                                        : "Fires automatically once the call has ended — no fixed position or delay."}
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Action Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={stepActionName}
+                                      onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                      placeholder="e.g. send_followup_sms"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Used to trigger this action via API. Use underscores, no spaces.
                                     </p>
                                   </div>
 
-                                  {/* ── ACTION NAME / REASON / URL (shown for incall and postcall only) ── */}
-                                  {stepTrigger !== "stage" && (
-                                    <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/10">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Action Name <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={stepActionName}
-                                          onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                          placeholder="e.g. send_followup_sms"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Used to trigger this action via API. Use underscores, no spaces.
-                                        </p>
-                                      </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
+                                    <input
+                                      type="text"
+                                      value={stepActionReason}
+                                      onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                      placeholder="e.g. caller_requested_callback"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Optional sub-reason included in the trigger URL.
+                                    </p>
+                                  </div>
 
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
-                                        <input
-                                          type="text"
-                                          value={stepActionReason}
-                                          onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                          placeholder="e.g. caller_requested_callback"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Optional sub-reason included in the trigger URL.
-                                        </p>
-                                      </div>
-
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
-                                        <div className="flex items-center gap-2">
-                                          <code
-                                            className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
-                                            style={{ fontFamily: 'monospace', color: '#020817' }}
-                                          >
-                                            {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
-                                          </code>
-                                          <button
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
-                                              toast.success("Trigger URL copied");
-                                            }}
-                                            className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
-                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                          >
-                                            Copy
-                                          </button>
-                                        </div>
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          call_id is mandatory. AI must pass the active call_id when triggering this action.
-                                        </p>
-                                      </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
+                                    <div className="flex items-center gap-2">
+                                      <code
+                                        className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
+                                        style={{ fontFamily: 'monospace', color: '#020817' }}
+                                      >
+                                        {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
+                                      </code>
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
+                                          toast.success("Trigger URL copied");
+                                        }}
+                                        className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
+                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                      >
+                                        Copy
+                                      </button>
                                     </div>
-                                  )}
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      call_id is mandatory. AI must pass the active call_id when triggering this action.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
 
-                                  {/* ── EXECUTION + DELAY + CONDITIONS (skipped for endworkflow) ── */}
-                                  {currentEditingStep.stepKey !== "endworkflow" && (
-                                    <div className="space-y-6">
+                              {/* Execution + Conditions — skipped for endworkflow */}
+                              {currentEditingStep.stepKey !== "endworkflow" && (
+                                <div className="space-y-6">
+                                  <div>
+                                    <div className="flex items-center justify-between py-2">
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Conditions
+                                        </label>
+                                        <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
+                                      </div>
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="sr-only peer"
+                                          checked={conditionsEnabled}
+                                          onChange={(e) => setConditionsEnabled(e.target.checked)}
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                                      </label>
+                                    </div>
 
-                                      {/* Execution — conditional on trigger */}
-                                      {stepTrigger === "stage" ? (
-                                        <>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                            <button
-                                              onClick={() => setExecutionTimingModalOpen(true)}
-                                              className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                                            >
-                                              <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
-                                              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                            </button>
-                                          </div>
-
-                                          {/* Delay — keep exactly as exists today */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
-                                            <div className="flex items-center">
-                                              <input
-                                                type="number"
-                                                value={delayValue}
-                                                onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
-                                                className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1' }}
-                                              />
-                                              <div className="relative">
-                                                <button
-                                                  onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
-                                                  className="px-3 py-2.5 text-sm border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '120px' }}
-                                                >
-                                                  <span>{delayUnit}</span>
-                                                  <ChevronDown className="w-4 h-4 ml-2 text-muted-foreground" />
+                                    {conditionsEnabled && (
+                                      <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
+                                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          This step will only execute when all specified conditions are met.
+                                        </p>
+                                        {conditions.map((cond, index) => (
+                                          <React.Fragment key={cond.id}>
+                                            <div className="flex items-start gap-2">
+                                              <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
+                                                <option>Stage Fields</option>
+                                                <option>Contact Fields</option>
+                                                <option>Call Fields</option>
+                                              </select>
+                                              <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                {["Stage Name", "Contact Name", "Call Status", "Call Duration", "Country", "Sentiment", "Intent", "Appointment Date", "Appointment Time", "AI Summary", "Call Transcription"].map(o => <option key={o}>{o}</option>)}
+                                              </select>
+                                              <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => <option key={o}>{o}</option>)}
+                                              </select>
+                                              {conditions.length > 1 && (
+                                                <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
+                                                  <Trash2 className="w-4 h-4 text-red-500" />
                                                 </button>
-                                                {delayUnitDropdownOpen && (
-                                                  <>
-                                                    <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
-                                                    <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[120px]">
-                                                      {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
-                                                        <button
-                                                          key={unit}
-                                                          onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
-                                                          className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        >
-                                                          {unit}
-                                                        </button>
-                                                      ))}
-                                                    </div>
-                                                  </>
-                                                )}
-                                              </div>
+                                              )}
                                             </div>
-                                          </div>
-                                        </>
-                                      ) : (
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                          <div className="w-full px-4 py-3 rounded-md border border-border bg-muted/20 text-sm flex items-center gap-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-                                            (Event Driven) Triggered by AI Action
-                                          </div>
-                                        </div>
-                                      )}
-
-                                      {/* Conditions Toggle — keep exactly as exists today */}
-                                      <div>
-                                        <div className="flex items-center justify-between py-2">
-                                          <div className="flex items-center gap-2">
-                                            <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Conditions
-                                            </label>
-                                            <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
-                                          </div>
-                                          <label className="relative inline-flex items-center cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              className="sr-only peer"
-                                              checked={conditionsEnabled}
-                                              onChange={(e) => setConditionsEnabled(e.target.checked)}
-                                            />
-                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                                          </label>
-                                        </div>
-
-                                        {conditionsEnabled && (
-                                          <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
-                                            <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                              This step will only execute when all specified conditions are met.
-                                            </p>
-                                            {conditions.map((cond, index) => (
-                                              <React.Fragment key={cond.id}>
-                                                <div className="flex items-start gap-2">
-                                                  <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
-                                                    <option>Stage Fields</option>
-                                                    <option>Contact Fields</option>
-                                                    <option>Call Fields</option>
-                                                  </select>
-                                                  <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                                    {["Stage Name","Contact Name","Call Status","Call Duration","Country","Sentiment","Intent","Appointment Date","Appointment Time","AI Summary","Call Transcription"].map(o => <option key={o}>{o}</option>)}
-                                                  </select>
-                                                  <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                                    {["Equal To","Not Equal To","Contains","Does Not Contain","Starts With","Ends With","Greater Than","Less Than","Is Empty","Is Not Empty"].map(o => <option key={o}>{o}</option>)}
-                                                  </select>
-                                                  {conditions.length > 1 && (
-                                                    <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
-                                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                  )}
+                                            <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                            {index < conditions.length - 1 && (
+                                              <div className="flex items-center justify-center py-1">
+                                                <div className="inline-flex rounded-md border border-border bg-white">
+                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
+                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
                                                 </div>
-                                                <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                                {index < conditions.length - 1 && (
-                                                  <div className="flex items-center justify-center py-1">
-                                                    <div className="inline-flex rounded-md border border-border bg-white">
-                                                      <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
-                                                      <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
-                                                    </div>
-                                                  </div>
-                                                )}
-                                              </React.Fragment>
-                                            ))}
-                                            <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              <Plus className="w-4 h-4" /> Add Condition
-                                            </button>
-                                            {conditions.some(c => c.value) && (
-                                              <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
-                                                <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
-                                                {conditions.map((cond, i) => (
-                                                  <div key={cond.id}>
-                                                    {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                                    {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i-1] || 'AND'}</p>}
-                                                    <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
-                                                  </div>
-                                                ))}
-                                                <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
                                               </div>
                                             )}
+                                          </React.Fragment>
+                                        ))}
+                                        <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                          <Plus className="w-4 h-4" /> Add Condition
+                                        </button>
+                                        {conditions.some(c => c.value) && (
+                                          <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
+                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
+                                            {conditions.map((cond, i) => (
+                                              <div key={cond.id}>
+                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
+                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
+                                              </div>
+                                            ))}
+                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
                                           </div>
                                         )}
                                       </div>
-                                    </div>
-                                  )}
+                                    )}
+                                  </div>
+                                </div>
+                              )}
 
-                                  {/* Field Update Step */}
-                                  {currentEditingStep.stepKey === "fieldupdate" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Field Category
-                                        </label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Stage Fields</option>
-                                          <option>Contact Fields</option>
-                                          <option>Call Fields</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Select Field to Edit
-                                        </label>
-                                        <select
-                                          value={fieldToEdit}
-                                          onChange={e => setFieldToEdit(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select field...</option>
-                                          <option>Stage Name</option>
-                                          <option>Contact Name</option>
-                                          <option>Call Status</option>
-                                          <option>Call Duration</option>
-                                          <option>Country</option>
-                                          <option>Sentiment</option>
-                                          <option>Intent</option>
-                                          <option>Appointment Date</option>
-                                          <option>Appointment Time</option>
-                                          <option>AI Summary</option>
-                                          <option>Call Transcription</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Update Value</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                              {/* Field Update Step */}
+                              {currentEditingStep.stepKey === "fieldupdate" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Field Category
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Stage Fields</option>
+                                      <option>Contact Fields</option>
+                                      <option>Call Fields</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Select Field to Edit
+                                    </label>
+                                    <select
+                                      value={fieldToEdit}
+                                      onChange={e => setFieldToEdit(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select field...</option>
+                                      <option>Stage Name</option>
+                                      <option>Contact Name</option>
+                                      <option>Call Status</option>
+                                      <option>Call Duration</option>
+                                      <option>Country</option>
+                                      <option>Sentiment</option>
+                                      <option>Intent</option>
+                                      <option>Appointment Date</option>
+                                      <option>Appointment Time</option>
+                                      <option>AI Summary</option>
+                                      <option>Call Transcription</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Update Value</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={updateValue}
+                                      onChange={e => setUpdateValue(e.target.value)}
+                                      placeholder="Enter new value..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Assign to Human Step */}
+                              {currentEditingStep.stepKey === "assignhuman" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Assign To
+                                    </label>
+                                    <select
+                                      value={assignedUser}
+                                      onChange={e => setAssignedUser(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select user...</option>
+                                      <option>John Smith</option>
+                                      <option>Sarah Johnson</option>
+                                      <option>Michael Chen</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Assignment Type
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Assign to specific user</option>
+                                      <option>Round robin</option>
+                                      <option>Least busy</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Internal Note (Optional)
+                                    </label>
+                                    <textarea
+                                      placeholder="Add context for the assigned team member..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={3}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Call Action Step */}
+                              {currentEditingStep.stepKey === "callaction" && (
+                                <div>
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Connect Call</label>
+                                  <select
+                                    value={assignedUser}
+                                    onChange={e => setAssignedUser(e.target.value)}
+                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                  >
+                                    <option>Select user...</option>
+                                    <option>John Smith</option>
+                                    <option>Sarah Johnson</option>
+                                    <option>Michael Chen</option>
+                                  </select>
+                                </div>
+                              )}
+
+                              {/* WhatsApp Step */}
+                              {currentEditingStep.stepKey === "whatsapp" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Connected Account
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select WhatsApp account...</option>
+                                      <option>+1 (555) 123-4567</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Template ID
+                                      </label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={templateId}
+                                      onChange={e => setTemplateId(e.target.value)}
+                                      placeholder="Enter WhatsApp template ID..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Message Body
+                                      </label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
+                                    </div>
+                                    <textarea
+                                      placeholder="Hello {{ContactName}}, ..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={4}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* SMS Step */}
+                              {currentEditingStep.stepKey === "sms" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Connected Account
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select SMS account...</option>
+                                      <option>+1 (555) 123-4567</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Message Body</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
+                                    </div>
+                                    <textarea
+                                      value={templateId}
+                                      onChange={e => setTemplateId(e.target.value)}
+                                      placeholder="Enter SMS message..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={4}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>Max 1000 characters.</p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Email Step */}
+                              {currentEditingStep.stepKey === "email" && (
+                                <div className="space-y-4">
+                                  {/* Connected Account */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Connected Account
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select email account...</option>
+                                      <option>support@company.com</option>
+                                      <option>noreply@company.com</option>
+                                    </select>
+                                  </div>
+
+                                  {/* Template Mode */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template Mode
+                                    </label>
+                                    <div className="flex items-center gap-4">
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="radio"
+                                          name="emailTemplateMode"
+                                          value="rich"
+                                          defaultChecked
+                                          className="w-4 h-4 text-blue-600"
+                                          onChange={() => setShowCustomEmail(false)}
+                                        />
+                                        <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>Rich Editor</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                          type="radio"
+                                          name="emailTemplateMode"
+                                          value="html"
+                                          className="w-4 h-4 text-blue-600"
+                                          onChange={() => setShowCustomEmail(true)}
+                                        />
+                                        <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>HTML Source</span>
+                                      </label>
+                                    </div>
+                                  </div>
+
+                                  {/* Email Body */}
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Email Body</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        &lt;/&gt; + Variable
+                                      </button>
+                                    </div>
+                                    <textarea
+                                      placeholder="Hello {{ContactName}}, ..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={5}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+
+                                  {/* Template Identifier */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template Identifier
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={templateId}
+                                      onChange={e => setTemplateId(e.target.value)}
+                                      placeholder="e.g. welcome-email, follow-up-day-3"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Used for template identification and analytics.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* CRM Update Step */}
+                              {currentEditingStep.stepKey === "crmupdate" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Platform</label>
+                                    <select
+                                      value={crmName}
+                                      onChange={e => setCrmName(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select CRM...</option>
+                                      <option>Salesforce</option>
+                                      <option>HubSpot</option>
+                                      <option>Zoho CRM</option>
+                                      <option>Pipedrive</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Update Record</option>
+                                      <option>Create Record</option>
+                                      <option>Create or Update</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Object</label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Contact</option>
+                                      <option>Lead</option>
+                                      <option>Deal</option>
+                                      <option>Account</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
+                                    <select
+                                      value={crmField}
+                                      onChange={e => setCrmField(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select field...</option>
+                                      <option>Status</option>
+                                      <option>Priority</option>
+                                      <option>Notes</option>
+                                      <option>Stage</option>
+                                      <option>Owner</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      placeholder="Enter value or use variable..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* EHR Update Step */}
+                              {currentEditingStep.stepKey === "ehrupdate" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Platform</label>
+                                    <select
+                                      value={ehrName}
+                                      onChange={e => setEhrName(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select EHR...</option>
+                                      <option>Epic</option>
+                                      <option>Cerner</option>
+                                      <option>athenahealth</option>
+                                      <option>Meditech</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Update Record</option>
+                                      <option>Create Record</option>
+                                      <option>Create or Update</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Object</label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Patient</option>
+                                      <option>Appointment</option>
+                                      <option>Encounter</option>
+                                      <option>Medication</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
+                                    <select
+                                      value={ehrField}
+                                      onChange={e => setEhrField(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select field...</option>
+                                      <option>Patient Status</option>
+                                      <option>Appointment Notes</option>
+                                      <option>Medication</option>
+                                      <option>Visit Type</option>
+                                      <option>Provider</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      placeholder="Enter value or use variable..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Trigger Webhook Step */}
+                              {currentEditingStep.stepKey === "wh_trigger" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>HTTP Method</label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      defaultValue="POST"
+                                    >
+                                      <option>GET</option>
+                                      <option>POST</option>
+                                      <option>PUT</option>
+                                      <option>PATCH</option>
+                                      <option>DELETE</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={webhookUrl}
+                                      onChange={e => setWebhookUrl(e.target.value)}
+                                      placeholder="https://api.example.com/webhook"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
+                                    <div className="space-y-2">
+                                      {webhookHeaders.map((header, index) => (
+                                        <div key={header.id} className="flex items-center gap-2">
+                                          <input
+                                            type="text"
+                                            value={header.key}
+                                            onChange={e => { const u = [...webhookHeaders]; u[index].key = e.target.value; setWebhookHeaders(u); }}
+                                            placeholder="Key"
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                          <input
+                                            type="text"
+                                            value={header.value}
+                                            onChange={e => { const u = [...webhookHeaders]; u[index].value = e.target.value; setWebhookHeaders(u); }}
+                                            placeholder="Value"
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                          {webhookHeaders.length > 1 && (
+                                            <button onClick={() => setWebhookHeaders(prev => prev.filter((_, i) => i !== index))} className="p-2 rounded hover:bg-red-50 transition-colors">
+                                              <Trash2 className="w-4 h-4 text-red-500" />
+                                            </button>
+                                          )}
                                         </div>
+                                      ))}
+                                      <button
+                                        onClick={() => setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
+                                        className="w-full py-2 text-sm border-2 border-dashed border-gray-300 rounded-md text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
+                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                      >
+                                        + Add Header
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Body</label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <textarea
+                                      value={webhookBody}
+                                      onChange={e => setWebhookBody(e.target.value)}
+                                      placeholder={'{"key": "value"}'}
+                                      rows={4}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors font-mono"
+                                      style={{ color: '#020817' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Trigger API Step */}
+                              {currentEditingStep.stepKey === "triggerapi" && (
+                                <>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>API Endpoint</label>
+                                      <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={apiEndpoint}
+                                      onChange={e => setApiEndpoint(e.target.value)}
+                                      placeholder="https://api.example.com/endpoint"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Method</label>
+                                    <select
+                                      value={apiMethod}
+                                      onChange={e => setApiMethod(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>GET</option>
+                                      <option>POST</option>
+                                      <option>PUT</option>
+                                      <option>PATCH</option>
+                                      <option>DELETE</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Authentication</label>
+                                      <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={apiAuth}
+                                      onChange={e => setApiAuth(e.target.value)}
+                                      placeholder="Bearer token or API key"
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
+                                    <div className="space-y-2">
+                                      {apiHeaders.map((header, index) => (
+                                        <div key={header.id} className="flex items-center gap-2">
+                                          <input
+                                            type="text"
+                                            value={header.key}
+                                            onChange={e => {
+                                              const updated = [...apiHeaders];
+                                              updated[index].key = e.target.value;
+                                              setApiHeaders(updated);
+                                            }}
+                                            placeholder="Key"
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                          <input
+                                            type="text"
+                                            value={header.value}
+                                            onChange={e => {
+                                              const updated = [...apiHeaders];
+                                              updated[index].value = e.target.value;
+                                              setApiHeaders(updated);
+                                            }}
+                                            placeholder="Value"
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                          {apiHeaders.length > 1 && (
+                                            <button
+                                              onClick={() => setApiHeaders(prev => prev.filter((_, i) => i !== index))}
+                                              className="p-2 rounded hover:bg-red-50 transition-colors"
+                                            >
+                                              <Trash2 className="w-4 h-4 text-red-500" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+                                      <button
+                                        onClick={() => setApiHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
+                                        className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-border hover:bg-muted/20 transition-colors"
+                                        style={{ fontFamily: 'DM Sans, sans-serif', color: '#2563EB', width: 'calc(100% - 32px)', marginLeft: '16px', marginRight: '16px' }}
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        Add Header
+                                      </button>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+
+                              {/* Stage Movement / Process Movement Steps */}
+                              {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Target Process
+                                    </label>
+                                    <select
+                                      value={stepDetailProcess}
+                                      onChange={e => { setStepDetailProcess(e.target.value); setStepDetailStage("Select stage..."); }}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select process...</option>
+                                      <option>Patient Intake</option>
+                                      <option>Follow-up Calls</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Target Stage
+                                    </label>
+                                    <select
+                                      value={stepDetailStage}
+                                      onChange={e => setStepDetailStage(e.target.value)}
+                                      disabled={stepDetailProcess === "Select process..."}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option>Select stage...</option>
+                                      {stepDetailProcess === "Patient Intake" && (
+                                        <>
+                                          <option>Initial Contact</option>
+                                          <option>Insurance Verify</option>
+                                          <option>Schedule Appointment</option>
+                                        </>
+                                      )}
+                                      {stepDetailProcess === "Follow-up Calls" && (
+                                        <>
+                                          <option>Post-Visit Check</option>
+                                          <option>Medication Reminder</option>
+                                        </>
+                                      )}
+                                    </select>
+                                  </div>
+                                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                                    <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      The contact will be moved to the selected process and stage when this step executes.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Greeting Phrase Step */}
+                              {currentEditingStep.stepKey === "greetingphrase" && (
+                                <div>
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Greeting Phrase</label>
+                                  <textarea
+                                    value={greetingPhrase}
+                                    onChange={(e) => setGreetingPhrase(e.target.value)}
+                                    placeholder="Hi, this is Alex from [Your Business], who do I have the pleasure of speaking with today?"
+                                    className="w-full p-4 bg-white rounded-lg border border-border resize-none h-24"
+                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                  />
+                                  <div className="flex items-start gap-3 p-3 rounded-lg mt-2" style={{ backgroundColor: '#EFF6FF' }}>
+                                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#2563EB' }} />
+                                    <p className="text-xs" style={{ color: '#1E40AF', fontFamily: 'Outfit, sans-serif' }}>
+                                      This is the opening line your receptionist will use when answering the phone.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Transfer Call Step */}
+                              {currentEditingStep.stepKey === "transfercall" && (
+                                <div>
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Scenario</label>
+                                  <div className="space-y-4">
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Scenario Description</label>
+                                      <textarea
+                                        placeholder="e.g., Transfer to Sales Department"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors resize-none"
+                                        rows={3}
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Phone Number</label>
+                                      <div className="flex gap-2">
+                                        <select
+                                          className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', width: '100px' }}
+                                        >
+                                          <option>+1</option>
+                                          <option>+44</option>
+                                          <option>+91</option>
+                                          <option>+61</option>
+                                        </select>
+                                        <input
+                                          type="tel"
+                                          placeholder="(555) 123-4567"
+                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Extension Digits (Optional)</label>
+                                      <input
+                                        type="text"
+                                        placeholder="e.g., 1234"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Voice Response</label>
+                                      <input
+                                        type="text"
+                                        defaultValue="Please hold while I transfer your call"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Call Transfer Type</label>
+                                      <div className="flex gap-4">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="radio"
+                                            name="transferType"
+                                            value="cold"
+                                            defaultChecked
+                                            className="w-4 h-4"
+                                          />
+                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Cold Transfer</span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                          <input
+                                            type="radio"
+                                            name="transferType"
+                                            value="hot"
+                                            className="w-4 h-4"
+                                          />
+                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Hot Transfer</span>
+                                        </label>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Bypass to Human Step */}
+                              {currentEditingStep.stepKey === "bypasstohuman" && (
+                                <div className="space-y-5">
+                                  <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+                                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                                    <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      When this step runs, the active call will be immediately forwarded to the phone number(s) configured below, bypassing the AI entirely and connecting the caller directly to a human agent.
+                                    </p>
+                                  </div>
+
+                                  <div>
+                                    <div className="flex items-center justify-between mb-3">
+                                      <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Forward to Phone Number(s)
+                                      </label>
+                                      <button
+                                        onClick={() => setBypassStepNumbers(prev => [...prev, { id: Date.now(), phoneNumber: "", countryCode: "+1" }])}
+                                        className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
+                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                      >
+                                        <Plus className="w-4 h-4" />
+                                        Add Number
+                                      </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                      {bypassStepNumbers.map((entry, idx) => (
+                                        <div key={entry.id} className="flex items-center gap-2">
+                                          <select
+                                            value={entry.countryCode}
+                                            onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, countryCode: e.target.value } : n))}
+                                            className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', minWidth: '90px' }}
+                                          >
+                                            <option value="+1">🇺🇸 +1</option>
+                                            <option value="+44">🇬🇧 +44</option>
+                                            <option value="+91">🇮🇳 +91</option>
+                                            <option value="+61">🇦🇺 +61</option>
+                                            <option value="+49">🇩🇪 +49</option>
+                                            <option value="+33">🇫🇷 +33</option>
+                                            <option value="+52">🇲🇽 +52</option>
+                                            <option value="+55">🇧🇷 +55</option>
+                                          </select>
+                                          <input
+                                            type="tel"
+                                            value={entry.phoneNumber}
+                                            onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, phoneNumber: e.target.value } : n))}
+                                            placeholder="(555) 123-4567"
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                          {bypassStepNumbers.length > 1 && (
+                                            <button
+                                              onClick={() => setBypassStepNumbers(prev => prev.filter(n => n.id !== entry.id))}
+                                              className="p-2 rounded hover:bg-red-50 transition-colors flex-shrink-0"
+                                            >
+                                              <Trash2 className="w-4 h-4 text-red-500" />
+                                            </button>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+
+                                    <p className="text-xs mt-2" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
+                                      If multiple numbers are added, the system will attempt them in order until one connects.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Live Intake Ticket Step */}
+                              {currentEditingStep.stepKey === "liveintaketicket" && (
+                                <div className="space-y-5">
+                                  {ticketEntries.map((entry, entryIdx) => (
+                                    <div key={entryIdx} className={entryIdx > 0 ? "pt-5 border-t border-border space-y-4" : "space-y-4"}>
+                                      {entryIdx > 0 && (
+                                        <div className="flex items-center justify-between mb-2">
+                                          <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Ticket #{entryIdx + 1}</span>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Name</label>
                                         <input
                                           type="text"
-                                          value={updateValue}
-                                          onChange={e => setUpdateValue(e.target.value)}
-                                          placeholder="Enter new value..."
+                                          value={entry.taskName}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskName: e.target.value } : t))}
+                                          placeholder="Enter task name..."
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
                                       </div>
-                                    </div>
-                                  )}
-
-                                  {/* Assign to Human Step */}
-                                  {currentEditingStep.stepKey === "assignhuman" && (
-                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Assign To
-                                        </label>
-                                        <select
-                                          value={assignedUser}
-                                          onChange={e => setAssignedUser(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select user...</option>
-                                          <option>John Smith</option>
-                                          <option>Sarah Johnson</option>
-                                          <option>Michael Chen</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Assignment Type
-                                        </label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Assign to specific user</option>
-                                          <option>Round robin</option>
-                                          <option>Least busy</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Internal Note (Optional)
-                                        </label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Description</label>
                                         <textarea
-                                          placeholder="Add context for the assigned team member..."
+                                          value={entry.taskDesc}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskDesc: e.target.value } : t))}
+                                          placeholder="Describe the task..."
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
                                           rows={3}
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
                                       </div>
-                                    </div>
-                                  )}
-
-                                  {/* Call Action Step */}
-                                  {currentEditingStep.stepKey === "callaction" && (
-                                    <div>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Connect Call</label>
-                                      <select
-                                        value={assignedUser}
-                                        onChange={e => setAssignedUser(e.target.value)}
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      >
-                                        <option>Select user...</option>
-                                        <option>John Smith</option>
-                                        <option>Sarah Johnson</option>
-                                        <option>Michael Chen</option>
-                                      </select>
-                                    </div>
-                                  )}
-
-                                  {/* WhatsApp Step */}
-                                  {currentEditingStep.stepKey === "whatsapp" && (
-                                    <div className="space-y-4">
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Connected Account
-                                        </label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Assignee</label>
                                         <select
+                                          value={entry.assignee}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, assignee: e.target.value } : t))}
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         >
-                                          <option value="">Select WhatsApp account...</option>
-                                          <option>+1 (555) 123-4567</option>
+                                          <option value="">Select team member...</option>
+                                          {availableEmployees.map(emp => (
+                                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Deadline</label>
+                                        <input
+                                          type="date"
+                                          value={entry.deadline}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, deadline: e.target.value } : t))}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Priority</label>
+                                        <select
+                                          value={entry.priority}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, priority: e.target.value } : t))}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>Normal</option>
+                                          <option>High</option>
+                                          <option>Urgent</option>
                                         </select>
                                       </div>
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Template ID
-                                          </label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Email</label>
+                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
                                         </div>
                                         <input
                                           type="text"
-                                          value={templateId}
-                                          onChange={e => setTemplateId(e.target.value)}
-                                          placeholder="Enter WhatsApp template ID..."
+                                          value={entry.clientEmail}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: e.target.value } : t))}
+                                          placeholder="client@example.com"
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
                                       </div>
                                       <div>
                                         <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Message Body
-                                          </label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
-                                        </div>
-                                        <textarea
-                                          placeholder="Hello {{ContactName}}, ..."
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                          rows={4}
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* SMS Step */}
-                                  {currentEditingStep.stepKey === "sms" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Connected Account
-                                        </label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option value="">Select SMS account...</option>
-                                          <option>+1 (555) 123-4567</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Message Body</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
-                                        </div>
-                                        <textarea
-                                          value={templateId}
-                                          onChange={e => setTemplateId(e.target.value)}
-                                          placeholder="Enter SMS message..."
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                          rows={4}
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>Max 1000 characters.</p>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Email Step */}
-                                  {currentEditingStep.stepKey === "email" && (
-                                    <div className="space-y-4">
-                                      {/* Connected Account */}
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Connected Account
-                                        </label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option value="">Select email account...</option>
-                                          <option>support@company.com</option>
-                                          <option>noreply@company.com</option>
-                                        </select>
-                                      </div>
-
-                                      {/* Template Mode */}
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Template Mode
-                                        </label>
-                                        <div className="flex items-center gap-4">
-                                          <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                              type="radio"
-                                              name="emailTemplateMode"
-                                              value="rich"
-                                              defaultChecked
-                                              className="w-4 h-4 text-blue-600"
-                                              onChange={() => setShowCustomEmail(false)}
-                                            />
-                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>Rich Editor</span>
-                                          </label>
-                                          <label className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                              type="radio"
-                                              name="emailTemplateMode"
-                                              value="html"
-                                              className="w-4 h-4 text-blue-600"
-                                              onChange={() => setShowCustomEmail(true)}
-                                            />
-                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>HTML Source</span>
-                                          </label>
-                                        </div>
-                                      </div>
-
-                                      {/* Email Body */}
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Email Body</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                            &lt;/&gt; + Variable
-                                          </button>
-                                        </div>
-                                        <textarea
-                                          placeholder="Hello {{ContactName}}, ..."
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                          rows={5}
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-
-                                      {/* Template Identifier */}
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Template Identifier
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={templateId}
-                                          onChange={e => setTemplateId(e.target.value)}
-                                          placeholder="e.g. welcome-email, follow-up-day-3"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          Used for template identification and analytics.
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* CRM Update Step */}
-                                  {currentEditingStep.stepKey === "crmupdate" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Platform</label>
-                                        <select
-                                          value={crmName}
-                                          onChange={e => setCrmName(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select CRM...</option>
-                                          <option>Salesforce</option>
-                                          <option>HubSpot</option>
-                                          <option>Zoho CRM</option>
-                                          <option>Pipedrive</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Update Record</option>
-                                          <option>Create Record</option>
-                                          <option>Create or Update</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Object</label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Contact</option>
-                                          <option>Lead</option>
-                                          <option>Deal</option>
-                                          <option>Account</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
-                                        <select
-                                          value={crmField}
-                                          onChange={e => setCrmField(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select field...</option>
-                                          <option>Status</option>
-                                          <option>Priority</option>
-                                          <option>Notes</option>
-                                          <option>Stage</option>
-                                          <option>Owner</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Number</label>
+                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
                                         </div>
                                         <input
                                           type="text"
-                                          placeholder="Enter value or use variable..."
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* EHR Update Step */}
-                                  {currentEditingStep.stepKey === "ehrupdate" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Platform</label>
-                                        <select
-                                          value={ehrName}
-                                          onChange={e => setEhrName(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select EHR...</option>
-                                          <option>Epic</option>
-                                          <option>Cerner</option>
-                                          <option>athenahealth</option>
-                                          <option>Meditech</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Update Record</option>
-                                          <option>Create Record</option>
-                                          <option>Create or Update</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Object</label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Patient</option>
-                                          <option>Appointment</option>
-                                          <option>Encounter</option>
-                                          <option>Medication</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
-                                        <select
-                                          value={ehrField}
-                                          onChange={e => setEhrField(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select field...</option>
-                                          <option>Patient Status</option>
-                                          <option>Appointment Notes</option>
-                                          <option>Medication</option>
-                                          <option>Visit Type</option>
-                                          <option>Provider</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          placeholder="Enter value or use variable..."
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Trigger Webhook Step */}
-                                  {currentEditingStep.stepKey === "wh_trigger" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>HTTP Method</label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          defaultValue="POST"
-                                        >
-                                          <option>GET</option>
-                                          <option>POST</option>
-                                          <option>PUT</option>
-                                          <option>PATCH</option>
-                                          <option>DELETE</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          value={webhookUrl}
-                                          onChange={e => setWebhookUrl(e.target.value)}
-                                          placeholder="https://api.example.com/webhook"
+                                          value={entry.clientNumber}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: e.target.value } : t))}
+                                          placeholder="+1 (555) 000-0000"
                                           className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
                                       </div>
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Pause process while task running</label>
+                                        <select
+                                          value={entry.pauseProcess}
+                                          onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, pauseProcess: e.target.value } : t))}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        >
+                                          <option>No</option>
+                                          <option>Yes</option>
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Checklist</label>
                                         <div className="space-y-2">
-                                          {webhookHeaders.map((header, index) => (
-                                            <div key={header.id} className="flex items-center gap-2">
+                                          {entry.checklist.map((item, itemIdx) => (
+                                            <div key={item.id} className="flex items-center gap-2">
                                               <input
                                                 type="text"
-                                                value={header.key}
-                                                onChange={e => { const u = [...webhookHeaders]; u[index].key = e.target.value; setWebhookHeaders(u); }}
-                                                placeholder="Key"
-                                                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                value={item.text}
+                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
+                                                  ...t,
+                                                  checklist: t.checklist.map((c, ci) => ci === itemIdx ? { ...c, text: e.target.value } : c)
+                                                } : t))}
+                                                placeholder={`Checklist item ${itemIdx + 1}...`}
+                                                className="flex-1 px-3 py-2 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                 style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                               />
-                                              <input
-                                                type="text"
-                                                value={header.value}
-                                                onChange={e => { const u = [...webhookHeaders]; u[index].value = e.target.value; setWebhookHeaders(u); }}
-                                                placeholder="Value"
-                                                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                              {webhookHeaders.length > 1 && (
-                                                <button onClick={() => setWebhookHeaders(prev => prev.filter((_, i) => i !== index))} className="p-2 rounded hover:bg-red-50 transition-colors">
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                              )}
+                                              <button
+                                                onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
+                                                  ...t,
+                                                  checklist: t.checklist.filter((_, ci) => ci !== itemIdx)
+                                                } : t))}
+                                                className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                                              >
+                                                <X className="w-4 h-4" style={{ color: '#EF4444' }} />
+                                              </button>
                                             </div>
                                           ))}
-                                          <button
-                                            onClick={() => setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
-                                            className="w-full py-2 text-sm border-2 border-dashed border-gray-300 rounded-md text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
-                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                          >
-                                            + Add Header
-                                          </button>
                                         </div>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Body</label>
-                                          <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                        </div>
-                                        <textarea
-                                          value={webhookBody}
-                                          onChange={e => setWebhookBody(e.target.value)}
-                                          placeholder={'{"key": "value"}'}
-                                          rows={4}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors font-mono"
-                                          style={{ color: '#020817' }}
-                                        />
+                                        <button
+                                          onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
+                                            ...t,
+                                            checklist: [...t.checklist, { id: `check-${Date.now()}`, text: "" }]
+                                          } : t))}
+                                          className="mt-2 text-sm font-medium flex items-center gap-1"
+                                          style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                                        >
+                                          <Plus className="w-4 h-4" /> Add Checklist Item
+                                        </button>
                                       </div>
                                     </div>
-                                  )}
+                                  ))}
+                                  <button
+                                    onClick={() => setTicketEntries(prev => [...prev, {
+                                      taskName: "", taskDesc: "", assignee: "", deadline: "", priority: "Normal",
+                                      clientEmail: "", clientNumber: "", pauseProcess: "No",
+                                      checklist: [{ id: `check-${Date.now()}`, text: "" }]
+                                    }])}
+                                    className="w-full py-2.5 text-sm font-medium rounded-md border border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/40 transition-colors flex items-center justify-center gap-2"
+                                    style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    <Copy className="w-4 h-4" /> + Duplicate Fields
+                                  </button>
+                                </div>
+                              )}
 
-                                  {/* Trigger API Step */}
-                                  {currentEditingStep.stepKey === "triggerapi" && (
+                              {/* Collect Information Step */}
+                              {currentEditingStep.stepKey === "collectinformation" && (
+                                <div className="relative">
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Form Template</label>
+                                  <button
+                                    onClick={() => setShowCollectInfoDropdown(!showCollectInfoDropdown)}
+                                    className="w-full h-[44px] flex items-center justify-between px-3 border border-border rounded-lg bg-white hover:border-blue-500 hover:bg-blue-50/50 transition-all cursor-pointer"
+                                  >
+                                    <span className="text-sm" style={{ color: collectInfoSelectedForm ? '#020817' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      {collectInfoSelectedForm || "Select the form to collect caller information"}
+                                    </span>
+                                    <span className="text-xs font-semibold text-primary">+ Add</span>
+                                  </button>
+                                  <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                    Choose a form template to collect information from callers.
+                                  </p>
+
+                                  {/* Inline Dropdown */}
+                                  {showCollectInfoDropdown && (
                                     <>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>API Endpoint</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          value={apiEndpoint}
-                                          onChange={e => setApiEndpoint(e.target.value)}
-                                          placeholder="https://api.example.com/endpoint"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Method</label>
-                                        <select
-                                          value={apiMethod}
-                                          onChange={e => setApiMethod(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>GET</option>
-                                          <option>POST</option>
-                                          <option>PUT</option>
-                                          <option>PATCH</option>
-                                          <option>DELETE</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <div className="flex items-center justify-between mb-2">
-                                          <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Authentication</label>
-                                          <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                        </div>
-                                        <input
-                                          type="text"
-                                          value={apiAuth}
-                                          onChange={e => setApiAuth(e.target.value)}
-                                          placeholder="Bearer token or API key"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
-                                        <div className="space-y-2">
-                                          {apiHeaders.map((header, index) => (
-                                            <div key={header.id} className="flex items-center gap-2">
-                                              <input
-                                                type="text"
-                                                value={header.key}
-                                                onChange={e => {
-                                                  const updated = [...apiHeaders];
-                                                  updated[index].key = e.target.value;
-                                                  setApiHeaders(updated);
+                                      {/* Backdrop */}
+                                      <div
+                                        className="fixed inset-0 z-40"
+                                        onClick={() => setShowCollectInfoDropdown(false)}
+                                      />
+                                      {/* Dropdown Panel */}
+                                      <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.14)] z-50 overflow-hidden">
+                                        {/* Form Templates List */}
+                                        <div className="py-3">
+                                          {FORM_TEMPLATES.map((template, index) => (
+                                            <div key={template.id}>
+                                              <button
+                                                onClick={() => {
+                                                  setCollectInfoSelectedForm(template.name);
+                                                  setShowCollectInfoDropdown(false);
+                                                  toast.success(`${template.name} template added successfully!`);
                                                 }}
-                                                placeholder="Key"
-                                                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                              <input
-                                                type="text"
-                                                value={header.value}
-                                                onChange={e => {
-                                                  const updated = [...apiHeaders];
-                                                  updated[index].value = e.target.value;
-                                                  setApiHeaders(updated);
-                                                }}
-                                                placeholder="Value"
-                                                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                              {apiHeaders.length > 1 && (
-                                                <button
-                                                  onClick={() => setApiHeaders(prev => prev.filter((_, i) => i !== index))}
-                                                  className="p-2 rounded hover:bg-red-50 transition-colors"
-                                                >
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                              )}
+                                                className="group w-full h-[44px] flex items-center justify-between px-4 hover:bg-[#F9FAFB] transition-colors"
+                                              >
+                                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                                  {template.name}
+                                                </span>
+                                                <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                                              </button>
+                                              {index < FORM_TEMPLATES.length - 1 && <div className="h-px bg-[#F3F4F6]"></div>}
                                             </div>
                                           ))}
+                                        </div>
+
+                                        {/* Separator */}
+                                        <div className="h-px bg-[#F3F4F6]"></div>
+
+                                        {/* Create New Form Button */}
+                                        <div className="px-4 pb-3 pt-2">
                                           <button
-                                            onClick={() => setApiHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
-                                            className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-border hover:bg-muted/20 transition-colors"
-                                            style={{ fontFamily: 'DM Sans, sans-serif', color: '#2563EB', width: 'calc(100% - 32px)', marginLeft: '16px', marginRight: '16px' }}
+                                            onClick={() => {
+                                              setShowCollectInfoDropdown(false);
+                                              toast.info("Redirecting to Web Forms page...");
+                                            }}
+                                            className="w-full h-[44px] flex items-center hover:bg-[#F0F7FF] transition-colors rounded-md px-2"
                                           >
-                                            <Plus className="w-4 h-4" />
-                                            Add Header
+                                            <Plus className="w-3.5 h-3.5 text-[#2563EB] mr-2" />
+                                            <span className="text-sm font-medium text-[#2563EB]" style={{ fontFamily: 'Outfit, sans-serif' }}>Create New Form</span>
                                           </button>
                                         </div>
                                       </div>
                                     </>
                                   )}
+                                </div>
+                              )}
 
-                                  {/* Stage Movement / Process Movement Steps */}
-                                  {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Target Process
-                                        </label>
-                                        <select
-                                          value={stepDetailProcess}
-                                          onChange={e => { setStepDetailProcess(e.target.value); setStepDetailStage("Select stage..."); }}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select process...</option>
-                                          <option>Patient Intake</option>
-                                          <option>Follow-up Calls</option>
-                                        </select>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Target Stage
-                                        </label>
-                                        <select
-                                          value={stepDetailStage}
-                                          onChange={e => setStepDetailStage(e.target.value)}
-                                          disabled={stepDetailProcess === "Select process..."}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option>Select stage...</option>
-                                          {stepDetailProcess === "Patient Intake" && (
-                                            <>
-                                              <option>Initial Contact</option>
-                                              <option>Insurance Verify</option>
-                                              <option>Schedule Appointment</option>
-                                            </>
-                                          )}
-                                          {stepDetailProcess === "Follow-up Calls" && (
-                                            <>
-                                              <option>Post-Visit Check</option>
-                                              <option>Medication Reminder</option>
-                                            </>
-                                          )}
-                                        </select>
-                                      </div>
-                                      <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                                        <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          The contact will be moved to the selected process and stage when this step executes.
-                                        </p>
-                                      </div>
-                                    </div>
-                                  )}
+                              {/* Schedule an Appointment Step */}
+                              {currentEditingStep.stepKey === "scheduleappointment" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Appointment Booking Method</label>
+                                    <p className="text-xs mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Select how you'd like to handle appointment scheduling with your callers
+                                    </p>
+                                    <select
+                                      value={appointmentBookingMethod}
+                                      onChange={(e) => setAppointmentBookingMethod(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      <option value="">Select a booking method...</option>
+                                      <option value="text-link">Text Booking Link — Automatically send your calendar booking link via text message</option>
+                                      <option value="collect-request">Collect Booking Request — AI collects caller availability and creates a booking request</option>
+                                      <option value="schedule-phone">Schedule Over Phone — AI assistant books appointments directly during the call</option>
+                                    </select>
+                                  </div>
 
-                                  {/* Greeting Phrase Step */}
-                                  {currentEditingStep.stepKey === "greetingphrase" && (
+                                  {/* Conditional fields based on selection */}
+                                  {appointmentBookingMethod === "text-link" && (
                                     <div>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Greeting Phrase</label>
-                                      <textarea
-                                        value={greetingPhrase}
-                                        onChange={(e) => setGreetingPhrase(e.target.value)}
-                                        placeholder="Hi, this is Alex from [Your Business], who do I have the pleasure of speaking with today?"
-                                        className="w-full p-4 bg-white rounded-lg border border-border resize-none h-24"
+                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Booking Link URL</label>
+                                      <input
+                                        type="url"
+                                        placeholder="https://calendly.com/your-link"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                         style={{ fontFamily: 'Outfit, sans-serif' }}
                                       />
-                                      <div className="flex items-start gap-3 p-3 rounded-lg mt-2" style={{ backgroundColor: '#EFF6FF' }}>
-                                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: '#2563EB' }} />
-                                        <p className="text-xs" style={{ color: '#1E40AF', fontFamily: 'Outfit, sans-serif' }}>
-                                          This is the opening line your receptionist will use when answering the phone.
-                                        </p>
-                                      </div>
+                                      <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        This link will be sent via SMS to the caller after the call ends.
+                                      </p>
                                     </div>
                                   )}
 
-                                  {/* Transfer Call Step */}
-                                  {currentEditingStep.stepKey === "transfercall" && (
-                                    <div>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Scenario</label>
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Scenario Description</label>
-                                          <textarea
-                                            placeholder="e.g., Transfer to Sales Department"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors resize-none"
-                                            rows={3}
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Phone Number</label>
-                                          <div className="flex gap-2">
-                                            <select
-                                              className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', width: '100px' }}
-                                            >
-                                              <option>+1</option>
-                                              <option>+44</option>
-                                              <option>+91</option>
-                                              <option>+61</option>
-                                            </select>
+                                  {appointmentBookingMethod === "collect-request" && (
+                                    <>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>What availability should the AI collect?</label>
+                                        <textarea
+                                          placeholder="e.g. Ask the caller for their preferred date and time window"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={3}
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Assigned To</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          <option>Select team member...</option>
+                                          {availableEmployees.map((emp) => (
+                                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {appointmentBookingMethod === "schedule-phone" && (
+                                    <>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Calendar to book on</label>
+                                        <select
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          <option>Select calendar...</option>
+                                          {availableEmployees.map((emp) => (
+                                            <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                          ))}
+                                        </select>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Appointment Duration (minutes)</label>
+                                        <input
+                                          type="number"
+                                          placeholder="30"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Time Control Step */}
+                              {currentEditingStep.stepKey === "timecontrol" && (
+                                <div className="space-y-3">
+                                  {/* Section A — Time Intervals */}
+                                  <div className="rounded-lg border border-border overflow-hidden">
+                                    <div
+                                      className="flex items-center justify-between p-4 hover:bg-muted/20 cursor-pointer"
+                                      onClick={() => { if (tcTimeIntervalsEnabled) setTcTimeIntervalsEnabled(false); }}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <Clock className="w-4 h-4 text-primary" />
+                                        <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Duration</span>
+                                      </div>
+                                      <label className="relative inline-flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
+                                        <input
+                                          type="checkbox"
+                                          checked={tcTimeIntervalsEnabled}
+                                          onChange={e => setTcTimeIntervalsEnabled(e.target.checked)}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                                      </label>
+                                    </div>
+                                    {tcTimeIntervalsEnabled && (
+                                      <div className="border-t border-border p-4 space-y-4">
+                                        {/* Call Duration + Hangup Window in one row */}
+                                        <div className="flex items-end gap-4">
+                                          {/* Call Duration */}
+                                          <div className="flex-1">
+                                            <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Call Duration (min)
+                                            </label>
                                             <input
-                                              type="tel"
-                                              placeholder="(555) 123-4567"
-                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                              type="number"
+                                              min={1}
+                                              value={tcCallDurationMinutes}
+                                              onChange={e => {
+                                                const val = parseInt(e.target.value) || 1;
+                                                setTcCallDurationMinutes(val);
+                                                if (tcHangupWindowMinutes >= val) {
+                                                  setTcHangupWindowMinutes(val - 1 > 0 ? val - 1 : 1);
+                                                }
+                                              }}
+                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                               style={{ fontFamily: 'Outfit, sans-serif' }}
                                             />
                                           </div>
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Extension Digits (Optional)</label>
-                                          <input
-                                            type="text"
-                                            placeholder="e.g., 1234"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Voice Response</label>
-                                          <input
-                                            type="text"
-                                            defaultValue="Please hold while I transfer your call"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Call Transfer Type</label>
-                                          <div className="flex gap-4">
-                                            <label className="flex items-center gap-2 cursor-pointer">
+
+                                          {/* Hangup Window */}
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-1.5 mb-1">
+                                              <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Hangup Window
+                                              </label>
+                                              <Tooltip text="During the last X minutes of the total call duration, the AI will proactively try to wrap up the conversation and end the call gracefully. The hangup window must be less than the total call duration." placement="top">
+                                                <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                              </Tooltip>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-sm text-muted-foreground whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Last</span>
                                               <input
-                                                type="radio"
-                                                name="transferType"
-                                                value="cold"
-                                                defaultChecked
-                                                className="w-4 h-4"
+                                                type="number"
+                                                min={1}
+                                                max={tcCallDurationMinutes - 1}
+                                                value={tcHangupWindowMinutes}
+                                                onChange={e => {
+                                                  const val = parseInt(e.target.value) || 1;
+                                                  if (val >= tcCallDurationMinutes) {
+                                                    toast.error(`Hangup window must be less than the call duration (${tcCallDurationMinutes} min)`);
+                                                    return;
+                                                  }
+                                                  setTcHangupWindowMinutes(val);
+                                                }}
+                                                className="flex-1 min-w-0 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                style={{ fontFamily: 'Outfit, sans-serif' }}
                                               />
-                                              <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Cold Transfer</span>
-                                            </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                              <input
-                                                type="radio"
-                                                name="transferType"
-                                                value="hot"
-                                                className="w-4 h-4"
-                                              />
-                                              <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Hot Transfer</span>
-                                            </label>
+                                              <span className="text-sm text-muted-foreground whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                {tcHangupWindowMinutes === 1 ? 'minute' : 'minutes'}
+                                              </span>
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </div>
-                                  )}
+                                        {tcHangupWindowMinutes >= tcCallDurationMinutes && (
+                                          <p className="text-xs text-red-500 -mt-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                            Hangup window must be less than call duration ({tcCallDurationMinutes} min).
+                                          </p>
+                                        )}
 
-                                  {/* Bypass to Human Step */}
-                                  {currentEditingStep.stepKey === "bypasstohuman" && (
-                                    <div className="space-y-5">
-                                      <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
-                                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                                        <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          When this step runs, the active call will be immediately forwarded to the phone number(s) configured below, bypassing the AI entirely and connecting the caller directly to a human agent.
-                                        </p>
-                                      </div>
-
-                                      <div>
-                                        <div className="flex items-center justify-between mb-3">
-                                          <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Forward to Phone Number(s)
-                                          </label>
+                                        <div className="flex justify-end">
                                           <button
-                                            onClick={() => setBypassStepNumbers(prev => [...prev, { id: Date.now(), phoneNumber: "", countryCode: "+1" }])}
-                                            className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                            onClick={() => toast.success("Call duration settings saved")}
+                                            className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
+                                            style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
                                           >
-                                            <Plus className="w-4 h-4" />
-                                            Add Number
+                                            Save
                                           </button>
                                         </div>
-
-                                        <div className="space-y-3">
-                                          {bypassStepNumbers.map((entry, idx) => (
-                                            <div key={entry.id} className="flex items-center gap-2">
-                                              <select
-                                                value={entry.countryCode}
-                                                onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, countryCode: e.target.value } : n))}
-                                                className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', minWidth: '90px' }}
-                                              >
-                                                <option value="+1">🇺🇸 +1</option>
-                                                <option value="+44">🇬🇧 +44</option>
-                                                <option value="+91">🇮🇳 +91</option>
-                                                <option value="+61">🇦🇺 +61</option>
-                                                <option value="+49">🇩🇪 +49</option>
-                                                <option value="+33">🇫🇷 +33</option>
-                                                <option value="+52">🇲🇽 +52</option>
-                                                <option value="+55">🇧🇷 +55</option>
-                                              </select>
-                                              <input
-                                                type="tel"
-                                                value={entry.phoneNumber}
-                                                onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, phoneNumber: e.target.value } : n))}
-                                                placeholder="(555) 123-4567"
-                                                className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                              {bypassStepNumbers.length > 1 && (
-                                                <button
-                                                  onClick={() => setBypassStepNumbers(prev => prev.filter(n => n.id !== entry.id))}
-                                                  className="p-2 rounded hover:bg-red-50 transition-colors flex-shrink-0"
-                                                >
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                              )}
-                                            </div>
-                                          ))}
-                                        </div>
-
-                                        <p className="text-xs mt-2" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                          If multiple numbers are added, the system will attempt them in order until one connects.
-                                        </p>
                                       </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Smart Call Analysis Step */}
+                              {currentEditingStep.stepKey === "smartcallanalysis" && (
+                                <div>
+                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select Template</label>
+                                  <button
+                                    onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
+                                    className="w-full px-4 py-2.5 text-sm rounded-md border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
+                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                  >
+                                    <span style={{ color: '#020817' }}>Choose a template</span>
+                                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                  </button>
+                                  {showTemplateDropdown && (
+                                    <div className="mt-2 border border-border rounded-md bg-white shadow-lg">
+                                      {[
+                                        {
+                                          id: "customer-feedback",
+                                          name: "Customer Feedback",
+                                          trackWhat: "Customer satisfaction",
+                                          fieldName: "customer_satisfaction_score",
+                                          captureDescription: "Rate the overall customer satisfaction based on tone, sentiment, and feedback during the call",
+                                          dataFormat: "Number - Numeric values",
+                                          outputExample: "8",
+                                          expectedFormat: "1-10 scale"
+                                        },
+                                        {
+                                          id: "sales-data",
+                                          name: "Sales Data",
+                                          trackWhat: "Revenue potential",
+                                          fieldName: "estimated_deal_value",
+                                          captureDescription: "Extract the estimated deal value or revenue opportunity mentioned during the sales call",
+                                          dataFormat: "Number - Numeric values",
+                                          outputExample: "5000",
+                                          expectedFormat: "Dollar amount without currency symbol"
+                                        },
+                                        {
+                                          id: "call-classification",
+                                          name: "Call Classification",
+                                          trackWhat: "Call type",
+                                          fieldName: "call_category",
+                                          captureDescription: "Classify the call into categories: Support, Sales, Complaint, Inquiry, Follow-up",
+                                          dataFormat: "Text - Simple text responses like summaries or comments",
+                                          outputExample: "Support",
+                                          expectedFormat: "One of: Support, Sales, Complaint, Inquiry, Follow-up"
+                                        },
+                                        {
+                                          id: "call-outcome",
+                                          name: "Call Outcome",
+                                          trackWhat: "Call resolution",
+                                          fieldName: "call_resolved",
+                                          captureDescription: "Determine if the caller's issue or request was fully resolved during the call",
+                                          dataFormat: "Boolean - Yes/No values",
+                                          outputExample: "true",
+                                          expectedFormat: "true or false"
+                                        }
+                                      ].map((template) => (
+                                        <button
+                                          key={template.id}
+                                          onClick={() => {
+                                            setSmartAnalysisSelectedTemplate(template.name);
+                                            setSmartAnalysisTrackWhat(template.trackWhat);
+                                            setSmartAnalysisFieldName(template.fieldName);
+                                            setSmartAnalysisCaptureDesc(template.captureDescription);
+                                            setSmartAnalysisDataFormat(template.dataFormat);
+                                            setSmartAnalysisOutputExample(template.outputExample);
+                                            setSmartAnalysisExpectedFormat(template.expectedFormat);
+                                            setShowTemplateDropdown(false);
+                                          }}
+                                          className="w-full px-4 py-2.5 text-sm text-left hover:bg-muted/20 transition-colors"
+                                          style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          {template.name}
+                                        </button>
+                                      ))}
                                     </div>
                                   )}
 
-                                  {/* Live Intake Ticket Step */}
-                                  {currentEditingStep.stepKey === "liveintaketicket" && (
-                                    <div className="space-y-5">
-                                      {ticketEntries.map((entry, entryIdx) => (
-                                        <div key={entryIdx} className={entryIdx > 0 ? "pt-5 border-t border-border space-y-4" : "space-y-4"}>
-                                          {entryIdx > 0 && (
-                                            <div className="flex items-center justify-between mb-2">
-                                              <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Ticket #{entryIdx + 1}</span>
-                                            </div>
-                                          )}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Name</label>
-                                            <input
-                                              type="text"
-                                              value={entry.taskName}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskName: e.target.value } : t))}
-                                              placeholder="Enter task name..."
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
+                                  {/* Inline Fields */}
+                                  {smartAnalysisSelectedTemplate !== "" && (
+                                    <div className="space-y-4 mt-4 p-4 border border-border rounded-lg bg-white">
+                                      {/* What do you want to track? */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          <span className="text-red-500">*</span> What do you want to track?
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={smartAnalysisTrackWhat}
+                                          onChange={(e) => setSmartAnalysisTrackWhat(e.target.value)}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+
+                                      {/* Field Name */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          <span className="text-red-500">*</span> Field Name
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={smartAnalysisFieldName}
+                                          onChange={(e) => setSmartAnalysisFieldName(e.target.value)}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+
+                                      {/* What the AI will capture during calls */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          <span className="text-red-500">*</span> What the AI will capture during calls
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <textarea
+                                          value={smartAnalysisCaptureDesc}
+                                          onChange={(e) => setSmartAnalysisCaptureDesc(e.target.value)}
+                                          rows={3}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+
+                                      {/* Format of data */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          <span className="text-red-500">*</span> Format of data
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <select
+                                          value={smartAnalysisDataFormat}
+                                          onChange={(e) => setSmartAnalysisDataFormat(e.target.value)}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          <option>Text - Simple text responses like summaries or comments</option>
+                                          <option>JSON - Structured data format</option>
+                                          <option>Number - Numeric values</option>
+                                          <option>Boolean - Yes/No values</option>
+                                        </select>
+                                      </div>
+
+                                      {/* Output Format Example */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Output Format Example
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <textarea
+                                          value={smartAnalysisOutputExample}
+                                          onChange={(e) => setSmartAnalysisOutputExample(e.target.value)}
+                                          rows={2}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+
+                                      {/* Expected Output Format */}
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          <span className="text-red-500">*</span> Expected Output Format
+                                          <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
+                                        </label>
+                                        <textarea
+                                          value={smartAnalysisExpectedFormat}
+                                          onChange={(e) => setSmartAnalysisExpectedFormat(e.target.value)}
+                                          rows={2}
+                                          className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+
+                                      {/* Add Scenario Button */}
+                                      <button
+                                        onClick={() => {
+                                          if (!smartAnalysisTrackWhat || !smartAnalysisFieldName || !smartAnalysisCaptureDesc || !smartAnalysisExpectedFormat) {
+                                            toast.error("Please fill in all required fields");
+                                            return;
+                                          }
+                                          setCallAnalysisScenarios([
+                                            ...callAnalysisScenarios,
+                                            {
+                                              id: Date.now(),
+                                              name: smartAnalysisTrackWhat,
+                                              description: smartAnalysisCaptureDesc,
+                                              dataFormat: smartAnalysisDataFormat
+                                            }
+                                          ]);
+                                          setSmartAnalysisTrackWhat("");
+                                          setSmartAnalysisFieldName("");
+                                          setSmartAnalysisCaptureDesc("");
+                                          setSmartAnalysisDataFormat("Text - Simple text responses like summaries or comments");
+                                          setSmartAnalysisOutputExample("");
+                                          setSmartAnalysisExpectedFormat("");
+                                          setSmartAnalysisSelectedTemplate("");
+                                          toast.success("Analysis scenario added successfully");
+                                        }}
+                                        className="w-full px-4 py-2.5 text-sm font-semibold rounded-lg text-white transition-colors hover:opacity-90"
+                                        style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                                      >
+                                        Add Scenario
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {/* List of saved scenarios */}
+                                  {callAnalysisScenarios.length > 0 && (
+                                    <div className="mt-4 space-y-2">
+                                      {callAnalysisScenarios.map((scenario, idx) => (
+                                        <div key={scenario.id} className="flex items-center justify-between px-4 py-3 border border-border rounded-md bg-white">
+                                          <div className="flex-1">
+                                            <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Scenario #{idx + 1}
+                                            </p>
+                                            <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                              {scenario.description}
+                                            </p>
                                           </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Description</label>
-                                            <textarea
-                                              value={entry.taskDesc}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskDesc: e.target.value } : t))}
-                                              placeholder="Describe the task..."
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              rows={3}
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Assignee</label>
-                                            <select
-                                              value={entry.assignee}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, assignee: e.target.value } : t))}
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            >
-                                              <option value="">Select team member...</option>
-                                              {availableEmployees.map(emp => (
-                                                <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Deadline</label>
-                                            <input
-                                              type="date"
-                                              value={entry.deadline}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, deadline: e.target.value } : t))}
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Priority</label>
-                                            <select
-                                              value={entry.priority}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, priority: e.target.value } : t))}
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            >
-                                              <option>Normal</option>
-                                              <option>High</option>
-                                              <option>Urgent</option>
-                                            </select>
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Email</label>
-                                              <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <input
-                                              type="text"
-                                              value={entry.clientEmail}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: e.target.value } : t))}
-                                              placeholder="client@example.com"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Number</label>
-                                              <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <input
-                                              type="text"
-                                              value={entry.clientNumber}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: e.target.value } : t))}
-                                              placeholder="+1 (555) 000-0000"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Pause process while task running</label>
-                                            <select
-                                              value={entry.pauseProcess}
-                                              onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, pauseProcess: e.target.value } : t))}
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            >
-                                              <option>No</option>
-                                              <option>Yes</option>
-                                            </select>
-                                          </div>
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Checklist</label>
-                                            <div className="space-y-2">
-                                              {entry.checklist.map((item, itemIdx) => (
-                                                <div key={item.id} className="flex items-center gap-2">
-                                                  <input
-                                                    type="text"
-                                                    value={item.text}
-                                                    onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                      ...t,
-                                                      checklist: t.checklist.map((c, ci) => ci === itemIdx ? { ...c, text: e.target.value } : c)
-                                                    } : t))}
-                                                    placeholder={`Checklist item ${itemIdx + 1}...`}
-                                                    className="flex-1 px-3 py-2 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  />
-                                                  <button
-                                                    onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                      ...t,
-                                                      checklist: t.checklist.filter((_, ci) => ci !== itemIdx)
-                                                    } : t))}
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                  >
-                                                    <X className="w-4 h-4" style={{ color: '#EF4444' }} />
-                                                  </button>
-                                                </div>
-                                              ))}
-                                            </div>
-                                            <button
-                                              onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                ...t,
-                                                checklist: [...t.checklist, { id: `check-${Date.now()}`, text: "" }]
-                                              } : t))}
-                                              className="mt-2 text-sm font-medium flex items-center gap-1"
-                                              style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                            >
-                                              <Plus className="w-4 h-4" /> Add Checklist Item
+                                          <div className="flex items-center gap-2">
+                                            <button className="p-1.5 rounded hover:bg-muted/40 transition-colors">
+                                              <Pencil className="w-4 h-4 text-muted-foreground" />
+                                            </button>
+                                            <button className="p-1.5 rounded hover:bg-red-50 transition-colors">
+                                              <Trash2 className="w-4 h-4 text-red-500" />
                                             </button>
                                           </div>
                                         </div>
                                       ))}
-                                      <button
-                                        onClick={() => setTicketEntries(prev => [...prev, {
-                                          taskName: "", taskDesc: "", assignee: "", deadline: "", priority: "Normal",
-                                          clientEmail: "", clientNumber: "", pauseProcess: "No",
-                                          checklist: [{ id: `check-${Date.now()}`, text: "" }]
-                                        }])}
-                                        className="w-full py-2.5 text-sm font-medium rounded-md border border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/40 transition-colors flex items-center justify-center gap-2"
-                                        style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                      >
-                                        <Copy className="w-4 h-4" /> + Duplicate Fields
-                                      </button>
                                     </div>
                                   )}
 
-                                  {/* Collect Information Step */}
-                                  {currentEditingStep.stepKey === "collectinformation" && (
-                                    <div className="relative">
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Form Template</label>
-                                      <button
-                                        onClick={() => setShowCollectInfoDropdown(!showCollectInfoDropdown)}
-                                        className="w-full h-[44px] flex items-center justify-between px-3 border border-border rounded-lg bg-white hover:border-blue-500 hover:bg-blue-50/50 transition-all cursor-pointer"
-                                      >
-                                        <span className="text-sm" style={{ color: collectInfoSelectedForm ? '#020817' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          {collectInfoSelectedForm || "Select the form to collect caller information"}
-                                        </span>
-                                        <span className="text-xs font-semibold text-primary">+ Add</span>
-                                      </button>
-                                      <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                        Choose a form template to collect information from callers.
+                                  {/* Empty state */}
+                                  {callAnalysisScenarios.length === 0 && (
+                                    <div className="mt-4 px-4 py-6 border border-border rounded-md text-center" style={{ backgroundColor: '#EFF6FF' }}>
+                                      <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        No analysis scenarios configured yet. Select a template above to get started.
                                       </p>
-
-                                      {/* Inline Dropdown */}
-                                      {showCollectInfoDropdown && (
-                                        <>
-                                          {/* Backdrop */}
-                                          <div
-                                            className="fixed inset-0 z-40"
-                                            onClick={() => setShowCollectInfoDropdown(false)}
-                                          />
-                                          {/* Dropdown Panel */}
-                                          <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.14)] z-50 overflow-hidden">
-                                            {/* Form Templates List */}
-                                            <div className="py-3">
-                                              {FORM_TEMPLATES.map((template, index) => (
-                                                <div key={template.id}>
-                                                  <button
-                                                    onClick={() => {
-                                                      setCollectInfoSelectedForm(template.name);
-                                                      setShowCollectInfoDropdown(false);
-                                                      toast.success(`${template.name} template added successfully!`);
-                                                    }}
-                                                    className="group w-full h-[44px] flex items-center justify-between px-4 hover:bg-[#F9FAFB] transition-colors"
-                                                  >
-                                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                                      {template.name}
-                                                    </span>
-                                                    <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                  </button>
-                                                  {index < FORM_TEMPLATES.length - 1 && <div className="h-px bg-[#F3F4F6]"></div>}
-                                                </div>
-                                              ))}
-                                            </div>
-
-                                            {/* Separator */}
-                                            <div className="h-px bg-[#F3F4F6]"></div>
-
-                                            {/* Create New Form Button */}
-                                            <div className="px-4 pb-3 pt-2">
-                                              <button
-                                                onClick={() => {
-                                                  setShowCollectInfoDropdown(false);
-                                                  toast.info("Redirecting to Web Forms page...");
-                                                }}
-                                                className="w-full h-[44px] flex items-center hover:bg-[#F0F7FF] transition-colors rounded-md px-2"
-                                              >
-                                                <Plus className="w-3.5 h-3.5 text-[#2563EB] mr-2" />
-                                                <span className="text-sm font-medium text-[#2563EB]" style={{ fontFamily: 'Outfit, sans-serif' }}>Create New Form</span>
-                                              </button>
-                                            </div>
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Schedule an Appointment Step */}
-                                  {currentEditingStep.stepKey === "scheduleappointment" && (
-                                    <div className="space-y-4">
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Appointment Booking Method</label>
-                                        <p className="text-xs mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Select how you'd like to handle appointment scheduling with your callers
-                                        </p>
-                                        <select
-                                          value={appointmentBookingMethod}
-                                          onChange={(e) => setAppointmentBookingMethod(e.target.value)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          <option value="">Select a booking method...</option>
-                                          <option value="text-link">Text Booking Link — Automatically send your calendar booking link via text message</option>
-                                          <option value="collect-request">Collect Booking Request — AI collects caller availability and creates a booking request</option>
-                                          <option value="schedule-phone">Schedule Over Phone — AI assistant books appointments directly during the call</option>
-                                        </select>
-                                      </div>
-
-                                      {/* Conditional fields based on selection */}
-                                      {appointmentBookingMethod === "text-link" && (
-                                        <div>
-                                          <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Booking Link URL</label>
-                                          <input
-                                            type="url"
-                                            placeholder="https://calendly.com/your-link"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          />
-                                          <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            This link will be sent via SMS to the caller after the call ends.
-                                          </p>
-                                        </div>
-                                      )}
-
-                                      {appointmentBookingMethod === "collect-request" && (
-                                        <>
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>What availability should the AI collect?</label>
-                                            <textarea
-                                              placeholder="e.g. Ask the caller for their preferred date and time window"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              rows={3}
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Assigned To</label>
-                                            <select
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              <option>Select team member...</option>
-                                              {availableEmployees.map((emp) => (
-                                                <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                        </>
-                                      )}
-
-                                      {appointmentBookingMethod === "schedule-phone" && (
-                                        <>
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Calendar to book on</label>
-                                            <select
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              <option>Select calendar...</option>
-                                              {availableEmployees.map((emp) => (
-                                                <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Appointment Duration (minutes)</label>
-                                            <input
-                                              type="number"
-                                              placeholder="30"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-                                        </>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* Time Control Step */}
-                                  {currentEditingStep.stepKey === "timecontrol" && (
-                                    <div className="space-y-3">
-                                      {/* Section A — Time Intervals */}
-                                      <div className="rounded-lg border border-border overflow-hidden">
-                                        <div
-                                          className="flex items-center justify-between p-4 hover:bg-muted/20 cursor-pointer"
-                                          onClick={() => { if (tcTimeIntervalsEnabled) setTcTimeIntervalsEnabled(false); }}
-                                        >
-                                          <div className="flex items-center gap-2">
-                                            <Clock className="w-4 h-4 text-primary" />
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Duration</span>
-                                          </div>
-                                          <label className="relative inline-flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
-                                            <input
-                                              type="checkbox"
-                                              checked={tcTimeIntervalsEnabled}
-                                              onChange={e => setTcTimeIntervalsEnabled(e.target.checked)}
-                                              className="sr-only peer"
-                                            />
-                                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-                                          </label>
-                                        </div>
-                                        {tcTimeIntervalsEnabled && (
-                                          <div className="border-t border-border p-4 space-y-4">
-                                            {/* Call Duration + Hangup Window in one row */}
-                                            <div className="flex items-end gap-4">
-                                              {/* Call Duration */}
-                                              <div className="flex-1">
-                                                <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Call Duration (min)
-                                                </label>
-                                                <input
-                                                  type="number"
-                                                  min={1}
-                                                  value={tcCallDurationMinutes}
-                                                  onChange={e => {
-                                                    const val = parseInt(e.target.value) || 1;
-                                                    setTcCallDurationMinutes(val);
-                                                    if (tcHangupWindowMinutes >= val) {
-                                                      setTcHangupWindowMinutes(val - 1 > 0 ? val - 1 : 1);
-                                                    }
-                                                  }}
-                                                  className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                />
-                                              </div>
-
-                                              {/* Hangup Window */}
-                                              <div className="flex-1">
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                  <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Hangup Window
-                                                  </label>
-                                                  <Tooltip text="During the last X minutes of the total call duration, the AI will proactively try to wrap up the conversation and end the call gracefully. The hangup window must be less than the total call duration." placement="top">
-                                                    <Info className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                                  </Tooltip>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <span className="text-sm text-muted-foreground whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Last</span>
-                                                  <input
-                                                    type="number"
-                                                    min={1}
-                                                    max={tcCallDurationMinutes - 1}
-                                                    value={tcHangupWindowMinutes}
-                                                    onChange={e => {
-                                                      const val = parseInt(e.target.value) || 1;
-                                                      if (val >= tcCallDurationMinutes) {
-                                                        toast.error(`Hangup window must be less than the call duration (${tcCallDurationMinutes} min)`);
-                                                        return;
-                                                      }
-                                                      setTcHangupWindowMinutes(val);
-                                                    }}
-                                                    className="flex-1 min-w-0 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                  />
-                                                  <span className="text-sm text-muted-foreground whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                    {tcHangupWindowMinutes === 1 ? 'minute' : 'minutes'}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            </div>
-                                            {tcHangupWindowMinutes >= tcCallDurationMinutes && (
-                                              <p className="text-xs text-red-500 -mt-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                Hangup window must be less than call duration ({tcCallDurationMinutes} min).
-                                              </p>
-                                            )}
-
-                                            <div className="flex justify-end">
-                                              <button
-                                                onClick={() => toast.success("Call duration settings saved")}
-                                                className="text-xs font-semibold px-3 py-1.5 rounded-md text-white"
-                                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                Save
-                                              </button>
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {/* Smart Call Analysis Step */}
-                                  {currentEditingStep.stepKey === "smartcallanalysis" && (
-                                    <div>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select Template</label>
-                                      <button
-                                        onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                                        className="w-full px-4 py-2.5 text-sm rounded-md border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        <span style={{ color: '#020817' }}>Choose a template</span>
-                                        <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                      </button>
-                                      {showTemplateDropdown && (
-                                        <div className="mt-2 border border-border rounded-md bg-white shadow-lg">
-                                          {[
-                                            {
-                                              id: "customer-feedback",
-                                              name: "Customer Feedback",
-                                              trackWhat: "Customer satisfaction",
-                                              fieldName: "customer_satisfaction_score",
-                                              captureDescription: "Rate the overall customer satisfaction based on tone, sentiment, and feedback during the call",
-                                              dataFormat: "Number - Numeric values",
-                                              outputExample: "8",
-                                              expectedFormat: "1-10 scale"
-                                            },
-                                            {
-                                              id: "sales-data",
-                                              name: "Sales Data",
-                                              trackWhat: "Revenue potential",
-                                              fieldName: "estimated_deal_value",
-                                              captureDescription: "Extract the estimated deal value or revenue opportunity mentioned during the sales call",
-                                              dataFormat: "Number - Numeric values",
-                                              outputExample: "5000",
-                                              expectedFormat: "Dollar amount without currency symbol"
-                                            },
-                                            {
-                                              id: "call-classification",
-                                              name: "Call Classification",
-                                              trackWhat: "Call type",
-                                              fieldName: "call_category",
-                                              captureDescription: "Classify the call into categories: Support, Sales, Complaint, Inquiry, Follow-up",
-                                              dataFormat: "Text - Simple text responses like summaries or comments",
-                                              outputExample: "Support",
-                                              expectedFormat: "One of: Support, Sales, Complaint, Inquiry, Follow-up"
-                                            },
-                                            {
-                                              id: "call-outcome",
-                                              name: "Call Outcome",
-                                              trackWhat: "Call resolution",
-                                              fieldName: "call_resolved",
-                                              captureDescription: "Determine if the caller's issue or request was fully resolved during the call",
-                                              dataFormat: "Boolean - Yes/No values",
-                                              outputExample: "true",
-                                              expectedFormat: "true or false"
-                                            }
-                                          ].map((template) => (
-                                            <button
-                                              key={template.id}
-                                              onClick={() => {
-                                                setSmartAnalysisSelectedTemplate(template.name);
-                                                setSmartAnalysisTrackWhat(template.trackWhat);
-                                                setSmartAnalysisFieldName(template.fieldName);
-                                                setSmartAnalysisCaptureDesc(template.captureDescription);
-                                                setSmartAnalysisDataFormat(template.dataFormat);
-                                                setSmartAnalysisOutputExample(template.outputExample);
-                                                setSmartAnalysisExpectedFormat(template.expectedFormat);
-                                                setShowTemplateDropdown(false);
-                                              }}
-                                              className="w-full px-4 py-2.5 text-sm text-left hover:bg-muted/20 transition-colors"
-                                              style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              {template.name}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* Inline Fields */}
-                                      {smartAnalysisSelectedTemplate !== "" && (
-                                        <div className="space-y-4 mt-4 p-4 border border-border rounded-lg bg-white">
-                                          {/* What do you want to track? */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              <span className="text-red-500">*</span> What do you want to track?
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={smartAnalysisTrackWhat}
-                                              onChange={(e) => setSmartAnalysisTrackWhat(e.target.value)}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-
-                                          {/* Field Name */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              <span className="text-red-500">*</span> Field Name
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={smartAnalysisFieldName}
-                                              onChange={(e) => setSmartAnalysisFieldName(e.target.value)}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-
-                                          {/* What the AI will capture during calls */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              <span className="text-red-500">*</span> What the AI will capture during calls
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <textarea
-                                              value={smartAnalysisCaptureDesc}
-                                              onChange={(e) => setSmartAnalysisCaptureDesc(e.target.value)}
-                                              rows={3}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-
-                                          {/* Format of data */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              <span className="text-red-500">*</span> Format of data
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <select
-                                              value={smartAnalysisDataFormat}
-                                              onChange={(e) => setSmartAnalysisDataFormat(e.target.value)}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            >
-                                              <option>Text - Simple text responses like summaries or comments</option>
-                                              <option>JSON - Structured data format</option>
-                                              <option>Number - Numeric values</option>
-                                              <option>Boolean - Yes/No values</option>
-                                            </select>
-                                          </div>
-
-                                          {/* Output Format Example */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Output Format Example
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <textarea
-                                              value={smartAnalysisOutputExample}
-                                              onChange={(e) => setSmartAnalysisOutputExample(e.target.value)}
-                                              rows={2}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-
-                                          {/* Expected Output Format */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              <span className="text-red-500">*</span> Expected Output Format
-                                              <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                            </label>
-                                            <textarea
-                                              value={smartAnalysisExpectedFormat}
-                                              onChange={(e) => setSmartAnalysisExpectedFormat(e.target.value)}
-                                              rows={2}
-                                              className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                          </div>
-
-                                          {/* Add Scenario Button */}
-                                          <button
-                                            onClick={() => {
-                                              if (!smartAnalysisTrackWhat || !smartAnalysisFieldName || !smartAnalysisCaptureDesc || !smartAnalysisExpectedFormat) {
-                                                toast.error("Please fill in all required fields");
-                                                return;
-                                              }
-                                              setCallAnalysisScenarios([
-                                                ...callAnalysisScenarios,
-                                                {
-                                                  id: Date.now(),
-                                                  name: smartAnalysisTrackWhat,
-                                                  description: smartAnalysisCaptureDesc,
-                                                  dataFormat: smartAnalysisDataFormat
-                                                }
-                                              ]);
-                                              setSmartAnalysisTrackWhat("");
-                                              setSmartAnalysisFieldName("");
-                                              setSmartAnalysisCaptureDesc("");
-                                              setSmartAnalysisDataFormat("Text - Simple text responses like summaries or comments");
-                                              setSmartAnalysisOutputExample("");
-                                              setSmartAnalysisExpectedFormat("");
-                                              setSmartAnalysisSelectedTemplate("");
-                                              toast.success("Analysis scenario added successfully");
-                                            }}
-                                            className="w-full px-4 py-2.5 text-sm font-semibold rounded-lg text-white transition-colors hover:opacity-90"
-                                            style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                          >
-                                            Add Scenario
-                                          </button>
-                                        </div>
-                                      )}
-
-                                      {/* List of saved scenarios */}
-                                      {callAnalysisScenarios.length > 0 && (
-                                        <div className="mt-4 space-y-2">
-                                          {callAnalysisScenarios.map((scenario, idx) => (
-                                            <div key={scenario.id} className="flex items-center justify-between px-4 py-3 border border-border rounded-md bg-white">
-                                              <div className="flex-1">
-                                                <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Scenario #{idx + 1}
-                                                </p>
-                                                <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                  {scenario.description}
-                                                </p>
-                                              </div>
-                                              <div className="flex items-center gap-2">
-                                                <button className="p-1.5 rounded hover:bg-muted/40 transition-colors">
-                                                  <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                </button>
-                                                <button className="p-1.5 rounded hover:bg-red-50 transition-colors">
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-
-                                      {/* Empty state */}
-                                      {callAnalysisScenarios.length === 0 && (
-                                        <div className="mt-4 px-4 py-6 border border-border rounded-md text-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                          <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            No analysis scenarios configured yet. Select a template above to get started.
-                                          </p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {/* End Workflow Step */}
-                                  {currentEditingStep.stepKey === "endworkflow" && (
-                                    <div className="space-y-4">
-                                      <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
-                                        <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                                        <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          End Reason (Optional)
-                                        </label>
-                                        <select
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        >
-                                          <option value="">Select reason...</option>
-                                          <option>Completed Successfully</option>
-                                          <option>Contact Unresponsive</option>
-                                          <option>Goal Achieved</option>
-                                          <option>Manually Terminated</option>
-                                          <option>Condition Not Met</option>
-                                        </select>
-                                      </div>
                                     </div>
                                   )}
                                 </div>
+                              )}
 
-                                {/* Footer */}
-                                <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-start gap-3">
-                                  <button
-                                    onClick={() => {
-                                      setStepDetailDrawerOpen(false);
-                                      setIsCreatingNewStep(false);
-                                      setSelectedWorkflowStepCard(null);
-                                      setWorkflowStepsDrawerOpen(true);
-                                    }}
-                                    className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                    style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
-                                  >
-                                    Back
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      if (stepTrigger !== "stage" && !stepActionName.trim()) {
-                                        toast.error("Action Name is required for In Call / Post Call triggers");
-                                        return;
-                                      }
-                                      if (isCreatingNewStep && currentEditingStep) {
-                                        // Add new step to the workflow
-                                        if (branchAddTarget === "true") {
-                                          setTrueBranchSteps(prev => [...prev, currentEditingStep]);
-                                          setBranchAddTarget(null);
-                                        } else if (branchAddTarget === "false") {
-                                          setFalseBranchSteps(prev => [...prev, currentEditingStep]);
-                                          setBranchAddTarget(null);
-                                        } else {
-                                          setWorkflowSteps(prev => [...prev, currentEditingStep]);
-                                        }
-                                        setIsCreatingNewStep(false);
-                                        toast.success("Step added successfully");
-                                      } else {
-                                        // Update existing step (if needed, add logic here to update the step in the array)
-                                        if (currentEditingStep) {
-                                          setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? currentEditingStep : s));
-                                        }
-                                        toast.success("Step settings saved successfully");
-                                      }
-                                      setStepDetailDrawerOpen(false);
-                                    }}
-                                    className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                    style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Save Changes
-                                  </button>
+                              {/* End Workflow Step */}
+                              {currentEditingStep.stepKey === "endworkflow" && (
+                                <div className="space-y-4">
+                                  <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
+                                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
+                                    <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      End Reason (Optional)
+                                    </label>
+                                    <select
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select reason...</option>
+                                      <option>Completed Successfully</option>
+                                      <option>Contact Unresponsive</option>
+                                      <option>Goal Achieved</option>
+                                      <option>Manually Terminated</option>
+                                      <option>Condition Not Met</option>
+                                    </select>
+                                  </div>
                                 </div>
-                              </div>
-                            </>
-                          )}
-
-                          {/* Execution Timing Modal */}
-                          {executionTimingModalOpen && (
-                            <div className="fixed inset-0 z-[60] flex items-center justify-center">
-                              {/* Backdrop */}
-                              <div
-                                className="absolute inset-0 bg-black/50"
-                                onClick={() => setExecutionTimingModalOpen(false)}
-                              />
-                              {/* Modal */}
-                              <div className="relative bg-white rounded-lg shadow-xl" style={{ width: '500px', maxWidth: '90vw' }}>
-                                {/* Header */}
-                                <div className="px-6 pt-6 pb-4 border-b border-border">
-                                  <h3 className="text-lg font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution Timing</h3>
-                                </div>
-                                {/* Body */}
-                                <div className="px-6 py-4 space-y-3">
-                                  <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
-                                    <input
-                                      type="radio"
-                                      name="executionType"
-                                      checked={executionType === "wait"}
-                                      onChange={() => setExecutionType("wait")}
-                                      className="mt-0.5"
-                                    />
-                                    <div>
-                                      <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Wait</p>
-                                      <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will start only after the previous step has completed execution.</p>
-                                    </div>
-                                  </label>
-                                  <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
-                                    <input
-                                      type="radio"
-                                      name="executionType"
-                                      checked={executionType === "parallel"}
-                                      onChange={() => setExecutionType("parallel")}
-                                      className="mt-0.5"
-                                    />
-                                    <div>
-                                      <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>In Parallel</p>
-                                      <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will run independently alongside other active workflow steps.</p>
-                                    </div>
-                                  </label>
-                                </div>
-                                {/* Footer */}
-                                <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-                                  <button
-                                    onClick={() => setExecutionTimingModalOpen(false)}
-                                    className="px-4 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                    style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
-                                  >
-                                    Cancel
-                                  </button>
-                                  <button
-                                    onClick={() => setExecutionTimingModalOpen(false)}
-                                    className="px-4 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                    style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    OK
-                                  </button>
-                                </div>
-                              </div>
+                              )}
                             </div>
-                          )}
+
+                            {/* Footer */}
+                            <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-start gap-3">
+                              <button
+                                onClick={() => {
+                                  setStepDetailDrawerOpen(false);
+                                  setIsCreatingNewStep(false);
+                                  setSelectedWorkflowStepCard(null);
+                                  setWorkflowStepsDrawerOpen(true);
+                                }}
+                                className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
+                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
+                              >
+                                Back
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (stepTrigger !== "stage" && !stepActionName.trim()) {
+                                    toast.error("Action Name is required for In Call / Post Call triggers");
+                                    return;
+                                  }
+                                  if (isCreatingNewStep && currentEditingStep) {
+                                    // Add new step to the workflow
+                                    if (branchAddTarget === "true") {
+                                      setTrueBranchSteps(prev => [...prev, currentEditingStep]);
+                                      setBranchAddTarget(null);
+                                    } else if (branchAddTarget === "false") {
+                                      setFalseBranchSteps(prev => [...prev, currentEditingStep]);
+                                      setBranchAddTarget(null);
+                                    } else {
+                                      setWorkflowSteps(prev => [...prev, currentEditingStep]);
+                                    }
+                                    setIsCreatingNewStep(false);
+                                    toast.success("Step added successfully");
+                                  } else {
+                                    // Update existing step (if needed, add logic here to update the step in the array)
+                                    if (currentEditingStep) {
+                                      setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? currentEditingStep : s));
+                                    }
+                                    toast.success("Step settings saved successfully");
+                                  }
+                                  setStepDetailDrawerOpen(false);
+                                }}
+                                className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
+                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                Save Changes
+                              </button>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Execution Timing Modal */}
+                      {executionTimingModalOpen && (
+                        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+                          {/* Backdrop */}
+                          <div
+                            className="absolute inset-0 bg-black/50"
+                            onClick={() => setExecutionTimingModalOpen(false)}
+                          />
+                          {/* Modal */}
+                          <div className="relative bg-white rounded-lg shadow-xl" style={{ width: '500px', maxWidth: '90vw' }}>
+                            {/* Header */}
+                            <div className="px-6 pt-6 pb-4 border-b border-border">
+                              <h3 className="text-lg font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution Timing</h3>
+                            </div>
+                            {/* Body */}
+                            <div className="px-6 py-4 space-y-3">
+                              <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
+                                <input
+                                  type="radio"
+                                  name="executionType"
+                                  checked={executionType === "wait"}
+                                  onChange={() => setExecutionType("wait")}
+                                  className="mt-0.5"
+                                />
+                                <div>
+                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Wait</p>
+                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will start only after the previous step has completed execution.</p>
+                                </div>
+                              </label>
+                              <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
+                                <input
+                                  type="radio"
+                                  name="executionType"
+                                  checked={executionType === "parallel"}
+                                  onChange={() => setExecutionType("parallel")}
+                                  className="mt-0.5"
+                                />
+                                <div>
+                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>In Parallel</p>
+                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will run independently alongside other active workflow steps.</p>
+                                </div>
+                              </label>
+                            </div>
+                            {/* Footer */}
+                            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
+                              <button
+                                onClick={() => setExecutionTimingModalOpen(false)}
+                                className="px-4 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
+                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                onClick={() => setExecutionTimingModalOpen(false)}
+                                className="px-4 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
+                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                OK
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
 
                       <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
