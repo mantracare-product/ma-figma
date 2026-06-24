@@ -357,7 +357,6 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
   "greetingphrase": ["incall"],
-  "transfercall": ["incall"],
   "bypasstohuman": ["incall"],
   "liveintaketicket": ["incall"],
   "callaction": ["incall", "postcall"],
@@ -3693,7 +3692,7 @@ export default function Process() {
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "element"], popular: false },
-                                    { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
+                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
                                     { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "telephony"], popular: false },
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
@@ -3703,7 +3702,6 @@ export default function Process() {
                                     { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
                                     { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
                                     { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
-                                    { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall", cats: ["all", "incall"], popular: true },
                                     { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "postcall"], popular: false },
                                     { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "postcall"], popular: false },
                                     { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "postcall"], popular: false },
@@ -3795,7 +3793,7 @@ export default function Process() {
                                       { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
                                       { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
                                       { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
-                                      { key: "callaction", name: "Call Action", desc: "Initiate, transfer, or manage phone calls with contacts.", iconKey: "phonecall" },
+                                      { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall" },
                                       { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" },
                                       { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
                                       { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
@@ -3806,7 +3804,6 @@ export default function Process() {
                                       { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
                                       { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist" },
                                       { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare" },
-                                      { key: "transfercall", name: "Transfer Call", desc: "Teach your AI how to intelligently transfer the call to a person or department.", iconKey: "phonecall" },
                                       { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" },
                                       { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" },
                                       { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" },
@@ -4915,86 +4912,6 @@ export default function Process() {
                                     <p className="text-xs" style={{ color: '#1E40AF', fontFamily: 'Outfit, sans-serif' }}>
                                       This is the opening line your receptionist will use when answering the phone.
                                     </p>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Transfer Call Step */}
-                              {currentEditingStep.stepKey === "transfercall" && (
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Scenario</label>
-                                  <div className="space-y-4">
-                                    <div>
-                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Scenario Description</label>
-                                      <textarea
-                                        placeholder="e.g., Transfer to Sales Department"
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors resize-none"
-                                        rows={3}
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Phone Number</label>
-                                      <div className="flex gap-2">
-                                        <select
-                                          className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', width: '100px' }}
-                                        >
-                                          <option>+1</option>
-                                          <option>+44</option>
-                                          <option>+91</option>
-                                          <option>+61</option>
-                                        </select>
-                                        <input
-                                          type="tel"
-                                          placeholder="(555) 123-4567"
-                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        />
-                                      </div>
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Extension Digits (Optional)</label>
-                                      <input
-                                        type="text"
-                                        placeholder="e.g., 1234"
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Voice Response</label>
-                                      <input
-                                        type="text"
-                                        defaultValue="Please hold while I transfer your call"
-                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Call Transfer Type</label>
-                                      <div className="flex gap-4">
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                          <input
-                                            type="radio"
-                                            name="transferType"
-                                            value="cold"
-                                            defaultChecked
-                                            className="w-4 h-4"
-                                          />
-                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Cold Transfer</span>
-                                        </label>
-                                        <label className="flex items-center gap-2 cursor-pointer">
-                                          <input
-                                            type="radio"
-                                            name="transferType"
-                                            value="hot"
-                                            className="w-4 h-4"
-                                          />
-                                          <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>Hot Transfer</span>
-                                        </label>
-                                      </div>
-                                    </div>
                                   </div>
                                 </div>
                               )}
