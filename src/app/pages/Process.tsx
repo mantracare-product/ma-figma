@@ -3857,14 +3857,12 @@ export default function Process() {
                               {/* Left Sidebar */}
                               <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
                                 {[
-                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All Steps" },
-                                  { key: "workflow", icon: <Zap className="w-4 h-4" />, name: "Workflow Logic" },
-                                  { key: "element", icon: <LayoutGrid className="w-4 h-4" />, name: "Element Management" },
-                                  { key: "telephony", icon: <Phone className="w-4 h-4" />, name: "Telephony" },
+                                  { key: "all",           icon: <Sparkles className="w-4 h-4" />,      name: "All Steps" },
+                                  { key: "workflow",      icon: <GitBranch className="w-4 h-4" />,     name: "Workflow Logic" },
+                                  { key: "incall",        icon: <Phone className="w-4 h-4" />,         name: "In-Call Actions" },
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                  { key: "crm", icon: <Database className="w-4 h-4" />, name: "CRM / EHR" },
-                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
-                                  { key: "appointment", icon: <Calendar className="w-4 h-4" />, name: "Appointment" },
+                                  { key: "data",          icon: <Database className="w-4 h-4" />,      name: "Data & Assignment" },
+                                  { key: "webhook",       icon: <Webhook className="w-4 h-4" />,       name: "Webhook / API" },
                                 ].map((cat) => {
                                   const active = workflowStepCategory === cat.key;
                                   return (
@@ -3898,29 +3896,29 @@ export default function Process() {
                               <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
-                                    { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "element"], popular: false },
-                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "element"], popular: false },
-                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "telephony"], popular: false },
-                                    /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "telephony"], popular: false }, */
-                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
-                                    /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "crm"], popular: false }, */
-                                    /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "crm"], popular: false }, */
-                                    { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
+                                    { key: "ifcondition",     name: "If Condition",       desc: "Branch workflow execution down True or False paths based on field values.",           iconKey: "gitbranch",    cats: ["all", "workflow"],       popular: false },
+                                    { key: "waitdelay",       name: "Wait / Delay",       desc: "Pause workflow execution for a specified duration before the next step runs.",         iconKey: "clock",        cats: ["all", "workflow"],       popular: false },
+                                    { key: "processmovement", name: "Process Movement",   desc: "Move the contact to a different process and select the target stage.",                iconKey: "zap",          cats: ["all", "workflow"],       popular: false },
+                                    { key: "endworkflow",     name: "End Workflow",       desc: "Terminate the workflow after this step runs and mark the contact as done.",            iconKey: "x",            cats: ["all", "workflow"],       popular: false },
+                                    { key: "callaction",      name: "Transfer Call",      desc: "Transfer the active AI call to a human agent or another AI agent.",                   iconKey: "phonecall",    cats: ["all", "incall"],         popular: false },
+                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.",                    iconKey: "calendar",     cats: ["all", "incall"],         popular: false },
+                                    { key: "fetchfieldvalue", name: "Fetch Field Value",  desc: "Read and surface a specific field value during an active call.",                      iconKey: "edit",         cats: ["all", "data"],           popular: false },
+                                    { key: "managecalendar",  name: "Manage Calendar",    desc: "Book, reschedule, or cancel calendar appointments during or after a call.",            iconKey: "calendar",     cats: ["all", "incall"],         popular: false },
+                                    { key: "whatsapp",        name: "WhatsApp",           desc: "Send WhatsApp messages to contacts using pre-configured templates.",                   iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
+                                    { key: "sms",             name: "SMS",                desc: "Send SMS text messages to contacts using pre-configured templates.",                    iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
+                                    { key: "email",           name: "Email",              desc: "Send email notifications to contacts using pre-configured templates.",                  iconKey: "mail",         cats: ["all", "communication"],  popular: false },
+                                    { key: "fieldupdate",     name: "Field Update",       desc: "Update a specific field value for the contact or record.",                             iconKey: "edit",         cats: ["all", "data"],           popular: false },
+                                    { key: "assignhuman",     name: "Assign to a Human",  desc: "Assign a human team member to review or handle this contact.",                        iconKey: "usercheck",    cats: ["all", "data"],           popular: false },
+                                    { key: "wh_trigger",      name: "Trigger Webhook",    desc: "Send data to external systems using webhooks with custom variables.",                  iconKey: "globe",        cats: ["all", "webhook"],        popular: false },
+                                    { key: "triggerapi",      name: "Trigger API",        desc: "Make HTTP API calls to external services with custom headers and body.",               iconKey: "zap",          cats: ["all", "webhook"],        popular: false },
+                                    /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "incall"], popular: false }, */
+                                    /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "data"], popular: false }, */
+                                    /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "data"], popular: false }, */
                                     /* { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false }, */
-                                    /* { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "postcall"], popular: false }, */
-                                    /* { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "postcall"], popular: false }, */
-                                    /* { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "postcall"], popular: false }, */
+                                    /* { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "workflow"], popular: false }, */
+                                    /* { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "workflow"], popular: false }, */
+                                    /* { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "workflow"], popular: false }, */
                                     /* { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist", cats: ["all", "incall"], popular: false }, */
-                                    { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
-                                    { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
-                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar", cats: ["all", "telephony"], popular: false },
-                                    { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit", cats: ["all", "telephony"], popular: false },
-                                    { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar", cats: ["all", "appointment"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -3998,29 +3996,29 @@ export default function Process() {
                                 <button
                                   onClick={() => {
                                     const allSteps = [
-                                      { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
-                                      { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
-                                      { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
-                                      { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
-                                      { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall" },
+                                      { key: "ifcondition",     name: "If Condition",       desc: "Branch workflow execution down True or False paths based on field values.",           iconKey: "gitbranch" },
+                                      { key: "waitdelay",       name: "Wait / Delay",       desc: "Pause workflow execution for a specified duration before the next step runs.",         iconKey: "clock" },
+                                      { key: "processmovement", name: "Process Movement",   desc: "Move the contact to a different process and select the target stage.",                iconKey: "zap" },
+                                      { key: "endworkflow",     name: "End Workflow",       desc: "Terminate the workflow after this step runs and mark the contact as done.",            iconKey: "x" },
+                                      { key: "callaction",      name: "Transfer Call",      desc: "Transfer the active AI call to a human agent or another AI agent.",                   iconKey: "phonecall" },
+                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.",                    iconKey: "calendar" },
+                                      { key: "fetchfieldvalue", name: "Fetch Field Value",  desc: "Read and surface a specific field value during an active call.",                      iconKey: "edit" },
+                                      { key: "managecalendar",  name: "Manage Calendar",    desc: "Book, reschedule, or cancel calendar appointments during or after a call.",            iconKey: "calendar" },
+                                      { key: "whatsapp",        name: "WhatsApp",           desc: "Send WhatsApp messages to contacts using pre-configured templates.",                   iconKey: "messagecircle" },
+                                      { key: "sms",             name: "SMS",                desc: "Send SMS text messages to contacts using pre-configured templates.",                    iconKey: "messagesquare" },
+                                      { key: "email",           name: "Email",              desc: "Send email notifications to contacts using pre-configured templates.",                  iconKey: "mail" },
+                                      { key: "fieldupdate",     name: "Field Update",       desc: "Update a specific field value for the contact or record.",                             iconKey: "edit" },
+                                      { key: "assignhuman",     name: "Assign to a Human",  desc: "Assign a human team member to review or handle this contact.",                        iconKey: "usercheck" },
+                                      { key: "wh_trigger",      name: "Trigger Webhook",    desc: "Send data to external systems using webhooks with custom variables.",                  iconKey: "globe" },
+                                      { key: "triggerapi",      name: "Trigger API",        desc: "Make HTTP API calls to external services with custom headers and body.",               iconKey: "zap" },
                                       /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" }, */
-                                      { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
-                                      { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
-                                      { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail" },
                                       /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext" }, */
                                       /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist" }, */
-                                      { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe" },
-                                      { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
                                       /* { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist" }, */
                                       /* { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare" }, */
                                       /* { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" }, */
                                       /* { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" }, */
                                       /* { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" }, */
-                                      { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock" },
-                                      { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch" },
-                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar" },
-                                      { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit" },
-                                      { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar" },
                                     ];
                                     const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
                                     if (step) {
@@ -4236,40 +4234,50 @@ export default function Process() {
 
                                   {actionConfigExpanded && (
                                     <div className="border-t border-border p-4 space-y-4 bg-muted/10">
+                                      {/* Action Name + Action Reason — side by side */}
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Action Name <span className="text-red-500">*</span>
+                                            <Tooltip text="Used to trigger this action via API. Use underscores, no spaces." placement="top">
+                                              <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
+                                            </Tooltip>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={stepActionName}
+                                            onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                            placeholder="e.g. send_followup_sms"
+                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                            Action Reason
+                                            <Tooltip text="Optional sub-reason included in the trigger URL." placement="top">
+                                              <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
+                                            </Tooltip>
+                                          </label>
+                                          <input
+                                            type="text"
+                                            value={stepActionReason}
+                                            onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                            placeholder="e.g. caller_requested_callback"
+                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* Generated Trigger URL */}
                                       <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Action Name <span className="text-red-500">*</span>
+                                        <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Generated Trigger URL
+                                          <Tooltip text="call_id is mandatory. AI must pass the active call_id when triggering this action." placement="top">
+                                            <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
+                                          </Tooltip>
                                         </label>
-                                        <input
-                                          type="text"
-                                          value={stepActionName}
-                                          onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                          placeholder="e.g. send_followup_sms"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Used to trigger this action via API. Use underscores, no spaces.
-                                        </p>
-                                      </div>
-
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
-                                        <input
-                                          type="text"
-                                          value={stepActionReason}
-                                          onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                          placeholder="e.g. caller_requested_callback"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Optional sub-reason included in the trigger URL.
-                                        </p>
-                                      </div>
-
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
                                         <div className="flex items-center gap-2">
                                           <code
                                             className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
@@ -4288,9 +4296,6 @@ export default function Process() {
                                             Copy
                                           </button>
                                         </div>
-                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          call_id is mandatory. AI must pass the active call_id when triggering this action.
-                                        </p>
                                       </div>
                                     </div>
                                   )}
