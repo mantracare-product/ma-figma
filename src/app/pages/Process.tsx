@@ -629,7 +629,6 @@ export default function Process() {
   const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
   const [delayValue, setDelayValue] = useState(5);
   const [delayUnit, setDelayUnit] = useState("Minute");
-  const [delayUnitDropdownOpen, setDelayUnitDropdownOpen] = useState(false);
   const [conditions, setConditions] = useState<Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>>([
     { id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }
   ]);
@@ -738,7 +737,6 @@ export default function Process() {
     setExecutionType("wait");
     setDelayValue(5);
     setDelayUnit("Minute");
-    setDelayUnitDropdownOpen(false);
     setConditions([{ id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }]);
     setConditionOperators([]);
     setStepDetailProcess("Select process...");
@@ -3857,12 +3855,12 @@ export default function Process() {
                               {/* Left Sidebar */}
                               <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
                                 {[
-                                  { key: "all",           icon: <Sparkles className="w-4 h-4" />,      name: "All Steps" },
-                                  { key: "workflow",      icon: <GitBranch className="w-4 h-4" />,     name: "Workflow Logic" },
-                                  { key: "incall",        icon: <Phone className="w-4 h-4" />,         name: "In-Call Actions" },
+                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All Steps" },
+                                  { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
+                                  { key: "incall", icon: <Phone className="w-4 h-4" />, name: "In-Call Actions" },
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
-                                  { key: "data",          icon: <Database className="w-4 h-4" />,      name: "Data & Assignment" },
-                                  { key: "webhook",       icon: <Webhook className="w-4 h-4" />,       name: "Webhook / API" },
+                                  { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
+                                  { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
                                 ].map((cat) => {
                                   const active = workflowStepCategory === cat.key;
                                   return (
@@ -3896,21 +3894,21 @@ export default function Process() {
                               <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
-                                    { key: "ifcondition",     name: "If Condition",       desc: "Branch workflow execution down True or False paths based on field values.",           iconKey: "gitbranch",    cats: ["all", "workflow"],       popular: false },
-                                    { key: "waitdelay",       name: "Wait / Delay",       desc: "Pause workflow execution for a specified duration before the next step runs.",         iconKey: "clock",        cats: ["all", "workflow"],       popular: false },
-                                    { key: "processmovement", name: "Process Movement",   desc: "Move the contact to a different process and select the target stage.",                iconKey: "zap",          cats: ["all", "workflow"],       popular: false },
-                                    { key: "endworkflow",     name: "End Workflow",       desc: "Terminate the workflow after this step runs and mark the contact as done.",            iconKey: "x",            cats: ["all", "workflow"],       popular: false },
-                                    { key: "callaction",      name: "Transfer Call",      desc: "Transfer the active AI call to a human agent or another AI agent.",                   iconKey: "phonecall",    cats: ["all", "incall"],         popular: false },
-                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.",                    iconKey: "calendar",     cats: ["all", "incall"],         popular: false },
-                                    { key: "fetchfieldvalue", name: "Fetch Field Value",  desc: "Read and surface a specific field value during an active call.",                      iconKey: "edit",         cats: ["all", "data"],           popular: false },
-                                    { key: "managecalendar",  name: "Manage Calendar",    desc: "Book, reschedule, or cancel calendar appointments during or after a call.",            iconKey: "calendar",     cats: ["all", "incall"],         popular: false },
-                                    { key: "whatsapp",        name: "WhatsApp",           desc: "Send WhatsApp messages to contacts using pre-configured templates.",                   iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
-                                    { key: "sms",             name: "SMS",                desc: "Send SMS text messages to contacts using pre-configured templates.",                    iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
-                                    { key: "email",           name: "Email",              desc: "Send email notifications to contacts using pre-configured templates.",                  iconKey: "mail",         cats: ["all", "communication"],  popular: false },
-                                    { key: "fieldupdate",     name: "Field Update",       desc: "Update a specific field value for the contact or record.",                             iconKey: "edit",         cats: ["all", "data"],           popular: false },
-                                    { key: "assignhuman",     name: "Assign to a Human",  desc: "Assign a human team member to review or handle this contact.",                        iconKey: "usercheck",    cats: ["all", "data"],           popular: false },
-                                    { key: "wh_trigger",      name: "Trigger Webhook",    desc: "Send data to external systems using webhooks with custom variables.",                  iconKey: "globe",        cats: ["all", "webhook"],        popular: false },
-                                    { key: "triggerapi",      name: "Trigger API",        desc: "Make HTTP API calls to external services with custom headers and body.",               iconKey: "zap",          cats: ["all", "webhook"],        popular: false },
+                                    { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
+                                    { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
+                                    { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                    { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
+                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
+                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
+                                    { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit", cats: ["all", "data"], popular: false },
+                                    { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
+                                    { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
+                                    { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
+                                    { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
+                                    { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
+                                    { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
+                                    { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
+                                    { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
                                     /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "incall"], popular: false }, */
                                     /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "data"], popular: false }, */
                                     /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "data"], popular: false }, */
@@ -3996,21 +3994,21 @@ export default function Process() {
                                 <button
                                   onClick={() => {
                                     const allSteps = [
-                                      { key: "ifcondition",     name: "If Condition",       desc: "Branch workflow execution down True or False paths based on field values.",           iconKey: "gitbranch" },
-                                      { key: "waitdelay",       name: "Wait / Delay",       desc: "Pause workflow execution for a specified duration before the next step runs.",         iconKey: "clock" },
-                                      { key: "processmovement", name: "Process Movement",   desc: "Move the contact to a different process and select the target stage.",                iconKey: "zap" },
-                                      { key: "endworkflow",     name: "End Workflow",       desc: "Terminate the workflow after this step runs and mark the contact as done.",            iconKey: "x" },
-                                      { key: "callaction",      name: "Transfer Call",      desc: "Transfer the active AI call to a human agent or another AI agent.",                   iconKey: "phonecall" },
-                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.",                    iconKey: "calendar" },
-                                      { key: "fetchfieldvalue", name: "Fetch Field Value",  desc: "Read and surface a specific field value during an active call.",                      iconKey: "edit" },
-                                      { key: "managecalendar",  name: "Manage Calendar",    desc: "Book, reschedule, or cancel calendar appointments during or after a call.",            iconKey: "calendar" },
-                                      { key: "whatsapp",        name: "WhatsApp",           desc: "Send WhatsApp messages to contacts using pre-configured templates.",                   iconKey: "messagecircle" },
-                                      { key: "sms",             name: "SMS",                desc: "Send SMS text messages to contacts using pre-configured templates.",                    iconKey: "messagesquare" },
-                                      { key: "email",           name: "Email",              desc: "Send email notifications to contacts using pre-configured templates.",                  iconKey: "mail" },
-                                      { key: "fieldupdate",     name: "Field Update",       desc: "Update a specific field value for the contact or record.",                             iconKey: "edit" },
-                                      { key: "assignhuman",     name: "Assign to a Human",  desc: "Assign a human team member to review or handle this contact.",                        iconKey: "usercheck" },
-                                      { key: "wh_trigger",      name: "Trigger Webhook",    desc: "Send data to external systems using webhooks with custom variables.",                  iconKey: "globe" },
-                                      { key: "triggerapi",      name: "Trigger API",        desc: "Make HTTP API calls to external services with custom headers and body.",               iconKey: "zap" },
+                                      { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch" },
+                                      { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock" },
+                                      { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
+                                      { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
+                                      { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall" },
+                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar" },
+                                      { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit" },
+                                      { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar" },
+                                      { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
+                                      { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
+                                      { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail" },
+                                      { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
+                                      { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
+                                      { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe" },
+                                      { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
                                       /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" }, */
                                       /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext" }, */
                                       /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist" }, */
@@ -4051,8 +4049,14 @@ export default function Process() {
                             className="fixed inset-0 z-40"
                             style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
                             onClick={() => {
-                              setStepDetailDrawerOpen(false);
-                              setIsCreatingNewStep(false);
+                              if (isCreatingNewStep) {
+                                setStepDetailDrawerOpen(false);
+                                setSelectedWorkflowStepCard(null);
+                                setWorkflowStepsDrawerOpen(true);
+                              } else {
+                                setStepDetailDrawerOpen(false);
+                                setIsCreatingNewStep(false);
+                              }
                             }}
                           />
                           {/* Drawer panel */}
@@ -4074,7 +4078,16 @@ export default function Process() {
                                     {currentEditingStep.description}
                                   </p>
                                 </div>
-                                <button onClick={() => { setStepDetailDrawerOpen(false); setIsCreatingNewStep(false); }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
+                                <button onClick={() => {
+                                  if (isCreatingNewStep) {
+                                    setStepDetailDrawerOpen(false);
+                                    setSelectedWorkflowStepCard(null);
+                                    setWorkflowStepsDrawerOpen(true);
+                                  } else {
+                                    setStepDetailDrawerOpen(false);
+                                    setIsCreatingNewStep(false);
+                                  }
+                                }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
                                   <X className="w-5 h-5 text-muted-foreground" />
                                 </button>
                               </div>
@@ -4169,41 +4182,25 @@ export default function Process() {
                                 {stepTrigger === "stage" && currentEditingStep.stepKey !== "waitdelay" && (
                                   <div className="w-[150px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
-                                    <div className="flex items-center">
+                                    <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
                                       <input
                                         type="number"
                                         value={delayValue}
                                         onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
-                                        className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1', width: '0', minWidth: '0' }}
+                                        className="w-16 px-3 py-2.5 text-sm outline-none bg-transparent border-none"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                       />
-                                      <div className="relative flex-shrink-0">
-                                        <button
-                                          onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
-                                          className="px-2 py-2.5 text-xs border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '80px' }}
-                                        >
-                                          <span className="text-xs truncate">{delayUnit}</span>
-                                          <ChevronDown className="w-3 h-3 ml-1 text-muted-foreground flex-shrink-0" />
-                                        </button>
-                                        {delayUnitDropdownOpen && (
-                                          <>
-                                            <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
-                                            <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[110px]">
-                                              {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
-                                                <button
-                                                  key={unit}
-                                                  onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
-                                                  className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  {unit}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
+                                      <div className="w-px h-5 bg-gray-300 flex-shrink-0" />
+                                      <select
+                                        value={delayUnit}
+                                        onChange={(e) => setDelayUnit(e.target.value)}
+                                        className="px-3 py-2.5 text-sm bg-transparent border-none outline-none hover:bg-gray-50 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      >
+                                        {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
+                                          <option key={unit} value={unit}>{unit}</option>
+                                        ))}
+                                      </select>
                                     </div>
                                   </div>
                                 )}
