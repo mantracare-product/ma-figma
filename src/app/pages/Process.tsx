@@ -421,6 +421,10 @@ const FETCH_FIELD_SOURCES = [
   },
 ];
 
+const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
+  FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
+);
+
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
@@ -608,8 +612,8 @@ export default function Process() {
   const [delayValue, setDelayValue] = useState(5);
   const [delayUnit, setDelayUnit] = useState("Minute");
   const [delayUnitDropdownOpen, setDelayUnitDropdownOpen] = useState(false);
-  const [conditions, setConditions] = useState<Array<{ id: string; field: string; operator: string; value: string }>>([
-    { id: "cond-1", field: "Field", operator: "Operator", value: "" }
+  const [conditions, setConditions] = useState<Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>>([
+    { id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }
   ]);
   const [conditionOperators, setConditionOperators] = useState<Array<"AND" | "OR">>([]);
   const [stepDetailProcess, setStepDetailProcess] = useState<string>("Select process...");
@@ -717,7 +721,7 @@ export default function Process() {
     setDelayValue(5);
     setDelayUnit("Minute");
     setDelayUnitDropdownOpen(false);
-    setConditions([{ id: "cond-1", field: "Field", operator: "Operator", value: "" }]);
+    setConditions([{ id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }]);
     setConditionOperators([]);
     setStepDetailProcess("Select process...");
     setStepDetailStage("Select stage...");
@@ -3874,17 +3878,7 @@ export default function Process() {
                                     <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                       {currentEditingStep.name}
                                     </h2>
-                                    {/* Trigger badge — mirrors manager's "Stage Enter" pill */}
-                                    <span
-                                      className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                                      style={{
-                                        backgroundColor: '#DBEAFE',
-                                        color: '#1D4ED8',
-                                        fontFamily: 'DM Sans, sans-serif'
-                                      }}
-                                    >
-                                      Stage Enter
-                                    </span>
+
                                   </div>
                                   <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
                                     {currentEditingStep.description}
@@ -3901,37 +3895,60 @@ export default function Process() {
                               {/* Trigger, Execution & Delay Row */}
                               <div className="flex items-start gap-3">
                                 {/* Column 1 — Trigger */}
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-shrink-0">
                                   <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
-                                  <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20 w-full justify-between">
-                                    {(() => {
-                                      const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
-                                      return ([
-                                        { key: "stage", label: "On Entering Stage" },
-                                        { key: "incall", label: "In Call" },
-                                        { key: "postcall", label: "Post Call" },
-                                      ] as const)
-                                        .filter(t => allowedTriggers.includes(t.key))
-                                        .map((t) => (
-                                          <button
-                                            key={t.key}
-                                            onClick={() => setStepTrigger(t.key)}
-                                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                              }`}
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            {t.label}
-                                          </button>
-                                        ));
-                                    })()}
-                                  </div>
-                                  <p className="text-xs mt-2 min-h-[32px]" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                    {stepTrigger === "stage"
+                                  {/* Trigger toggle + conditional info */}
+                                  {(() => {
+                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
+                                    const visibleButtons = ([
+                                      { key: "stage", label: "On Entering Stage" },
+                                      { key: "incall", label: "In Call" },
+                                      { key: "postcall", label: "Post Call" },
+                                    ] as const).filter(t => allowedTriggers.includes(t.key));
+
+                                    const subtitleText = stepTrigger === "stage"
                                       ? "Runs in sequence as part of this stage's step order, with an optional delay."
                                       : stepTrigger === "incall"
-                                        ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
-                                        : "Fires automatically once the call has ended — no fixed position or delay."}
-                                  </p>
+                                        ? "Fires the moment the AI decides to take this action mid-conversation."
+                                        : "Fires automatically once the call has ended.";
+
+                                    const isSingle = visibleButtons.length === 1;
+
+                                    return (
+                                      <>
+                                        <div className="flex items-center gap-1.5">
+                                        <div className="inline-flex items-center gap-0 p-1 rounded-lg border border-border bg-muted/20">
+                                            {visibleButtons.map((t, idx) => (
+                                              <React.Fragment key={t.key}>
+                                                {idx > 0 && (
+                                                  <div className="w-px h-5 bg-gray-300 flex-shrink-0 mx-0.5" />
+                                                )}
+                                                <button
+                                                  onClick={() => setStepTrigger(t.key)}
+                                                  className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                                    stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                                  }`}
+                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                >
+                                                  {t.label}
+                                                </button>
+                                              </React.Fragment>
+                                            ))}
+                                          </div>
+                                          {isSingle && (
+                                            <Tooltip text={subtitleText} placement="top">
+                                              <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 flex-shrink-0" />
+                                            </Tooltip>
+                                          )}
+                                        </div>
+                                        {!isSingle && (
+                                          <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                            {subtitleText}
+                                          </p>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
 
                                 {/* Column 2 — Execution */}
@@ -3947,7 +3964,7 @@ export default function Process() {
                                     </button>
                                   </div>
                                 ) : (stepTrigger === "incall" || stepTrigger === "postcall") ? (
-                                  <div className="w-[200px] flex-shrink-0">
+                                  <div className="w-fit flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
                                     <div
                                       className="w-full px-3 py-2.5 rounded-md border border-border bg-muted/10 flex items-center gap-2"
@@ -5917,13 +5934,32 @@ export default function Process() {
                                       {conditions.map((cond, index) => (
                                         <React.Fragment key={cond.id}>
                                           <div className="flex items-start gap-2">
-                                            <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
-                                              <option>Stage Fields</option>
-                                              <option>Contact Fields</option>
-                                              <option>Call Fields</option>
+                                            <select
+                                              value={cond.fieldSource || ""}
+                                              onChange={e => setConditions(prev => prev.map(c =>
+                                                c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
+                                              ))}
+                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                            >
+                                              <option value="">Source</option>
+                                              {FETCH_FIELD_SOURCES.map(src => (
+                                                <option key={src.value} value={src.value}>{src.label}</option>
+                                              ))}
                                             </select>
-                                            <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                              {["Stage Name", "Contact Name", "Call Status", "Call Duration", "Country", "Sentiment", "Intent", "Appointment Date", "Appointment Time", "AI Summary", "Call Transcription"].map(o => <option key={o}>{o}</option>)}
+                                            <select
+                                              value={cond.field}
+                                              onChange={e => setConditions(prev => prev.map(c =>
+                                                c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
+                                              ))}
+                                              disabled={!cond.fieldSource}
+                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                            >
+                                              <option value="">Field</option>
+                                              {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
+                                                <option key={f.value} value={f.value}>{f.label}</option>
+                                              ))}
                                             </select>
                                             <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
                                               {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => <option key={o}>{o}</option>)}
@@ -5945,7 +5981,7 @@ export default function Process() {
                                           )}
                                         </React.Fragment>
                                       ))}
-                                      <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                      <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                         <Plus className="w-4 h-4" /> Add Condition
                                       </button>
                                       {conditions.some(c => c.value) && (
@@ -5955,7 +5991,7 @@ export default function Process() {
                                             <div key={cond.id}>
                                               {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
                                               {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
-                                              <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
+                                              <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} = "{cond.value}"</p>
                                             </div>
                                           ))}
                                           <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
