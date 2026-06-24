@@ -352,7 +352,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "crmupdate": ["stage", "postcall"],
   "ehrupdate": ["stage", "postcall"],
   "wh_trigger": ["stage", "postcall"],
-  "triggerapi": ["stage", "postcall"],
+  "triggerapi": ["stage", "incall", "postcall"],
   "collectinformation": ["stage", "postcall"],
   "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
@@ -581,6 +581,11 @@ export default function Process() {
 
   // WhatsApp / SMS / Email states
   const [templateId, setTemplateId] = useState<string>("");
+  const [smsTemplate, setSmsTemplate] = useState("");
+  const [smsTemplateIdentifier, setSmsTemplateIdentifier] = useState("");
+  const [whatsappTemplate, setWhatsappTemplate] = useState("");
+  const [whatsappTemplateIdentifier, setWhatsappTemplateIdentifier] = useState("");
+  const [webhookHeaderTypes, setWebhookHeaderTypes] = useState<string[]>(["Static"]);
 
   // CRM Update states
   const [crmName, setCrmName] = useState<string>("Select CRM...");
@@ -645,12 +650,17 @@ export default function Process() {
     setUpdateValue("");
     setAssignedUser("Select user...");
     setTemplateId("");
+    setSmsTemplate("");
+    setSmsTemplateIdentifier("");
+    setWhatsappTemplate("");
+    setWhatsappTemplateIdentifier("");
     setCrmName("Select CRM...");
     setCrmField("Select field...");
     setEhrName("Select EHR...");
     setEhrField("Select field...");
     setWebhookUrl("");
     setWebhookHeaders([{ id: "header-1", key: "", value: "" }]);
+    setWebhookHeaderTypes(["Static"]);
     setWebhookBody("");
     setApiEndpoint("");
     setApiMethod("GET");
@@ -3835,7 +3845,7 @@ export default function Process() {
                                 </div>
 
                                 {/* Column 2 — Execution */}
-                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
+                                {stepTrigger === "stage" ? (
                                   <div className="w-[140px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
                                     <button
@@ -3846,7 +3856,7 @@ export default function Process() {
                                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
                                     </button>
                                   </div>
-                                ) : (stepTrigger === "incall" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "endworkflow" ? (
+                                ) : (stepTrigger === "incall" || stepTrigger === "postcall") ? (
                                   <div className="w-[200px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
                                     <div
@@ -3860,7 +3870,7 @@ export default function Process() {
                                 ) : null}
 
                                 {/* Column 3 — Delay */}
-                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" && (
+                                {stepTrigger === "stage" && (
                                   <div className="w-[150px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
                                     <div className="flex items-center">
@@ -4011,15 +4021,14 @@ export default function Process() {
                                 <div className="space-y-4">
                                   <div>
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Field Category
+                                      Field Type
                                     </label>
                                     <select
                                       className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                       style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                     >
-                                      <option>Stage Fields</option>
-                                      <option>Contact Fields</option>
-                                      <option>Call Fields</option>
+                                      <option>System Fields</option>
+                                      <option>Custom Fields</option>
                                     </select>
                                   </div>
                                   <div>
@@ -4103,78 +4112,19 @@ export default function Process() {
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                       Assign To
                                     </label>
-                                    {/* Search input */}
-                                    <div className="relative mb-2">
-                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                      <input
-                                        type="text"
-                                        value={assignHumanSearch}
-                                        onChange={e => setAssignHumanSearch(e.target.value)}
-                                        placeholder="Search users..."
-                                        className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      />
-                                    </div>
-                                    {/* User list */}
-                                    <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
-                                      {availableEmployees
-                                        .filter(emp => 
-                                          !assignHumanSearch || 
-                                          emp.name.toLowerCase().includes(assignHumanSearch.toLowerCase())
-                                        )
-                                        .map(emp => (
-                                          <label
-                                            key={emp.id}
-                                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors ${assignedUser === emp.id ? "bg-primary/5" : ""}`}
-                                          >
-                                            <input
-                                              type="radio"
-                                              name="assignHumanUser"
-                                              value={emp.id}
-                                              checked={assignedUser === emp.id}
-                                              onChange={() => setAssignedUser(emp.id)}
-                                              className="accent-primary"
-                                            />
-                                            <div className="flex-1">
-                                              <p className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{emp.name}</p>
-                                            </div>
-                                            {assignedUser === emp.id && (
-                                              <span className="text-primary">✓</span>
-                                            )}
-                                          </label>
-                                        ))
-                                      }
-                                      {availableEmployees.filter(emp => 
-                                        !assignHumanSearch || 
-                                        emp.name.toLowerCase().includes(assignHumanSearch.toLowerCase())
-                                      ).length === 0 && (
-                                        <p className="px-4 py-3 text-sm text-muted-foreground">No users found.</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Assignment Type
-                                    </label>
                                     <select
+                                      value={assignedUser}
+                                      onChange={e => setAssignedUser(e.target.value)}
                                       className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                       style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                     >
-                                      <option>Assign to specific user</option>
-                                      <option>Round robin</option>
-                                      <option>Least busy</option>
+                                      <option value="">Select user...</option>
+                                      {availableEmployees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>
+                                          {emp.name}
+                                        </option>
+                                      ))}
                                     </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Internal Note (Optional)
-                                    </label>
-                                    <textarea
-                                      placeholder="Add context for the assigned team member..."
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                      rows={3}
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
                                   </div>
                                 </div>
                               )}
@@ -4314,6 +4264,38 @@ export default function Process() {
                                 <div className="space-y-4">
                                   <div>
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template
+                                    </label>
+                                    <select
+                                      value={whatsappTemplate}
+                                      onChange={e => setWhatsappTemplate(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select Template...</option>
+                                      <option value="Appointment Confirmation">Appointment Confirmation</option>
+                                      <option value="Post Visit Follow Up">Post Visit Follow Up</option>
+                                      <option value="Intake Form">Intake Form</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template Identifier
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={whatsappTemplateIdentifier}
+                                      onChange={e => setWhatsappTemplateIdentifier(e.target.value)}
+                                      placeholder="Enter template identifier..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Used for template identification and analytics.
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                       Connected Account
                                     </label>
                                     <select
@@ -4324,42 +4306,44 @@ export default function Process() {
                                       <option>+1 (555) 123-4567</option>
                                     </select>
                                   </div>
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Template ID
-                                      </label>
-                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                    </div>
-                                    <input
-                                      type="text"
-                                      value={templateId}
-                                      onChange={e => setTemplateId(e.target.value)}
-                                      placeholder="Enter WhatsApp template ID..."
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Message Body
-                                      </label>
-                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
-                                    </div>
-                                    <textarea
-                                      placeholder="Hello {{ContactName}}, ..."
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                      rows={4}
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                  </div>
                                 </div>
                               )}
 
                               {/* SMS Step */}
                               {currentEditingStep.stepKey === "sms" && (
                                 <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template
+                                    </label>
+                                    <select
+                                      value={smsTemplate}
+                                      onChange={e => setSmsTemplate(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select Template...</option>
+                                      <option value="Appointment Booking">Appointment Booking</option>
+                                      <option value="Welcome Message">Welcome Message</option>
+                                      <option value="Follow Up">Follow Up</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Template Identifier
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={smsTemplateIdentifier}
+                                      onChange={e => setSmsTemplateIdentifier(e.target.value)}
+                                      placeholder="Enter template identifier..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Used for template identification and analytics.
+                                    </p>
+                                  </div>
                                   <div>
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                       Connected Account
@@ -4371,21 +4355,6 @@ export default function Process() {
                                       <option value="">Select SMS account...</option>
                                       <option>+1 (555) 123-4567</option>
                                     </select>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Message Body</label>
-                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>+ Variable</button>
-                                    </div>
-                                    <textarea
-                                      value={templateId}
-                                      onChange={e => setTemplateId(e.target.value)}
-                                      placeholder="Enter SMS message..."
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                      rows={4}
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>Max 1000 characters.</p>
                                   </div>
                                 </div>
                               )}
@@ -4622,20 +4591,6 @@ export default function Process() {
                               {currentEditingStep.stepKey === "wh_trigger" && (
                                 <div className="space-y-4">
                                   <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>HTTP Method</label>
-                                    <select
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      defaultValue="POST"
-                                    >
-                                      <option>GET</option>
-                                      <option>POST</option>
-                                      <option>PUT</option>
-                                      <option>PATCH</option>
-                                      <option>DELETE</option>
-                                    </select>
-                                  </div>
-                                  <div>
                                     <div className="flex items-center justify-between mb-2">
                                       <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
                                       <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
@@ -4654,6 +4609,20 @@ export default function Process() {
                                     <div className="space-y-2">
                                       {webhookHeaders.map((header, index) => (
                                         <div key={header.id} className="flex items-center gap-2">
+                                          <select
+                                            value={webhookHeaderTypes[index] || "Static"}
+                                            onChange={e => {
+                                              const newTypes = [...webhookHeaderTypes];
+                                              newTypes[index] = e.target.value;
+                                              setWebhookHeaderTypes(newTypes);
+                                            }}
+                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          >
+                                            <option value="Static">Static</option>
+                                            <option value="System Fields">System Fields</option>
+                                            <option value="Custom Fields">Custom Fields</option>
+                                          </select>
                                           <input
                                             type="text"
                                             value={header.key}
@@ -4671,34 +4640,29 @@ export default function Process() {
                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                           />
                                           {webhookHeaders.length > 1 && (
-                                            <button onClick={() => setWebhookHeaders(prev => prev.filter((_, i) => i !== index))} className="p-2 rounded hover:bg-red-50 transition-colors">
+                                            <button
+                                              onClick={() => {
+                                                setWebhookHeaders(prev => prev.filter((_, i) => i !== index));
+                                                setWebhookHeaderTypes(prev => prev.filter((_, i) => i !== index));
+                                              }}
+                                              className="p-2 rounded hover:bg-red-50 transition-colors"
+                                            >
                                               <Trash2 className="w-4 h-4 text-red-500" />
                                             </button>
                                           )}
                                         </div>
                                       ))}
                                       <button
-                                        onClick={() => setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
+                                        onClick={() => {
+                                          setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }]);
+                                          setWebhookHeaderTypes(prev => [...prev, "Static"]);
+                                        }}
                                         className="w-full py-2 text-sm border-2 border-dashed border-gray-300 rounded-md text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
                                         style={{ fontFamily: 'DM Sans, sans-serif' }}
                                       >
                                         + Add Header
                                       </button>
                                     </div>
-                                  </div>
-                                  <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Body</label>
-                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                    </div>
-                                    <textarea
-                                      value={webhookBody}
-                                      onChange={e => setWebhookBody(e.target.value)}
-                                      placeholder={'{"key": "value"}'}
-                                      rows={4}
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors font-mono"
-                                      style={{ color: '#020817' }}
-                                    />
                                   </div>
                                 </div>
                               )}
@@ -5729,8 +5693,7 @@ export default function Process() {
                               </div>
 
                               {/* Execution + Conditions — skipped for endworkflow (moved to be last) */}
-                              {currentEditingStep.stepKey !== "endworkflow" && (
-                                <div className="space-y-6">
+                              <div className="space-y-6">
                                   <div>
                                     <div className="flex items-center justify-between py-2">
                                       <div className="flex items-center gap-2">
@@ -5806,7 +5769,6 @@ export default function Process() {
                                     )}
                                   </div>
                                 </div>
-                              )}
                             </div>
 
                             {/* Footer */}
