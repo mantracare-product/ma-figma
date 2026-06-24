@@ -363,7 +363,50 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "callaction": ["incall", "postcall"],
   "waitdelay": ["stage", "incall", "postcall"],
   "ifcondition": ["stage", "incall", "postcall"],
+  "fetchavailability": ["incall"],
+  "fetchfieldvalue": ["incall"],
+  "managecalendar": ["incall", "postcall"],
 };
+
+const FETCH_FIELD_SOURCES = [
+  { value: "system", label: "System Fields", fields: [
+    { value: "contact_name", label: "Contact Name" },
+    { value: "contact_email", label: "Contact Email" },
+    { value: "contact_phone", label: "Contact Phone" },
+    { value: "country", label: "Country" },
+    { value: "language", label: "Language" },
+  ]},
+  { value: "call-log", label: "Call Log Fields", fields: [
+    { value: "call_status", label: "Call Status" },
+    { value: "call_duration", label: "Call Duration" },
+    { value: "call_sentiment", label: "Sentiment" },
+    { value: "call_intent", label: "Intent" },
+    { value: "call_summary", label: "Call Summary" },
+    { value: "call_transcription", label: "Call Transcription" },
+  ]},
+  { value: "stage", label: "Stage Fields", fields: [
+    { value: "stage_name", label: "Stage Name" },
+    { value: "stage_entered_at", label: "Stage Entered At" },
+  ]},
+  { value: "process", label: "Process Fields", fields: [
+    { value: "process_name", label: "Process Name" },
+    { value: "process_status", label: "Process Status" },
+  ]},
+  { value: "appointment", label: "Appointment Fields", fields: [
+    { value: "appointment_date", label: "Appointment Date" },
+    { value: "appointment_time", label: "Appointment Time" },
+    { value: "appointment_status", label: "Appointment Status" },
+    { value: "appointment_with", label: "Appointment With" },
+  ]},
+  { value: "org", label: "Organization Fields", fields: [
+    { value: "org_name", label: "Organization Name" },
+    { value: "org_domain", label: "Organization Domain" },
+  ]},
+  { value: "custom", label: "Custom Fields", fields: [
+    { value: "custom_field_1", label: "Custom Field 1" },
+    { value: "custom_field_2", label: "Custom Field 2" },
+  ]},
+];
 
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
@@ -571,6 +614,25 @@ export default function Process() {
   const [callActionVoiceResponse, setCallActionVoiceResponse] = useState<string>("Please hold while I transfer your call");
   const [callActionExtension, setCallActionExtension] = useState<string>("");
 
+  // Fetch Availability states
+  const [fetchAvailCalendarUser, setFetchAvailCalendarUser] = useState<string>("");
+  const [fetchAvailDateSource, setFetchAvailDateSource] = useState<string>("");
+  const [fetchAvailTimeSource, setFetchAvailTimeSource] = useState<string>("");
+  const [fetchAvailSummary, setFetchAvailSummary] = useState<string>("");
+
+  // Fetch Field Value states
+  const [fetchFieldSource, setFetchFieldSource] = useState<string>("");
+  const [fetchFieldSelected, setFetchFieldSelected] = useState<string>("");
+  const [fetchFieldReason, setFetchFieldReason] = useState<string>("");
+
+  // Manage Calendar states
+  const [calendarMode, setCalendarMode] = useState<"book" | "reschedule" | "cancel">("book");
+  const [calendarMeetingId, setCalendarMeetingId] = useState<string>("");
+  const [calendarConnected, setCalendarConnected] = useState<string>("");
+  const [calendarDate, setCalendarDate] = useState<string>("");
+  const [calendarTime, setCalendarTime] = useState<string>("");
+  const [calendarAppointmentField, setCalendarAppointmentField] = useState<string>("");
+
 
   // Field Update states
   const [fieldToEdit, setFieldToEdit] = useState<string>("Select field...");
@@ -711,6 +773,19 @@ export default function Process() {
     setCallActionReason("");
     setCallActionVoiceResponse("Please hold while I transfer your call");
     setCallActionExtension("");
+    setFetchAvailCalendarUser("");
+    setFetchAvailDateSource("");
+    setFetchAvailTimeSource("");
+    setFetchAvailSummary("");
+    setFetchFieldSource("");
+    setFetchFieldSelected("");
+    setFetchFieldReason("");
+    setCalendarMode("book");
+    setCalendarMeetingId("");
+    setCalendarConnected("");
+    setCalendarDate("");
+    setCalendarTime("");
+    setCalendarAppointmentField("");
   };
 
   const buildTriggerUrl = (trigger: "incall" | "postcall", actionName: string, actionReason: string) => {
@@ -3636,6 +3711,9 @@ export default function Process() {
                                     { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
                                     { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
                                     { key: "timecontrol", name: "Time Control", desc: "Define time intervals and call duration limits that control when this stage operates.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
+                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar", cats: ["all", "telephony"], popular: false },
+                                    { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit", cats: ["all", "telephony"], popular: false },
+                                    { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar", cats: ["all", "appointment"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -3735,6 +3813,9 @@ export default function Process() {
                                       { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock" },
                                       { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch" },
                                       { key: "timecontrol", name: "Time Control", desc: "Define time intervals and call duration limits that control when this stage operates.", iconKey: "clock" },
+                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar" },
+                                      { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit" },
+                                      { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar" },
                                     ];
                                     const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
                                     if (step) {
@@ -5688,6 +5769,250 @@ export default function Process() {
                                   </div>
                                 </div>
                               )}
+
+                              {/* Fetch Availability Step */}
+                              {currentEditingStep.stepKey === "fetchavailability" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Calendar User
+                                    </label>
+                                    <p className="text-xs mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Only users with connected calendars appear here.
+                                    </p>
+                                    <select
+                                      value={fetchAvailCalendarUser}
+                                      onChange={e => setFetchAvailCalendarUser(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select calendar user...</option>
+                                      <option value="u1">John Smith — Google Calendar</option>
+                                      <option value="u2">Sarah Johnson — Outlook</option>
+                                    </select>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Date Source
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={fetchAvailDateSource}
+                                        onChange={e => setFetchAvailDateSource(e.target.value)}
+                                        placeholder="{{AppointmentDate}}"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                    </div>
+                                    <div>
+                                      <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Time Source
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={fetchAvailTimeSource}
+                                        onChange={e => setFetchAvailTimeSource(e.target.value)}
+                                        placeholder="{{AppointmentTime}}"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Summary
+                                      </label>
+                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                        Insert Variable
+                                      </button>
+                                    </div>
+                                    <textarea
+                                      value={fetchAvailSummary}
+                                      onChange={e => setFetchAvailSummary(e.target.value)}
+                                      placeholder="e.g. Checking availability for {{ContactName}}..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={3}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                                    <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Sent as <code style={{ color: '#2563EB' }}>request_type=fetch_availability</code> in the backend payload.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Fetch Field Value Step */}
+                              {currentEditingStep.stepKey === "fetchfieldvalue" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Field Source
+                                    </label>
+                                    <select
+                                      value={fetchFieldSource}
+                                      onChange={e => { setFetchFieldSource(e.target.value); setFetchFieldSelected(""); }}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select source...</option>
+                                      {FETCH_FIELD_SOURCES.map(src => (
+                                        <option key={src.value} value={src.value}>{src.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Field Selector
+                                    </label>
+                                    <select
+                                      value={fetchFieldSelected}
+                                      onChange={e => setFetchFieldSelected(e.target.value)}
+                                      disabled={!fetchFieldSource}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select field...</option>
+                                      {(FETCH_FIELD_SOURCES.find(s => s.value === fetchFieldSource)?.fields || []).map(f => (
+                                        <option key={f.value} value={f.value}>{f.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Reason
+                                    </label>
+                                    <textarea
+                                      value={fetchFieldReason}
+                                      onChange={e => setFetchFieldReason(e.target.value)}
+                                      placeholder="Why this field value is being fetched during the call..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                      rows={3}
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                                    <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Sent as <code style={{ color: '#2563EB' }}>request_type=fetch_field</code> in the backend payload.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Manage Calendar Step */}
+                              {currentEditingStep.stepKey === "managecalendar" && (
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Mode
+                                    </label>
+                                    <div className="flex gap-2">
+                                      {[
+                                        { v: "book" as const, l: "Book" },
+                                        { v: "reschedule" as const, l: "Reschedule" },
+                                        { v: "cancel" as const, l: "Cancel" }
+                                      ].map(opt => (
+                                        <button
+                                          key={opt.v}
+                                          onClick={() => setCalendarMode(opt.v)}
+                                          className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${
+                                            calendarMode === opt.v
+                                              ? "border-primary bg-primary/5 text-primary"
+                                              : "border-border hover:border-muted-foreground/30 text-gray-600"
+                                          }`}
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          {opt.l}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  {(calendarMode === "reschedule" || calendarMode === "cancel") && (
+                                    <div>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Meeting ID
+                                      </label>
+                                      <input
+                                        type="text"
+                                        value={calendarMeetingId}
+                                        onChange={e => setCalendarMeetingId(e.target.value)}
+                                        placeholder="e.g. {{MeetingID}}"
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                    </div>
+                                  )}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Connected Calendar
+                                    </label>
+                                    <select
+                                      value={calendarConnected}
+                                      onChange={e => setCalendarConnected(e.target.value)}
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    >
+                                      <option value="">Select calendar...</option>
+                                      <option value="c1">John Smith — Google Calendar</option>
+                                      <option value="c2">Sarah Johnson — Outlook</option>
+                                    </select>
+                                  </div>
+                                  {calendarMode !== "cancel" && (
+                                    <div className="grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                                          {calendarMode === "reschedule" ? "New Date" : "Date"}
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={calendarDate}
+                                          onChange={e => setCalendarDate(e.target.value)}
+                                          placeholder="{{AppointmentDate}}"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                                          {calendarMode === "reschedule" ? "New Time" : "Time"}
+                                        </label>
+                                        <input
+                                          type="text"
+                                          value={calendarTime}
+                                          onChange={e => setCalendarTime(e.target.value)}
+                                          placeholder="{{AppointmentTime}}"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Current Appointment Field
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={calendarAppointmentField}
+                                      onChange={e => setCalendarAppointmentField(e.target.value)}
+                                      placeholder="Field storing appointment reference..."
+                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+                                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
+                                    <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Sent as <code style={{ color: '#2563EB' }}>
+                                        request_type={calendarMode === "book" ? "book_appointment" : calendarMode === "reschedule" ? "reschedule_appointment" : "cancel_appointment"}
+                                      </code> in the backend payload.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+
                                   </div>
                                 )}
                               </div>
