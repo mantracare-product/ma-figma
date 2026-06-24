@@ -3948,7 +3948,7 @@ export default function Process() {
                                 ) : null}
 
                                 {/* Column 3 — Delay */}
-                                {stepTrigger === "stage" && (
+                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "waitdelay" && (
                                   <div className="w-[150px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
                                     <div className="flex items-center">
@@ -5927,6 +5927,52 @@ export default function Process() {
                                       </code> in the backend payload.
                                     </p>
                                   </div>
+                                </div>
+                              )}
+
+                              {currentEditingStep.stepKey === "waitdelay" && (
+                                <div className="space-y-3">
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Duration (seconds)
+                                    </label>
+                                    <p className="text-xs mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enter a value between 1 and 600 seconds.
+                                    </p>
+                                    <div className="flex items-center gap-3">
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        max={600}
+                                        value={delayValue}
+                                        onChange={(e) => {
+                                          const val = Math.min(600, Math.max(1, parseInt(e.target.value) || 1));
+                                          setDelayValue(val);
+                                        }}
+                                        className="w-32 px-3 py-2.5 bg-white border border-border rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                      <span className="text-sm font-medium" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        seconds
+                                      </span>
+                                    </div>
+                                    {delayValue > 0 && (
+                                      <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        Workflow pauses for <strong style={{ color: '#020817' }}>{delayValue}s</strong> before the next step runs.
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {currentEditingStep.stepKey === "ifcondition" && (
+                                <div className="p-4 rounded-xl border border-violet-200 bg-violet-50">
+                                  <p className="text-sm font-semibold mb-1" style={{ color: '#5B21B6', fontFamily: 'DM Sans, sans-serif' }}>
+                                    If Condition
+                                  </p>
+                                  <p className="text-xs leading-relaxed" style={{ color: '#6D28D9', fontFamily: 'Outfit, sans-serif' }}>
+                                    Configure the branching logic in the Conditions section below. True and False branches can be managed from the workflow canvas after adding this step.
+                                  </p>
                                 </div>
                               )}
 
