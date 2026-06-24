@@ -354,13 +354,15 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "wh_trigger": ["stage", "postcall"],
   "triggerapi": ["stage", "postcall"],
   "collectinformation": ["stage", "postcall"],
-  "scheduleappointment": ["stage", "postcall"],
+  "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
   "greetingphrase": ["incall"],
   "transfercall": ["incall"],
   "bypasstohuman": ["incall"],
   "liveintaketicket": ["incall"],
   "callaction": ["incall", "postcall"],
+  "waitdelay": ["stage", "incall", "postcall"],
+  "ifcondition": ["stage", "incall", "postcall"],
 };
 
 export default function Process() {
@@ -556,6 +558,19 @@ export default function Process() {
   const [conditionOperators, setConditionOperators] = useState<Array<"AND" | "OR">>([]);
   const [stepDetailProcess, setStepDetailProcess] = useState<string>("Select process...");
   const [stepDetailStage, setStepDetailStage] = useState<string>("Select stage...");
+  const [movementTargetExpanded, setMovementTargetExpanded] = useState(true);
+  const [actionConfigExpanded, setActionConfigExpanded] = useState(true);
+  const [parametersExpanded, setParametersExpanded] = useState(true);
+  const [fieldUpdateValueSource, setFieldUpdateValueSource] = useState<"static" | "variable" | "field_ref">("static");
+  const [assignHumanSearch, setAssignHumanSearch] = useState<string>("");
+  const [callActionTransferType, setCallActionTransferType] = useState<"human" | "agent">("human");
+  const [callActionCountryCode, setCallActionCountryCode] = useState<string>("+1");
+  const [callActionPhoneNumber, setCallActionPhoneNumber] = useState<string>("");
+  const [callActionAgentId, setCallActionAgentId] = useState<string>("");
+  const [callActionReason, setCallActionReason] = useState<string>("");
+  const [callActionVoiceResponse, setCallActionVoiceResponse] = useState<string>("Please hold while I transfer your call");
+  const [callActionExtension, setCallActionExtension] = useState<string>("");
+
 
   // Field Update states
   const [fieldToEdit, setFieldToEdit] = useState<string>("Select field...");
@@ -674,6 +689,18 @@ export default function Process() {
     setTrueBranchExpanded(true);
     setFalseBranchExpanded(true);
     setBranchAddTarget(null);
+    setMovementTargetExpanded(true);
+    setActionConfigExpanded(true);
+    setParametersExpanded(true);
+    setFieldUpdateValueSource("static");
+    setAssignHumanSearch("");
+    setCallActionTransferType("human");
+    setCallActionCountryCode("+1");
+    setCallActionPhoneNumber("");
+    setCallActionAgentId("");
+    setCallActionReason("");
+    setCallActionVoiceResponse("Please hold while I transfer your call");
+    setCallActionExtension("");
   };
 
   const buildTriggerUrl = (trigger: "incall" | "postcall", actionName: string, actionReason: string) => {
@@ -2883,8 +2910,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${retryRulesEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3004,8 +3031,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${skipDayRulesEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3066,8 +3093,8 @@ export default function Process() {
                                             )
                                           }
                                           className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all ${isActive
-                                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                              : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                                            ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                            : 'bg-white text-gray-600 border-gray-200 hover:border-blue-400 hover:text-blue-600'
                                             }`}
                                           style={{ fontFamily: 'DM Sans, sans-serif' }}
                                         >
@@ -3170,8 +3197,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${detectVoicemailEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3242,8 +3269,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${autoHangupInteractionEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3317,8 +3344,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${autoHangupSilenceStageEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3392,8 +3419,8 @@ export default function Process() {
                               <div className="flex items-center gap-2">
                                 <span
                                   className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${idleMessagesStageEnabled
-                                      ? 'bg-green-100 text-green-700'
-                                      : 'bg-gray-100 text-gray-500'
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-gray-100 text-gray-500'
                                     }`}
                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                 >
@@ -3596,6 +3623,9 @@ export default function Process() {
                                     { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "postcall"], popular: false },
                                     { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "postcall"], popular: false },
                                     { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist", cats: ["all", "incall"], popular: false },
+                                    { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
+                                    { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
+                                    { key: "timecontrol", name: "Time Control", desc: "Define time intervals and call duration limits that control when this stage operates.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -3692,6 +3722,9 @@ export default function Process() {
                                       { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" },
                                       { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" },
                                       { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" },
+                                      { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock" },
+                                      { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch" },
+                                      { key: "timecontrol", name: "Time Control", desc: "Define time intervals and call duration limits that control when this stage operates.", iconKey: "clock" },
                                     ];
                                     const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
                                     if (step) {
@@ -3768,14 +3801,14 @@ export default function Process() {
                               {/* Trigger, Execution & Delay Row */}
                               <div className="flex items-start gap-3">
                                 {/* Column 1 — Trigger */}
-                                <div className="flex-1">
+                                <div className="flex-1 min-w-0">
                                   <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
                                   <div className="inline-flex gap-1 p-1 rounded-lg border border-border bg-muted/20 w-full justify-between">
                                     {(() => {
                                       const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
                                       return ([
-                                        { key: "stage",    label: "On Entering Stage" },
-                                        { key: "incall",   label: "In Call" },
+                                        { key: "stage", label: "On Entering Stage" },
+                                        { key: "incall", label: "In Call" },
                                         { key: "postcall", label: "Post Call" },
                                       ] as const)
                                         .filter(t => allowedTriggers.includes(t.key))
@@ -3783,9 +3816,8 @@ export default function Process() {
                                           <button
                                             key={t.key}
                                             onClick={() => setStepTrigger(t.key)}
-                                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                              stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                            }`}
+                                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                              }`}
                                             style={{ fontFamily: 'Outfit, sans-serif' }}
                                           >
                                             {t.label}
@@ -3793,226 +3825,186 @@ export default function Process() {
                                         ));
                                     })()}
                                   </div>
-                                  <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                  <p className="text-xs mt-2 min-h-[32px]" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
                                     {stepTrigger === "stage"
                                       ? "Runs in sequence as part of this stage's step order, with an optional delay."
                                       : stepTrigger === "incall"
-                                      ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
-                                      : "Fires automatically once the call has ended — no fixed position or delay."}
+                                        ? "Fires the moment the AI decides to take this action mid-conversation — no fixed position or delay."
+                                        : "Fires automatically once the call has ended — no fixed position or delay."}
                                   </p>
                                 </div>
 
                                 {/* Column 2 — Execution */}
-                                <div className={stepTrigger === "stage" ? "w-[160px] flex-shrink-0" : "w-[220px] flex-shrink-0"}>
-                                  {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
-                                    <>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                      <button
-                                        onClick={() => setExecutionTimingModalOpen(true)}
-                                        className="w-full flex items-center justify-between px-4 py-3 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                                      >
-                                        <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
-                                        <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                                      </button>
-                                    </>
-                                  ) : (stepTrigger === "incall" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "endworkflow" ? (
-                                    <>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                      <div className="w-full px-3 py-3 rounded-md border border-border bg-muted/20 text-xs flex items-center gap-2 whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
-                                        <span>(Event Driven) Triggered by AI Action</span>
-                                      </div>
-                                    </>
-                                  ) : null}
-                                </div>
+                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
+                                  <div className="w-[140px] flex-shrink-0">
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                    <button
+                                      onClick={() => setExecutionTimingModalOpen(true)}
+                                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                                    >
+                                      <span className="text-sm truncate" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
+                                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
+                                    </button>
+                                  </div>
+                                ) : (stepTrigger === "incall" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "endworkflow" ? (
+                                  <div className="w-[200px] flex-shrink-0">
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                    <div
+                                      className="w-full px-3 py-2.5 rounded-md border border-border bg-muted/10 flex items-center gap-2"
+                                      style={{ height: '42px' }}
+                                    >
+                                      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                                      <span className="text-xs truncate whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Event Driven · AI Action</span>
+                                    </div>
+                                  </div>
+                                ) : null}
 
                                 {/* Column 3 — Delay */}
-                                <div className="w-[160px] flex-shrink-0">
-                                  {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" ? (
-                                    <>
-                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
-                                      <div className="flex items-center">
-                                        <input
-                                          type="number"
-                                          value={delayValue}
-                                          onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
-                                          className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1', width: '0' }}
-                                        />
-                                        <div className="relative flex-shrink-0">
-                                          <button
-                                            onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
-                                            className="px-2 py-2.5 text-xs border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '90px' }}
-                                          >
-                                            <span className="text-xs">{delayUnit}</span>
-                                            <ChevronDown className="w-3 h-3 ml-1 text-muted-foreground" />
-                                          </button>
-                                          {delayUnitDropdownOpen && (
-                                            <>
-                                              <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
-                                              <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[120px]">
-                                                {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
-                                                  <button
-                                                    key={unit}
-                                                    onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
-                                                    className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  >
-                                                    {unit}
-                                                  </button>
-                                                ))}
-                                              </div>
-                                            </>
-                                          )}
-                                        </div>
+                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "endworkflow" && (
+                                  <div className="w-[150px] flex-shrink-0">
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
+                                    <div className="flex items-center">
+                                      <input
+                                        type="number"
+                                        value={delayValue}
+                                        onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
+                                        className="px-3 py-2.5 text-sm border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopLeftRadius: '0.375rem', borderBottomLeftRadius: '0.375rem', borderRight: 'none', flex: '1', width: '0', minWidth: '0' }}
+                                      />
+                                      <div className="relative flex-shrink-0">
+                                        <button
+                                          onClick={() => setDelayUnitDropdownOpen(!delayUnitDropdownOpen)}
+                                          className="px-2 py-2.5 text-xs border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', borderTopRightRadius: '0.375rem', borderBottomRightRadius: '0.375rem', borderLeft: 'none', minWidth: '80px' }}
+                                        >
+                                          <span className="text-xs truncate">{delayUnit}</span>
+                                          <ChevronDown className="w-3 h-3 ml-1 text-muted-foreground flex-shrink-0" />
+                                        </button>
+                                        {delayUnitDropdownOpen && (
+                                          <>
+                                            <div className="fixed inset-0 z-[40]" onClick={() => setDelayUnitDropdownOpen(false)} />
+                                            <div className="absolute top-full right-0 mt-1 bg-white border border-border rounded-md shadow-lg z-[50] min-w-[110px]">
+                                              {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
+                                                <button
+                                                  key={unit}
+                                                  onClick={() => { setDelayUnit(unit); setDelayUnitDropdownOpen(false); }}
+                                                  className="w-full px-3 py-2 text-sm text-left hover:bg-muted/20 transition-colors"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                >
+                                                  {unit}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          </>
+                                        )}
                                       </div>
-                                    </>
-                                  ) : null}
-                                </div>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Action Name / Reason / URL — shown for incall and postcall only */}
                               {stepTrigger !== "stage" && (
-                                <div className="space-y-4 p-4 rounded-lg border border-border bg-muted/10">
-                                  <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Action Name <span className="text-red-500">*</span>
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={stepActionName}
-                                      onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                      placeholder="e.g. send_followup_sms"
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Used to trigger this action via API. Use underscores, no spaces.
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
-                                    <input
-                                      type="text"
-                                      value={stepActionReason}
-                                      onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                      placeholder="e.g. caller_requested_callback"
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
-                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Optional sub-reason included in the trigger URL.
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
+                                <div className="rounded-lg border border-border overflow-hidden">
+                                  <button
+                                    onClick={() => setActionConfigExpanded(!actionConfigExpanded)}
+                                    className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+                                  >
                                     <div className="flex items-center gap-2">
-                                      <code
-                                        className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
-                                        style={{ fontFamily: 'monospace', color: '#020817' }}
-                                      >
-                                        {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
-                                      </code>
-                                      <button
-                                        onClick={() => {
-                                          navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
-                                          toast.success("Trigger URL copied");
-                                        }}
-                                        className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
-                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                      >
-                                        Copy
-                                      </button>
+                                      <Zap className="w-4 h-4 text-primary" />
+                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Action Configuration
+                                      </span>
                                     </div>
-                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      call_id is mandatory. AI must pass the active call_id when triggering this action.
-                                    </p>
-                                  </div>
-                                </div>
-                              )}
+                                    <div className="flex items-center gap-2">
+                                      {stepActionName && (
+                                        <span className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          {stepActionName}
+                                        </span>
+                                      )}
+                                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${actionConfigExpanded ? "rotate-180" : ""}`} />
+                                    </div>
+                                  </button>
 
-                              {/* Execution + Conditions — skipped for endworkflow */}
-                              {currentEditingStep.stepKey !== "endworkflow" && (
-                                <div className="space-y-6">
-                                  <div>
-                                    <div className="flex items-center justify-between py-2">
-                                      <div className="flex items-center gap-2">
-                                        <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Conditions
+                                  {actionConfigExpanded && (
+                                    <div className="border-t border-border p-4 space-y-4 bg-muted/10">
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Action Name <span className="text-red-500">*</span>
                                         </label>
-                                        <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
-                                      </div>
-                                      <label className="relative inline-flex items-center cursor-pointer">
                                         <input
-                                          type="checkbox"
-                                          className="sr-only peer"
-                                          checked={conditionsEnabled}
-                                          onChange={(e) => setConditionsEnabled(e.target.checked)}
+                                          type="text"
+                                          value={stepActionName}
+                                          onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                          placeholder="e.g. send_followup_sms"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                         />
-                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                                      </label>
-                                    </div>
-
-                                    {conditionsEnabled && (
-                                      <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
-                                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          This step will only execute when all specified conditions are met.
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          Used to trigger this action via API. Use underscores, no spaces.
                                         </p>
-                                        {conditions.map((cond, index) => (
-                                          <React.Fragment key={cond.id}>
-                                            <div className="flex items-start gap-2">
-                                              <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
-                                                <option>Stage Fields</option>
-                                                <option>Contact Fields</option>
-                                                <option>Call Fields</option>
-                                              </select>
-                                              <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                                {["Stage Name", "Contact Name", "Call Status", "Call Duration", "Country", "Sentiment", "Intent", "Appointment Date", "Appointment Time", "AI Summary", "Call Transcription"].map(o => <option key={o}>{o}</option>)}
-                                              </select>
-                                              <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                                {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => <option key={o}>{o}</option>)}
-                                              </select>
-                                              {conditions.length > 1 && (
-                                                <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
-                                              )}
-                                            </div>
-                                            <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                            {index < conditions.length - 1 && (
-                                              <div className="flex items-center justify-center py-1">
-                                                <div className="inline-flex rounded-md border border-border bg-white">
-                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
-                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </React.Fragment>
-                                        ))}
-                                        <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                          <Plus className="w-4 h-4" /> Add Condition
-                                        </button>
-                                        {conditions.some(c => c.value) && (
-                                          <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
-                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
-                                            {conditions.map((cond, i) => (
-                                              <div key={cond.id}>
-                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
-                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
-                                              </div>
-                                            ))}
-                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
-                                          </div>
-                                        )}
                                       </div>
-                                    )}
-                                  </div>
+
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action Reason</label>
+                                        <input
+                                          type="text"
+                                          value={stepActionReason}
+                                          onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
+                                          placeholder="e.g. caller_requested_callback"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          Optional sub-reason included in the trigger URL.
+                                        </p>
+                                      </div>
+
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Generated Trigger URL</label>
+                                        <div className="flex items-center gap-2">
+                                          <code
+                                            className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
+                                            style={{ fontFamily: 'monospace', color: '#020817' }}
+                                          >
+                                            {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
+                                          </code>
+                                          <button
+                                            onClick={() => {
+                                              navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
+                                              toast.success("Trigger URL copied");
+                                            }}
+                                            className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
+                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                          >
+                                            Copy
+                                          </button>
+                                        </div>
+                                        <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                          call_id is mandatory. AI must pass the active call_id when triggering this action.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               )}
+
+                              {/* Parameters Collapsible Wrapper */}
+                              <div className="rounded-lg border border-border overflow-hidden">
+                                <button
+                                  onClick={() => setParametersExpanded(!parametersExpanded)}
+                                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <Sliders className="w-4 h-4 text-primary" />
+                                    <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Parameters
+                                    </span>
+                                  </div>
+                                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${parametersExpanded ? "rotate-180" : ""}`} />
+                                </button>
+                                {parametersExpanded && (
+                                  <div className="border-t border-border p-4 space-y-4">
 
                               {/* Field Update Step */}
                               {currentEditingStep.stepKey === "fieldupdate" && (
@@ -4055,18 +4047,51 @@ export default function Process() {
                                     </select>
                                   </div>
                                   <div>
-                                    <div className="flex items-center justify-between mb-2">
-                                      <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Update Value</label>
-                                      <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                    {/* Value Source */}
+                                    <div>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Value Source
+                                      </label>
+                                      <div className="flex items-center gap-4 mb-3">
+                                        {[
+                                          { v: "static", l: "Static" },
+                                          { v: "variable", l: "Variable" },
+                                          { v: "field_ref", l: "Field Reference" }
+                                        ].map((opt) => (
+                                          <label key={opt.v} className="flex items-center gap-2 cursor-pointer">
+                                            <input
+                                              type="radio"
+                                              name="fieldUpdateValueSource"
+                                              value={opt.v}
+                                              checked={fieldUpdateValueSource === opt.v}
+                                              onChange={() => { setFieldUpdateValueSource(opt.v as any); setUpdateValue(""); }}
+                                              className="w-4 h-4 text-blue-600"
+                                            />
+                                            <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                      <div className="flex items-center justify-between mb-2">
+                                        <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          {fieldUpdateValueSource === "variable" ? "Variable" : fieldUpdateValueSource === "field_ref" ? "Field Reference" : "Static Value"}
+                                        </label>
+                                        <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                      </div>
+                                      <input
+                                        type="text"
+                                        value={updateValue}
+                                        onChange={e => setUpdateValue(e.target.value)}
+                                        placeholder={
+                                          fieldUpdateValueSource === "variable" 
+                                            ? "{{ContactName}}" 
+                                            : fieldUpdateValueSource === "field_ref" 
+                                              ? "contact_name" 
+                                              : "Enter static value..."
+                                        }
+                                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
                                     </div>
-                                    <input
-                                      type="text"
-                                      value={updateValue}
-                                      onChange={e => setUpdateValue(e.target.value)}
-                                      placeholder="Enter new value..."
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    />
                                   </div>
                                 </div>
                               )}
@@ -4078,17 +4103,54 @@ export default function Process() {
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                       Assign To
                                     </label>
-                                    <select
-                                      value={assignedUser}
-                                      onChange={e => setAssignedUser(e.target.value)}
-                                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                    >
-                                      <option>Select user...</option>
-                                      <option>John Smith</option>
-                                      <option>Sarah Johnson</option>
-                                      <option>Michael Chen</option>
-                                    </select>
+                                    {/* Search input */}
+                                    <div className="relative mb-2">
+                                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                                      <input
+                                        type="text"
+                                        value={assignHumanSearch}
+                                        onChange={e => setAssignHumanSearch(e.target.value)}
+                                        placeholder="Search users..."
+                                        className="w-full pl-9 pr-3 py-2 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                      />
+                                    </div>
+                                    {/* User list */}
+                                    <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
+                                      {availableEmployees
+                                        .filter(emp => 
+                                          !assignHumanSearch || 
+                                          emp.name.toLowerCase().includes(assignHumanSearch.toLowerCase())
+                                        )
+                                        .map(emp => (
+                                          <label
+                                            key={emp.id}
+                                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors ${assignedUser === emp.id ? "bg-primary/5" : ""}`}
+                                          >
+                                            <input
+                                              type="radio"
+                                              name="assignHumanUser"
+                                              value={emp.id}
+                                              checked={assignedUser === emp.id}
+                                              onChange={() => setAssignedUser(emp.id)}
+                                              className="accent-primary"
+                                            />
+                                            <div className="flex-1">
+                                              <p className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{emp.name}</p>
+                                            </div>
+                                            {assignedUser === emp.id && (
+                                              <span className="text-primary">✓</span>
+                                            )}
+                                          </label>
+                                        ))
+                                      }
+                                      {availableEmployees.filter(emp => 
+                                        !assignHumanSearch || 
+                                        emp.name.toLowerCase().includes(assignHumanSearch.toLowerCase())
+                                      ).length === 0 && (
+                                        <p className="px-4 py-3 text-sm text-muted-foreground">No users found.</p>
+                                      )}
+                                    </div>
                                   </div>
                                   <div>
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
@@ -4117,21 +4179,133 @@ export default function Process() {
                                 </div>
                               )}
 
-                              {/* Call Action Step */}
                               {currentEditingStep.stepKey === "callaction" && (
-                                <div>
-                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Connect Call</label>
-                                  <select
-                                    value={assignedUser}
-                                    onChange={e => setAssignedUser(e.target.value)}
-                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                  >
-                                    <option>Select user...</option>
-                                    <option>John Smith</option>
-                                    <option>Sarah Johnson</option>
-                                    <option>Michael Chen</option>
-                                  </select>
+                                <div className="space-y-4">
+                                  {/* Transfer Type */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Type</label>
+                                    <div className="flex gap-3">
+                                      {[{ v: "human", l: "Human" }, { v: "agent", l: "AI Agent" }].map((opt) => (
+                                        <label key={opt.v} className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${callActionTransferType === opt.v ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40"}`}>
+                                          <input
+                                            type="radio"
+                                            name="callActionTransferType"
+                                            value={opt.v}
+                                            checked={callActionTransferType === opt.v}
+                                            onChange={() => setCallActionTransferType(opt.v as any)}
+                                            className="accent-primary"
+                                          />
+                                          <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Human fields */}
+                                  {callActionTransferType === "human" && (
+                                    <>
+                                      <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Country Code</label>
+                                          <select
+                                            value={callActionCountryCode}
+                                            onChange={e => setCallActionCountryCode(e.target.value)}
+                                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          >
+                                            <option value="+1">+1 (US/CA)</option>
+                                            <option value="+44">+44 (UK)</option>
+                                            <option value="+91">+91 (IN)</option>
+                                            <option value="+61">+61 (AU)</option>
+                                            <option value="+49">+49 (DE)</option>
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Phone Number</label>
+                                          <input
+                                            type="tel"
+                                            value={callActionPhoneNumber}
+                                            onChange={e => setCallActionPhoneNumber(e.target.value)}
+                                            placeholder="5551234567"
+                                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Extension Digits (Optional)</label>
+                                        <input
+                                          type="text"
+                                          value={callActionExtension}
+                                          onChange={e => setCallActionExtension(e.target.value)}
+                                          placeholder="e.g. 1234"
+                                          className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    </>
+                                  )}
+
+                                  {/* Agent fields */}
+                                  {callActionTransferType === "agent" && (
+                                    <div>
+                                      <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select AI Agent</label>
+                                      <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
+                                        {[
+                                          { id: "a1", number: "+1 (800) 555-0101", process: "Patient Intake", stage: "Initial Contact" },
+                                          { id: "a2", number: "+1 (800) 555-0202", process: "Follow-up Calls", stage: "Follow-up Pending" },
+                                          { id: "a3", number: "+1 (800) 555-0303", process: "Insurance Verify", stage: "Pending Verification" },
+                                        ].map(agent => (
+                                          <label
+                                            key={agent.id}
+                                            className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors ${callActionAgentId === agent.id ? "bg-primary/5" : ""}`}
+                                          >
+                                            <input
+                                              type="radio"
+                                              name="callActionAgent"
+                                              value={agent.id}
+                                              checked={callActionAgentId === agent.id}
+                                              onChange={() => setCallActionAgentId(agent.id)}
+                                              className="accent-primary"
+                                            />
+                                            <div className="flex-1">
+                                              <p className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{agent.number}</p>
+                                              <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{agent.process} · {agent.stage}</p>
+                                            </div>
+                                            {callActionAgentId === agent.id && <span className="text-primary text-sm">✓</span>}
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Voice Response */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-1.5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Voice Response</label>
+                                    <input
+                                      type="text"
+                                      value={callActionVoiceResponse}
+                                      onChange={e => setCallActionVoiceResponse(e.target.value)}
+                                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                  </div>
+
+                                  {/* Transfer Reason */}
+                                  <div>
+                                    <label className="block text-sm font-semibold mb-1.5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Reason</label>
+                                    <input
+                                      type="text"
+                                      value={callActionReason}
+                                      onChange={e => setCallActionReason(e.target.value)}
+                                      placeholder="Why this call is being transferred..."
+                                      className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
+                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                    />
+                                    <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                      Sent as <code style={{ color: '#2563EB' }}>request_reason</code> in the backend payload.
+                                    </p>
+                                  </div>
                                 </div>
                               )}
 
@@ -5547,6 +5721,89 @@ export default function Process() {
                                       <option>Manually Terminated</option>
                                       <option>Condition Not Met</option>
                                     </select>
+                                  </div>
+                                </div>
+                              )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Execution + Conditions — skipped for endworkflow (moved to be last) */}
+                              {currentEditingStep.stepKey !== "endworkflow" && (
+                                <div className="space-y-6">
+                                  <div>
+                                    <div className="flex items-center justify-between py-2">
+                                      <div className="flex items-center gap-2">
+                                        <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Conditions
+                                        </label>
+                                        <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
+                                      </div>
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="sr-only peer"
+                                          checked={conditionsEnabled}
+                                          onChange={(e) => setConditionsEnabled(e.target.checked)}
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                                      </label>
+                                    </div>
+
+                                    {conditionsEnabled && (
+                                      <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
+                                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          This step will only execute when all specified conditions are met.
+                                        </p>
+                                        {conditions.map((cond, index) => (
+                                          <React.Fragment key={cond.id}>
+                                            <div className="flex items-start gap-2">
+                                              <select className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} defaultValue="Stage Fields">
+                                                <option>Stage Fields</option>
+                                                <option>Contact Fields</option>
+                                                <option>Call Fields</option>
+                                              </select>
+                                              <select value={cond.field} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, field: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                {["Stage Name", "Contact Name", "Call Status", "Call Duration", "Country", "Sentiment", "Intent", "Appointment Date", "Appointment Time", "AI Summary", "Call Transcription"].map(o => <option key={o}>{o}</option>)}
+                                              </select>
+                                              <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => <option key={o}>{o}</option>)}
+                                              </select>
+                                              {conditions.length > 1 && (
+                                                <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
+                                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                                </button>
+                                              )}
+                                            </div>
+                                            <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                            {index < conditions.length - 1 && (
+                                              <div className="flex items-center justify-center py-1">
+                                                <div className="inline-flex rounded-md border border-border bg-white">
+                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
+                                                  <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                        <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, field: "Stage Name", operator: "Equal To", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                          <Plus className="w-4 h-4" /> Add Condition
+                                        </button>
+                                        {conditions.some(c => c.value) && (
+                                          <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
+                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
+                                            {conditions.map((cond, i) => (
+                                              <div key={cond.id}>
+                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
+                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{cond.field} = "{cond.value}"</p>
+                                              </div>
+                                            ))}
+                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
