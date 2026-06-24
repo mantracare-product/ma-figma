@@ -41,6 +41,18 @@ interface Process {
   aiSettings: AISettings;
 }
 
+type WorkflowStep = {
+  id: string;
+  name: string;
+  description: string;
+  iconKey: string;
+  stepKey?: string;
+  trigger?: "stage" | "incall" | "postcall";
+  executionType?: "wait" | "parallel";
+  delayValue?: number;
+  delayUnit?: string;
+};
+
 const STAGE_COLORS = [
   "#22D3EE", // cyan
   "#EC4899", // pink
@@ -225,7 +237,7 @@ const DraggableStage = ({ stage, index, moveStage, onRemove, onEdit }: Draggable
 
 // Draggable Workflow Step Component
 interface DraggableWorkflowStepProps {
-  step: { id: string; name: string; description: string; iconKey: string; stepKey?: string };
+  step: WorkflowStep;
   index: number;
   moveStep: (dragIndex: number, hoverIndex: number) => void;
   onEdit: () => void;
@@ -303,7 +315,13 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-        <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Sequential</p>
+        <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
+          {step.trigger === "incall" || step.trigger === "postcall"
+            ? "→ Event Driven"
+            : step.executionType === "parallel"
+              ? "→ Parallel"
+              : "→ Sequential"}
+        </p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
         <button
@@ -599,13 +617,13 @@ export default function Process() {
   // CHANGE 1: Collapsible sections state
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
-  const [workflowSteps, setWorkflowSteps] = useState<Array<{ id: string; name: string; description: string; iconKey: string; stepKey?: string }>>([]);
+  const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
   const [selectedWorkflowStepCard, setSelectedWorkflowStepCard] = useState<string | null>(null);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [stepDetailDrawerOpen, setStepDetailDrawerOpen] = useState(false);
-  const [currentEditingStep, setCurrentEditingStep] = useState<{ id: string; name: string; description: string; iconKey: string; stepKey?: string } | null>(null);
+  const [currentEditingStep, setCurrentEditingStep] = useState<WorkflowStep | null>(null);
   const [isCreatingNewStep, setIsCreatingNewStep] = useState(false);
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
   const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
@@ -701,8 +719,8 @@ export default function Process() {
   const [ifCondField, setIfCondField] = useState("Stage Name");
   const [ifCondOperator, setIfCondOperator] = useState("Equal To");
   const [ifCondValue, setIfCondValue] = useState("");
-  const [trueBranchSteps, setTrueBranchSteps] = useState<Array<{ id: string; name: string; description: string; iconKey: string; stepKey?: string }>>([]);
-  const [falseBranchSteps, setFalseBranchSteps] = useState<Array<{ id: string; name: string; description: string; iconKey: string; stepKey?: string }>>([]);
+  const [trueBranchSteps, setTrueBranchSteps] = useState<WorkflowStep[]>([]);
+  const [falseBranchSteps, setFalseBranchSteps] = useState<WorkflowStep[]>([]);
   const [trueBranchExpanded, setTrueBranchExpanded] = useState(true);
   const [falseBranchExpanded, setFalseBranchExpanded] = useState(true);
   const [branchAddTarget, setBranchAddTarget] = useState<"true" | "false" | null>(null);
@@ -2682,58 +2700,232 @@ export default function Process() {
                                   <div className="text-center py-6">
                                     <p className="text-sm" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>No workflow steps added yet.</p>
                                   </div>
-                                ) : (
-                                  <DndProvider backend={HTML5Backend}>
-                                    <div className="space-y-2">
-                                      {workflowSteps.map((step, idx) => {
-                                        const StepIcon = ({ iconKey }: { iconKey: string }) => {
-                                          const map: Record<string, React.ReactNode> = {
-                                            clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
-                                            chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
-                                            edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
-                                            phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
-                                            messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
-                                            filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
-                                            globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
-                                            refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
-                                            lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
-                                            layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
-                                            gitbranch: <GitBranch className="w-4 h-4 text-white" />,
-                                          };
-                                          return <>{map[iconKey]}</>;
-                                        };
-                                        return (
-                                          <DraggableWorkflowStep
-                                            key={step.id}
-                                            step={step}
-                                            index={idx}
-                                            moveStep={(dragIndex, hoverIndex) => {
-                                              const updatedSteps = [...workflowSteps];
-                                              const [removed] = updatedSteps.splice(dragIndex, 1);
-                                              updatedSteps.splice(hoverIndex, 0, removed);
-                                              setWorkflowSteps(updatedSteps);
-                                            }}
-                                            onEdit={() => {
-                                              setCurrentEditingStep(step);
-                                              setIsCreatingNewStep(false);
-                                              setStepDetailDrawerOpen(true);
-                                            }}
-                                            onDuplicate={() => {
-                                              const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                              setWorkflowSteps([...workflowSteps.slice(0, idx + 1), newStep, ...workflowSteps.slice(idx + 1)]);
-                                              toast.success("Step duplicated successfully");
-                                            }}
-                                            onDelete={() => {
-                                              setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                              toast.success("Step removed successfully");
-                                            }}
-                                            StepIcon={StepIcon}
-                                          />
-                                        );
-                                      })}
+                                ) : (() => {
+                                  const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
+                                  const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
+                                  const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
+
+                                  const StepIcon = ({ iconKey }: { iconKey: string }) => {
+                                    const map: Record<string, React.ReactNode> = {
+                                      clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
+                                      chevronright: <ChevronRight className="w-4 h-4 text-white" />, zap: <Zap className="w-4 h-4 text-white" />,
+                                      edit: <Edit className="w-4 h-4 text-white" />, usercheck: <UserCheck className="w-4 h-4 text-white" />,
+                                      phonecall: <PhoneCall className="w-4 h-4 text-white" />, messagecircle: <MessageCircle className="w-4 h-4 text-white" />,
+                                      messagesquare: <MessageSquare className="w-4 h-4 text-white" />, mail: <Mail className="w-4 h-4 text-white" />,
+                                      filetext: <FileText className="w-4 h-4 text-white" />, clipboardlist: <ClipboardList className="w-4 h-4 text-white" />,
+                                      globe: <Globe className="w-4 h-4 text-white" />, calendar: <Calendar className="w-4 h-4 text-white" />,
+                                      refreshcw: <RefreshCw className="w-4 h-4 text-white" />,
+                                      lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
+                                      layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
+                                      gitbranch: <GitBranch className="w-4 h-4 text-white" />,
+                                    };
+                                    return <>{map[iconKey]}</>;
+                                  };
+
+                                  const moveStageStep = (dragIndex: number, hoverIndex: number) => {
+                                    const updatedStageSteps = [...stageSteps];
+                                    const [removed] = updatedStageSteps.splice(dragIndex, 1);
+                                    updatedStageSteps.splice(hoverIndex, 0, removed);
+
+                                    let stageIdx = 0;
+                                    const newWorkflowSteps = workflowSteps.map(s => {
+                                      if (!s.trigger || s.trigger === "stage") {
+                                        return updatedStageSteps[stageIdx++];
+                                      }
+                                      return s;
+                                    });
+                                    setWorkflowSteps(newWorkflowSteps);
+                                  };
+
+                                  return (
+                                    <div className="space-y-4">
+                                      {/* On Stage Entry List */}
+                                      {stageSteps.length > 0 && (
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                            On Stage Entry
+                                          </p>
+                                          <DndProvider backend={HTML5Backend}>
+                                            <div className="space-y-2">
+                                              {stageSteps.map((step, idx) => (
+                                                <DraggableWorkflowStep
+                                                  key={step.id}
+                                                  step={step}
+                                                  index={idx}
+                                                  moveStep={moveStageStep}
+                                                  onEdit={() => {
+                                                    setCurrentEditingStep(step);
+                                                    setIsCreatingNewStep(false);
+                                                    setStepDetailDrawerOpen(true);
+                                                  }}
+                                                  onDuplicate={() => {
+                                                    const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                    const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                    if (fullIdx !== -1) {
+                                                      setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                    }
+                                                    toast.success("Step duplicated successfully");
+                                                  }}
+                                                  onDelete={() => {
+                                                    setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                    toast.success("Step removed successfully");
+                                                  }}
+                                                  StepIcon={StepIcon}
+                                                />
+                                              ))}
+                                            </div>
+                                          </DndProvider>
+                                        </div>
+                                      )}
+
+                                      {/* In Call List */}
+                                      {inCallSteps.length > 0 && (
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                            In Call
+                                          </p>
+                                          <div className="space-y-2">
+                                            {inCallSteps.map((step) => (
+                                              <div
+                                                key={step.id}
+                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
+                                                onClick={(e) => {
+                                                  if ((e.target as HTMLElement).closest('button')) {
+                                                    return;
+                                                  }
+                                                  setCurrentEditingStep(step);
+                                                  setIsCreatingNewStep(false);
+                                                  setStepDetailDrawerOpen(true);
+                                                }}
+                                              >
+                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
+                                                  <StepIcon iconKey={step.iconKey} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
+                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
+                                                </div>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Duplicate"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                      if (fullIdx !== -1) {
+                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                      }
+                                                      toast.success("Step duplicated successfully");
+                                                    }}
+                                                  >
+                                                    <Copy className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Edit"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setCurrentEditingStep(step);
+                                                      setIsCreatingNewStep(false);
+                                                      setStepDetailDrawerOpen(true);
+                                                    }}
+                                                  >
+                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                                                    title="Delete"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                      toast.success("Step removed successfully");
+                                                    }}
+                                                  >
+                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Post Call List */}
+                                      {postCallSteps.length > 0 && (
+                                        <div className="space-y-2">
+                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                            Post Call
+                                          </p>
+                                          <div className="space-y-2">
+                                            {postCallSteps.map((step) => (
+                                              <div
+                                                key={step.id}
+                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
+                                                onClick={(e) => {
+                                                  if ((e.target as HTMLElement).closest('button')) {
+                                                    return;
+                                                  }
+                                                  setCurrentEditingStep(step);
+                                                  setIsCreatingNewStep(false);
+                                                  setStepDetailDrawerOpen(true);
+                                                }}
+                                              >
+                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
+                                                  <StepIcon iconKey={step.iconKey} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
+                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
+                                                </div>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Duplicate"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                      if (fullIdx !== -1) {
+                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                      }
+                                                      toast.success("Step duplicated successfully");
+                                                    }}
+                                                  >
+                                                    <Copy className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Edit"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setCurrentEditingStep(step);
+                                                      setIsCreatingNewStep(false);
+                                                      setStepDetailDrawerOpen(true);
+                                                    }}
+                                                  >
+                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                                                    title="Delete"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                      toast.success("Step removed successfully");
+                                                    }}
+                                                  >
+                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  </DndProvider>
-                                )}
+                                  );
+                                })()}
                                 <Button
                                   variant="primary"
                                   onClick={() => {
@@ -3917,7 +4109,7 @@ export default function Process() {
                                     return (
                                       <>
                                         <div className="flex items-center gap-1.5">
-                                        <div className="inline-flex items-center gap-0 p-1 rounded-lg border border-border bg-muted/20">
+                                          <div className="inline-flex items-center gap-0 p-1 rounded-lg border border-border bg-muted/20">
                                             {visibleButtons.map((t, idx) => (
                                               <React.Fragment key={t.key}>
                                                 {idx > 0 && (
@@ -3925,9 +4117,8 @@ export default function Process() {
                                                 )}
                                                 <button
                                                   onClick={() => setStepTrigger(t.key)}
-                                                  className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                                    stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                                  }`}
+                                                  className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                                                    }`}
                                                   style={{ fontFamily: 'Outfit, sans-serif' }}
                                                 >
                                                   {t.label}
@@ -4289,17 +4480,7 @@ export default function Process() {
                                                 />
                                               </div>
                                             </div>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Extension Digits (Optional)</label>
-                                              <input
-                                                type="text"
-                                                value={callActionExtension}
-                                                onChange={e => setCallActionExtension(e.target.value)}
-                                                placeholder="e.g. 1234"
-                                                className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
+
                                           </>
                                         )}
 
@@ -5762,8 +5943,8 @@ export default function Process() {
                                                 key={opt.v}
                                                 onClick={() => setCalendarMode(opt.v)}
                                                 className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${calendarMode === opt.v
-                                                    ? "border-primary bg-primary/5 text-primary"
-                                                    : "border-border hover:border-muted-foreground/30 text-gray-600"
+                                                  ? "border-primary bg-primary/5 text-primary"
+                                                  : "border-border hover:border-muted-foreground/30 text-gray-600"
                                                   }`}
                                                 style={{ fontFamily: 'Outfit, sans-serif' }}
                                               >
@@ -6023,25 +6204,34 @@ export default function Process() {
                                     toast.error("Action Name is required for In Call / Post Call triggers");
                                     return;
                                   }
-                                  if (isCreatingNewStep && currentEditingStep) {
-                                    // Add new step to the workflow
-                                    if (branchAddTarget === "true") {
-                                      setTrueBranchSteps(prev => [...prev, currentEditingStep]);
-                                      setBranchAddTarget(null);
-                                    } else if (branchAddTarget === "false") {
-                                      setFalseBranchSteps(prev => [...prev, currentEditingStep]);
-                                      setBranchAddTarget(null);
+                                  if (currentEditingStep) {
+                                    const stepToSave: WorkflowStep = {
+                                      ...currentEditingStep,
+                                      trigger: stepTrigger,
+                                      executionType: stepTrigger === "stage" ? executionType : undefined,
+                                      delayValue: stepTrigger === "stage" ? delayValue : undefined,
+                                      delayUnit: stepTrigger === "stage" ? delayUnit : undefined,
+                                    };
+                                    if (isCreatingNewStep) {
+                                      // Add new step to the workflow
+                                      if (branchAddTarget === "true") {
+                                        setTrueBranchSteps(prev => [...prev, stepToSave]);
+                                        setBranchAddTarget(null);
+                                      } else if (branchAddTarget === "false") {
+                                        setFalseBranchSteps(prev => [...prev, stepToSave]);
+                                        setBranchAddTarget(null);
+                                      } else {
+                                        setWorkflowSteps(prev => [...prev, stepToSave]);
+                                      }
+                                      setIsCreatingNewStep(false);
+                                      toast.success("Step added successfully");
                                     } else {
-                                      setWorkflowSteps(prev => [...prev, currentEditingStep]);
+                                      // Update existing step in all lists
+                                      setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                                      setTrueBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                                      setFalseBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                                      toast.success("Step settings saved successfully");
                                     }
-                                    setIsCreatingNewStep(false);
-                                    toast.success("Step added successfully");
-                                  } else {
-                                    // Update existing step (if needed, add logic here to update the step in the array)
-                                    if (currentEditingStep) {
-                                      setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? currentEditingStep : s));
-                                    }
-                                    toast.success("Step settings saved successfully");
                                   }
                                   setStepDetailDrawerOpen(false);
                                 }}
