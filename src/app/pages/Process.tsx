@@ -317,11 +317,17 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
         <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-          {step.trigger === "incall" || step.trigger === "postcall"
+          {step.trigger === "incall"
             ? "→ Event Driven"
-            : step.executionType === "parallel"
-              ? "→ Parallel"
-              : "→ Sequential"}
+            : step.trigger === "postcall"
+              ? `→ Event Driven · ${step.executionType === "parallel" ? "Parallel" : "Sequential"}${
+                  step.executionType !== "parallel" && step.delayValue
+                    ? ` (+${step.delayValue} ${step.delayUnit ?? "Minute"})`
+                    : ""
+                }`
+              : step.executionType === "parallel"
+                ? "→ Parallel"
+                : "→ Sequential"}
         </p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -3034,38 +3040,41 @@ export default function Process() {
                                       )}
 
                                       {/* Post Call List */}
-                                      {postCallSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                            Post Call
-                                          </p>
+                                      {postCallSteps.length > 0 && (() => {
+                                        const movePostCallStep = (dragIndex: number, hoverIndex: number) => {
+                                          const updatedPostCallSteps = [...postCallSteps];
+                                          const [removed] = updatedPostCallSteps.splice(dragIndex, 1);
+                                          updatedPostCallSteps.splice(hoverIndex, 0, removed);
+
+                                          let pcIdx = 0;
+                                          const newWorkflowSteps = workflowSteps.map(s => {
+                                            if (s.trigger === "postcall") {
+                                              return updatedPostCallSteps[pcIdx++];
+                                            }
+                                            return s;
+                                          });
+                                          setWorkflowSteps(newWorkflowSteps);
+                                        };
+
+                                        return (
                                           <div className="space-y-2">
-                                            {postCallSteps.map((step) => (
-                                              <div
-                                                key={step.id}
-                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                onClick={(e) => {
-                                                  if ((e.target as HTMLElement).closest('button')) {
-                                                    return;
-                                                  }
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                              >
-                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
-                                                  <StepIcon iconKey={step.iconKey} />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Duplicate"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              Post Call
+                                            </p>
+                                            <DndProvider backend={HTML5Backend}>
+                                              <div className="space-y-2">
+                                                {postCallSteps.map((step, idx) => (
+                                                  <DraggableWorkflowStep
+                                                    key={step.id}
+                                                    step={step}
+                                                    index={idx}
+                                                    moveStep={movePostCallStep}
+                                                    onEdit={() => {
+                                                      setCurrentEditingStep(step);
+                                                      setIsCreatingNewStep(false);
+                                                      setStepDetailDrawerOpen(true);
+                                                    }}
+                                                    onDuplicate={() => {
                                                       const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
                                                       const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
                                                       if (fullIdx !== -1) {
@@ -3073,38 +3082,18 @@ export default function Process() {
                                                       }
                                                       toast.success("Step duplicated successfully");
                                                     }}
-                                                  >
-                                                    <Copy className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Edit"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                  >
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
+                                                    onDelete={() => {
                                                       setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
                                                       toast.success("Step removed successfully");
                                                     }}
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
+                                                    StepIcon={StepIcon}
+                                                  />
+                                                ))}
                                               </div>
-                                            ))}
+                                            </DndProvider>
                                           </div>
-                                        </div>
-                                      )}
+                                        );
+                                      })()}
                                     </div>
                                   );
                                 })()}
@@ -4092,7 +4081,18 @@ export default function Process() {
                                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
                                     </button>
                                   </div>
-                                ) : (stepTrigger === "incall" || stepTrigger === "postcall") ? (
+                                ) : stepTrigger === "postcall" ? (
+                                  <div className="w-[140px] flex-shrink-0">
+                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
+                                    <button
+                                      onClick={() => setExecutionTimingModalOpen(true)}
+                                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
+                                    >
+                                      <span className="text-sm truncate" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
+                                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
+                                    </button>
+                                  </div>
+                                ) : stepTrigger === "incall" ? (
                                   <div className="w-fit flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
                                     <div
@@ -4106,7 +4106,7 @@ export default function Process() {
                                 ) : null}
 
                                 {/* Column 3 — Delay */}
-                                {stepTrigger === "stage" && currentEditingStep.stepKey !== "waitdelay" && (
+                                {(stepTrigger === "stage" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "waitdelay" && (
                                   <div className="w-[150px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
                                     <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
@@ -6442,9 +6442,9 @@ export default function Process() {
                                     const stepToSave: WorkflowStep = {
                                       ...currentEditingStep,
                                       trigger: stepTrigger,
-                                      executionType: stepTrigger === "stage" ? executionType : undefined,
-                                      delayValue: stepTrigger === "stage" ? delayValue : undefined,
-                                      delayUnit: stepTrigger === "stage" ? delayUnit : undefined,
+                                      executionType: stepTrigger !== "incall" ? executionType : undefined,
+                                      delayValue: stepTrigger !== "incall" ? delayValue : undefined,
+                                      delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
                                     };
                                     if (isCreatingNewStep) {
                                       // Add new step to the workflow
