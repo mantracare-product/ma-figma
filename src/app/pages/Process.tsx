@@ -2109,8 +2109,8 @@ export default function Process() {
                       <div className="flex gap-2 mt-4">
                         {[
                           { id: "basic", label: "Basic" },
+                          { id: "advanced", label: "Advance" },
                           { id: "automation", label: "Automation" },
-                          { id: "advanced", label: "Advanced" },
                         ].map((tab) => (
                           <button
                             key={tab.id}
@@ -2304,7 +2304,13 @@ export default function Process() {
                                     {/* Single Prompt Mode */}
                                     {callerPitchMode === "single" && (
                                       <div>
-                                        <div className="flex items-center justify-end mb-3">
+                                        <textarea
+                                          value={callerPitch}
+                                          onChange={(e) => setCallerPitch(e.target.value)}
+                                          className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
+                                          style={{ fontFamily: 'Outfit, sans-serif', minHeight: '120px' }}
+                                        />
+                                        <div className="flex items-center justify-end mt-2">
                                           <button
                                             onClick={() => {
                                               toast.success("AI generation coming soon!");
@@ -2313,15 +2319,9 @@ export default function Process() {
                                             style={{ fontFamily: 'Outfit, sans-serif' }}
                                           >
                                             <Zap className="w-4 h-4" />
-                                            AI Generate
+                                            Generate with AI
                                           </button>
                                         </div>
-                                        <textarea
-                                          value={callerPitch}
-                                          onChange={(e) => setCallerPitch(e.target.value)}
-                                          className="w-full p-3 bg-input-background border border-input rounded-lg resize-none text-sm"
-                                          style={{ fontFamily: 'Outfit, sans-serif', minHeight: '120px' }}
-                                        />
                                       </div>
                                     )}
 
