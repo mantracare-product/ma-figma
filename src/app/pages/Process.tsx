@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -446,6 +447,150 @@ const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
   FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
 );
 
+interface VariablePickerButtonProps {
+  targetRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (newValue: string) => void;
+  label?: string;
+}
+
+const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
+  targetRef,
+  value,
+  onChange,
+  label = "Insert Variable"
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownPanelRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectField = (fieldValue: string) => {
+    const textarea = targetRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const insertText = `{{${fieldValue}}}`;
+    const currentVal = value || "";
+
+    const newValue = currentVal.slice(0, start) + insertText + currentVal.slice(end);
+    onChange(newValue);
+    setIsOpen(false);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + insertText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const openDropdown = () => {
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+    setIsOpen(true);
+  };
+
+  const closeDropdown = () => {
+    setIsOpen(false);
+    setDropdownPos(null);
+  };
+
+  // Close on ancestor scroll/resize, but NOT when the user scrolls inside the dropdown list itself
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      // If the scroll originated inside the dropdown panel, let it through
+      if (dropdownPanelRef.current && dropdownPanelRef.current.contains(e.target as Node)) return;
+      closeDropdown();
+    };
+    const handleResize = () => closeDropdown();
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => (isOpen ? closeDropdown() : openDropdown())}
+        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+        style={{ fontFamily: 'DM Sans, sans-serif' }}
+      >
+        {label}
+      </button>
+
+      {isOpen && dropdownPos && createPortal(
+        <>
+          {/* Backdrop — click-outside to close */}
+          <div
+            className="fixed inset-0 cursor-default"
+            style={{ zIndex: 9998 }}
+            onClick={closeDropdown}
+          />
+          {/* Dropdown panel — portaled to body, fixed-positioned */}
+          <div
+            ref={dropdownPanelRef}
+            className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden flex flex-col"
+            style={{
+              position: 'fixed',
+              top: dropdownPos.top,
+              right: dropdownPos.right,
+              width: '256px',
+              maxHeight: '256px',
+              zIndex: 9999,
+            }}
+          >
+            <div className="p-2 border-b border-gray-100 bg-gray-50/50">
+              <span className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Insert Field Variable
+              </span>
+            </div>
+            <div className="overflow-y-auto flex-1 py-1 max-h-[220px]">
+              {FETCH_FIELD_SOURCES.map(group => (
+                <div key={group.value}>
+                  <div
+                    className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50 first:border-t-0"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    {group.label}
+                  </div>
+                  <div className="py-0.5">
+                    {group.fields.map(field => (
+                      <button
+                        key={field.value}
+                        type="button"
+                        onClick={() => handleSelectField(field.value)}
+                        className="w-full text-left px-4 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        <span>{field.label}</span>
+                        <span className="text-[9px] text-gray-400 font-mono">
+                          {`{{${field.value}}}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
@@ -831,6 +976,13 @@ export default function Process() {
     setIdleMessageStageDelay(10);
     setIdleHangupMessageStage("");
     setIdleHangupDelayStage(20);
+    setEmailHtmlBody("");
+    setHtmlBodyViewMode("code");
+    setEmailConnectedAccount("");
+    setEmailRichBody("");
+    setCrmUpdateValue("");
+    setEhrUpdateValue("");
+    setEmailSubject("");
   };
 
   const buildTriggerUrl = (trigger: "incall" | "postcall", actionName: string, actionReason: string) => {
@@ -842,6 +994,25 @@ export default function Process() {
   };
 
   const [showCustomEmail, setShowCustomEmail] = useState(false);
+  const [emailConnectedAccount, setEmailConnectedAccount] = useState("");
+  const [emailHtmlBody, setEmailHtmlBody] = useState("");
+  const [htmlBodyViewMode, setHtmlBodyViewMode] = useState<"code" | "preview">("code");
+  const [emailRichBody, setEmailRichBody] = useState("");
+  const [crmUpdateValue, setCrmUpdateValue] = useState("");
+  const [ehrUpdateValue, setEhrUpdateValue] = useState("");
+
+  const emailRichBodyRef = useRef<HTMLTextAreaElement>(null);
+  const emailHtmlBodyRef = useRef<HTMLTextAreaElement>(null);
+  const crmUpdateValueRef = useRef<HTMLInputElement>(null);
+  const ehrUpdateValueRef = useRef<HTMLInputElement>(null);
+  const webhookUrlRef = useRef<HTMLInputElement>(null);
+  const apiEndpointRef = useRef<HTMLInputElement>(null);
+  const apiAuthRef = useRef<HTMLInputElement>(null);
+  const fetchAvailSummaryRef = useRef<HTMLTextAreaElement>(null);
+
+  const fieldUpdateValueRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const ticketClientEmailRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const ticketClientNumberRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [tcTimeIntervalsEnabled, setTcTimeIntervalsEnabled] = useState(false);
   const [tcCallDurationMinutes, setTcCallDurationMinutes] = useState<number>(5);
   const [tcHangupWindowMinutes, setTcHangupWindowMinutes] = useState<number>(1);
@@ -4185,9 +4356,20 @@ export default function Process() {
                                                     <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                                       {block.valueSource === "variable" ? "Variable" : "Static Value"}
                                                     </label>
-                                                    <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                                    <VariablePickerButton
+                                                      targetRef={{
+                                                        get current() {
+                                                          return fieldUpdateValueRefs.current[index];
+                                                        }
+                                                      } as React.RefObject<HTMLInputElement>}
+                                                      value={block.updateValue}
+                                                      onChange={val => {
+                                                        setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, updateValue: val } : b));
+                                                      }}
+                                                    />
                                                   </div>
                                                   <input
+                                                    ref={el => { fieldUpdateValueRefs.current[index] = el; }}
                                                     type="text"
                                                     value={block.updateValue}
                                                     onChange={e => {
@@ -4474,6 +4656,8 @@ export default function Process() {
                                             Connected Account
                                           </label>
                                           <select
+                                            value={emailConnectedAccount}
+                                            onChange={e => setEmailConnectedAccount(e.target.value)}
                                             className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                           >
@@ -4494,7 +4678,7 @@ export default function Process() {
                                                 type="radio"
                                                 name="emailTemplateMode"
                                                 value="rich"
-                                                defaultChecked
+                                                checked={!showCustomEmail}
                                                 className="w-4 h-4 text-blue-600"
                                                 onChange={() => setShowCustomEmail(false)}
                                               />
@@ -4505,6 +4689,7 @@ export default function Process() {
                                                 type="radio"
                                                 name="emailTemplateMode"
                                                 value="html"
+                                                checked={showCustomEmail}
                                                 className="w-4 h-4 text-blue-600"
                                                 onChange={() => setShowCustomEmail(true)}
                                               />
@@ -4530,62 +4715,140 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Email Body</label>
-                                            <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              &lt;/&gt; + Variable
-                                            </button>
+                                            <VariablePickerButton
+                                              targetRef={!showCustomEmail ? emailRichBodyRef : emailHtmlBodyRef}
+                                              value={!showCustomEmail ? emailRichBody : emailHtmlBody}
+                                              onChange={!showCustomEmail ? setEmailRichBody : setEmailHtmlBody}
+                                              label="</> + Variable"
+                                            />
                                           </div>
-                                          {/* Rich text toolbar */}
-                                          <div className="flex items-center gap-0.5 px-2 py-1.5 bg-gray-50 border border-b-0 border-border rounded-t-md">
-                                            {[
-                                              { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**', '**'] },
-                                              { label: 'I', title: 'Italic', style: 'italic', wrap: ['_', '_'] },
-                                              { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>', '</u>'] },
-                                            ].map(btn => (
-                                              <button
-                                                key={btn.label}
-                                                title={btn.title}
-                                                type="button"
-                                                className={`w-7 h-7 flex items-center justify-center text-xs rounded hover:bg-gray-200 transition-colors ${btn.style}`}
-                                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
-                                              >
-                                                {btn.label}
-                                              </button>
-                                            ))}
-                                            <div className="w-px h-4 bg-gray-300 mx-1" />
-                                            <button type="button" title="Bullet List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
-                                                <circle cx="2" cy="4" r="1.3" /><rect x="5" y="3.2" width="9" height="1.6" rx="0.8" />
-                                                <circle cx="2" cy="8" r="1.3" /><rect x="5" y="7.2" width="9" height="1.6" rx="0.8" />
-                                                <circle cx="2" cy="12" r="1.3" /><rect x="5" y="11.2" width="9" height="1.6" rx="0.8" />
-                                              </svg>
-                                            </button>
-                                            <button type="button" title="Numbered List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
-                                                <text x="1" y="5" fontSize="5" fontFamily="monospace">1.</text>
-                                                <rect x="6" y="3.2" width="8" height="1.6" rx="0.8" />
-                                                <text x="1" y="9" fontSize="5" fontFamily="monospace">2.</text>
-                                                <rect x="6" y="7.2" width="8" height="1.6" rx="0.8" />
-                                                <text x="1" y="13" fontSize="5" fontFamily="monospace">3.</text>
-                                                <rect x="6" y="11.2" width="8" height="1.6" rx="0.8" />
-                                              </svg>
-                                            </button>
-                                            <div className="w-px h-4 bg-gray-300 mx-1" />
-                                            <button type="button" title="Insert Link" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#64748B' }}>
-                                                <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L7 4" strokeLinecap="round" />
-                                                <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0L3 8a3.5 3.5 0 0 0 5 5L9 12" strokeLinecap="round" />
-                                              </svg>
-                                            </button>
-                                            <button type="button" title="Attach File" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                              <Paperclip className="w-3.5 h-3.5" style={{ color: '#64748B' }} />
-                                            </button>
-                                          </div>
-                                          <textarea
-                                            placeholder="Hello {{ContactName}}, ..."
-                                            className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-b-md"
-                                            rows={5}
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
+
+                                          {!showCustomEmail ? (
+                                            <>
+                                              {/* Rich text toolbar — Rich Editor mode */}
+                                              <div className="flex items-center gap-0.5 px-2 py-1.5 bg-gray-50 border border-b-0 border-border rounded-t-md">
+                                                {[
+                                                  { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**', '**'] },
+                                                  { label: 'I', title: 'Italic', style: 'italic', wrap: ['_', '_'] },
+                                                  { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>', '</u>'] },
+                                                ].map(btn => (
+                                                  <button
+                                                    key={btn.label}
+                                                    title={btn.title}
+                                                    type="button"
+                                                    className={`w-7 h-7 flex items-center justify-center text-xs rounded hover:bg-gray-200 transition-colors ${btn.style}`}
+                                                    style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
+                                                  >
+                                                    {btn.label}
+                                                  </button>
+                                                ))}
+                                                <div className="w-px h-4 bg-gray-300 mx-1" />
+                                                <button type="button" title="Bullet List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
+                                                    <circle cx="2" cy="4" r="1.3" /><rect x="5" y="3.2" width="9" height="1.6" rx="0.8" />
+                                                    <circle cx="2" cy="8" r="1.3" /><rect x="5" y="7.2" width="9" height="1.6" rx="0.8" />
+                                                    <circle cx="2" cy="12" r="1.3" /><rect x="5" y="11.2" width="9" height="1.6" rx="0.8" />
+                                                  </svg>
+                                                </button>
+                                                <button type="button" title="Numbered List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
+                                                    <text x="1" y="5" fontSize="5" fontFamily="monospace">1.</text>
+                                                    <rect x="6" y="3.2" width="8" height="1.6" rx="0.8" />
+                                                    <text x="1" y="9" fontSize="5" fontFamily="monospace">2.</text>
+                                                    <rect x="6" y="7.2" width="8" height="1.6" rx="0.8" />
+                                                    <text x="1" y="13" fontSize="5" fontFamily="monospace">3.</text>
+                                                    <rect x="6" y="11.2" width="8" height="1.6" rx="0.8" />
+                                                  </svg>
+                                                </button>
+                                                <div className="w-px h-4 bg-gray-300 mx-1" />
+                                                <button type="button" title="Insert Link" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#64748B' }}>
+                                                    <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L7 4" strokeLinecap="round" />
+                                                    <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0L3 8a3.5 3.5 0 0 0 5 5L9 12" strokeLinecap="round" />
+                                                  </svg>
+                                                </button>
+                                                <button type="button" title="Attach File" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                                  <Paperclip className="w-3.5 h-3.5" style={{ color: '#64748B' }} />
+                                                </button>
+                                              </div>
+                                              <textarea
+                                                ref={emailRichBodyRef}
+                                                value={emailRichBody}
+                                                onChange={e => setEmailRichBody(e.target.value)}
+                                                placeholder="Hello {{ContactName}}, ..."
+                                                className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-b-md"
+                                                rows={5}
+                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                              />
+                                            </>
+                                          ) : (
+                                            <>
+                                              {/* Code / Preview tab toggle — HTML Source mode */}
+                                              <div className="flex items-center gap-1 mb-2">
+                                                {(['code', 'preview'] as const).map(tab => (
+                                                  <button
+                                                    key={tab}
+                                                    type="button"
+                                                    onClick={() => setHtmlBodyViewMode(tab)}
+                                                    className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${htmlBodyViewMode === tab
+                                                        ? 'bg-blue-600 text-white border-blue-600'
+                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                                                      }`}
+                                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                                  >
+                                                    {tab === 'code' ? 'Code' : 'Preview'}
+                                                  </button>
+                                                ))}
+                                              </div>
+
+                                              {htmlBodyViewMode === 'code' ? (
+                                                <textarea
+                                                  ref={emailHtmlBodyRef}
+                                                  value={emailHtmlBody}
+                                                  onChange={e => setEmailHtmlBody(e.target.value)}
+                                                  placeholder={`<div style="font-family: sans-serif;">
+  <p>Hello {{ContactName}},</p>
+  <p>Your appointment is confirmed for {{AppointmentDate}}.</p>
+</div>`}
+                                                  className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-md"
+                                                  rows={8}
+                                                  style={{ fontFamily: 'monospace', color: '#020817' }}
+                                                />
+                                              ) : (
+                                                <div className="w-full rounded-md border border-border p-4" style={{ background: '#F1F5F9' }}>
+                                                  {emailHtmlBody.trim() ? (
+                                                    <div className="mx-auto bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm" style={{ maxWidth: '600px' }}>
+                                                      {/* Email Header */}
+                                                      <div className="p-4 bg-white border-b border-gray-100 text-xs space-y-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                        <div className="flex items-start gap-1">
+                                                          <span className="font-semibold text-gray-500 min-w-[50px]">From:</span>
+                                                          <span className="text-gray-800 font-medium">{emailConnectedAccount || 'your-email@company.com'}</span>
+                                                        </div>
+                                                        <div className="flex items-start gap-1">
+                                                          <span className="font-semibold text-gray-500 min-w-[50px]">Subject:</span>
+                                                          <span className="text-gray-800 font-medium">{emailSubject || '(No subject)'}</span>
+                                                        </div>
+                                                      </div>
+                                                      {/* Email Body */}
+                                                      <div className="px-6 py-5 text-sm overflow-auto" style={{ fontFamily: 'sans-serif', color: '#020817' }}>
+                                                        <div dangerouslySetInnerHTML={{ __html: emailHtmlBody }} />
+                                                      </div>
+                                                    </div>
+                                                  ) : (
+                                                    <div className="flex items-center justify-center py-10">
+                                                      <span className="text-gray-400 text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                        Nothing to preview yet — switch to Code and write your HTML.
+                                                      </span>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                              )}
+
+                                              <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                Write raw HTML. Variables like &#123;&#123;ContactName&#125;&#125; will be replaced when the email is sent.
+                                              </p>
+                                            </>
+                                          )}
                                         </div>
 
                                         {/* Template Identifier */}
@@ -4668,9 +4931,16 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                            <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                            <VariablePickerButton
+                                              targetRef={crmUpdateValueRef}
+                                              value={crmUpdateValue}
+                                              onChange={setCrmUpdateValue}
+                                            />
                                           </div>
                                           <input
+                                            ref={crmUpdateValueRef}
+                                            value={crmUpdateValue}
+                                            onChange={e => setCrmUpdateValue(e.target.value)}
                                             type="text"
                                             placeholder="Enter value or use variable..."
                                             className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
@@ -4679,7 +4949,7 @@ export default function Process() {
                                         </div>
                                       </div>
                                     )}
-
+ 
                                     {/* EHR Update Step */}
                                     {currentEditingStep.stepKey === "ehrupdate" && (
                                       <div className="space-y-4">
@@ -4740,9 +5010,16 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                            <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                            <VariablePickerButton
+                                              targetRef={ehrUpdateValueRef}
+                                              value={ehrUpdateValue}
+                                              onChange={setEhrUpdateValue}
+                                            />
                                           </div>
                                           <input
+                                            ref={ehrUpdateValueRef}
+                                            value={ehrUpdateValue}
+                                            onChange={e => setEhrUpdateValue(e.target.value)}
                                             type="text"
                                             placeholder="Enter value or use variable..."
                                             className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
@@ -4751,16 +5028,21 @@ export default function Process() {
                                         </div>
                                       </div>
                                     )}
-
+ 
                                     {/* Trigger Webhook Step */}
                                     {currentEditingStep.stepKey === "wh_trigger" && (
                                       <div className="space-y-4">
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
-                                            <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                            <VariablePickerButton
+                                              targetRef={webhookUrlRef}
+                                              value={webhookUrl}
+                                              onChange={setWebhookUrl}
+                                            />
                                           </div>
                                           <input
+                                            ref={webhookUrlRef}
                                             type="text"
                                             value={webhookUrl}
                                             onChange={e => setWebhookUrl(e.target.value)}
@@ -4838,9 +5120,14 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>API Endpoint</label>
-                                            <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                            <VariablePickerButton
+                                              targetRef={apiEndpointRef}
+                                              value={apiEndpoint}
+                                              onChange={setApiEndpoint}
+                                            />
                                           </div>
                                           <input
+                                            ref={apiEndpointRef}
                                             type="text"
                                             value={apiEndpoint}
                                             onChange={e => setApiEndpoint(e.target.value)}
@@ -4867,9 +5154,14 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Authentication</label>
-                                            <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                            <VariablePickerButton
+                                              targetRef={apiAuthRef}
+                                              value={apiAuth}
+                                              onChange={setApiAuth}
+                                            />
                                           </div>
                                           <input
+                                            ref={apiAuthRef}
                                             type="text"
                                             value={apiAuth}
                                             onChange={e => setApiAuth(e.target.value)}
@@ -5145,9 +5437,18 @@ export default function Process() {
                                             <div>
                                               <div className="flex items-center justify-between mb-2">
                                                 <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Email</label>
-                                                <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                                <VariablePickerButton
+                                                  targetRef={{
+                                                    get current() {
+                                                      return ticketClientEmailRefs.current[entryIdx];
+                                                    }
+                                                  } as React.RefObject<HTMLInputElement>}
+                                                  value={entry.clientEmail}
+                                                  onChange={val => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: val } : t))}
+                                                />
                                               </div>
                                               <input
+                                                ref={el => { ticketClientEmailRefs.current[entryIdx] = el; }}
                                                 type="text"
                                                 value={entry.clientEmail}
                                                 onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: e.target.value } : t))}
@@ -5159,9 +5460,18 @@ export default function Process() {
                                             <div>
                                               <div className="flex items-center justify-between mb-2">
                                                 <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Number</label>
-                                                <button className="text-xs font-medium" style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                                <VariablePickerButton
+                                                  targetRef={{
+                                                    get current() {
+                                                      return ticketClientNumberRefs.current[entryIdx];
+                                                    }
+                                                  } as React.RefObject<HTMLInputElement>}
+                                                  value={entry.clientNumber}
+                                                  onChange={val => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: val } : t))}
+                                                />
                                               </div>
                                               <input
+                                                ref={el => { ticketClientNumberRefs.current[entryIdx] = el; }}
                                                 type="text"
                                                 value={entry.clientNumber}
                                                 onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: e.target.value } : t))}
@@ -5781,11 +6091,14 @@ export default function Process() {
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                               Voice Response
                                             </label>
-                                            <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              Insert Variable
-                                            </button>
+                                            <VariablePickerButton
+                                              targetRef={fetchAvailSummaryRef}
+                                              value={fetchAvailSummary}
+                                              onChange={setFetchAvailSummary}
+                                            />
                                           </div>
                                           <textarea
+                                            ref={fetchAvailSummaryRef}
                                             value={fetchAvailSummary}
                                             onChange={e => setFetchAvailSummary(e.target.value)}
                                             placeholder="e.g. {{calendar_user}} is/is not available on the {{appointment_date}} between {{appointment_time}}"
