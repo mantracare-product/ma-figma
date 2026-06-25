@@ -4463,7 +4463,7 @@ export default function Process() {
                                           className="flex items-center justify-center gap-2 py-2.5 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50/20 transition-colors w-full text-blue-600 font-semibold"
                                           style={{ fontFamily: 'DM Sans, sans-serif' }}
                                         >
-                                          <Plus className="w-4 h-4" /> Add fields to be updated ++
+                                          <Plus className="w-4 h-4" /> Add fields to be updated
                                         </button>
                                       </div>
                                     )}
@@ -4784,9 +4784,9 @@ export default function Process() {
                                           {/* Rich text toolbar */}
                                           <div className="flex items-center gap-0.5 px-2 py-1.5 bg-gray-50 border border-b-0 border-border rounded-t-md">
                                             {[
-                                              { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**','**'] },
-                                              { label: 'I', title: 'Italic', style: 'italic', wrap: ['_','_'] },
-                                              { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>','</u>'] },
+                                              { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**', '**'] },
+                                              { label: 'I', title: 'Italic', style: 'italic', wrap: ['_', '_'] },
+                                              { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>', '</u>'] },
                                             ].map(btn => (
                                               <button
                                                 key={btn.label}
