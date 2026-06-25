@@ -2220,8 +2220,11 @@ export default function WebForms() {
                           <thead>
                             <tr className="border-b border-border bg-gray-50">
                               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Name</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Forms</th>
-                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created On</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Submissions</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Last Updated</th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
                               <th className="px-5 py-3"></th>
                             </tr>
                           </thead>
@@ -2229,97 +2232,133 @@ export default function WebForms() {
                             {flows
                               .filter(fl => fl.name.toLowerCase().includes(flowSearch.toLowerCase()))
                               .map((flow, i, arr) => (
-                                <React.Fragment key={flow.id}>
-                                  <tr
-                                    className={`transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 || expandedFlowId === flow.id ? "border-b border-border" : ""}`}
-                                  >
-                                    <td className="px-5 py-3.5">
-                                      <button
-                                        onClick={() => setDrawerFlow(flow)}
-                                        className="text-sm font-medium hover:underline text-left"
-                                        style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                                <tr
+                                  key={flow.id}
+                                  onClick={() => setDrawerFlow(flow)}
+                                  className={`cursor-pointer transition-colors hover:bg-gray-50/60 ${i < arr.length - 1 ? "border-b border-border" : ""}`}
+                                >
+                                  {/* Name */}
+                                  <td className="px-5 py-3.5">
+                                    <button
+                                      onClick={e => { e.stopPropagation(); setDrawerFlow(flow); }}
+                                      className="text-sm font-medium hover:underline text-left"
+                                      style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                                    >
+                                      {flow.name}
+                                    </button>
+                                  </td>
+
+                                  {/* Status — flows don't have live/draft so show "Active" badge always */}
+                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                    <span
+                                      className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-green-600" />
+                                      Active
+                                    </span>
+                                  </td>
+
+                                  {/* Submissions — sum of all forms in this flow */}
+                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                                      onClick={e => e.stopPropagation()}>
+                                    {flow.steps.reduce((sum, step) => {
+                                      const f = forms.find(f => f.id === step.formId);
+                                      return sum + (f?.submissions ?? 0);
+                                    }, 0)}
+                                  </td>
+
+                                  {/* Created By */}
+                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-2">
+                                      <div
+                                        className="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center font-medium shrink-0"
+                                        style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
                                       >
-                                        {flow.name}
-                                      </button>
-                                    </td>
-                                    <td className="px-5 py-3.5">
+                                        {getInitials(flow.senderName)}
+                                      </div>
+                                      <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                        {flow.senderName}
+                                      </span>
+                                    </div>
+                                  </td>
+
+                                  {/* Last Updated */}
+                                  <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}
+                                      onClick={e => e.stopPropagation()}>
+                                    {flow.createdAt}
+                                  </td>
+
+                                  {/* Enabled toggle */}
+                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                    <label className="flex items-center cursor-pointer" onClick={e => e.stopPropagation()}>
+                                      <div className="relative">
+                                        <input
+                                          type="checkbox"
+                                          checked={flow.enabled ?? true}
+                                          onChange={() => {
+                                            const updated = flows.map(fl =>
+                                              fl.id === flow.id ? { ...fl, enabled: !(fl.enabled ?? true) } : fl
+                                            );
+                                            setFlows(updated);
+                                            toast.success(`${flow.name} ${(flow.enabled ?? true) ? "disabled" : "enabled"}`);
+                                          }}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-10 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-4 after:transition-all peer-checked:bg-primary" />
+                                      </div>
+                                    </label>
+                                  </td>
+
+                                  {/* Actions dropdown */}
+                                  <td className="px-5 py-3.5" onClick={e => e.stopPropagation()}>
+                                    <div className="relative flex justify-end">
                                       <button
-                                        onClick={() => setExpandedFlowId(expandedFlowId === flow.id ? null : flow.id)}
-                                        className="inline-flex items-center gap-1.5"
+                                        onClick={e => { e.stopPropagation(); setFlowDropdownId(flowDropdownId === flow.id ? null : flow.id); }}
+                                        className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
                                       >
-                                        <span className="px-2 py-0.5 bg-gray-100 rounded-full text-xs font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                                          {flow.steps.length}
-                                        </span>
-                                        {expandedFlowId === flow.id ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+                                        <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
                                       </button>
-                                    </td>
-                                    <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                                      {flow.createdAt}
-                                    </td>
-                                    <td className="px-5 py-3.5">
-                                      <div className="relative flex justify-end">
-                                        <button
-                                          onClick={e => { e.stopPropagation(); setFlowDropdownId(flowDropdownId === flow.id ? null : flow.id); }}
-                                          className="p-1.5 hover:bg-muted/20 rounded-lg transition-colors"
-                                        >
-                                          <MoreVertical className="w-4 h-4" style={{ color: "#64748B" }} />
-                                        </button>
-                                        {flowDropdownId === flow.id && (
-                                          <>
-                                            <div className="fixed inset-0 z-10" onClick={() => setFlowDropdownId(null)} />
-                                            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
-                                              <button onClick={() => { setFlowDropdownId(null); setActiveFlow(flow); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                                <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
-                                              </button>
-                                              <button onClick={() => {
+                                      {flowDropdownId === flow.id && (
+                                        <>
+                                          <div className="fixed inset-0 z-10" onClick={() => setFlowDropdownId(null)} />
+                                          <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-border rounded-lg shadow-lg py-1 z-20">
+                                            <button
+                                              onClick={() => { setFlowDropdownId(null); setActiveFlow(flow); }}
+                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
+                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                                            >
+                                              <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
+                                            </button>
+                                            <button
+                                              onClick={() => {
                                                 const dup: IntakeFlow = { ...flow, id: Date.now(), name: flow.name + " (Copy)", createdAt: "Jun 16, 2026" };
                                                 setFlows(prev => [...prev, dup]);
                                                 setFlowDropdownId(null);
                                                 toast.success("Flow duplicated");
-                                              }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                                                <Copy className="w-4 h-4 text-muted-foreground" />Duplicate
-                                              </button>
-                                              <button onClick={() => {
+                                              }}
+                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
+                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                                            >
+                                              <Copy className="w-4 h-4 text-muted-foreground" />Duplicate
+                                            </button>
+                                            <button
+                                              onClick={() => {
                                                 setFlows(flows.filter(fl => fl.id !== flow.id));
                                                 setFlowDropdownId(null);
                                                 toast.success("Flow deleted");
-                                              }} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
-                                                <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
-                                              </button>
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    </td>
-                                  </tr>
-                                  {expandedFlowId === flow.id && (
-                                    <tr key={`${flow.id}-expanded`} className={i < arr.length - 1 ? "border-b border-border" : ""}>
-                                      <td colSpan={4} className="px-5 py-3 bg-gray-50">
-                                        {flow.steps.length === 0 ? (
-                                          <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>No forms in this flow.</p>
-                                        ) : (
-                                          <ul className="space-y-1">
-                                            {flow.steps.map((step, idx) => {
-                                              const sf = forms.find(f => f.id === step.formId);
-                                              return (
-                                                <li
-                                                   key={idx}
-                                                   className="flex items-center gap-2 text-xs cursor-pointer hover:underline"
-                                                   style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
-                                                   onClick={() => sf && setDrawerForm(sf)}
-                                                 >
-                                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
-                                                  {sf?.name ?? `Form #${step.formId}`}
-                                                  {step.required && <span className="text-red-400">*</span>}
-                                                </li>
-                                              );
-                                            })}
-                                          </ul>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  )}
-                                </React.Fragment>
+                                              }}
+                                              className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3"
+                                              style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}
+                                            >
+                                              <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
                               ))}
                           </tbody>
                         </table>

@@ -638,7 +638,6 @@ export default function Process() {
   const [movementTargetExpanded, setMovementTargetExpanded] = useState(true);
   const [actionConfigExpanded, setActionConfigExpanded] = useState(true);
   const [parametersExpanded, setParametersExpanded] = useState(true);
-  const [fieldUpdateValueSource, setFieldUpdateValueSource] = useState<"static" | "variable" | "field_ref">("static");
   const [assignHumanSearch, setAssignHumanSearch] = useState<string>("");
   const [callActionTransferType, setCallActionTransferType] = useState<"human" | "agent">("human");
   const [callActionCountryCode, setCallActionCountryCode] = useState<string>("+1");
@@ -669,8 +668,10 @@ export default function Process() {
 
 
   // Field Update states
-  const [fieldToEdit, setFieldToEdit] = useState<string>("Select field...");
-  const [updateValue, setUpdateValue] = useState<string>("");
+  const [fieldUpdateBlocks, setFieldUpdateBlocks] = useState<Array<{ fieldType: string; fieldToEdit: string; valueSource: "static" | "variable"; updateValue: string }>>([
+    { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }
+  ]);
+  const [expandedBlockIndex, setExpandedBlockIndex] = useState<number | null>(0);
 
   // Assign to Human / Call Action states
   const [assignedUser, setAssignedUser] = useState<string>("Select user...");
@@ -681,6 +682,7 @@ export default function Process() {
   const [smsTemplateIdentifier, setSmsTemplateIdentifier] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
   const [whatsappTemplateIdentifier, setWhatsappTemplateIdentifier] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
   const [webhookHeaderTypes, setWebhookHeaderTypes] = useState<string[]>(["Static"]);
 
   // CRM Update states
@@ -741,8 +743,10 @@ export default function Process() {
     setConditionOperators([]);
     setStepDetailProcess("Select process...");
     setStepDetailStage("Select stage...");
-    setFieldToEdit("Select field...");
-    setUpdateValue("");
+    setFieldUpdateBlocks([
+      { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }
+    ]);
+    setExpandedBlockIndex(0);
     setAssignedUser("Select user...");
     setTemplateId("");
     setSmsTemplate("");
@@ -797,7 +801,6 @@ export default function Process() {
     setMovementTargetExpanded(true);
     setActionConfigExpanded(true);
     setParametersExpanded(true);
-    setFieldUpdateValueSource("static");
     setAssignHumanSearch("");
     setCallActionTransferType("human");
     setCallActionCountryCode("+1");
@@ -4317,91 +4320,151 @@ export default function Process() {
                                   <div className="border-t border-border p-4 space-y-4">
 
                                     {/* Field Update Step */}
+                                    {/* Field Update Step */}
                                     {currentEditingStep.stepKey === "fieldupdate" && (
                                       <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Field Type
-                                          </label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>System Fields</option>
-                                            <option>Custom Fields</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Select Field to Edit
-                                          </label>
-                                          <select
-                                            value={fieldToEdit}
-                                            onChange={e => setFieldToEdit(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select field...</option>
-                                            <option>Stage Name</option>
-                                            <option>Contact Name</option>
-                                            <option>Call Status</option>
-                                            <option>Call Duration</option>
-                                            <option>Country</option>
-                                            <option>Sentiment</option>
-                                            <option>Intent</option>
-                                            <option>Appointment Date</option>
-                                            <option>Appointment Time</option>
-                                            <option>AI Summary</option>
-                                            <option>Call Transcription</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          {/* Value Source */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Value Source
-                                            </label>
-                                            <div className="flex items-center gap-4 mb-3">
-                                              {[
-                                                { v: "static", l: "Static" },
-                                                { v: "variable", l: "Variable" },
-                                                { v: "field_ref", l: "Field Reference" }
-                                              ].map((opt) => (
-                                                <label key={opt.v} className="flex items-center gap-2 cursor-pointer">
+                                        {fieldUpdateBlocks.map((block, index) => (
+                                          <div key={index} className="border border-border rounded-lg overflow-hidden bg-white">
+                                            <div
+                                              className="flex items-center justify-between px-4 py-3 bg-gray-50/70 border-b border-border cursor-pointer select-none"
+                                              onClick={() => setExpandedBlockIndex(expandedBlockIndex === index ? null : index)}
+                                            >
+                                              <div className="flex items-center gap-2">
+                                                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedBlockIndex === index ? "rotate-180" : ""}`} />
+                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? block.fieldToEdit : `Field ${index + 1}`}
+                                                </span>
+                                              </div>
+                                              {fieldUpdateBlocks.length > 1 && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const updated = fieldUpdateBlocks.filter((_, i) => i !== index);
+                                                    setFieldUpdateBlocks(updated);
+                                                    if (expandedBlockIndex === index) {
+                                                      setExpandedBlockIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
+                                                    } else if (expandedBlockIndex !== null && expandedBlockIndex > index) {
+                                                      setExpandedBlockIndex(expandedBlockIndex - 1);
+                                                    }
+                                                  }}
+                                                  className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
+                                                >
+                                                  <Trash2 className="w-4 h-4" />
+                                                </button>
+                                              )}
+                                            </div>
+                                            {expandedBlockIndex === index && (
+                                              <div className="p-4 space-y-4">
+                                                {/* Field Type */}
+                                                <div>
+                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Field Type
+                                                  </label>
+                                                  <select
+                                                    value={block.fieldType}
+                                                    onChange={e => {
+                                                      const val = e.target.value;
+                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, fieldType: val } : b));
+                                                    }}
+                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                  >
+                                                    <option>System Fields</option>
+                                                    <option>Custom Fields</option>
+                                                  </select>
+                                                </div>
+
+                                                {/* Select Field to Edit */}
+                                                <div>
+                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Select Field to Edit
+                                                  </label>
+                                                  <select
+                                                    value={block.fieldToEdit}
+                                                    onChange={e => {
+                                                      const val = e.target.value;
+                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, fieldToEdit: val } : b));
+                                                    }}
+                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                  >
+                                                    <option>Select field...</option>
+                                                    <option>Stage Name</option>
+                                                    <option>Contact Name</option>
+                                                    <option>Call Status</option>
+                                                    <option>Call Duration</option>
+                                                    <option>Country</option>
+                                                    <option>Sentiment</option>
+                                                    <option>Intent</option>
+                                                    <option>Appointment Date</option>
+                                                    <option>Appointment Time</option>
+                                                    <option>AI Summary</option>
+                                                    <option>Call Transcription</option>
+                                                  </select>
+                                                </div>
+
+                                                {/* Value Source */}
+                                                <div>
+                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Value Source
+                                                  </label>
+                                                  <div className="flex items-center gap-4 mb-3">
+                                                    {[
+                                                      { v: "static", l: "Static" },
+                                                      { v: "variable", l: "Variable" },
+                                                    ].map((opt) => (
+                                                      <label key={opt.v} className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                          type="radio"
+                                                          name={`fieldUpdateValueSource-${index}`}
+                                                          value={opt.v}
+                                                          checked={block.valueSource === opt.v}
+                                                          onChange={() => {
+                                                            setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, valueSource: opt.v as any, updateValue: "" } : b));
+                                                          }}
+                                                          className="w-4 h-4 text-blue-600"
+                                                        />
+                                                        <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
+                                                      </label>
+                                                    ))}
+                                                  </div>
+                                                  <div className="flex items-center justify-between mb-2">
+                                                    <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                      {block.valueSource === "variable" ? "Variable" : "Static Value"}
+                                                    </label>
+                                                    <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
+                                                  </div>
                                                   <input
-                                                    type="radio"
-                                                    name="fieldUpdateValueSource"
-                                                    value={opt.v}
-                                                    checked={fieldUpdateValueSource === opt.v}
-                                                    onChange={() => { setFieldUpdateValueSource(opt.v as any); setUpdateValue(""); }}
-                                                    className="w-4 h-4 text-blue-600"
+                                                    type="text"
+                                                    value={block.updateValue}
+                                                    onChange={e => {
+                                                      const val = e.target.value;
+                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, updateValue: val } : b));
+                                                    }}
+                                                    placeholder={
+                                                      block.valueSource === "variable"
+                                                        ? "{{ContactName}}"
+                                                        : "Enter static value..."
+                                                    }
+                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                   />
-                                                  <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
-                                                </label>
-                                              ))}
-                                            </div>
-                                            <div className="flex items-center justify-between mb-2">
-                                              <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                {fieldUpdateValueSource === "variable" ? "Variable" : fieldUpdateValueSource === "field_ref" ? "Field Reference" : "Static Value"}
-                                              </label>
-                                              <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>Insert Variable</button>
-                                            </div>
-                                            <input
-                                              type="text"
-                                              value={updateValue}
-                                              onChange={e => setUpdateValue(e.target.value)}
-                                              placeholder={
-                                                fieldUpdateValueSource === "variable"
-                                                  ? "{{ContactName}}"
-                                                  : fieldUpdateValueSource === "field_ref"
-                                                    ? "contact_name"
-                                                    : "Enter static value..."
-                                              }
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
+                                                </div>
+                                              </div>
+                                            )}
                                           </div>
-                                        </div>
+                                        ))}
+                                        <button
+                                          onClick={() => {
+                                            const newBlock = { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static" as const, updateValue: "" };
+                                            setFieldUpdateBlocks(prev => [...prev, newBlock]);
+                                            setExpandedBlockIndex(fieldUpdateBlocks.length);
+                                          }}
+                                          className="flex items-center justify-center gap-2 py-2.5 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50/20 transition-colors w-full text-blue-600 font-semibold"
+                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                        >
+                                          <Plus className="w-4 h-4" /> Add fields to be updated ++
+                                        </button>
                                       </div>
                                     )}
 
@@ -4697,6 +4760,19 @@ export default function Process() {
                                           </div>
                                         </div>
 
+                                        {/* Subject */}
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Subject</label>
+                                          <input
+                                            type="text"
+                                            value={emailSubject}
+                                            onChange={e => setEmailSubject(e.target.value)}
+                                            placeholder="e.g. Your appointment confirmation"
+                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                          />
+                                        </div>
+
                                         {/* Email Body */}
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
@@ -4705,9 +4781,55 @@ export default function Process() {
                                               &lt;/&gt; + Variable
                                             </button>
                                           </div>
+                                          {/* Rich text toolbar */}
+                                          <div className="flex items-center gap-0.5 px-2 py-1.5 bg-gray-50 border border-b-0 border-border rounded-t-md">
+                                            {[
+                                              { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**','**'] },
+                                              { label: 'I', title: 'Italic', style: 'italic', wrap: ['_','_'] },
+                                              { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>','</u>'] },
+                                            ].map(btn => (
+                                              <button
+                                                key={btn.label}
+                                                title={btn.title}
+                                                type="button"
+                                                className={`w-7 h-7 flex items-center justify-center text-xs rounded hover:bg-gray-200 transition-colors ${btn.style}`}
+                                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
+                                              >
+                                                {btn.label}
+                                              </button>
+                                            ))}
+                                            <div className="w-px h-4 bg-gray-300 mx-1" />
+                                            <button type="button" title="Bullet List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
+                                                <circle cx="2" cy="4" r="1.3" /><rect x="5" y="3.2" width="9" height="1.6" rx="0.8" />
+                                                <circle cx="2" cy="8" r="1.3" /><rect x="5" y="7.2" width="9" height="1.6" rx="0.8" />
+                                                <circle cx="2" cy="12" r="1.3" /><rect x="5" y="11.2" width="9" height="1.6" rx="0.8" />
+                                              </svg>
+                                            </button>
+                                            <button type="button" title="Numbered List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
+                                                <text x="1" y="5" fontSize="5" fontFamily="monospace">1.</text>
+                                                <rect x="6" y="3.2" width="8" height="1.6" rx="0.8" />
+                                                <text x="1" y="9" fontSize="5" fontFamily="monospace">2.</text>
+                                                <rect x="6" y="7.2" width="8" height="1.6" rx="0.8" />
+                                                <text x="1" y="13" fontSize="5" fontFamily="monospace">3.</text>
+                                                <rect x="6" y="11.2" width="8" height="1.6" rx="0.8" />
+                                              </svg>
+                                            </button>
+                                            <div className="w-px h-4 bg-gray-300 mx-1" />
+                                            <button type="button" title="Insert Link" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                              <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#64748B' }}>
+                                                <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L7 4" strokeLinecap="round" />
+                                                <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0L3 8a3.5 3.5 0 0 0 5 5L9 12" strokeLinecap="round" />
+                                              </svg>
+                                            </button>
+                                            <button type="button" title="Attach File" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
+                                              <Paperclip className="w-3.5 h-3.5" style={{ color: '#64748B' }} />
+                                            </button>
+                                          </div>
                                           <textarea
                                             placeholder="Hello {{ContactName}}, ..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                            className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-b-md"
                                             rows={5}
                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                           />
@@ -5848,7 +5970,7 @@ export default function Process() {
                                         <div>
                                           <div className="flex items-center justify-between mb-2">
                                             <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Summary
+                                              Voice Response
                                             </label>
                                             <button className="text-xs font-medium text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                               Insert Variable
@@ -5857,7 +5979,7 @@ export default function Process() {
                                           <textarea
                                             value={fetchAvailSummary}
                                             onChange={e => setFetchAvailSummary(e.target.value)}
-                                            placeholder="e.g. Checking availability for {{ContactName}}..."
+                                            placeholder="e.g. {{calendar_user}} is/is not available on the {{appointment_date}} between {{appointment_time}}"
                                             className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
                                             rows={3}
                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
@@ -6015,19 +6137,7 @@ export default function Process() {
                                             </div>
                                           </div>
                                         )}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Current Appointment Field
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={calendarAppointmentField}
-                                            onChange={e => setCalendarAppointmentField(e.target.value)}
-                                            placeholder="Field storing appointment reference..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
+
                                         <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
                                           <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                             Sent as <code style={{ color: '#2563EB' }}>

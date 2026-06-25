@@ -12,6 +12,7 @@ export interface IntakeFlow {
   createdAt: string;
   showWelcomeStep?: boolean;
   showThankYouStep?: boolean;
+  enabled?: boolean;
 }
 
 export const INITIAL_FLOWS: IntakeFlow[] = [
