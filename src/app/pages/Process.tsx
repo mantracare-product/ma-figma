@@ -369,7 +369,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "whatsapp": ["stage", "incall", "postcall"],
   "sms": ["stage", "incall", "postcall"],
   "email": ["stage", "incall", "postcall"],
-  "processmovement": ["stage", "postcall"],
+  "processmovement": ["postcall"],
   "endworkflow": ["stage", "postcall"],
   "fieldupdate": ["stage", "postcall"],
   "assignhuman": ["stage", "postcall"],
