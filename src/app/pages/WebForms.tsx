@@ -685,49 +685,41 @@ function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClos
                 <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>{form.createdAt}</p>
               </div>
 
-              <div className="h-px bg-border" />
-
-              {/* Block 5 — Live Link or Draft notice */}
-              {form.status === "live" ? (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>LIVE LINK</p>
-                  <div className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 border border-border rounded-lg">
-                    <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="text-xs font-mono truncate flex-1" style={{ color: "#64748B" }}>{formUrl}</span>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(formUrl); toast.success("Link copied to clipboard"); }}
-                      className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg border border-border shrink-0 transition-colors"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <Copy className="w-3 h-3" /> Copy link
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-1">
-                  <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>STATUS</p>
-                  <div className="flex items-center justify-between px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
-                    <span className="text-xs text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>This form is a draft — publish it to get a live link.</span>
-                    <button
-                      onClick={() => toast.success("Form published!")}
-                      className="px-3 py-1.5 bg-black text-white text-xs font-semibold rounded-lg hover:bg-black/90 transition-colors shrink-0 ml-3"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      Publish form
-                    </button>
-                  </div>
-                </div>
-              )}
-
               {form.status === "live" && (
                 <>
                   <div className="h-px bg-border" />
-
-                  {/* Block 6 — Embed Code */}
                   <div className="space-y-1">
-                    <p className="text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>EMBED CODE</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide" 
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      LIVE LINK
+                    </p>
+                    <div className="flex items-center gap-3 px-3 py-2.5 bg-white border border-border rounded-lg">
+                      <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-xs font-mono truncate flex-1" style={{ color: "#64748B" }}>
+                        {formUrl}
+                      </span>
+                      <button
+                        onClick={() => { navigator.clipboard.writeText(formUrl); toast.success("Link copied to clipboard"); }}
+                        className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg border border-border shrink-0 transition-colors"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <Copy className="w-3 h-3" /> Copy link
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-border" />
+
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide" 
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      EMBED CODE
+                    </p>
                     <div className="bg-gray-50 border border-border rounded-lg p-3 space-y-3">
-                      <code className="text-xs break-all leading-relaxed font-mono block" style={{ color: "#64748B" }}>{embedCode}</code>
+                      <code className="text-xs break-all leading-relaxed font-mono block" 
+                            style={{ color: "#64748B" }}>
+                        {embedCode}
+                      </code>
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => { navigator.clipboard.writeText(embedCode); toast.success("Embed code copied"); }}
@@ -745,9 +737,35 @@ function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClos
                         </button>
                         <label className="flex items-center gap-1.5 ml-auto cursor-pointer">
                           <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
-                          <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>My form is embedded</span>
+                          <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                            My form is embedded
+                          </span>
                         </label>
                       </div>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {form.status === "draft" && (
+                <>
+                  <div className="h-px bg-border" />
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide" 
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      STATUS
+                    </p>
+                    <div className="flex items-center justify-between px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                      <span className="text-xs text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        This form is a draft — publish it to get a live link.
+                      </span>
+                      <button
+                        onClick={() => toast.success("Form published!")}
+                        className="px-3 py-1.5 bg-black text-white text-xs font-semibold rounded-lg hover:bg-black/90 transition-colors shrink-0 ml-3"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        Publish form
+                      </button>
                     </div>
                   </div>
                 </>
@@ -813,6 +831,384 @@ function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClos
   );
 }
 
+function IntakeFlowDrawer({
+  flow,
+  forms,
+  onClose,
+  onEdit,
+}: {
+  flow: IntakeFlow | null;
+  forms: Form[];
+  onClose: () => void;
+  onEdit: (fl: IntakeFlow) => void;
+}) {
+  const [tab, setTab] = useState<"overview" | "preview">("overview");
+  const [previewStep, setPreviewStep] = useState(0);
+  const [previewValues, setPreviewValues] = useState<Record<string, string>>({});
+
+  if (!flow) return null;
+
+  const stepForms = flow.steps
+    .map(s => forms.find(f => f.id === s.formId))
+    .filter(Boolean) as Form[];
+
+  // Build preview screens: welcome → forms → thankYou
+  const screens: { type: "welcome" | "form" | "thankYou"; formIndex?: number }[] = [];
+  if (flow.showWelcomeStep !== false) screens.push({ type: "welcome" });
+  stepForms.forEach((_, i) => screens.push({ type: "form", formIndex: i }));
+  if (flow.showThankYouStep !== false) screens.push({ type: "thankYou" });
+
+  const currentScreen = screens[previewStep] ?? null;
+
+  const flowUrl = `https://app.myaifrontdesk.com/flows/flow-${flow.id}`;
+  const flowEmbedCode = `<iframe src="${flowUrl}" width="100%" height="700px" style="border: none; border-radius: 8px;"></iframe>`;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
+      <div className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-[680px] bg-white shadow-2xl flex flex-col">
+        
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-wrap">
+          <h2 className="text-base font-bold mr-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+            {flow.name}
+          </h2>
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+            Intake Flow
+          </span>
+          <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+            Created {flow.createdAt}
+          </span>
+          <button
+            onClick={() => { onClose(); onEdit(flow); }}
+            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            <Edit2 className="w-3 h-3" /> Edit
+          </button>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <X className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex items-center gap-5 px-6 border-b border-border">
+          {(["overview", "preview"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => { setTab(t); setPreviewStep(0); setPreviewValues({}); }}
+              className={`pb-2 pt-2 px-1 text-xs font-medium transition-colors relative capitalize ${tab === t ? "text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {t === "overview" ? "Overview" : "Preview"}
+              {tab === t && <div className="absolute bottom-0 left-0 right-0 h-px bg-primary rounded-t" />}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {tab === "overview" ? (
+            <div className="px-6 py-5 space-y-5">
+              {/* Block 1 — Forms in Flow count + step list combined */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide" 
+                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  FORMS IN FLOW
+                </p>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 rounded-lg text-sm font-medium mb-3"
+                     style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                  <FileText className="w-3.5 h-3.5" />
+                  {flow.steps.length}
+                </div>
+
+                {flow.steps.length === 0 ? (
+                  <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                    No forms in this flow yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {flow.steps.map((step, idx) => {
+                      const sf = forms.find(f => f.id === step.formId);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-3 px-3 py-2.5 bg-gray-50 border border-border rounded-lg"
+                        >
+                          <div
+                            className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0"
+                            style={{ fontFamily: "DM Sans, sans-serif", color: "#64748B" }}
+                          >
+                            {idx + 1}
+                          </div>
+                          <span
+                            className="text-sm flex-1"
+                            style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                          >
+                            {sf?.name ?? `Form #${step.formId}`}
+                          </span>
+                          {step.required && (
+                            <span
+                              className="text-xs px-2 py-0.5 bg-red-50 text-red-500 rounded-full font-medium shrink-0"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              Required
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Welcome message */}
+              {flow.showWelcomeStep !== false && (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide"
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      WELCOME MESSAGE
+                    </p>
+                    <p className="text-sm italic"
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                      "{flow.welcomeMessage}"
+                    </p>
+                  </div>
+                  <div className="h-px bg-border" />
+                </>
+              )}
+
+              {/* Thank you message */}
+              {flow.showThankYouStep !== false && (
+                <>
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide"
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                      THANK YOU MESSAGE
+                    </p>
+                    <p className="text-sm italic"
+                       style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                      "{flow.thankYouMessage}"
+                    </p>
+                  </div>
+                  <div className="h-px bg-border" />
+                </>
+              )}
+
+              {/* Created By */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide"
+                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  CREATED BY
+                </p>
+                <div className="flex items-center gap-2">
+                  <div
+                    className="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center text-xs font-bold shrink-0"
+                    style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                  >
+                    {getInitials(flow.senderName)}
+                  </div>
+                  <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                    {flow.senderName}
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Created On */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide"
+                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  CREATED ON
+                </p>
+                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                  {flow.createdAt}
+                </p>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Share Link */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide"
+                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  SHARE LINK
+                </p>
+                <div className="flex items-center gap-3 px-3 py-2.5 bg-white border border-border rounded-lg">
+                  <Link2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-xs font-mono truncate flex-1" style={{ color: "#64748B" }}>
+                    {flowUrl}
+                  </span>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(flowUrl); toast.success("Link copied to clipboard"); }}
+                    className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-primary hover:bg-blue-50 rounded-lg border border-border shrink-0 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Copy className="w-3 h-3" /> Copy link
+                  </button>
+                </div>
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Embed Code */}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide"
+                   style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
+                  EMBED CODE
+                </p>
+                <div className="bg-gray-50 border border-border rounded-lg p-3 space-y-3">
+                  <code className="text-xs break-all leading-relaxed font-mono block"
+                        style={{ color: "#64748B" }}>
+                    {flowEmbedCode}
+                  </code>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(flowEmbedCode); toast.success("Embed code copied"); }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-black text-white rounded-lg hover:bg-black/90 transition-colors"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      <Copy className="w-3 h-3" /> Copy embed code
+                    </button>
+                    <button
+                      onClick={() => toast.info("Opening email client...")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium hover:text-foreground transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                    >
+                      <Mail className="w-3.5 h-3.5" /> Email to developer
+                    </button>
+                    <label className="flex items-center gap-1.5 ml-auto cursor-pointer">
+                      <input type="checkbox" className="w-3.5 h-3.5 rounded border-gray-300" />
+                      <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                        Flow is embedded
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          ) : (
+            /* Preview tab — multi-step flow preview */
+            <div className="flex flex-col h-full">
+              {/* Step indicator */}
+              <div className="px-6 py-3 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  {screens.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setPreviewStep(i); setPreviewValues({}); }}
+                      className={`w-2 h-2 rounded-full transition-colors ${i === previewStep ? "bg-black" : "bg-gray-300"}`}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <button
+                    disabled={previewStep === 0}
+                    onClick={() => setPreviewStep(s => Math.max(0, s - 1))}
+                    className="px-3 py-1 text-xs border border-border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    disabled={previewStep >= screens.length - 1}
+                    onClick={() => setPreviewStep(s => Math.min(screens.length - 1, s + 1))}
+                    className="px-3 py-1 text-xs bg-black text-white rounded-lg disabled:opacity-40 hover:bg-black/90 transition-colors"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+
+              {/* Screen content */}
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                {currentScreen?.type === "welcome" && (
+                  <div className="bg-white rounded-2xl border border-border shadow-sm p-8 space-y-4 text-center">
+                    <h2 className="text-xl font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>Welcome [Client Name],</h2>
+                    <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{flow.welcomeMessage}</p>
+                    <p className="text-sm italic" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>— {flow.senderName}</p>
+                  </div>
+                )}
+
+                {currentScreen?.type === "form" && (() => {
+                  const pForm = stepForms[currentScreen.formIndex!];
+                  return pForm ? (
+                    <div className="bg-white rounded-2xl border border-border shadow-sm p-6 space-y-4">
+                      <h2 className="text-lg font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{pForm.name}</h2>
+                      <div className="space-y-4">
+                        {pForm.fields.map((field, idx) => {
+                          const key = `${previewStep}-${field.label}`;
+                          const val = previewValues[key] || "";
+                          return (
+                            <div key={idx} className="space-y-1">
+                              <label className="text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                {field.label}{field.required && <span className="ml-1 text-red-400">*</span>}
+                              </label>
+                              {field.type === "textarea" ? (
+                                <textarea
+                                  value={val}
+                                  onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                  placeholder={field.placeholder}
+                                  rows={3}
+                                  className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                />
+                              ) : field.type === "select" ? (
+                                <select
+                                  value={val}
+                                  onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                  className={SELECT_STYLE + " w-full"}
+                                  style={SELECT_INLINE}
+                                >
+                                  <option value="">{field.placeholder || "Select…"}</option>
+                                </select>
+                              ) : (
+                                <input
+                                  type={field.type}
+                                  value={val}
+                                  onChange={e => setPreviewValues(prev => ({ ...prev, [key]: e.target.value }))}
+                                  placeholder={field.placeholder}
+                                  className="w-full px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                />
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <button disabled className="w-full py-2.5 rounded-lg bg-gray-100 text-sm font-semibold text-muted-foreground cursor-not-allowed" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        Submit (preview only)
+                      </button>
+                    </div>
+                  ) : null;
+                })()}
+
+                {currentScreen?.type === "thankYou" && (
+                  <div className="bg-white rounded-2xl border border-border shadow-sm p-8 space-y-4 text-center">
+                    <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+                      <svg className="w-7 h-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h2 className="text-xl font-bold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>All Done!</h2>
+                    <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{flow.thankYouMessage}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function WebForms() {
@@ -820,6 +1216,7 @@ export default function WebForms() {
   const location = useLocation();
   const [mainTab, setMainTab] = useState<"submissions" | "forms">("forms");
   const [drawerForm, setDrawerForm] = useState<Form | null>(null);
+  const [drawerFlow, setDrawerFlow] = useState<IntakeFlow | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const [forms, setForms] = useState<Form[]>(() => {
     const saved = sessionStorage.getItem("webForms");
@@ -1533,7 +1930,11 @@ export default function WebForms() {
                                       <p className="text-xs font-medium mb-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                                         {ordinalSuffix(idx + 1)} form
                                       </p>
-                                      <p className="text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                                      <p
+                                        className="text-sm font-semibold cursor-pointer hover:underline"
+                                        style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+                                        onClick={() => stepForm && setDrawerForm(stepForm)}
+                                      >
                                         {stepForm?.name ?? `Form #${step.formId}`}
                                       </p>
                                     </div>
@@ -1834,7 +2235,7 @@ export default function WebForms() {
                                   >
                                     <td className="px-5 py-3.5">
                                       <button
-                                        onClick={() => setActiveFlow(flow)}
+                                        onClick={() => setDrawerFlow(flow)}
                                         className="text-sm font-medium hover:underline text-left"
                                         style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
                                       >
@@ -1901,7 +2302,12 @@ export default function WebForms() {
                                             {flow.steps.map((step, idx) => {
                                               const sf = forms.find(f => f.id === step.formId);
                                               return (
-                                                <li key={idx} className="flex items-center gap-2 text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                                <li
+                                                   key={idx}
+                                                   className="flex items-center gap-2 text-xs cursor-pointer hover:underline"
+                                                   style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}
+                                                   onClick={() => sf && setDrawerForm(sf)}
+                                                 >
                                                   <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
                                                   {sf?.name ?? `Form #${step.formId}`}
                                                   {step.required && <span className="text-red-400">*</span>}
@@ -1971,6 +2377,14 @@ export default function WebForms() {
         form={drawerForm}
         onClose={() => setDrawerForm(null)}
         onEdit={f => { setDrawerForm(null); handleEdit(f); }}
+      />
+
+      {/* Intake flow detail drawer */}
+      <IntakeFlowDrawer
+        flow={drawerFlow}
+        forms={forms}
+        onClose={() => setDrawerFlow(null)}
+        onEdit={fl => { setDrawerFlow(null); setActiveFlow(fl); }}
       />
 
       {viewingClient && (
