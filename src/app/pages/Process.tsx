@@ -320,11 +320,10 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
           {step.trigger === "incall"
             ? "→ Event Driven"
             : step.trigger === "postcall"
-              ? `→ Event Driven · ${step.executionType === "parallel" ? "Parallel" : "Sequential"}${
-                  step.executionType !== "parallel" && step.delayValue
-                    ? ` (+${step.delayValue} ${step.delayUnit ?? "Minute"})`
-                    : ""
-                }`
+              ? `→ Event Driven · ${step.executionType === "parallel" ? "Parallel" : "Sequential"}${step.executionType !== "parallel" && step.delayValue
+                ? ` (+${step.delayValue} ${step.delayUnit ?? "Minute"})`
+                : ""
+              }`
               : step.executionType === "parallel"
                 ? "→ Parallel"
                 : "→ Sequential"}
@@ -384,7 +383,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "greetingphrase": ["incall"],
   "bypasstohuman": ["incall"],
   "liveintaketicket": ["incall"],
-  "callaction": ["incall", "postcall"],
+  "callaction": ["incall"],
   "waitdelay": ["stage", "incall", "postcall"],
   "ifcondition": ["stage", "incall", "postcall"],
   "autohangupinteraction": ["incall"],
@@ -3808,12 +3807,9 @@ export default function Process() {
                                     { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
-                                    { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
-                                    { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "autohangupinteraction", name: "Auto Hang-up After Interaction Ends", desc: "Automatically end the call once the interaction is complete.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
                                     { key: "autohangupsilence", name: "Auto Hang-up After Silence", desc: "Automatically end the call when silence is detected during the call.", iconKey: "volume2", cats: ["all", "incall"], popular: false },
                                     { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
-                                    { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
@@ -3853,8 +3849,7 @@ export default function Process() {
                                     return (
                                       <button
                                         key={step.key}
-                                        onClick={() => setSelectedWorkflowStepCard(step.key)}
-                                        onDoubleClick={() => {
+                                        onClick={() => {
                                           // Reset state to prevent data bleeding between steps
                                           resetStepDetailState();
 
@@ -3893,66 +3888,6 @@ export default function Process() {
                                 })()}
                               </div>
                             </div>
-
-                            {/* Footer — only shown when a step is selected */}
-                            {selectedWorkflowStepCard && (
-                              <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-end gap-3">
-                                <button
-                                  onClick={() => setWorkflowStepsDrawerOpen(false)}
-                                  className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                  style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    const allSteps = [
-                                      { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch" },
-                                      { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock" },
-                                      { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap" },
-                                      { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x" },
-                                      { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall" },
-                                      { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar" },
-                                      { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit" },
-                                      { key: "autohangupinteraction", name: "Auto Hang-up After Interaction Ends", desc: "Automatically end the call once the interaction is complete.", iconKey: "phonecall" },
-                                      { key: "autohangupsilence", name: "Auto Hang-up After Silence", desc: "Automatically end the call when silence is detected during the call.", iconKey: "volume2" },
-                                      { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare" },
-                                      { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar" },
-                                      { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
-                                      { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
-                                      { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail" },
-                                      { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit" },
-                                      { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck" },
-                                      { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe" },
-                                      { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap" },
-                                      /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck" }, */
-                                      /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext" }, */
-                                      /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist" }, */
-                                      /* { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist" }, */
-                                      /* { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare" }, */
-                                      /* { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb" }, */
-                                      /* { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar" }, */
-                                      /* { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid" }, */
-                                    ];
-                                    const step = allSteps.find(s => s.key === selectedWorkflowStepCard);
-                                    if (step) {
-                                      // Reset state to prevent data bleeding between steps
-                                      resetStepDetailState();
-
-                                      // Open detail drawer to configure the step before adding it
-                                      setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
-                                      setIsCreatingNewStep(true);
-                                      setWorkflowStepsDrawerOpen(false);
-                                      setStepDetailDrawerOpen(true);
-                                    }
-                                  }}
-                                  className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                  style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                >
-                                  Add Step
-                                </button>
-                              </div>
-                            )}
                           </div>
                         </>
                       )}
@@ -4791,8 +4726,8 @@ export default function Process() {
                                                     type="button"
                                                     onClick={() => setHtmlBodyViewMode(tab)}
                                                     className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${htmlBodyViewMode === tab
-                                                        ? 'bg-blue-600 text-white border-blue-600'
-                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600'
+                                                      ? 'bg-blue-600 text-white border-blue-600'
+                                                      : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600'
                                                       }`}
                                                     style={{ fontFamily: 'DM Sans, sans-serif' }}
                                                   >
@@ -4949,7 +4884,7 @@ export default function Process() {
                                         </div>
                                       </div>
                                     )}
- 
+
                                     {/* EHR Update Step */}
                                     {currentEditingStep.stepKey === "ehrupdate" && (
                                       <div className="space-y-4">
@@ -5028,7 +4963,7 @@ export default function Process() {
                                         </div>
                                       </div>
                                     )}
- 
+
                                     {/* Trigger Webhook Step */}
                                     {currentEditingStep.stepKey === "wh_trigger" && (
                                       <div className="space-y-4">
