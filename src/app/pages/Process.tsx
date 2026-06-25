@@ -380,6 +380,9 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "callaction": ["incall", "postcall"],
   "waitdelay": ["stage", "incall", "postcall"],
   "ifcondition": ["stage", "incall", "postcall"],
+  "autohangupinteraction": ["incall"],
+  "autohangupsilence": ["incall"],
+  "idlemessages": ["incall"],
   "fetchavailability": ["incall"],
   "fetchfieldvalue": ["incall"],
   "managecalendar": ["incall", "postcall"],
@@ -822,6 +825,12 @@ export default function Process() {
     setCalendarDate("");
     setCalendarTime("");
     setCalendarAppointmentField("");
+    setAutoHangupInteractionMessage("");
+    setAutoHangupSilenceStageDuration(5);
+    setIdleMessageStageText("");
+    setIdleMessageStageDelay(10);
+    setIdleHangupMessageStage("");
+    setIdleHangupDelayStage(20);
   };
 
   const buildTriggerUrl = (trigger: "incall" | "postcall", actionName: string, actionReason: string) => {
@@ -2719,6 +2728,7 @@ export default function Process() {
                                       lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
                                       layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
                                       gitbranch: <GitBranch className="w-4 h-4 text-white" />,
+                                      volume2: <Volume2 className="w-4 h-4 text-white" />,
                                     };
                                     return <>{map[iconKey]}</>;
                                   };
@@ -3904,6 +3914,9 @@ export default function Process() {
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
                                     { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
                                     { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit", cats: ["all", "data"], popular: false },
+                                    { key: "autohangupinteraction", name: "Auto Hang-up After Interaction Ends", desc: "Automatically end the call once the interaction is complete.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
+                                    { key: "autohangupsilence", name: "Auto Hang-up After Silence", desc: "Automatically end the call when silence is detected during the call.", iconKey: "volume2", cats: ["all", "incall"], popular: false },
+                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
                                     { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar", cats: ["all", "incall"], popular: false },
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
@@ -3933,6 +3946,7 @@ export default function Process() {
                                     lightbulb: <Lightbulb className="w-4 h-4 text-white" />,
                                     layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
                                     gitbranch: <GitBranch className="w-4 h-4 text-white" />,
+                                    volume2: <Volume2 className="w-4 h-4 text-white" />,
                                   };
                                   const filtered = allSteps.filter(s =>
                                     s.cats.includes(workflowStepCategory) &&
@@ -4004,6 +4018,9 @@ export default function Process() {
                                       { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall" },
                                       { key: "fetchavailability", name: "Fetch Availability", desc: "Check calendar availability for a user during an active call.", iconKey: "calendar" },
                                       { key: "fetchfieldvalue", name: "Fetch Field Value", desc: "Read and surface a specific field value during an active call.", iconKey: "edit" },
+                                      { key: "autohangupinteraction", name: "Auto Hang-up After Interaction Ends", desc: "Automatically end the call once the interaction is complete.", iconKey: "phonecall" },
+                                      { key: "autohangupsilence", name: "Auto Hang-up After Silence", desc: "Automatically end the call when silence is detected during the call.", iconKey: "volume2" },
+                                      { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare" },
                                       { key: "managecalendar", name: "Manage Calendar", desc: "Book, reschedule, or cancel calendar appointments during or after a call.", iconKey: "calendar" },
                                       { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle" },
                                       { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare" },
@@ -5914,6 +5931,62 @@ export default function Process() {
                                             <option>Manually Terminated</option>
                                             <option>Condition Not Met</option>
                                           </select>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Auto Hangup Interaction Step */}
+                                    {currentEditingStep.stepKey === "autohangupinteraction" && (
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Hangup Message
+                                        </label>
+                                        <textarea
+                                          value={autoHangupInteractionMessage}
+                                          onChange={(e) => setAutoHangupInteractionMessage(e.target.value)}
+                                          placeholder="Enter the message to be spoken before hanging up"
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
+                                          rows={3}
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    )}
+
+                                    {/* Auto Hangup Silence Step */}
+                                    {currentEditingStep.stepKey === "autohangupsilence" && (
+                                      <div>
+                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                          Silence Duration (seconds)
+                                        </label>
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          value={autoHangupSilenceStageDuration}
+                                          onChange={(e) => setAutoHangupSilenceStageDuration(parseInt(e.target.value) || 1)}
+                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                        />
+                                      </div>
+                                    )}
+
+                                    {/* Idle Messages Step */}
+                                    {currentEditingStep.stepKey === "idlemessages" && (
+                                      <div className="space-y-4">
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Message</label>
+                                          <textarea value={idleMessageStageText} onChange={(e) => setIdleMessageStageText(e.target.value)} placeholder="Are you still there?" rows={2} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Message Delay (seconds)</label>
+                                          <input type="number" min={1} value={idleMessageStageDelay} onChange={(e) => setIdleMessageStageDelay(parseInt(e.target.value) || 1)} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Hangup Message</label>
+                                          <textarea value={idleHangupMessageStage} onChange={(e) => setIdleHangupMessageStage(e.target.value)} placeholder="I'll let you go now. Have a great day!" rows={2} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
+                                        </div>
+                                        <div>
+                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Hangup Delay (seconds)</label>
+                                          <input type="number" min={1} value={idleHangupDelayStage} onChange={(e) => setIdleHangupDelayStage(parseInt(e.target.value) || 1)} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
                                         </div>
                                       </div>
                                     )}
