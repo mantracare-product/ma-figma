@@ -863,6 +863,8 @@ export default function Process() {
   const [appointmentBookingMethod, setAppointmentBookingMethod] = useState<string>("");
 
   const [conditionsEnabled, setConditionsEnabled] = useState(false);
+  const [conditionsSectionExpanded, setConditionsSectionExpanded] = useState(true);
+  const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
   const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "postcall">("stage");
@@ -900,6 +902,7 @@ export default function Process() {
       { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }
     ]);
     setExpandedBlockIndex(0);
+    setExpandedConditionIndex(0);
     setAssignedUser("Select user...");
     setTemplateId("");
     setSmsTemplate("");
@@ -939,6 +942,7 @@ export default function Process() {
     setTcHangupWindowMinutes(1);
     setBypassStepNumbers([{ id: 1, phoneNumber: "", countryCode: "+1" }]);
     setConditionsEnabled(false);
+    setConditionsSectionExpanded(true);
     setConditionPreview("");
     setStepTrigger("stage");
     setStepActionName("");
@@ -2890,6 +2894,7 @@ export default function Process() {
                                   const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
                                   const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
                                   const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
+                                  const isBlockedCallType = stageType === "No action" || stageType === "Human Action";
 
                                   const StepIcon = ({ iconKey }: { iconKey: string }) => {
                                     const map: Record<string, React.ReactNode> = {
@@ -2967,74 +2972,84 @@ export default function Process() {
 
                                       {/* In Call List */}
                                       {inCallSteps.length > 0 && (
-                                        <div className="space-y-2">
-                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                            In Call
-                                          </p>
-                                          <div className="space-y-2">
-                                            {inCallSteps.map((step) => (
-                                              <div
-                                                key={step.id}
-                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
-                                                onClick={(e) => {
-                                                  if ((e.target as HTMLElement).closest('button')) {
-                                                    return;
-                                                  }
-                                                  setCurrentEditingStep(step);
-                                                  setIsCreatingNewStep(false);
-                                                  setStepDetailDrawerOpen(true);
-                                                }}
-                                              >
-                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
-                                                  <StepIcon iconKey={step.iconKey} />
+                                        <div className="relative">
+                                          <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              In Call
+                                            </p>
+                                            <div className="space-y-2">
+                                              {inCallSteps.map((step) => (
+                                                <div
+                                                  key={step.id}
+                                                  className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
+                                                  onClick={(e) => {
+                                                    if ((e.target as HTMLElement).closest('button')) {
+                                                      return;
+                                                    }
+                                                    setCurrentEditingStep(step);
+                                                    setIsCreatingNewStep(false);
+                                                    setStepDetailDrawerOpen(true);
+                                                  }}
+                                                >
+                                                  <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#2563EB' }}>
+                                                    <StepIcon iconKey={step.iconKey} />
+                                                  </div>
+                                                  <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
+                                                    <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
+                                                  </div>
+                                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                                    <button
+                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                      title="Duplicate"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                        if (fullIdx !== -1) {
+                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                        }
+                                                        toast.success("Step duplicated successfully");
+                                                      }}
+                                                    >
+                                                      <Copy className="w-4 h-4 text-muted-foreground" />
+                                                    </button>
+                                                    <button
+                                                      className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                      title="Edit"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCurrentEditingStep(step);
+                                                        setIsCreatingNewStep(false);
+                                                        setStepDetailDrawerOpen(true);
+                                                      }}
+                                                    >
+                                                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                                                    </button>
+                                                    <button
+                                                      className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                                                      title="Delete"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                        toast.success("Step removed successfully");
+                                                      }}
+                                                    >
+                                                      <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </button>
+                                                  </div>
                                                 </div>
-                                                <div className="flex-1 min-w-0">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
-                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Event Driven</p>
-                                                </div>
-                                                <div className="flex items-center gap-1 flex-shrink-0">
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Duplicate"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) {
-                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      }
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                  >
-                                                    <Copy className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
-                                                    title="Edit"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                  >
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button
-                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    title="Delete"
-                                                    onClick={(e) => {
-                                                      e.stopPropagation();
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
+                                              ))}
+                                            </div>
                                           </div>
+                                          {isBlockedCallType && (
+                                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                              <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
+                                                <Ban className="w-3.5 h-3.5" />
+                                                Not available for this call type
+                                              </span>
+                                            </div>
+                                          )}
                                         </div>
                                       )}
 
@@ -3056,40 +3071,50 @@ export default function Process() {
                                         };
 
                                         return (
-                                          <div className="space-y-2">
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              Post Call
-                                            </p>
-                                            <DndProvider backend={HTML5Backend}>
-                                              <div className="space-y-2">
-                                                {postCallSteps.map((step, idx) => (
-                                                  <DraggableWorkflowStep
-                                                    key={step.id}
-                                                    step={step}
-                                                    index={idx}
-                                                    moveStep={movePostCallStep}
-                                                    onEdit={() => {
-                                                      setCurrentEditingStep(step);
-                                                      setIsCreatingNewStep(false);
-                                                      setStepDetailDrawerOpen(true);
-                                                    }}
-                                                    onDuplicate={() => {
-                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                      if (fullIdx !== -1) {
-                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                      }
-                                                      toast.success("Step duplicated successfully");
-                                                    }}
-                                                    onDelete={() => {
-                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                      toast.success("Step removed successfully");
-                                                    }}
-                                                    StepIcon={StepIcon}
-                                                  />
-                                                ))}
+                                          <div className="relative">
+                                            <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
+                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                                Post Call
+                                              </p>
+                                              <DndProvider backend={HTML5Backend}>
+                                                <div className="space-y-2">
+                                                  {postCallSteps.map((step, idx) => (
+                                                    <DraggableWorkflowStep
+                                                      key={step.id}
+                                                      step={step}
+                                                      index={idx}
+                                                      moveStep={movePostCallStep}
+                                                      onEdit={() => {
+                                                        setCurrentEditingStep(step);
+                                                        setIsCreatingNewStep(false);
+                                                        setStepDetailDrawerOpen(true);
+                                                      }}
+                                                      onDuplicate={() => {
+                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                        if (fullIdx !== -1) {
+                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                        }
+                                                        toast.success("Step duplicated successfully");
+                                                      }}
+                                                      onDelete={() => {
+                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                        toast.success("Step removed successfully");
+                                                      }}
+                                                      StepIcon={StepIcon}
+                                                    />
+                                                  ))}
+                                                </div>
+                                              </DndProvider>
+                                            </div>
+                                            {isBlockedCallType && (
+                                              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                                <span className="px-3 py-1.5 rounded-full text-xs font-medium border border-border shadow-sm flex items-center gap-1.5" style={{ backgroundColor: '#F1F5F9', color: '#64748B', borderColor: '#E2E8F0', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  <Ban className="w-3.5 h-3.5" />
+                                                  Not available for this call type
+                                                </span>
                                               </div>
-                                            </DndProvider>
+                                            )}
                                           </div>
                                         );
                                       })()}
@@ -3816,14 +3841,6 @@ export default function Process() {
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
                                     { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
                                     { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
-                                    /* { key: "bypasstohuman", name: "Bypass to Human", desc: "Route the caller directly to a human agent by forwarding the call to a specified phone number.", iconKey: "usercheck", cats: ["all", "incall"], popular: false }, */
-                                    /* { key: "crmupdate", name: "CRM Update", desc: "Update or create records in your connected CRM system.", iconKey: "filetext", cats: ["all", "data"], popular: false }, */
-                                    /* { key: "ehrupdate", name: "EHR Update", desc: "Update or sync patient data with your connected EHR system.", iconKey: "clipboardlist", cats: ["all", "data"], popular: false }, */
-                                    /* { key: "greetingphrase", name: "Greeting Phrase", desc: "Configure the opening line spoken when answering a call.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false }, */
-                                    /* { key: "collectinformation", name: "Collect Information", desc: "Run an intake form after the call to collect caller information.", iconKey: "lightbulb", cats: ["all", "workflow"], popular: false }, */
-                                    /* { key: "scheduleappointment", name: "Schedule an Appointment", desc: "Book, collect, or text a scheduling link after the call ends.", iconKey: "calendar", cats: ["all", "workflow"], popular: false }, */
-                                    /* { key: "smartcallanalysis", name: "Smart Call Analysis", desc: "Define what data the AI extracts and analyzes from each call automatically.", iconKey: "layoutgrid", cats: ["all", "workflow"], popular: false }, */
-                                    /* { key: "liveintaketicket", name: "Live Intake Ticket", desc: "Create a task ticket during the call for follow-up or escalation.", iconKey: "clipboardlist", cats: ["all", "incall"], popular: false }, */
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -3843,30 +3860,32 @@ export default function Process() {
                                     s.cats.includes(workflowStepCategory) &&
                                     (workflowStepSearch === "" || s.name.toLowerCase().includes(workflowStepSearch.toLowerCase()) || s.desc.toLowerCase().includes(workflowStepSearch.toLowerCase()))
                                   );
+
                                   return filtered.map((step, i) => {
                                     const isSelected = selectedWorkflowStepCard === step.key;
-                                    return (
+                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[step.key] || [];
+                                    const isOnlyInCall = allowedTriggers.length === 1 && allowedTriggers[0] === "incall";
+                                    const isUnavailable = isOnlyInCall && (stageType === "No action" || stageType === "Human Action");
+
+                                    const buttonElement = (
                                       <button
                                         key={step.key}
-                                        onClick={() => {
-                                          // Reset state to prevent data bleeding between steps
+                                        onClick={isUnavailable ? undefined : () => {
                                           resetStepDetailState();
-
-                                          // Open detail drawer to configure the step before adding it
                                           setCurrentEditingStep({ id: `${step.key}-${Date.now()}`, name: step.name, description: step.desc, iconKey: step.iconKey, stepKey: step.key });
                                           setIsCreatingNewStep(true);
                                           setWorkflowStepsDrawerOpen(false);
                                           setStepDetailDrawerOpen(true);
                                         }}
-                                        className="w-full flex items-start gap-4 px-5 py-4 text-left transition-colors"
+                                        className={`w-full flex items-start gap-4 px-5 py-4 text-left transition-colors ${isUnavailable ? "opacity-40 pointer-events-none cursor-not-allowed select-none" : ""}`}
                                         style={{
                                           borderBottom: i < filtered.length - 1 ? '1px solid #F1F5F9' : 'none',
                                           outline: isSelected ? '2px solid #2563EB' : 'none',
                                           outlineOffset: '-2px',
                                           backgroundColor: isSelected ? '#EFF6FF' : 'transparent',
                                         }}
-                                        onMouseEnter={e => { if (!isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
-                                        onMouseLeave={e => { (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
+                                        onMouseEnter={e => { if (!isUnavailable && !isSelected) (e.currentTarget as HTMLElement).style.backgroundColor = '#F8FAFF'; }}
+                                        onMouseLeave={e => { if (!isUnavailable) (e.currentTarget as HTMLElement).style.backgroundColor = isSelected ? '#EFF6FF' : 'transparent'; }}
                                       >
                                         <div className="w-9 h-9 rounded-md flex items-center justify-center flex-shrink-0 mt-0.5" style={{ backgroundColor: '#2563EB' }}>
                                           {iconMap[step.iconKey]}
@@ -3877,12 +3896,25 @@ export default function Process() {
                                             {step.popular && (
                                               <span className="px-2 py-0.5 rounded-full text-xs font-semibold text-white" style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}>Popular</span>
                                             )}
+                                            {isUnavailable && (
+                                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-50 text-red-600 border border-red-100" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                                In-Call only — unavailable
+                                              </span>
+                                            )}
                                           </div>
                                           <p className="text-sm mt-0.5 leading-snug" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{step.desc}</p>
                                         </div>
                                         <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-1" />
                                       </button>
                                     );
+
+                                    return isUnavailable ? (
+                                      <Tooltip key={step.key} text="In-Call only — unavailable" placement="top">
+                                        <div className="w-full pointer-events-auto">
+                                          {buttonElement}
+                                        </div>
+                                      </Tooltip>
+                                    ) : buttonElement;
                                   });
                                 })()}
                               </div>
@@ -4067,98 +4099,197 @@ export default function Process() {
                                 )}
                               </div>
 
-                              {/* Action Name / Reason / URL — shown for incall and postcall only */}
-                              {stepTrigger !== "stage" && (
-                                <div className="rounded-lg border border-border overflow-hidden">
-                                  <button
-                                    onClick={() => setActionConfigExpanded(!actionConfigExpanded)}
-                                    className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                                  >
-                                    <div className="flex items-center gap-2">
-                                      <Zap className="w-4 h-4 text-primary" />
-                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Action Configuration
-                                      </span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                      {stepActionName && (
-                                        <span className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                          {stepActionName}
-                                        </span>
-                                      )}
-                                      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${actionConfigExpanded ? "rotate-180" : ""}`} />
-                                    </div>
-                                  </button>
-
-                                  {actionConfigExpanded && (
-                                    <div className="border-t border-border p-4 space-y-4 bg-muted/10">
-                                      {/* Action Name + Action Reason — side by side */}
-                                      <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                          <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Action Name <span className="text-red-500">*</span>
-                                            <Tooltip text="Used to trigger this action via API. Use underscores, no spaces." placement="top">
-                                              <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
-                                            </Tooltip>
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={stepActionName}
-                                            onChange={(e) => setStepActionName(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                            placeholder="e.g. send_followup_sms"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Action Reason
-                                            <Tooltip text="Optional sub-reason included in the trigger URL." placement="top">
-                                              <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
-                                            </Tooltip>
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={stepActionReason}
-                                            onChange={(e) => setStepActionReason(e.target.value.replace(/[^a-zA-Z0-9_]/g, "_"))}
-                                            placeholder="e.g. caller_requested_callback"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                      </div>
-
-                                      {/* Generated Trigger URL */}
-                                      <div>
-                                        <label className="flex items-center gap-1 text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Generated Trigger URL
-                                          <Tooltip text="call_id is mandatory. AI must pass the active call_id when triggering this action." placement="top">
-                                            <Info className="w-3.5 h-3.5 inline-block ml-1 text-gray-400 cursor-help hover:text-gray-600" />
-                                          </Tooltip>
-                                        </label>
-                                        <div className="flex items-center gap-2">
-                                          <code
-                                            className="flex-1 px-3 py-2.5 text-xs rounded-md border border-border bg-gray-50 overflow-x-auto whitespace-nowrap block"
-                                            style={{ fontFamily: 'monospace', color: '#020817' }}
-                                          >
-                                            {buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason)}
-                                          </code>
-                                          <button
-                                            onClick={() => {
-                                              navigator.clipboard.writeText(buildTriggerUrl(stepTrigger as "incall" | "postcall", stepActionName, stepActionReason));
-                                              toast.success("Trigger URL copied");
-                                            }}
-                                            className="px-3 py-2.5 text-xs font-semibold rounded-md border border-border hover:bg-muted/30 transition-colors flex-shrink-0"
-                                            style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                          >
-                                            Copy
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  )}
+                              {/* ───────────── CONDITIONS ───────────── */}
+                              <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+                                {/* Header row — label + optional tag + toggle, always visible */}
+                                <div
+                                  onClick={() => {
+                                    if (conditionsEnabled) {
+                                      setConditionsSectionExpanded(!conditionsSectionExpanded);
+                                    }
+                                  }}
+                                  className={`flex items-center justify-between px-4 py-3 ${conditionsEnabled ? "cursor-pointer select-none" : ""}`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Conditions
+                                    </span>
+                                    <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <ChevronDown
+                                      className={`w-4 h-4 text-muted-foreground transition-transform ${
+                                        !conditionsEnabled
+                                          ? "text-gray-300 cursor-not-allowed opacity-50"
+                                          : conditionsSectionExpanded
+                                          ? "rotate-180"
+                                          : ""
+                                      }`}
+                                    />
+                                    <label
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="relative inline-flex items-center cursor-pointer"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={conditionsEnabled}
+                                        onChange={(e) => {
+                                          const val = e.target.checked;
+                                          setConditionsEnabled(val);
+                                          if (val) {
+                                            setConditionsSectionExpanded(true);
+                                          }
+                                        }}
+                                      />
+                                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
+                                    </label>
+                                  </div>
                                 </div>
-                              )}
+
+                                {/* Expanded content — only shown when toggle is ON */}
+                                {conditionsEnabled && conditionsSectionExpanded && (
+                                  <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50/40">
+                                    <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      This step will only execute when all specified conditions are met.
+                                    </p>
+                                    {conditions.map((cond, index) => (
+                                      <React.Fragment key={cond.id}>
+                                        <div className="border border-border rounded-lg overflow-hidden bg-white">
+                                          {/* Card Header */}
+                                          <div
+                                            onClick={() => setExpandedConditionIndex(expandedConditionIndex === index ? null : index)}
+                                            className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
+                                          >
+                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
+                                            </span>
+                                            <div className="flex items-center gap-2">
+                                              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedConditionIndex === index ? "rotate-180" : ""}`} />
+                                              {conditions.length > 1 && (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    const updated = conditions.filter(c => c.id !== cond.id);
+                                                    setConditions(updated);
+                                                    setConditionOperators(prev => prev.filter((_, i) => i !== index));
+                                                    if (expandedConditionIndex === index) {
+                                                      setExpandedConditionIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
+                                                    } else if (expandedConditionIndex !== null && expandedConditionIndex > index) {
+                                                      setExpandedConditionIndex(expandedConditionIndex - 1);
+                                                    }
+                                                  }}
+                                                  className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
+                                                >
+                                                  <Trash2 className="w-4 h-4 text-red-500" />
+                                                </button>
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Card Body */}
+                                          {expandedConditionIndex === index && (
+                                            <div className="border-t border-border p-4 space-y-4 bg-white">
+                                              <div className="flex items-start gap-2">
+                                                <select
+                                                  value={cond.fieldSource || ""}
+                                                  onChange={e => setConditions(prev => prev.map(c =>
+                                                    c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
+                                                  ))}
+                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                >
+                                                  <option value="">Source</option>
+                                                  {FETCH_FIELD_SOURCES.map(src => (
+                                                    <option key={src.value} value={src.value}>{src.label}</option>
+                                                  ))}
+                                                </select>
+                                                <select
+                                                  value={cond.field}
+                                                  onChange={e => setConditions(prev => prev.map(c =>
+                                                    c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
+                                                  ))}
+                                                  disabled={!cond.fieldSource}
+                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                >
+                                                  <option value="">Field</option>
+                                                  {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
+                                                    <option key={f.value} value={f.value}>{f.label}</option>
+                                                  ))}
+                                                </select>
+                                                <select
+                                                  value={cond.operator}
+                                                  onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))}
+                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                >
+                                                  {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
+                                                    <option key={o}>{o}</option>
+                                                  ))}
+                                                </select>
+                                              </div>
+                                              <input
+                                                type="text"
+                                                value={cond.value}
+                                                onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))}
+                                                placeholder="Enter value..."
+                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                        {index < conditions.length - 1 && (
+                                          <div className="flex items-center justify-center py-1">
+                                            <div className="inline-flex rounded-md border border-border bg-white">
+                                              <button
+                                                onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }}
+                                                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                              >
+                                                AND
+                                              </button>
+                                              <button
+                                                onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }}
+                                                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                              >
+                                                OR
+                                              </button>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </React.Fragment>
+                                    ))}
+                                    <button
+                                      onClick={() => {
+                                        const newIndex = conditions.length;
+                                        setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
+                                        if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]);
+                                        setExpandedConditionIndex(newIndex);
+                                      }}
+                                      className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600"
+                                      style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      <Plus className="w-4 h-4" /> Add Condition
+                                    </button>
+                                    {conditions.some(c => c.value) && (
+                                      <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
+                                        <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
+                                        {conditions.map((cond, i) => (
+                                          <div key={cond.id}>
+                                            {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                            {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
+                                            <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
+                                              &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
+                                            </p>
+                                          </div>
+                                        ))}
+                                        <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Parameters Collapsible Wrapper */}
                               <div className="rounded-lg border border-border overflow-hidden">
@@ -6252,103 +6383,6 @@ export default function Process() {
 
                                   </div>
                                 )}
-                              </div>
-
-                              {/* Execution + Conditions — skipped for endworkflow (moved to be last) */}
-                              <div className="space-y-6">
-                                <div>
-                                  <div className="flex items-center justify-between py-2">
-                                    <div className="flex items-center gap-2">
-                                      <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                        Conditions
-                                      </label>
-                                      <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
-                                    </div>
-                                    <label className="relative inline-flex items-center cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        className="sr-only peer"
-                                        checked={conditionsEnabled}
-                                        onChange={(e) => setConditionsEnabled(e.target.checked)}
-                                      />
-                                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                                    </label>
-                                  </div>
-
-                                  {conditionsEnabled && (
-                                    <div className="mt-3 space-y-3 p-4 rounded-lg border border-border bg-white">
-                                      <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        This step will only execute when all specified conditions are met.
-                                      </p>
-                                      {conditions.map((cond, index) => (
-                                        <React.Fragment key={cond.id}>
-                                          <div className="flex items-start gap-2">
-                                            <select
-                                              value={cond.fieldSource || ""}
-                                              onChange={e => setConditions(prev => prev.map(c =>
-                                                c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
-                                              ))}
-                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            >
-                                              <option value="">Source</option>
-                                              {FETCH_FIELD_SOURCES.map(src => (
-                                                <option key={src.value} value={src.value}>{src.label}</option>
-                                              ))}
-                                            </select>
-                                            <select
-                                              value={cond.field}
-                                              onChange={e => setConditions(prev => prev.map(c =>
-                                                c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
-                                              ))}
-                                              disabled={!cond.fieldSource}
-                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            >
-                                              <option value="">Field</option>
-                                              {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
-                                                <option key={f.value} value={f.value}>{f.label}</option>
-                                              ))}
-                                            </select>
-                                            <select value={cond.operator} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))} className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                              {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => <option key={o}>{o}</option>)}
-                                            </select>
-                                            {conditions.length > 1 && (
-                                              <button onClick={() => { setConditions(prev => prev.filter(c => c.id !== cond.id)); setConditionOperators(prev => prev.filter((_, i) => i !== index)); }} className="p-2 rounded hover:bg-red-50 transition-colors mt-0.5">
-                                                <Trash2 className="w-4 h-4 text-red-500" />
-                                              </button>
-                                            )}
-                                          </div>
-                                          <input type="text" value={cond.value} onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))} placeholder="Enter value..." className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                          {index < conditions.length - 1 && (
-                                            <div className="flex items-center justify-center py-1">
-                                              <div className="inline-flex rounded-md border border-border bg-white">
-                                                <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>AND</button>
-                                                <button onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }} className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}>OR</button>
-                                              </div>
-                                            </div>
-                                          )}
-                                        </React.Fragment>
-                                      ))}
-                                      <button onClick={() => { setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]); if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]); }} className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                        <Plus className="w-4 h-4" /> Add Condition
-                                      </button>
-                                      {conditions.some(c => c.value) && (
-                                        <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
-                                          <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
-                                          {conditions.map((cond, i) => (
-                                            <div key={cond.id}>
-                                              {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                              {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
-                                              <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>&nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} = "{cond.value}"</p>
-                                            </div>
-                                          ))}
-                                          <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
                               </div>
                             </div>
 
