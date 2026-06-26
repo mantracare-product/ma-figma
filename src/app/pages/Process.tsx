@@ -872,8 +872,7 @@ export default function Process() {
   // New Webhook states
   const [webhookIntegration, setWebhookIntegration] = useState<string>("");
   const [webhookAction, setWebhookAction] = useState<string>("");
-  const [webhookUpdatePolicy, setWebhookUpdatePolicy] = useState<string>("Ask me first");
-  const [webhookNotifyAfterCall, setWebhookNotifyAfterCall] = useState<boolean>(false);
+
 
   // New API states
   const [apiIntegration, setApiIntegration] = useState<string>("");
@@ -989,8 +988,7 @@ export default function Process() {
     setApiHeaders([{ id: "header-1", key: "", value: "" }]);
     setWebhookIntegration("");
     setWebhookAction("");
-    setWebhookUpdatePolicy("Ask me first");
-    setWebhookNotifyAfterCall(false);
+
     setWebhookIntOpen(false);
     setWebhookActionOpen(false);
     setApiIntOpen(false);
@@ -5170,8 +5168,6 @@ export default function Process() {
 
                                     {/* Trigger Webhook Step */}
                                     {currentEditingStep.stepKey === "wh_trigger" && (() => {
-                                      const isEhrOrCrm = ["athenahealth", "epic", "salesforce"].includes(webhookIntegration);
-                                      const isEhr = ["athenahealth", "epic"].includes(webhookIntegration);
 
                                       const getIntegrationLabel = (id: string) => {
                                         switch (id) {
@@ -5358,52 +5354,6 @@ export default function Process() {
                                             </div>
                                           </div>
 
-                                          {/* Conditional Rendering Steps 3 & 4 */}
-                                          {webhookIntegration && webhookAction && (
-                                            <>
-                                              {/* Step 3 — How carefully (Update Policy) */}
-                                              {isEhrOrCrm && (
-                                                <div>
-                                                  <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Update Policy
-                                                  </label>
-                                                  <p className="text-xs text-muted-foreground mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                    Controls how the AI handles this data category when detected in a call
-                                                  </p>
-                                                  <select
-                                                    value={webhookUpdatePolicy}
-                                                    onChange={e => setWebhookUpdatePolicy(e.target.value)}
-                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  >
-                                                    <option value="Auto-update">Auto-update</option>
-                                                    <option value="Ask me first">Ask me first</option>
-                                                    <option value="Never">Never</option>
-                                                  </select>
-                                                </div>
-                                              )}
-
-                                              {/* Step 4 — Notify after each call */}
-                                              {isEhr && (
-                                                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-white">
-                                                  <div className="space-y-0.5">
-                                                    <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      Notify me after each call
-                                                    </label>
-                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                      Get a summary of what was synced after every call
-                                                    </p>
-                                                  </div>
-                                                  <input
-                                                    type="checkbox"
-                                                    checked={webhookNotifyAfterCall}
-                                                    onChange={e => setWebhookNotifyAfterCall(e.target.checked)}
-                                                    className="w-4 h-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
-                                                  />
-                                                </div>
-                                              )}
-                                            </>
-                                          )}
 
                                           {/* Read-only info box */}
                                           <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
