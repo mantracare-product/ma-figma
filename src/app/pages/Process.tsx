@@ -384,9 +384,6 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "bypasstohuman": ["incall"],
   "liveintaketicket": ["incall"],
   "callaction": ["incall"],
-  "waitdelay": ["stage", "incall", "postcall"],
-  "ifcondition": ["stage", "incall", "postcall"],
-  "autohangupinteraction": ["incall"],
   "autohangupsilence": ["incall"],
   "idlemessages": ["incall"],
   "fetchavailability": ["incall"],
@@ -3788,9 +3785,8 @@ export default function Process() {
                               {/* Left Sidebar */}
                               <div className="w-[220px] flex-shrink-0 border-r border-border overflow-y-auto py-2 flex flex-col gap-1">
                                 {[
-                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All Steps" },
+                                  { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All" },
                                   { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
-                                  { key: "incall", icon: <Phone className="w-4 h-4" />, name: "In-Call Actions" },
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
                                   { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
                                   { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
@@ -3827,12 +3823,9 @@ export default function Process() {
                               <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
-                                    { key: "ifcondition", name: "If Condition", desc: "Branch workflow execution down True or False paths based on field values.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: false },
-                                    { key: "waitdelay", name: "Wait / Delay", desc: "Pause workflow execution for a specified duration before the next step runs.", iconKey: "clock", cats: ["all", "workflow"], popular: false },
                                     { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
-                                    { key: "autohangupinteraction", name: "Auto Hang-up After Interaction Ends", desc: "Automatically end the call once the interaction is complete.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
                                     { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
@@ -4072,7 +4065,7 @@ export default function Process() {
                                 ) : null}
 
                                 {/* Column 3 — Delay */}
-                                {(stepTrigger === "stage" || stepTrigger === "postcall") && currentEditingStep.stepKey !== "waitdelay" && (
+                                {(stepTrigger === "stage" || stepTrigger === "postcall") && (
                                   <div className="w-[150px] flex-shrink-0">
                                     <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
                                     <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
@@ -6046,22 +6039,6 @@ export default function Process() {
                                       </div>
                                     )}
 
-                                    {/* Auto Hangup Interaction Step */}
-                                    {currentEditingStep.stepKey === "autohangupinteraction" && (
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Hangup Message
-                                        </label>
-                                        <textarea
-                                          value={autoHangupInteractionMessage}
-                                          onChange={(e) => setAutoHangupInteractionMessage(e.target.value)}
-                                          placeholder="Enter the message to be spoken before hanging up"
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                          rows={3}
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                    )}
 
                                     {/* Auto Hangup Silence Step */}
                                     {currentEditingStep.stepKey === "autohangupsilence" && (
@@ -6335,51 +6312,6 @@ export default function Process() {
                                       </div>
                                     )}
 
-                                    {currentEditingStep.stepKey === "waitdelay" && (
-                                      <div className="space-y-3">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Duration (seconds)
-                                          </label>
-                                          <p className="text-xs mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            Enter a value between 1 and 600 seconds.
-                                          </p>
-                                          <div className="flex items-center gap-3">
-                                            <input
-                                              type="number"
-                                              min={1}
-                                              max={600}
-                                              value={delayValue}
-                                              onChange={(e) => {
-                                                const val = Math.min(600, Math.max(1, parseInt(e.target.value) || 1));
-                                                setDelayValue(val);
-                                              }}
-                                              className="w-32 px-3 py-2.5 bg-white border border-border rounded-lg text-sm outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                            <span className="text-sm font-medium" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                              seconds
-                                            </span>
-                                          </div>
-                                          {delayValue > 0 && (
-                                            <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                              Workflow pauses for <strong style={{ color: '#020817' }}>{delayValue}s</strong> before the next step runs.
-                                            </p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {currentEditingStep.stepKey === "ifcondition" && (
-                                      <div className="p-4 rounded-xl border border-violet-200 bg-violet-50">
-                                        <p className="text-sm font-semibold mb-1" style={{ color: '#5B21B6', fontFamily: 'DM Sans, sans-serif' }}>
-                                          If Condition
-                                        </p>
-                                        <p className="text-xs leading-relaxed" style={{ color: '#6D28D9', fontFamily: 'Outfit, sans-serif' }}>
-                                          Configure the branching logic in the Conditions section below. True and False branches can be managed from the workflow canvas after adding this step.
-                                        </p>
-                                      </div>
-                                    )}
 
                                   </div>
                                 )}
