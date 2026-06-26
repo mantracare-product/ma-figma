@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { Link } from "react-router";
 import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -376,7 +377,6 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "crmupdate": ["stage", "postcall"],
   "ehrupdate": ["stage", "postcall"],
   "wh_trigger": ["stage", "postcall"],
-  "triggerapi": ["stage", "incall", "postcall"],
   "collectinformation": ["stage", "postcall"],
   "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
@@ -591,6 +591,21 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
       )}
     </div>
   );
+};
+
+const WEBHOOK_ACTIONS: Record<string, string[]> = {
+  athenahealth: ["Update Patient Record", "Create Appointment Task", "Add Clinical Note", "Mark Visit Complete"],
+  epic: ["Update Patient Status", "Create Staff Task", "Sync Call Summary to Chart"],
+  salesforce: ["Update Contact", "Create Task", "Log Activity"],
+  slack: ["Send Message to Channel", "Send DM to User", "Post Alert"],
+};
+
+const API_ACTIONS: Record<string, string[]> = {
+  athenahealth: ["Fetch Patient Record", "Update Insurance Info", "Book Appointment", "Check Appointment Status"],
+  epic: ["Fetch Patient Data", "Update Contact Info", "Get Appointment Details", "Post Encounter Note"],
+  cerner: ["Fetch Patient Summary", "Update Demographics", "Log Clinical Note"],
+  hubspot: ["Create Contact", "Update Deal Stage", "Fetch Contact Info", "Log Call Activity"],
+  salesforce: ["Fetch Lead Info", "Update Opportunity", "Create Case"],
 };
 
 export default function Process() {
@@ -854,6 +869,60 @@ export default function Process() {
   const [apiAuth, setApiAuth] = useState<string>("");
   const [apiHeaders, setApiHeaders] = useState<Array<{ id: string; key: string; value: string }>>([{ id: "header-1", key: "", value: "" }]);
 
+  // New Webhook states
+  const [webhookIntegration, setWebhookIntegration] = useState<string>("");
+  const [webhookAction, setWebhookAction] = useState<string>("");
+  const [webhookUpdatePolicy, setWebhookUpdatePolicy] = useState<string>("Ask me first");
+  const [webhookNotifyAfterCall, setWebhookNotifyAfterCall] = useState<boolean>(false);
+
+  // New API states
+  const [apiIntegration, setApiIntegration] = useState<string>("");
+  const [apiAction, setApiAction] = useState<string>("");
+  const [apiResponseVariable, setApiResponseVariable] = useState<string>("");
+  const [apiUpdatePolicy, setApiUpdatePolicy] = useState<string>("Ask me first");
+  const [apiTimeout, setApiTimeout] = useState<number>(3);
+  const [apiOnFailure, setApiOnFailure] = useState<string>("Continue call");
+
+  // Dropdown open states
+  const [webhookIntOpen, setWebhookIntOpen] = useState(false);
+  const [webhookActionOpen, setWebhookActionOpen] = useState(false);
+  const [webhookIntPos, setWebhookIntPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const [webhookActionPos, setWebhookActionPos] = useState<{ top: number; left: number; width: number } | null>(null);
+
+  // Close webhookInt dropdown on scroll or resize
+  useEffect(() => {
+    if (!webhookIntOpen) return;
+    const handleScroll = () => {
+      setWebhookIntOpen(false);
+      setWebhookIntPos(null);
+    };
+    const handleResize = () => handleScroll();
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [webhookIntOpen]);
+
+  // Close webhookAction dropdown on scroll or resize
+  useEffect(() => {
+    if (!webhookActionOpen) return;
+    const handleScroll = () => {
+      setWebhookActionOpen(false);
+      setWebhookActionPos(null);
+    };
+    const handleResize = () => handleScroll();
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [webhookActionOpen]);
+  const [apiIntOpen, setApiIntOpen] = useState(false);
+  const [apiActionOpen, setApiActionOpen] = useState(false);
+
   // Appointment states
   const [appointmentUser, setAppointmentUser] = useState<string>("Select from Team Calendar...");
   const [appointmentDetails, setAppointmentDetails] = useState<string>("Appointment Time");
@@ -918,6 +987,20 @@ export default function Process() {
     setApiMethod("GET");
     setApiAuth("");
     setApiHeaders([{ id: "header-1", key: "", value: "" }]);
+    setWebhookIntegration("");
+    setWebhookAction("");
+    setWebhookUpdatePolicy("Ask me first");
+    setWebhookNotifyAfterCall(false);
+    setWebhookIntOpen(false);
+    setWebhookActionOpen(false);
+    setApiIntOpen(false);
+    setApiActionOpen(false);
+    setApiIntegration("");
+    setApiAction("");
+    setApiResponseVariable("");
+    setApiUpdatePolicy("Ask me first");
+    setApiTimeout(3);
+    setApiOnFailure("Continue call");
     setAppointmentUser("Select from Team Calendar...");
     setAppointmentDetails("Appointment Time");
     setCollectInfoSelectedForm("");
@@ -3832,8 +3915,7 @@ export default function Process() {
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "Trigger Webhook", desc: "Send data to external systems using webhooks with custom variables.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "triggerapi", name: "Trigger API", desc: "Make HTTP API calls to external services with custom headers and body.", iconKey: "zap", cats: ["all", "webhook"], popular: false },
+                                    { key: "wh_trigger", name: "Integration Actions", desc: "Perform actions in external CRM, EHR, or messaging systems using connected integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -4111,13 +4193,12 @@ export default function Process() {
                                   </div>
                                   <div className="flex items-center gap-3">
                                     <ChevronDown
-                                      className={`w-4 h-4 text-muted-foreground transition-transform ${
-                                        !conditionsEnabled
-                                          ? "text-gray-300 cursor-not-allowed opacity-50"
-                                          : conditionsSectionExpanded
+                                      className={`w-4 h-4 text-muted-foreground transition-transform ${!conditionsEnabled
+                                        ? "text-gray-300 cursor-not-allowed opacity-50"
+                                        : conditionsSectionExpanded
                                           ? "rotate-180"
                                           : ""
-                                      }`}
+                                        }`}
                                     />
                                     <label
                                       onClick={(e) => e.stopPropagation()}
@@ -5088,197 +5169,258 @@ export default function Process() {
                                     )}
 
                                     {/* Trigger Webhook Step */}
-                                    {currentEditingStep.stepKey === "wh_trigger" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Webhook URL</label>
-                                            <VariablePickerButton
-                                              targetRef={webhookUrlRef}
-                                              value={webhookUrl}
-                                              onChange={setWebhookUrl}
-                                            />
-                                          </div>
-                                          <input
-                                            ref={webhookUrlRef}
-                                            type="text"
-                                            value={webhookUrl}
-                                            onChange={e => setWebhookUrl(e.target.value)}
-                                            placeholder="https://api.example.com/webhook"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
-                                          <div className="space-y-2">
-                                            {webhookHeaders.map((header, index) => (
-                                              <div key={header.id} className="flex items-center gap-2">
-                                                <select
-                                                  value={webhookHeaderTypes[index] || "Static"}
-                                                  onChange={e => {
-                                                    const newTypes = [...webhookHeaderTypes];
-                                                    newTypes[index] = e.target.value;
-                                                    setWebhookHeaderTypes(newTypes);
-                                                  }}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option value="Static">Static</option>
-                                                  <option value="System Fields">System Fields</option>
-                                                  <option value="Custom Fields">Custom Fields</option>
-                                                </select>
-                                                <input
-                                                  type="text"
-                                                  value={header.key}
-                                                  onChange={e => { const u = [...webhookHeaders]; u[index].key = e.target.value; setWebhookHeaders(u); }}
-                                                  placeholder="Key"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                <input
-                                                  type="text"
-                                                  value={header.value}
-                                                  onChange={e => { const u = [...webhookHeaders]; u[index].value = e.target.value; setWebhookHeaders(u); }}
-                                                  placeholder="Value"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                {webhookHeaders.length > 1 && (
-                                                  <button
-                                                    onClick={() => {
-                                                      setWebhookHeaders(prev => prev.filter((_, i) => i !== index));
-                                                      setWebhookHeaderTypes(prev => prev.filter((_, i) => i !== index));
-                                                    }}
-                                                    className="p-2 rounded hover:bg-red-50 transition-colors"
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                )}
-                                              </div>
-                                            ))}
-                                            <button
-                                              onClick={() => {
-                                                setWebhookHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }]);
-                                                setWebhookHeaderTypes(prev => [...prev, "Static"]);
-                                              }}
-                                              className="w-full py-2 text-sm border-2 border-dashed border-gray-300 rounded-md text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
-                                              style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                            >
-                                              + Add Header
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    )}
+                                    {currentEditingStep.stepKey === "wh_trigger" && (() => {
+                                      const isEhrOrCrm = ["athenahealth", "epic", "salesforce"].includes(webhookIntegration);
+                                      const isEhr = ["athenahealth", "epic"].includes(webhookIntegration);
 
-                                    {/* Trigger API Step */}
-                                    {currentEditingStep.stepKey === "triggerapi" && (
-                                      <>
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>API Endpoint</label>
-                                            <VariablePickerButton
-                                              targetRef={apiEndpointRef}
-                                              value={apiEndpoint}
-                                              onChange={setApiEndpoint}
-                                            />
-                                          </div>
-                                          <input
-                                            ref={apiEndpointRef}
-                                            type="text"
-                                            value={apiEndpoint}
-                                            onChange={e => setApiEndpoint(e.target.value)}
-                                            placeholder="https://api.example.com/endpoint"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Method</label>
-                                          <select
-                                            value={apiMethod}
-                                            onChange={e => setApiMethod(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>GET</option>
-                                            <option>POST</option>
-                                            <option>PUT</option>
-                                            <option>PATCH</option>
-                                            <option>DELETE</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Authentication</label>
-                                            <VariablePickerButton
-                                              targetRef={apiAuthRef}
-                                              value={apiAuth}
-                                              onChange={setApiAuth}
-                                            />
-                                          </div>
-                                          <input
-                                            ref={apiAuthRef}
-                                            type="text"
-                                            value={apiAuth}
-                                            onChange={e => setApiAuth(e.target.value)}
-                                            placeholder="Bearer token or API key"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Headers</label>
-                                          <div className="space-y-2">
-                                            {apiHeaders.map((header, index) => (
-                                              <div key={header.id} className="flex items-center gap-2">
-                                                <input
-                                                  type="text"
-                                                  value={header.key}
-                                                  onChange={e => {
-                                                    const updated = [...apiHeaders];
-                                                    updated[index].key = e.target.value;
-                                                    setApiHeaders(updated);
-                                                  }}
-                                                  placeholder="Key"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                <input
-                                                  type="text"
-                                                  value={header.value}
-                                                  onChange={e => {
-                                                    const updated = [...apiHeaders];
-                                                    updated[index].value = e.target.value;
-                                                    setApiHeaders(updated);
-                                                  }}
-                                                  placeholder="Value"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                {apiHeaders.length > 1 && (
-                                                  <button
-                                                    onClick={() => setApiHeaders(prev => prev.filter((_, i) => i !== index))}
-                                                    className="p-2 rounded hover:bg-red-50 transition-colors"
+                                      const getIntegrationLabel = (id: string) => {
+                                        switch (id) {
+                                          case "athenahealth": return "Athenahealth";
+                                          case "epic": return "Epic EHR";
+                                          case "salesforce": return "Salesforce";
+                                          case "slack": return "Slack";
+                                          default: return "";
+                                        }
+                                      };
+
+                                      return (
+                                        <div className="space-y-4">
+                                          {/* Step 1 — Integration */}
+                                          <div>
+                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Connected Integration
+                                            </label>
+                                            <div className="relative">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  if (webhookIntOpen) {
+                                                    setWebhookIntOpen(false);
+                                                    setWebhookIntPos(null);
+                                                  } else {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setWebhookIntPos({
+                                                      top: rect.bottom + 4,
+                                                      left: rect.left,
+                                                      width: rect.width,
+                                                    });
+                                                    setWebhookIntOpen(true);
+                                                  }
+                                                }}
+                                                className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors cursor-pointer text-left"
+                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                              >
+                                                <span>{webhookIntegration ? getIntegrationLabel(webhookIntegration) : "Select integration..."}</span>
+                                                <div className="flex items-center gap-1.5">
+                                                  {webhookIntegration && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Connected ✅
+                                                    </span>
+                                                  )}
+                                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                                </div>
+                                              </button>
+                                              {webhookIntOpen && webhookIntPos && createPortal(
+                                                <>
+                                                  {/* Backdrop — click-outside to close */}
+                                                  <div
+                                                    className="fixed inset-0 cursor-default bg-transparent"
+                                                    style={{ zIndex: 9998 }}
+                                                    onClick={() => {
+                                                      setWebhookIntOpen(false);
+                                                      setWebhookIntPos(null);
+                                                    }}
+                                                  />
+                                                  {/* Dropdown panel — portaled to body, fixed-positioned */}
+                                                  <div
+                                                    className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
+                                                    style={{
+                                                      position: 'fixed',
+                                                      top: webhookIntPos.top,
+                                                      left: webhookIntPos.left,
+                                                      width: `${webhookIntPos.width}px`,
+                                                      zIndex: 9999,
+                                                    }}
                                                   >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                )}
-                                              </div>
-                                            ))}
-                                            <button
-                                              onClick={() => setApiHeaders(prev => [...prev, { id: `header-${Date.now()}`, key: "", value: "" }])}
-                                              className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-border hover:bg-muted/20 transition-colors"
-                                              style={{ fontFamily: 'DM Sans, sans-serif', color: '#2563EB', width: 'calc(100% - 32px)', marginLeft: '16px', marginRight: '16px' }}
-                                            >
-                                              <Plus className="w-4 h-4" />
-                                              Add Header
-                                            </button>
+                                                    {[
+                                                      { id: "athenahealth", name: "Athenahealth" },
+                                                      { id: "epic", name: "Epic EHR" },
+                                                      { id: "salesforce", name: "Salesforce" },
+                                                      { id: "slack", name: "Slack" },
+                                                    ].map(opt => (
+                                                      <button
+                                                        key={opt.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setWebhookIntegration(opt.id);
+                                                          setWebhookAction("");
+                                                          setWebhookIntOpen(false);
+                                                          setWebhookIntPos(null);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                      >
+                                                        <span>{opt.name}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                                                          Connected ✅
+                                                        </span>
+                                                      </button>
+                                                    ))}
+                                                    <Link
+                                                      to="/settings?tab=integrations"
+                                                      onClick={() => {
+                                                        setWebhookIntOpen(false);
+                                                        setWebhookIntPos(null);
+                                                      }}
+                                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-1.5 text-blue-600 font-semibold border-t border-border mt-1 pt-2"
+                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                    >
+                                                      <Plus className="w-3.5 h-3.5" />
+                                                      Add Integration →
+                                                    </Link>
+                                                  </div>
+                                                </>,
+                                                document.body
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Step 2 — Action */}
+                                          <div>
+                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Action
+                                            </label>
+                                            <div className="relative">
+                                              <button
+                                                type="button"
+                                                disabled={!webhookIntegration}
+                                                onClick={(e) => {
+                                                  if (webhookActionOpen) {
+                                                    setWebhookActionOpen(false);
+                                                    setWebhookActionPos(null);
+                                                  } else {
+                                                    const rect = e.currentTarget.getBoundingClientRect();
+                                                    setWebhookActionPos({
+                                                      top: rect.bottom + 4,
+                                                      left: rect.left,
+                                                      width: rect.width,
+                                                    });
+                                                    setWebhookActionOpen(true);
+                                                  }
+                                                }}
+                                                className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                              >
+                                                <span>{webhookAction || "Select action..."}</span>
+                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                              </button>
+                                              {webhookActionOpen && webhookActionPos && webhookIntegration && createPortal(
+                                                <>
+                                                  {/* Backdrop — click-outside to close */}
+                                                  <div
+                                                    className="fixed inset-0 cursor-default bg-transparent"
+                                                    style={{ zIndex: 9998 }}
+                                                    onClick={() => {
+                                                      setWebhookActionOpen(false);
+                                                      setWebhookActionPos(null);
+                                                    }}
+                                                  />
+                                                  {/* Dropdown panel — portaled to body, fixed-positioned */}
+                                                  <div
+                                                    className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
+                                                    style={{
+                                                      position: 'fixed',
+                                                      top: webhookActionPos.top,
+                                                      left: webhookActionPos.left,
+                                                      width: `${webhookActionPos.width}px`,
+                                                      zIndex: 9999,
+                                                    }}
+                                                  >
+                                                    {(WEBHOOK_ACTIONS[webhookIntegration] || []).map(act => (
+                                                      <button
+                                                        key={act}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setWebhookAction(act);
+                                                          setWebhookActionOpen(false);
+                                                          setWebhookActionPos(null);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
+                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                      >
+                                                        {act}
+                                                      </button>
+                                                    ))}
+                                                  </div>
+                                                </>,
+                                                document.body
+                                              )}
+                                            </div>
+                                          </div>
+
+                                          {/* Conditional Rendering Steps 3 & 4 */}
+                                          {webhookIntegration && webhookAction && (
+                                            <>
+                                              {/* Step 3 — How carefully (Update Policy) */}
+                                              {isEhrOrCrm && (
+                                                <div>
+                                                  <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Update Policy
+                                                  </label>
+                                                  <p className="text-xs text-muted-foreground mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                    Controls how the AI handles this data category when detected in a call
+                                                  </p>
+                                                  <select
+                                                    value={webhookUpdatePolicy}
+                                                    onChange={e => setWebhookUpdatePolicy(e.target.value)}
+                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                  >
+                                                    <option value="Auto-update">Auto-update</option>
+                                                    <option value="Ask me first">Ask me first</option>
+                                                    <option value="Never">Never</option>
+                                                  </select>
+                                                </div>
+                                              )}
+
+                                              {/* Step 4 — Notify after each call */}
+                                              {isEhr && (
+                                                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-white">
+                                                  <div className="space-y-0.5">
+                                                    <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                      Notify me after each call
+                                                    </label>
+                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Get a summary of what was synced after every call
+                                                    </p>
+                                                  </div>
+                                                  <input
+                                                    type="checkbox"
+                                                    checked={webhookNotifyAfterCall}
+                                                    onChange={e => setWebhookNotifyAfterCall(e.target.checked)}
+                                                    className="w-4 h-4 rounded border-input text-primary focus:ring-primary cursor-pointer"
+                                                  />
+                                                </div>
+                                              )}
+                                            </>
+                                          )}
+
+                                          {/* Read-only info box */}
+                                          <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
+                                            <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                            <div className="flex-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                              Credentials and endpoint configuration for{" "}
+                                              <span className="font-semibold">{getIntegrationLabel(webhookIntegration) || "selected integration"}</span>{" "}
+                                              are managed in{" "}
+                                              <Link to="/settings?tab=integrations" className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-0.5">
+                                                Settings → Integrations
+                                                <ExternalLink className="w-3.5 h-3.5" />
+                                              </Link>
+                                            </div>
                                           </div>
                                         </div>
-                                      </>
-                                    )}
+                                      );
+                                    })()}
 
                                     {/* Stage Movement / Process Movement Steps */}
                                     {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
