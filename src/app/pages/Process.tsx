@@ -661,13 +661,7 @@ export default function Process() {
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
 
-  useEffect(() => {
-    try {
-      setCustomApiIntegrations(JSON.parse(localStorage.getItem('customApiIntegrations') || '[]'));
-    } catch (e) {
-      console.error(e);
-    }
-  }, []);
+
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
   const [activeTab, setActiveTab] = useState<string>("basic");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
@@ -798,6 +792,16 @@ export default function Process() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [stepDetailDrawerOpen, setStepDetailDrawerOpen] = useState(false);
   const [currentEditingStep, setCurrentEditingStep] = useState<WorkflowStep | null>(null);
+
+  useEffect(() => {
+    if (stepDetailDrawerOpen && currentEditingStep?.stepKey === "wh_trigger") {
+      try {
+        setCustomApiIntegrations(JSON.parse(localStorage.getItem('customApiIntegrations') || '[]'));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [stepDetailDrawerOpen, currentEditingStep]);
   const [isCreatingNewStep, setIsCreatingNewStep] = useState(false);
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
   const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
@@ -5194,14 +5198,7 @@ export default function Process() {
 
                                       const getIntegrationLabel = (id: string) => {
                                         const customInt = customApiIntegrations.find((c: any) => c.id === id);
-                                        if (customInt) return customInt.name;
-                                        switch (id) {
-                                          case "athenahealth": return "Athenahealth";
-                                          case "epic": return "Epic EHR";
-                                          case "salesforce": return "Salesforce";
-                                          case "slack": return "Slack";
-                                          default: return "";
-                                        }
+                                        return customInt ? customInt.name : "";
                                       };
 
                                       const METHOD_LABELS: Record<string, string> = {
@@ -5285,13 +5282,7 @@ export default function Process() {
                                                       zIndex: 9999,
                                                     }}
                                                   >
-                                                    {[
-                                                      { id: "athenahealth", name: "Athenahealth" },
-                                                      { id: "epic", name: "Epic EHR" },
-                                                      { id: "salesforce", name: "Salesforce" },
-                                                      { id: "slack", name: "Slack" },
-                                                      ...customApiIntegrations.map((c: any) => ({ id: c.id, name: c.name }))
-                                                    ].map(opt => (
+                                                    {customApiIntegrations.map((c: any) => ({ id: c.id, name: c.name })).map(opt => (
                                                       <button
                                                         key={opt.id}
                                                         type="button"
