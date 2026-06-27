@@ -377,6 +377,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "crmupdate": ["stage", "postcall"],
   "ehrupdate": ["stage", "postcall"],
   "wh_trigger": ["stage", "postcall"],
+  "webhook_trigger": ["stage", "postcall"],
   "collectinformation": ["stage", "postcall"],
   "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
@@ -802,6 +803,19 @@ export default function Process() {
       }
     }
   }, [stepDetailDrawerOpen, currentEditingStep]);
+
+  // Webhook integrations (session-only, synced from localStorage when drawer opens)
+  const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (stepDetailDrawerOpen && currentEditingStep?.stepKey === "webhook_trigger") {
+      try {
+        setCustomWebhookIntegrations(JSON.parse(localStorage.getItem('customWebhookIntegrations') || '[]'));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [stepDetailDrawerOpen, currentEditingStep]);
   const [isCreatingNewStep, setIsCreatingNewStep] = useState(false);
   const [executionTimingModalOpen, setExecutionTimingModalOpen] = useState(false);
   const [executionType, setExecutionType] = useState<"wait" | "parallel">("wait");
@@ -888,6 +902,9 @@ export default function Process() {
   const [webhookSelectedFields, setWebhookSelectedFields] = useState<string[]>([]);
   const [webhookUpdateRows, setWebhookUpdateRows] = useState<Array<{ fieldKey: string; value: string }>>([{ fieldKey: "", value: "" }]);
   const [webhookCreateRows, setWebhookCreateRows] = useState<Array<{ fieldName: string; value: string }>>([{ fieldName: "", value: "" }]);
+  const [webhookPayloadMode, setWebhookPayloadMode] = useState<"fields" | "json">("fields");
+  const [webhookJsonBody, setWebhookJsonBody] = useState<string>("");
+  const [webhookJsonError, setWebhookJsonError] = useState<string>("");
   const [webhookReplaceRows, setWebhookReplaceRows] = useState<Array<{ existingFieldKey: string; newFieldName: string; newValue: string }>>([{ existingFieldKey: "", newFieldName: "", newValue: "" }]);
 
 
@@ -1011,6 +1028,10 @@ export default function Process() {
     setWebhookUpdateRows([{ fieldKey: "", value: "" }]);
     setWebhookCreateRows([{ fieldName: "", value: "" }]);
     setWebhookReplaceRows([{ existingFieldKey: "", newFieldName: "", newValue: "" }]);
+    setWebhookPayloadMode("fields");
+    setWebhookJsonBody("");
+    setWebhookJsonError("");
+    setWebhookIntegration(""); // also reset webhook_trigger selection
 
     setWebhookIntOpen(false);
     setWebhookActionOpen(false);
@@ -1119,12 +1140,14 @@ export default function Process() {
   const apiEndpointRef = useRef<HTMLInputElement>(null);
   const apiAuthRef = useRef<HTMLInputElement>(null);
   const fetchAvailSummaryRef = useRef<HTMLTextAreaElement>(null);
+  const webhookJsonBodyRef = useRef<HTMLTextAreaElement>(null);
 
   const webhookIntDropdownRef = useRef<HTMLDivElement>(null);
   const webhookActionDropdownRef = useRef<HTMLDivElement>(null);
 
   const fieldUpdateValueRefs = useRef<(HTMLInputElement | null)[]>([]);
   const webhookFieldValueRefs = useRef<{ update: (HTMLInputElement | null)[]; create: (HTMLInputElement | null)[]; replace: (HTMLInputElement | null)[] }>({ update: [], create: [], replace: [] });
+  const webhookTriggerDropdownRef = useRef<HTMLDivElement>(null);
   const ticketClientEmailRefs = useRef<(HTMLInputElement | null)[]>([]);
   const ticketClientNumberRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [tcTimeIntervalsEnabled, setTcTimeIntervalsEnabled] = useState(false);
@@ -3940,7 +3963,8 @@ export default function Process() {
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "Integration Actions", desc: "Perform actions in external CRM, EHR, or messaging systems using connected integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
+                                    { key: "wh_trigger", name: "API Automation", desc: "Perform actions in external CRM, EHR, or messaging systems using connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
+                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"] },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -5711,6 +5735,293 @@ export default function Process() {
                                       );
                                     })()}
 
+
+                                    {/* Webhook Automation Step */}
+                                    {currentEditingStep.stepKey === "webhook_trigger" && (() => {
+
+                                      const webhookIntLabel = (customWebhookIntegrations.find((c: any) => c.id === webhookIntegration) || {}).name || "";
+                                      const webhookIntegrationObj = customWebhookIntegrations.find((c: any) => c.id === webhookIntegration);
+                                      const webhookFieldMappings: { key: string; label: string }[] = webhookIntegrationObj
+                                        ? (Array.isArray(webhookIntegrationObj.fieldMappings)
+                                            ? webhookIntegrationObj.fieldMappings
+                                            : (() => { try { return JSON.parse(webhookIntegrationObj.fieldMappings || '[]'); } catch { return []; } })())
+                                        : [];
+
+                                      return (
+                                        <div className="space-y-4">
+
+                                          {/* Section 1 — Connected Integration */}
+                                          <div className="space-y-2">
+                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                              Connected Integration
+                                            </label>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => {
+                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                setWebhookIntPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+                                                setWebhookIntOpen(true);
+                                              }}
+                                              className="w-full text-left px-3 py-2.5 text-sm rounded-md border border-border bg-white flex items-center justify-between hover:border-blue-400 transition-colors"
+                                              style={{ fontFamily: 'Outfit, sans-serif', color: webhookIntegration ? '#020817' : '#94a3b8' }}
+                                            >
+                                              <span>{webhookIntLabel || "Select Integration..."}</span>
+                                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                                            </button>
+                                            {webhookIntOpen && webhookIntPos && createPortal(
+                                              <>
+                                                <div className="fixed inset-0 z-[9998]" onClick={() => { setWebhookIntOpen(false); setWebhookIntPos(null); }} />
+                                                <div
+                                                  ref={webhookIntDropdownRef}
+                                                  className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
+                                                  style={{ position: 'fixed', top: webhookIntPos.top, left: webhookIntPos.left, width: `${webhookIntPos.width}px`, zIndex: 9999 }}
+                                                >
+                                                  {customWebhookIntegrations.length === 0 ? (
+                                                    <div className="px-3 py-4 text-sm text-muted-foreground text-center" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      No webhook integrations added yet
+                                                    </div>
+                                                  ) : (
+                                                    customWebhookIntegrations.map((c: any) => (
+                                                      <button
+                                                        key={c.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                          setWebhookIntegration(c.id);
+                                                          setWebhookCreateRows(
+                                                            (() => {
+                                                              const fm = Array.isArray(c.fieldMappings) ? c.fieldMappings : (() => { try { return JSON.parse(c.fieldMappings || '[]'); } catch { return []; } })();
+                                                              return fm.length > 0 ? fm.map((f: any) => ({ fieldName: f.key, value: "" })) : [{ fieldName: "", value: "" }];
+                                                            })()
+                                                          );
+                                                          setWebhookIntOpen(false);
+                                                          setWebhookIntPos(null);
+                                                        }}
+                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                      >
+                                                        <span>{c.name}</span>
+                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">Connected ✅</span>
+                                                      </button>
+                                                    ))
+                                                  )}
+                                                  <Link
+                                                    to="/settings?tab=integrations"
+                                                    onClick={() => { setWebhookIntOpen(false); setWebhookIntPos(null); }}
+                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-1.5 text-blue-600 font-semibold border-t border-border mt-1 pt-2"
+                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                  >
+                                                    <Plus className="w-3.5 h-3.5" />
+                                                    Add Integration →
+                                                  </Link>
+                                                </div>
+                                              </>,
+                                              document.body
+                                            )}
+                                          </div>
+
+                                          {/* Section 2 — Payload Mode Toggle + Editor */}
+                                          {webhookIntegration && (() => {
+                                            return (
+                                              <div className="space-y-3">
+                                                {/* Mode Toggle */}
+                                                <div>
+                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                    Payload Mode
+                                                  </label>
+                                                  <div className="inline-flex items-center p-1 rounded-lg border border-border bg-muted/20">
+                                                    {([
+                                                      { key: "fields", label: "Field Builder" },
+                                                      { key: "json", label: "Raw JSON" },
+                                                    ] as const).map((mode, idx) => (
+                                                      <React.Fragment key={mode.key}>
+                                                        {idx > 0 && <div className="w-px h-5 bg-gray-300 mx-0.5" />}
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => setWebhookPayloadMode(mode.key)}
+                                                          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                                            webhookPayloadMode === mode.key
+                                                              ? "bg-primary text-white"
+                                                              : "text-gray-600 hover:text-gray-900"
+                                                          }`}
+                                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                        >
+                                                          {mode.label}
+                                                        </button>
+                                                      </React.Fragment>
+                                                    ))}
+                                                  </div>
+                                                </div>
+
+                                                {/* Field Builder Mode */}
+                                                {webhookPayloadMode === "fields" && (
+                                                  <div className="space-y-2">
+                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Configure the fields sent in this webhook payload
+                                                    </p>
+                                                    <div className="space-y-3">
+                                                      {webhookCreateRows.map((row, idx) => (
+                                                        <div key={idx} className="flex items-center gap-2">
+                                                          <input
+                                                            type="text"
+                                                            placeholder="Field Name"
+                                                            value={row.fieldName}
+                                                            onChange={(e) => {
+                                                              const newRows = [...webhookCreateRows];
+                                                              newRows[idx] = { ...newRows[idx], fieldName: e.target.value };
+                                                              setWebhookCreateRows(newRows);
+                                                            }}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                          />
+                                                          <div className="flex-1 flex flex-col gap-1">
+                                                            <div className="flex items-center justify-between">
+                                                              <span className="text-xs text-muted-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Value</span>
+                                                              <VariablePickerButton
+                                                                targetRef={{
+                                                                  get current() { return webhookFieldValueRefs.current.create[idx]; }
+                                                                } as React.RefObject<HTMLInputElement>}
+                                                                value={row.value}
+                                                                onChange={(val) => {
+                                                                  const newRows = [...webhookCreateRows];
+                                                                  newRows[idx] = { ...newRows[idx], value: val };
+                                                                  setWebhookCreateRows(newRows);
+                                                                }}
+                                                              />
+                                                            </div>
+                                                            <input
+                                                              ref={el => { webhookFieldValueRefs.current.create[idx] = el; }}
+                                                              type="text"
+                                                              placeholder="Value or {{variable}}"
+                                                              value={row.value}
+                                                              onChange={(e) => {
+                                                                const newRows = [...webhookCreateRows];
+                                                                newRows[idx] = { ...newRows[idx], value: e.target.value };
+                                                                setWebhookCreateRows(newRows);
+                                                              }}
+                                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                            />
+                                                          </div>
+                                                          {webhookCreateRows.length > 1 && (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => setWebhookCreateRows(webhookCreateRows.filter((_, i) => i !== idx))}
+                                                              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                                                            >
+                                                              <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                          )}
+                                                        </div>
+                                                      ))}
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => setWebhookCreateRows([...webhookCreateRows, { fieldName: "", value: "" }])}
+                                                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                                                      >
+                                                        <Plus className="w-3.5 h-3.5" />
+                                                        Add Field
+                                                      </button>
+                                                    </div>
+                                                  </div>
+                                                )}
+
+                                                {/* Raw JSON Mode */}
+                                                {webhookPayloadMode === "json" && (
+                                                  <div className="space-y-2">
+                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                      Write the raw JSON body to send. Use <code className="text-blue-600 font-mono text-[10px]">{"{{variable}}"}</code> placeholders anywhere in the JSON.
+                                                    </p>
+
+                                                    {/* Toolbar: Format + Variable Picker */}
+                                                    <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-b-0 border-border rounded-t-md">
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                          try {
+                                                            const parsed = JSON.parse(webhookJsonBody);
+                                                            setWebhookJsonBody(JSON.stringify(parsed, null, 2));
+                                                            setWebhookJsonError("");
+                                                          } catch {
+                                                            setWebhookJsonError("Invalid JSON — cannot format.");
+                                                          }
+                                                        }}
+                                                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1"
+                                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                                      >
+                                                        <span className="font-mono">{"{ }"}</span> Format JSON
+                                                      </button>
+                                                      <VariablePickerButton
+                                                        targetRef={webhookJsonBodyRef}
+                                                        value={webhookJsonBody}
+                                                        onChange={(val) => {
+                                                          setWebhookJsonBody(val);
+                                                          setWebhookJsonError("");
+                                                        }}
+                                                        label="+ Insert Variable"
+                                                      />
+                                                    </div>
+
+                                                    {/* JSON Textarea */}
+                                                    <textarea
+                                                      ref={webhookJsonBodyRef}
+                                                      value={webhookJsonBody}
+                                                      onChange={(e) => {
+                                                        setWebhookJsonBody(e.target.value);
+                                                        // Live validation
+                                                        try {
+                                                          if (e.target.value.trim()) JSON.parse(e.target.value);
+                                                          setWebhookJsonError("");
+                                                        } catch (err) {
+                                                          setWebhookJsonError(err instanceof Error ? err.message : "Invalid JSON");
+                                                        }
+                                                      }}
+                                                      placeholder={`{\n  "event": "stage_entered",\n  "contact_name": "{{contact_name}}",\n  "call_summary": "{{call_summary}}"\n}`}
+                                                      rows={10}
+                                                      className={`w-full px-3 py-2.5 text-sm border rounded-b-md bg-white resize-none outline-none transition-colors font-mono ${
+                                                        webhookJsonError ? "border-red-400 focus:border-red-500" : "border-border focus:border-blue-500"
+                                                      }`}
+                                                      style={{ color: '#020817', lineHeight: '1.6' }}
+                                                      spellCheck={false}
+                                                    />
+
+                                                    {/* Validation feedback */}
+                                                    {webhookJsonError ? (
+                                                      <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-red-50 border border-red-200">
+                                                        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
+                                                        <p className="text-xs text-red-600 font-mono" style={{ fontFamily: 'monospace' }}>{webhookJsonError}</p>
+                                                      </div>
+                                                    ) : webhookJsonBody.trim() ? (
+                                                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 border border-green-200">
+                                                        <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                                                        <p className="text-xs text-green-700 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>Valid JSON</p>
+                                                      </div>
+                                                    ) : null}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+
+                                          {/* Read-only info box */}
+                                          {webhookIntegration && (
+                                            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
+                                              <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                                              <div className="flex-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                Credentials and endpoint configuration for{" "}
+                                                <span className="font-semibold">{webhookIntLabel || "selected integration"}</span>{" "}
+                                                are managed in{" "}
+                                                <Link to="/settings?tab=integrations" className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-0.5">
+                                                  Settings → Integrations
+                                                  <ExternalLink className="w-3.5 h-3.5" />
+                                                </Link>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                        </div>
+                                      );
+                                    })()}
                                     {/* Stage Movement / Process Movement Steps */}
                                     {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
                                       <div className="space-y-4">

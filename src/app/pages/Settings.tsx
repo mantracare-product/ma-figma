@@ -1841,7 +1841,8 @@ export default function Settings() {
     }
 
     // Custom API / Webhook-specific validation
-    if (selectedIntegration.id === "custom-api-webhook") {
+    // Custom API validation & save
+    if (selectedIntegration.id === "custom-api") {
       if (!integrationCredentials.integrationName || !integrationCredentials.baseUrl) {
         toast.error("Please fill in all required fields");
         return;
@@ -1858,6 +1859,28 @@ export default function Settings() {
           fieldMappings: JSON.parse(integrationCredentials.fieldMappings || '[]'),
         };
         localStorage.setItem('customApiIntegrations', JSON.stringify([...existing, newEntry]));
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    // Custom Webhook validation & save
+    if (selectedIntegration.id === "custom-webhook") {
+      if (!integrationCredentials.integrationName || !integrationCredentials.webhookUrl) {
+        toast.error("Please fill in all required fields");
+        return;
+      }
+      try {
+        const existing = JSON.parse(localStorage.getItem('customWebhookIntegrations') || '[]');
+        const newEntry = {
+          id: `custom-wh-${Date.now()}`,
+          name: integrationCredentials.integrationName,
+          webhookUrl: integrationCredentials.webhookUrl,
+          authType: integrationCredentials.authType || "None",
+          authValue: integrationCredentials.authValue || "",
+          fieldMappings: JSON.parse(integrationCredentials.fieldMappings || '[]'),
+        };
+        localStorage.setItem('customWebhookIntegrations', JSON.stringify([...existing, newEntry]));
       } catch (e) {
         console.error(e);
       }
@@ -2330,7 +2353,8 @@ export default function Settings() {
     { id: "bitrix24", name: "Bitrix 24", description: "Collaboration and CRM platform", category: "crm", connected: false },
     { id: "hubspot", name: "HubSpot", description: "Marketing and sales CRM", category: "crm", connected: false },
     { id: "salesforce", name: "Salesforce", description: "Cloud-based CRM solution", category: "crm", connected: true },
-    { id: "custom-api-webhook", name: "Custom API / Webhook", description: "Connect any REST API or Webhook endpoint", category: "crm", connected: false },
+    { id: "custom-api", name: "Custom API", description: "Connect any REST API endpoint", category: "crm", connected: false },
+    { id: "custom-webhook", name: "Custom Webhook", description: "Send event payloads to any webhook endpoint", category: "crm", connected: false },
 
     // Telephony
     { id: "twilio", name: "Twilio", description: "Cloud communications platform", category: "telephony", connected: true },
@@ -9165,10 +9189,10 @@ export default function Settings() {
               {/* API Details Tab */}
               {integrationConfigTab === "api" && (
                 <div className="space-y-6">
-                  {selectedIntegration.id === "custom-api-webhook" ? (
+                  {(selectedIntegration.id === "custom-api" || selectedIntegration.id === "custom-webhook") ? (
                     <div>
                       <h3 className="text-base font-semibold mb-4" style={TEXT_STYLES.heading}>
-                        Custom API Details
+                        {selectedIntegration.id === "custom-api" ? "Custom API Details" : "Custom Webhook Details"}
                       </h3>
                       <div className="space-y-4">
                         {/* Integration Name */}
@@ -9188,58 +9212,70 @@ export default function Settings() {
                           />
                         </div>
 
-                        {/* Base URL */}
+                        {/* Base URL / Webhook URL — key and label depend on integration type */}
                         <div>
-                          <label className="block text-sm font-medium mb-2">Base URL</label>
+                          <label className="block text-sm font-medium mb-2">
+                            {selectedIntegration.id === "custom-webhook" ? "Webhook URL" : "Base URL"}
+                          </label>
                           <input
                             type="text"
-                            value={integrationCredentials.baseUrl || ""}
+                            value={
+                              selectedIntegration.id === "custom-webhook"
+                                ? integrationCredentials.webhookUrl || ""
+                                : integrationCredentials.baseUrl || ""
+                            }
                             onChange={(e) =>
                               setIntegrationCredentials({
                                 ...integrationCredentials,
-                                baseUrl: e.target.value,
+                                [selectedIntegration.id === "custom-webhook" ? "webhookUrl" : "baseUrl"]: e.target.value,
                               })
                             }
-                            placeholder="https://api.example.com"
+                            placeholder={
+                              selectedIntegration.id === "custom-webhook"
+                                ? "https://hooks.example.com/endpoint"
+                                : "https://api.example.com"
+                            }
                             className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
                           />
                         </div>
 
-                        {/* Allowed Methods */}
-                        <div>
-                          <label className="block text-sm font-medium mb-2">Allowed Methods</label>
-                          <div className="flex flex-wrap gap-4 mt-2">
-                            {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => {
-                              const methodsArray = (integrationCredentials.allowedMethods || "")
-                                .split(",")
-                                .map((m) => m.trim())
-                                .filter(Boolean);
-                              const isChecked = methodsArray.includes(method);
-                              return (
-                                <label key={method} className="flex items-center gap-2 cursor-pointer text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={(e) => {
-                                      let newMethods;
-                                      if (e.target.checked) {
-                                        newMethods = [...methodsArray, method];
-                                      } else {
-                                        newMethods = methodsArray.filter((m) => m !== method);
-                                      }
-                                      setIntegrationCredentials({
-                                        ...integrationCredentials,
-                                        allowedMethods: newMethods.join(","),
-                                      });
-                                    }}
-                                    className="rounded border-input text-primary focus:ring-primary h-4 w-4 bg-input-background"
-                                  />
-                                  {method}
-                                </label>
-                              );
-                            })}
+                        {/* Allowed Methods — Custom API only */}
+                        {selectedIntegration.id !== "custom-webhook" && (
+                          <div>
+                            <label className="block text-sm font-medium mb-2">Allowed Methods</label>
+                            <div className="flex flex-wrap gap-4 mt-2">
+                              {["GET", "POST", "PUT", "PATCH", "DELETE"].map((method) => {
+                                const methodsArray = (integrationCredentials.allowedMethods || "")
+                                  .split(",")
+                                  .map((m) => m.trim())
+                                  .filter(Boolean);
+                                const isChecked = methodsArray.includes(method);
+                                return (
+                                  <label key={method} className="flex items-center gap-2 cursor-pointer text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        let newMethods;
+                                        if (e.target.checked) {
+                                          newMethods = [...methodsArray, method];
+                                        } else {
+                                          newMethods = methodsArray.filter((m) => m !== method);
+                                        }
+                                        setIntegrationCredentials({
+                                          ...integrationCredentials,
+                                          allowedMethods: newMethods.join(","),
+                                        });
+                                      }}
+                                      className="rounded border-input text-primary focus:ring-primary h-4 w-4 bg-input-background"
+                                    />
+                                    {method}
+                                  </label>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         {/* Authentication Type */}
                         <div>
@@ -9255,9 +9291,18 @@ export default function Settings() {
                             className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
                           >
                             <option value="None">None</option>
-                            <option value="API Key">API Key</option>
-                            <option value="Bearer Token">Bearer Token</option>
-                            <option value="Basic Auth">Basic Auth</option>
+                            {selectedIntegration.id === "custom-api" ? (
+                              <>
+                                <option value="API Key">API Key</option>
+                                <option value="Bearer Token">Bearer Token</option>
+                                <option value="Basic Auth">Basic Auth</option>
+                              </>
+                            ) : (
+                              <>
+                                <option value="Signing Secret">Signing Secret</option>
+                                <option value="Bearer Token">Bearer Token</option>
+                              </>
+                            )}
                           </select>
                         </div>
 
