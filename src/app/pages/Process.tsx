@@ -3963,8 +3963,8 @@ export default function Process() {
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
-                                    { key: "wh_trigger", name: "API Automation", desc: "Perform actions in external CRM, EHR, or messaging systems using connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
-                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"] },
+                                    { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },
+                                    { key: "webhook_trigger", name: "Webhook Automation", desc: "Send an event payload to a connected webhook when this step runs.", iconKey: "webhook", cats: ["all", "webhook"], popular: false },
                                   ];
                                   const iconMap: Record<string, React.ReactNode> = {
                                     clock: <Clock className="w-4 h-4 text-white" />, x: <X className="w-4 h-4 text-white" />,
@@ -3979,6 +3979,7 @@ export default function Process() {
                                     layoutgrid: <LayoutGrid className="w-4 h-4 text-white" />,
                                     gitbranch: <GitBranch className="w-4 h-4 text-white" />,
                                     volume2: <Volume2 className="w-4 h-4 text-white" />,
+                                    webhook: <Webhook className="w-4 h-4 text-white" />,
                                   };
                                   const filtered = allSteps.filter(s =>
                                     s.cats.includes(workflowStepCategory) &&
