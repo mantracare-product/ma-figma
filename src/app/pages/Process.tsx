@@ -659,6 +659,15 @@ export default function Process() {
   }, [selectedProcess]);
 
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
+  const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
+
+  useEffect(() => {
+    try {
+      setCustomApiIntegrations(JSON.parse(localStorage.getItem('customApiIntegrations') || '[]'));
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
   const [activeTab, setActiveTab] = useState<string>("basic");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
@@ -872,6 +881,10 @@ export default function Process() {
   // New Webhook states
   const [webhookIntegration, setWebhookIntegration] = useState<string>("");
   const [webhookAction, setWebhookAction] = useState<string>("");
+  const [webhookSelectedFields, setWebhookSelectedFields] = useState<string[]>([]);
+  const [webhookUpdateRows, setWebhookUpdateRows] = useState<Array<{ fieldKey: string; value: string }>>([{ fieldKey: "", value: "" }]);
+  const [webhookCreateRows, setWebhookCreateRows] = useState<Array<{ fieldName: string; value: string }>>([{ fieldName: "", value: "" }]);
+  const [webhookReplaceRows, setWebhookReplaceRows] = useState<Array<{ existingFieldKey: string; newFieldName: string; newValue: string }>>([{ existingFieldKey: "", newFieldName: "", newValue: "" }]);
 
 
   // New API states
@@ -891,11 +904,12 @@ export default function Process() {
   // Close webhookInt dropdown on scroll or resize
   useEffect(() => {
     if (!webhookIntOpen) return;
-    const handleScroll = () => {
+    const handleScroll = (e: Event) => {
+      if (webhookIntDropdownRef.current?.contains(e.target as Node)) return;
       setWebhookIntOpen(false);
       setWebhookIntPos(null);
     };
-    const handleResize = () => handleScroll();
+    const handleResize = () => { setWebhookIntOpen(false); setWebhookIntPos(null); };
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", handleResize);
     return () => {
@@ -907,11 +921,12 @@ export default function Process() {
   // Close webhookAction dropdown on scroll or resize
   useEffect(() => {
     if (!webhookActionOpen) return;
-    const handleScroll = () => {
+    const handleScroll = (e: Event) => {
+      if (webhookActionDropdownRef.current?.contains(e.target as Node)) return;
       setWebhookActionOpen(false);
       setWebhookActionPos(null);
     };
-    const handleResize = () => handleScroll();
+    const handleResize = () => { setWebhookActionOpen(false); setWebhookActionPos(null); };
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", handleResize);
     return () => {
@@ -988,6 +1003,13 @@ export default function Process() {
     setApiHeaders([{ id: "header-1", key: "", value: "" }]);
     setWebhookIntegration("");
     setWebhookAction("");
+    setWebhookSelectedFields([]);
+                                                           setWebhookUpdateRows([{ fieldKey: "", value: "" }]);
+                                                           setWebhookCreateRows([{ fieldName: "", value: "" }]);
+                                                           setWebhookReplaceRows([{ existingFieldKey: "", newFieldName: "", newValue: "" }]);
+    setWebhookUpdateRows([{ fieldKey: "", value: "" }]);
+    setWebhookCreateRows([{ fieldName: "", value: "" }]);
+    setWebhookReplaceRows([{ existingFieldKey: "", newFieldName: "", newValue: "" }]);
 
     setWebhookIntOpen(false);
     setWebhookActionOpen(false);
@@ -1096,6 +1118,9 @@ export default function Process() {
   const apiEndpointRef = useRef<HTMLInputElement>(null);
   const apiAuthRef = useRef<HTMLInputElement>(null);
   const fetchAvailSummaryRef = useRef<HTMLTextAreaElement>(null);
+
+  const webhookIntDropdownRef = useRef<HTMLDivElement>(null);
+  const webhookActionDropdownRef = useRef<HTMLDivElement>(null);
 
   const fieldUpdateValueRefs = useRef<(HTMLInputElement | null)[]>([]);
   const ticketClientEmailRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -5170,6 +5195,8 @@ export default function Process() {
                                     {currentEditingStep.stepKey === "wh_trigger" && (() => {
 
                                       const getIntegrationLabel = (id: string) => {
+                                        const customInt = customApiIntegrations.find((c: any) => c.id === id);
+                                        if (customInt) return customInt.name;
                                         switch (id) {
                                           case "athenahealth": return "Athenahealth";
                                           case "epic": return "Epic EHR";
@@ -5178,6 +5205,25 @@ export default function Process() {
                                           default: return "";
                                         }
                                       };
+
+                                      const METHOD_LABELS: Record<string, string> = {
+                                        "GET": "Fetch / Read",
+                                        "POST": "Create New",
+                                        "PUT": "Replace Record",
+                                        "PATCH": "Update Record",
+                                        "DELETE": "Delete Record",
+                                      };
+
+                                      const selectedCustomInt = customApiIntegrations.find((c: any) => c.id === webhookIntegration);
+                                      const actionOptions: string[] = selectedCustomInt
+                                        ? (selectedCustomInt.allowedMethods || []).map((m: string) => METHOD_LABELS[m] ?? m)
+                                        : (WEBHOOK_ACTIONS[webhookIntegration] || []);
+
+                                      const fieldMappings: { key: string; label: string }[] = selectedCustomInt
+                                        ? (Array.isArray(selectedCustomInt.fieldMappings)
+                                          ? selectedCustomInt.fieldMappings
+                                          : JSON.parse(selectedCustomInt.fieldMappings || '[]'))
+                                        : [];
 
                                       return (
                                         <div className="space-y-4">
@@ -5229,6 +5275,7 @@ export default function Process() {
                                                   />
                                                   {/* Dropdown panel — portaled to body, fixed-positioned */}
                                                   <div
+                                                    ref={webhookIntDropdownRef}
                                                     className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
                                                     style={{
                                                       position: 'fixed',
@@ -5243,6 +5290,7 @@ export default function Process() {
                                                       { id: "epic", name: "Epic EHR" },
                                                       { id: "salesforce", name: "Salesforce" },
                                                       { id: "slack", name: "Slack" },
+                                                      ...customApiIntegrations.map((c: any) => ({ id: c.id, name: c.name }))
                                                     ].map(opt => (
                                                       <button
                                                         key={opt.id}
@@ -5250,6 +5298,7 @@ export default function Process() {
                                                         onClick={() => {
                                                           setWebhookIntegration(opt.id);
                                                           setWebhookAction("");
+                                                          setWebhookSelectedFields([]);
                                                           setWebhookIntOpen(false);
                                                           setWebhookIntPos(null);
                                                         }}
@@ -5323,6 +5372,7 @@ export default function Process() {
                                                   />
                                                   {/* Dropdown panel — portaled to body, fixed-positioned */}
                                                   <div
+                                                    ref={webhookActionDropdownRef}
                                                     className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
                                                     style={{
                                                       position: 'fixed',
@@ -5332,12 +5382,13 @@ export default function Process() {
                                                       zIndex: 9999,
                                                     }}
                                                   >
-                                                    {(WEBHOOK_ACTIONS[webhookIntegration] || []).map(act => (
+                                                    {actionOptions.map((act: string) => (
                                                       <button
                                                         key={act}
                                                         type="button"
                                                         onClick={() => {
                                                           setWebhookAction(act);
+                                                          setWebhookSelectedFields([]);
                                                           setWebhookActionOpen(false);
                                                           setWebhookActionPos(null);
                                                         }}
@@ -5355,7 +5406,253 @@ export default function Process() {
                                           </div>
 
 
-                                          {/* Read-only info box */}
+                                                                                    {/* Section 3 — Field Values */}
+                                          {selectedCustomInt && fieldMappings.length > 0 && webhookAction && (() => {
+                                            const actionLower = webhookAction.toLowerCase();
+                                            const isUpdate = actionLower.includes("update") || actionLower.includes("patch");
+                                            const isCreate = actionLower.includes("create") || actionLower.includes("post");
+                                            const isReplace = actionLower.includes("replace") || actionLower.includes("put");
+                                            const isDelete = actionLower.includes("delete");
+
+                                            if (!isUpdate && !isCreate && !isReplace && !isDelete) return null;
+
+                                            return (
+                                              <div className="space-y-2">
+                                                <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Field Values
+                                                </label>
+                                                <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                  {isDelete ? "Select which fields to include in this API call" : "Configure the fields and values for this action"}
+                                                </p>
+
+                                                {/* Case 1: Update Action */}
+                                                {isUpdate && (
+                                                  <div className="space-y-3">
+                                                    {webhookUpdateRows.map((row, idx) => (
+                                                      <div key={idx} className="flex items-center gap-2">
+                                                        <select
+                                                          value={row.fieldKey}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookUpdateRows];
+                                                            newRows[idx] = { ...newRows[idx], fieldKey: e.target.value };
+                                                            setWebhookUpdateRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                        >
+                                                          <option value="">Select field...</option>
+                                                          {fieldMappings.map((f) => (
+                                                            <option key={f.key} value={f.key}>
+                                                              {f.label || f.key}
+                                                            </option>
+                                                          ))}
+                                                        </select>
+                                                        <input
+                                                          type="text"
+                                                          placeholder="Value"
+                                                          value={row.value}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookUpdateRows];
+                                                            newRows[idx] = { ...newRows[idx], value: e.target.value };
+                                                            setWebhookUpdateRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                        />
+                                                        {webhookUpdateRows.length > 1 && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              const newRows = webhookUpdateRows.filter((_, i) => i !== idx);
+                                                              setWebhookUpdateRows(newRows);
+                                                            }}
+                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                                                          >
+                                                            <Trash2 className="w-4 h-4" />
+                                                          </button>
+                                                        )}
+                                                      </div>
+                                                    ))}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setWebhookUpdateRows([...webhookUpdateRows, { fieldKey: "", value: "" }])}
+                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+                                                      style={{ fontFamily: 'Outfit, sans-serif' }}$
+                                                    >
+                                                      <Plus className="w-3.5 h-3.5" />
+                                                      Add Field
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {/* Case 2: Create Action */}
+                                                {isCreate && (
+                                                  <div className="space-y-3">
+                                                    {webhookCreateRows.map((row, idx) => (
+                                                      <div key={idx} className="flex items-center gap-2">
+                                                        <input
+                                                          type="text"
+                                                          placeholder="Field Name"
+                                                          value={row.fieldName}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookCreateRows];
+                                                            newRows[idx] = { ...newRows[idx], fieldName: e.target.value };
+                                                            setWebhookCreateRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                        />
+                                                        <input
+                                                          type="text"
+                                                          placeholder="Value"
+                                                          value={row.value}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookCreateRows];
+                                                            newRows[idx] = { ...newRows[idx], value: e.target.value };
+                                                            setWebhookCreateRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                        />
+                                                        {webhookCreateRows.length > 1 && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              const newRows = webhookCreateRows.filter((_, i) => i !== idx);
+                                                              setWebhookCreateRows(newRows);
+                                                            }}
+                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                                                          >
+                                                            <Trash2 className="w-4 h-4" />
+                                                          </button>
+                                                        )}
+                                                      </div>
+                                                    ))}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setWebhookCreateRows([...webhookCreateRows, { fieldName: "", value: "" }])}
+                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+                                                      style={{ fontFamily: 'Outfit, sans-serif' }}$
+                                                    >
+                                                      <Plus className="w-3.5 h-3.5" />
+                                                      Add Field
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {/* Case 3: Replace Action */}
+                                                {isReplace && (
+                                                  <div className="space-y-3">
+                                                    {webhookReplaceRows.map((row, idx) => (
+                                                      <div key={idx} className="flex flex-col gap-2 p-3 border border-border rounded-lg bg-muted/5">
+                                                        <div className="flex items-center gap-2">
+                                                          <select
+                                                            value={row.existingFieldKey}
+                                                            onChange={(e) => {
+                                                              const newRows = [...webhookReplaceRows];
+                                                              newRows[idx] = { ...newRows[idx], existingFieldKey: e.target.value };
+                                                              setWebhookReplaceRows(newRows);
+                                                            }}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                          >
+                                                            <option value="">Select existing field...</option>
+                                                            {fieldMappings.map((f) => (
+                                                              <option key={f.key} value={f.key}>
+                                                                {f.label || f.key}
+                                                              </option>
+                                                            ))}
+                                                          </select>
+                                                          {webhookReplaceRows.length > 1 && (
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                const newRows = webhookReplaceRows.filter((_, i) => i !== idx);
+                                                                setWebhookReplaceRows(newRows);
+                                                              }}
+                                                              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                                                            >
+                                                              <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                          )}
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                          <input
+                                                            type="text"
+                                                            placeholder="New Field Name"
+                                                            value={row.newFieldName}
+                                                            onChange={(e) => {
+                                                              const newRows = [...webhookReplaceRows];
+                                                              newRows[idx] = { ...newRows[idx], newFieldName: e.target.value };
+                                                              setWebhookReplaceRows(newRows);
+                                                            }}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                          />
+                                                          <input
+                                                            type="text"
+                                                            placeholder="New Value"
+                                                            value={row.newValue}
+                                                            onChange={(e) => {
+                                                              const newRows = [...webhookReplaceRows];
+                                                              newRows[idx] = { ...newRows[idx], newValue: e.target.value };
+                                                              setWebhookReplaceRows(newRows);
+                                                            }}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}$
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setWebhookReplaceRows([...webhookReplaceRows, { existingFieldKey: "", newFieldName: "", newValue: "" }])}
+                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
+                                                      style={{ fontFamily: 'Outfit, sans-serif' }}$
+                                                    >
+                                                      <Plus className="w-3.5 h-3.5" />
+                                                      Add Field
+                                                    </button>
+                                                  </div>
+                                                )}
+
+                                                {/* Case 4: Delete Action */}
+                                                {isDelete && (
+                                                  <div className="space-y-2">
+                                                    {fieldMappings.map((field: { key: string; label: string }) => (
+                                                      <label
+                                                        key={field.key}
+                                                        className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-muted/20 bg-white"
+                                                      >
+                                                        <input
+                                                          type="checkbox"
+                                                          checked={webhookSelectedFields.includes(field.key)}
+                                                          onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                              setWebhookSelectedFields(prev => [...prev, field.key]);
+                                                            } else {
+                                                              setWebhookSelectedFields(prev => prev.filter(k => k !== field.key));
+                                                            }
+                                                          }}
+                                                          className="w-4 h-4 rounded"
+                                                        />
+                                                        <div className="flex-1">
+                                                          <p className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
+                                                            {field.label !== "" ? field.label : field.key}
+                                                          </p>
+                                                          <p className="text-xs text-muted-foreground font-mono">
+                                                            {field.key}
+                                                          </p>
+                                                        </div>
+                                                      </label>
+                                                    ))}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+
+{/* Read-only info box */}
                                           <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
                                             <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                                             <div className="flex-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
