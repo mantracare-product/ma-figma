@@ -22,6 +22,7 @@ import Services from "./pages/Services";
 import Appointments from "./pages/Appointments";
 import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
+import Chats from "./pages/Chats";
 import NotFound from "./pages/NotFound";
 
 export const router = createBrowserRouter([
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
           { path: "settings/team/:id", Component: ManageTeamMember },
           { path: "services", Component: Services },
           { path: "appointments", Component: Appointments },
+          { path: "chats", Component: Chats },
           { path: "profile", Component: Profile },
         ],
       },

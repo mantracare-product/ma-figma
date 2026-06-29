@@ -705,6 +705,26 @@ export default function Settings() {
     }
   }, []);
 
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('whatsappTemplateIntegrations');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed.length > 0) {
+          setIntegrations((prev) =>
+            prev.map((i) =>
+              i.id === "whatsapp-business"
+                ? { ...i, connected: true, credentials: parsed[0]?.credentials || parsed[0] }
+                : i
+            )
+          );
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   // Privacy State
   // Verify Caller ID State
   const [businessProfile, setBusinessProfile] = useState({
@@ -1732,6 +1752,11 @@ export default function Settings() {
     setValidationErrors({});
     setIntegrationConfigTab("api"); // Start with API tab
 
+    if (integration.id === "whatsapp-business") {
+      const creds = integration.credentials || {};
+      setWhatsappProvider(creds.provider || "twilio");
+    }
+
     // Initialize default values for toggles
     const fields = getIntegrationFields(integration.id);
     const defaultValues: Record<string, string> = {};
@@ -1753,6 +1778,11 @@ export default function Settings() {
     setTestConnectionStatus("idle");
     setValidationErrors({});
     setIntegrationConfigTab("api"); // Start with API tab when managing
+
+    if (integration.id === "whatsapp-business") {
+      const creds = integration.credentials || {};
+      setWhatsappProvider(creds.provider || "twilio");
+    }
     // If Bitrix is already connected, mark as tested and expand mapping section
     if (integration.id === "bitrix24" && integration.connected) {
       setBitrixConnectionTested(true);
@@ -1833,32 +1863,68 @@ export default function Settings() {
     }
 
     if (selectedIntegration.id === "whatsapp-business") {
-      if (!integrationCredentials.name || !integrationCredentials.webhookUrl) {
+      if (!integrationCredentials.name) {
+        setValidationErrors({ ...validationErrors, name: "Connection Name is required" });
         toast.error("Please fill in all required fields");
         return;
       }
-      if (!integrationCredentials.payloadTemplate) {
-        toast.error("Parse a payload shape before saving");
+
+      const providerFields = getWhatsappProviderFields(whatsappProvider);
+      const errors: Record<string, string> = {};
+      let hasErrors = false;
+
+      providerFields.forEach(field => {
+        if (field.label.endsWith("*")) {
+          const val = integrationCredentials[field.name];
+          if (!val || !val.trim()) {
+            errors[field.name] = `${field.label.replace(" *", "")} is required`;
+            hasErrors = true;
+          }
+        }
+      });
+
+      if (hasErrors) {
+        setValidationErrors(errors);
+        toast.error("Please fill in all required fields");
         return;
       }
-      if (whatsappTemplates.length === 0) {
-        setWhatsappTemplateValidationError("Add at least one template before saving.");
-        toast.error("Add at least one WhatsApp template");
-        return;
-      }
+
       try {
         const existing = JSON.parse(localStorage.getItem('whatsappTemplateIntegrations') || '[]');
-        const newEntry = {
-          id: `wa-${Date.now()}`,
+        const connectionId = integrationCredentials.id || `wa-${Date.now()}`;
+
+        const providerSpecificFieldValues: Record<string, string> = {};
+        providerFields.forEach(field => {
+          providerSpecificFieldValues[field.name] = integrationCredentials[field.name] || "";
+        });
+
+        const credentialsData = {
+          id: connectionId,
           name: integrationCredentials.name,
-          webhookUrl: integrationCredentials.webhookUrl,
-          authType: integrationCredentials.authType || "None",
-          authValue: integrationCredentials.authValue || "",
-          payloadTemplate: integrationCredentials.payloadTemplate,
-          templates: whatsappTemplates,
+          provider: whatsappProvider,
+          ...providerSpecificFieldValues
         };
-        localStorage.setItem('whatsappTemplateIntegrations', JSON.stringify([...existing, newEntry]));
-      } catch (e) { console.error(e); }
+
+        const newEntry = {
+          id: connectionId,
+          name: integrationCredentials.name,
+          provider: whatsappProvider,
+          providerLabel: WHATSAPP_PROVIDERS.find(p => p.id === whatsappProvider)?.name || whatsappProvider,
+          credentials: credentialsData,
+        };
+
+        const isEditing = existing.some((item: any) => item.id === connectionId);
+        const updated = isEditing
+          ? existing.map((item: any) => item.id === connectionId ? newEntry : item)
+          : [...existing, newEntry];
+
+        localStorage.setItem('whatsappTemplateIntegrations', JSON.stringify(updated));
+        
+        integrationCredentials.id = connectionId;
+        integrationCredentials.provider = whatsappProvider;
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     // Custom API / Webhook-specific validation
@@ -1963,6 +2029,14 @@ export default function Settings() {
           : int
       )
     );
+
+    if (selectedIntegration.id === "whatsapp-business") {
+      try {
+        localStorage.removeItem('whatsappTemplateIntegrations');
+      } catch (e) {
+        console.error(e);
+      }
+    }
 
     setShowIntegrationModal(false);
     setSelectedIntegration(null);
@@ -2325,23 +2399,55 @@ export default function Settings() {
           tooltip: "A secret string you define. MantraAssist will use this to verify webhook requests from Meta are genuine."
         },
       ],
-      "whatsapp-business": [
-  {
-    name: "name",
-    label: "Connection Name *",
-    placeholder: "e.g. Front Desk WhatsApp",
-    tooltip: "Internal label so your team can identify this connection. Not sent anywhere."
-  },
-  {
-    name: "webhookUrl",
-    label: "Webhook URL *",
-    placeholder: "https://hook.example.com/abc123",
-    tooltip: "The webhook URL from your WhatsApp automation tool (respond.io, Make, Zapier, n8n, Interakt, etc). MantraAssist sends a request here every time this automation step runs."
-  },
-],
+      "whatsapp-business": [],
     };
 
     return fields[integrationId] || [];
+  };
+
+  const WHATSAPP_PROVIDERS = [
+    { id: "twilio", name: "Twilio" },
+    { id: "interakt", name: "Interakt" },
+    { id: "whapi", name: "WhAPI (whapi.cloud)" },
+  ];
+
+  const getWhatsappProviderFields = (provider: string) => {
+    const fields: Record<string, Array<{ name: string; label: string; type?: string; placeholder?: string; tooltip?: string; readonly?: boolean }>> = {
+      twilio: [
+        { name: "accountSid", label: "Account SID *", type: "password", placeholder: "ACxxxxxxxxxxxxxxxxxxxx", tooltip: "Found in Twilio Console → Account Info" },
+        { name: "authToken", label: "Auth Token *", type: "password", placeholder: "Enter Auth Token", tooltip: "Secret key used to authenticate API requests" },
+        { name: "whatsappNumber", label: "WhatsApp Sender Number *", type: "text", placeholder: "whatsapp:+14155238886", tooltip: "The WhatsApp-enabled number provisioned in your Twilio account" }
+      ],
+      interakt: [
+        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter Interakt API Key", tooltip: "Found in Interakt → Settings → API Keys" },
+        { name: "phoneNumberId", label: "WABA Phone Number ID *", type: "text", placeholder: "Enter Phone Number ID" },
+        { name: "verifyToken", label: "Webhook Verify Token", type: "text", placeholder: "Create a secret string", tooltip: "Used by Interakt to verify webhook requests are genuine" }
+      ],
+      whapi: [
+        { name: "apiToken", label: "API Token *", type: "password", placeholder: "Enter WhAPI Token", tooltip: "Found in your WhAPI Cloud dashboard" },
+        { name: "channelId", label: "Channel / Instance ID *", type: "text", placeholder: "Enter Channel ID" }
+      ],
+      gupshup: [
+        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter Gupshup API Key" },
+        { name: "appName", label: "App Name *", type: "text", placeholder: "Enter Gupshup App Name" },
+        { name: "sourceNumber", label: "Source Number *", type: "text", placeholder: "+14155238886" }
+      ],
+      "360dialog": [
+        { name: "apiKey", label: "D360 API Key *", type: "password", placeholder: "Enter 360dialog API Key", tooltip: "Sent as the D360-API-KEY header" },
+        { name: "channelId", label: "Channel ID *", type: "text", placeholder: "Enter Channel ID" }
+      ],
+      messagebird: [
+        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter MessageBird API Key" },
+        { name: "channelId", label: "WhatsApp Channel ID *", type: "text", placeholder: "Enter Channel ID" },
+        { name: "originator", label: "Originator Number *", type: "text", placeholder: "+14155238886" }
+      ],
+      other: [
+        { name: "providerName", label: "Provider Name *", type: "text", placeholder: "e.g. Internal Gateway" },
+        { name: "apiEndpoint", label: "API Endpoint *", type: "text", placeholder: "https://api.provider.com/send" },
+        { name: "apiKey", label: "API Key / Token *", type: "password", placeholder: "Enter credential" }
+      ]
+    };
+    return fields[provider] || [];
   };
 
   // Integrations State
@@ -2374,7 +2480,7 @@ export default function Settings() {
 
     // Marketing
     { id: "meta-leads", name: "Meta Lead Ads", description: "Pull leads from your Meta Ad campaigns automatically", category: "marketing", connected: false },
-    { id: "whatsapp-business", name: "WhatsApp Business", description: "Connect WhatsApp Business API to receive and send messages", category: "marketing", connected: false },
+    { id: "whatsapp-business", name: "WhatsApp Business", description: "Send and receive WhatsApp messages, manage templates, and automate conversations", category: "marketing", connected: false },
   ]);
   const [integrationTab, setIntegrationTab] = useState<"ehr" | "crm" | "telephony" | "mailbox" | "sms" | "marketing">("ehr");
   const [metaLeadFormsConnectionTested, setMetaLeadFormsConnectionTested] = useState(false);
@@ -2403,6 +2509,7 @@ export default function Settings() {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [integrationCredentials, setIntegrationCredentials] = useState<Record<string, string>>({});
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
+  const [whatsappProvider, setWhatsappProvider] = useState<string>("twilio");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testConnectionStatus, setTestConnectionStatus] = useState<"idle" | "success" | "error">("idle");
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -9170,7 +9277,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
             }
           }}
           title={selectedIntegration?.id === "whatsapp-business"
-            ? "WhatsApp Outbound Automation"
+            ? "WhatsApp Hub"
             : `Configure ${selectedIntegration?.name || "Provider"}`}
         >
           {selectedIntegration && (
@@ -9617,220 +9724,206 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                   )}
 
                   {selectedIntegration?.id === "whatsapp-business" && (
-  <div className="space-y-6">
+                    <div className="space-y-6">
+                      {/* Connection Name */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-2">
+                          <label className="block text-sm font-medium">Connection Name *</label>
+                          <Tooltip text="Internal label so your team can identify this connection. Not sent anywhere.">
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </Tooltip>
+                        </div>
+                        <input
+                          type="text"
+                          value={integrationCredentials.name || ""}
+                          onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, name: e.target.value })}
+                          placeholder="e.g. Front Desk WhatsApp"
+                          className={`w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm ${validationErrors.name ? "border-destructive" : ""}`}
+                        />
+                        {validationErrors.name && (
+                          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            {validationErrors.name}
+                          </p>
+                        )}
+                      </div>
 
+                      {/* Provider Selector */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Provider</label>
+                        <select
+                          value={whatsappProvider}
+                          onChange={(e) => {
+                            setWhatsappProvider(e.target.value);
+                            setValidationErrors({});
+                          }}
+                          className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
+                        >
+                          {WHATSAPP_PROVIDERS.map((prov) => (
+                            <option key={prov.id} value={prov.id}>
+                              {prov.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
 
-    {/* Auth type */}
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        <label className="block text-sm font-medium">Authentication Type</label>
-        <Tooltip text="Most tools require an auth header on incoming webhook requests.">
-          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-        </Tooltip>
-      </div>
-      <select
-        value={integrationCredentials.authType || "None"}
-        onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, authType: e.target.value })}
-        className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
-      >
-        <option value="None">None</option>
-        <option value="Signing Secret">Signing Secret</option>
-        <option value="Bearer Token">Bearer Token</option>
-      </select>
-    </div>
+                      {/* Provider specific inputs */}
+                      <div className="space-y-4">
+                        {getWhatsappProviderFields(whatsappProvider).map((field) => (
+                          <div key={field.name}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <label className="block text-sm font-medium">{field.label}</label>
+                              {field.tooltip && (
+                                <Tooltip text={field.tooltip}>
+                                  <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                                </Tooltip>
+                              )}
+                            </div>
 
-    {/* Auth value — conditional */}
-    {integrationCredentials.authType && integrationCredentials.authType !== "None" && (
-      <div>
-        <label className="block text-sm font-medium mb-2">Auth Value</label>
-        <div className="relative">
-          <input
-            type={visibleFields["wa_authValue"] ? "text" : "password"}
-            value={integrationCredentials.authValue || ""}
-            onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, authValue: e.target.value })}
-            placeholder="Paste your secret or token"
-            className="w-full px-4 py-2 pr-10 bg-input-background border border-input rounded-xl text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => setVisibleFields({ ...visibleFields, wa_authValue: !visibleFields["wa_authValue"] })}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-          >
-            {visibleFields["wa_authValue"] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
-        </div>
-      </div>
-    )}
+                            <div className="relative">
+                              <input
+                                type={field.type === "password" && !visibleFields[field.name] ? "password" : "text"}
+                                value={integrationCredentials[field.name] || ""}
+                                onChange={(e) =>
+                                  setIntegrationCredentials({
+                                    ...integrationCredentials,
+                                    [field.name]: e.target.value,
+                                  })
+                                }
+                                placeholder={field.placeholder}
+                                className={`w-full px-4 py-2 pr-10 bg-input-background border border-input rounded-xl text-sm ${
+                                  validationErrors[field.name] ? "border-destructive" : ""
+                                }`}
+                              />
+                              {field.type === "password" && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setVisibleFields({
+                                      ...visibleFields,
+                                      [field.name]: !visibleFields[field.name],
+                                    })
+                                  }
+                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                >
+                                  {visibleFields[field.name] ? (
+                                    <EyeOff className="w-4 h-4" />
+                                  ) : (
+                                    <Eye className="w-4 h-4" />
+                                  )}
+                                </button>
+                              )}
+                            </div>
 
-    {/* Payload shape */}
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <label className="block text-sm font-medium">Payload Shape</label>
-        <Tooltip text="Paste a sample to auto-detect merge fields. Stored as the runtime payload template.">
-          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-        </Tooltip>
-      </div>
-      <textarea
-        value={sampleJson}
-        onChange={(e) => setSampleJson(e.target.value)}
-        placeholder='{"phone": "{{contact_phone}}", "template": "{{template_name}}", "variables": {"1": "{{var_1}}"}}'
-        rows={4}
-        className="w-full px-4 py-3 bg-input-background border border-input rounded-xl text-sm font-mono resize-y"
-      />
-      <button
-        type="button"
-        onClick={() => {
-          try {
-            JSON.parse(sampleJson);
-            setIntegrationCredentials({ ...integrationCredentials, payloadTemplate: sampleJson });
-            toast.success("Payload shape saved");
-          } catch {
-            toast.error("Invalid JSON — check and try again");
-          }
-        }}
-        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-colors"
-      >
-        Parse Payload Shape
-      </button>
-      {integrationCredentials.payloadTemplate && (
-        <p className="text-xs text-secondary flex items-center gap-1">
-          <CheckCircle className="w-3 h-3 text-success" /> Payload shape saved
-        </p>
-      )}
-    </div>
+                            {validationErrors[field.name] && (
+                              <p className="text-xs text-destructive mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3" />
+                                {validationErrors[field.name]}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
 
-    {/* Template registry */}
-    <div className="border-t border-border pt-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>WhatsApp Templates</h3>
-          <Tooltip text="Register templates this automation can send. The identifier must exactly match the template name in your connected tool.">
-            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-          </Tooltip>
-        </div>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => {
-            setIsAddingWaTemplate(true);
-            setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
-            setWaTemplateFormErrors({});
-          }}
-        >
-          <Plus className="w-4 h-4" />
-          Add Template
-        </Button>
-      </div>
+                       {/* Webhook status — provider-aware */}
+                      {whatsappProvider === "twilio" ? (
+                        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-green-900">Webhook auto-configured</p>
+                            <p className="text-xs text-green-700 mt-0.5">
+                              MantraAssist will register the inbound webhook with Twilio automatically on save — no manual setup needed.
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+                          <div className="flex items-center gap-2">
+                            <Info className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                            <p className="text-sm font-semibold text-blue-900">Inbound Webhook URL (Manual setup required)</p>
+                          </div>
+                          <p className="text-xs text-blue-700">
+                            Paste this URL into your {WHATSAPP_PROVIDERS.find(p => p.id === whatsappProvider)?.name || whatsappProvider} webhook settings so incoming WhatsApp messages reach MantraAssist.
+                          </p>
+                          <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2">
+                            <code className="text-xs text-blue-800 flex-1 break-all">
+                              {`https://app.mantraassist.com/api/webhooks/whatsapp/${whatsappProvider}`}
+                            </code>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(`https://app.mantraassist.com/api/webhooks/whatsapp/${whatsappProvider}`);
+                                toast.success("Webhook URL copied");
+                              }}
+                              className="flex-shrink-0 text-blue-600 hover:text-blue-800"
+                            >
+                              <Copy className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      )}
 
-      {whatsappTemplateValidationError && (
-        <p className="text-xs text-destructive flex items-center gap-1">
-          <AlertCircle className="w-3 h-3" />{whatsappTemplateValidationError}
-        </p>
-      )}
+                      {/* Linked WhatsApp Templates */}
+                      <div className="border-t border-border pt-6 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Linked WhatsApp Templates</h3>
+                          <Tooltip text="Templates managed centrally in Chats and available for outbound automations.">
+                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                          </Tooltip>
+                        </div>
 
-      {whatsappTemplates.length === 0 ? (
-        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-          <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No templates added yet</h4>
-          <p className="text-sm text-muted-foreground">Add the templates this connection is allowed to send</p>
-        </div>
-      ) : (
-        <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-          {whatsappTemplates.map((t) => (
-            <div key={t.id} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
-              <div>
-                <p className="text-sm font-medium">{t.label}</p>
-                <p className="text-xs text-muted-foreground font-mono">{t.identifier} · {t.variables.length} variable{t.variables.length !== 1 ? "s" : ""}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setWhatsappTemplates(whatsappTemplates.filter(x => x.id !== t.id))}
-                className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-4 h-4 text-destructive" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+                        {(() => {
+                          const globalTemplates = (() => {
+                            try {
+                              return JSON.parse(localStorage.getItem('whatsappGlobalTemplates') || '[]');
+                            } catch {
+                              return [];
+                            }
+                          })();
 
-      {isAddingWaTemplate && (
-        <div className="border border-border rounded-xl p-4 space-y-4 bg-muted/20 mt-3">
-          <h4 className="text-sm font-semibold" style={TEXT_STYLES.heading}>New template</h4>
+                          if (globalTemplates.length === 0) {
+                            return (
+                              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                                <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                                <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No templates added yet</h4>
+                                <p className="text-sm text-muted-foreground">Add and manage WhatsApp templates in the Template Builder.</p>
+                              </div>
+                            );
+                          }
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Display name *</label>
-            <input
-              type="text"
-              value={waTemplateForm.label}
-              onChange={(e) => setWaTemplateForm({ ...waTemplateForm, label: e.target.value })}
-              placeholder="e.g. Appointment Reminder"
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
-            />
-            {waTemplateFormErrors.label && (
-              <p className="text-xs text-destructive mt-1">{waTemplateFormErrors.label}</p>
-            )}
-          </div>
+                          return (
+                            <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+                              {globalTemplates.map((t: any) => (
+                                <div key={t.id} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+                                  <div>
+                                    <p className="text-sm font-medium">{t.name}</p>
+                                    <p className="text-xs text-muted-foreground font-mono">{t.identifier}</p>
+                                  </div>
+                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                    {t.category}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        })()}
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Template ID *</label>
-            <input
-              type="text"
-              value={waTemplateForm.identifier}
-              onChange={(e) => setWaTemplateForm({ ...waTemplateForm, identifier: e.target.value })}
-              placeholder="e.g. appt_reminder_v2"
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm font-mono"
-            />
-            <p className="text-xs text-muted-foreground mt-1">Must exactly match the template name in your connected tool — copy it, don't retype.</p>
-            {waTemplateFormErrors.identifier && (
-              <p className="text-xs text-destructive mt-1">{waTemplateFormErrors.identifier}</p>
-            )}
-          </div>
-
-
-
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => {
-                const errors: Record<string, string> = {};
-                if (!waTemplateForm.label.trim()) errors.label = "Display name is required.";
-                if (!waTemplateForm.identifier.trim()) errors.identifier = "Identifier is required.";
-                if (Object.keys(errors).length > 0) { setWaTemplateFormErrors(errors); return; }
-                const variables: Array<{ slot: string; mappedField: string }> = [];
-                setWhatsappTemplates([...whatsappTemplates, {
-                  id: Date.now().toString(),
-                  label: waTemplateForm.label.trim(),
-                  identifier: waTemplateForm.identifier.trim(),
-                  variables,
-                }]);
-                setWhatsappTemplateValidationError("");
-                setIsAddingWaTemplate(false);
-                setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
-                setWaTemplateFormErrors({});
-                toast.success("Template added");
-              }}
-            >
-              Save template
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsAddingWaTemplate(false);
-                setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
-                setWaTemplateFormErrors({});
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-    </div>
-  </div>
-)}
+                        <Button
+                          variant="outline"
+                          type="button"
+                          className="w-full justify-center"
+                          onClick={() => {
+                            setShowIntegrationModal(false);
+                            setSelectedIntegration(null);
+                            setIntegrationCredentials({});
+                            navigate("/chats?tab=templates");
+                          }}
+                        >
+                          Manage Templates →
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
                   
 
