@@ -1832,12 +1832,33 @@ export default function Settings() {
       }
     }
 
-    // WhatsApp Business-specific validation
     if (selectedIntegration.id === "whatsapp-business") {
-      if (!integrationCredentials.phoneNumberId || !integrationCredentials.wabaId || !integrationCredentials.accessToken) {
+      if (!integrationCredentials.name || !integrationCredentials.webhookUrl) {
         toast.error("Please fill in all required fields");
         return;
       }
+      if (!integrationCredentials.payloadTemplate) {
+        toast.error("Parse a payload shape before saving");
+        return;
+      }
+      if (whatsappTemplates.length === 0) {
+        setWhatsappTemplateValidationError("Add at least one template before saving.");
+        toast.error("Add at least one WhatsApp template");
+        return;
+      }
+      try {
+        const existing = JSON.parse(localStorage.getItem('whatsappTemplateIntegrations') || '[]');
+        const newEntry = {
+          id: `wa-${Date.now()}`,
+          name: integrationCredentials.name,
+          webhookUrl: integrationCredentials.webhookUrl,
+          authType: integrationCredentials.authType || "None",
+          authValue: integrationCredentials.authValue || "",
+          payloadTemplate: integrationCredentials.payloadTemplate,
+          templates: whatsappTemplates,
+        };
+        localStorage.setItem('whatsappTemplateIntegrations', JSON.stringify([...existing, newEntry]));
+      } catch (e) { console.error(e); }
     }
 
     // Custom API / Webhook-specific validation
@@ -2305,38 +2326,19 @@ export default function Settings() {
         },
       ],
       "whatsapp-business": [
-        {
-          name: "phoneNumberId",
-          label: "Phone Number ID *",
-          placeholder: "Enter WhatsApp Phone Number ID",
-          tooltip: "Found in Meta Developer Portal → WhatsApp → Getting Started. This is the ID of your WhatsApp Business phone number, not the number itself."
-        },
-        {
-          name: "wabaId",
-          label: "WhatsApp Business Account ID *",
-          placeholder: "Enter WABA ID",
-          tooltip: "Found in Meta Business Manager → WhatsApp Accounts. This is your top-level WhatsApp Business Account."
-        },
-        {
-          name: "accessToken",
-          label: "Permanent Access Token *",
-          type: "password",
-          placeholder: "Enter permanent access token",
-          tooltip: "Generate a permanent token from Meta Business Manager → System Users → Assign Assets (WhatsApp) → Generate Token. Use a System User token, not a personal token."
-        },
-        {
-          name: "webhookVerifyToken",
-          label: "Webhook Verify Token",
-          placeholder: "Create a secret string e.g. mantraassist_wa_verify",
-          tooltip: "A secret string you define. MantraAssist registers this with Meta so only genuine WhatsApp webhooks are accepted."
-        },
-        {
-          name: "defaultProcessId",
-          label: "Default Process",
-          placeholder: "e.g. Ad Lead Acquisition",
-          tooltip: "When a new WhatsApp contact is received, automatically assign them to this process in MantraAssist."
-        },
-      ],
+  {
+    name: "name",
+    label: "Connection Name *",
+    placeholder: "e.g. Front Desk WhatsApp",
+    tooltip: "Internal label so your team can identify this connection. Not sent anywhere."
+  },
+  {
+    name: "webhookUrl",
+    label: "Webhook URL *",
+    placeholder: "https://hook.example.com/abc123",
+    tooltip: "The webhook URL from your WhatsApp automation tool (respond.io, Make, Zapier, n8n, Interakt, etc). MantraAssist sends a request here every time this automation step runs."
+  },
+],
     };
 
     return fields[integrationId] || [];
@@ -2418,6 +2420,18 @@ export default function Settings() {
     categoryId: string;
     processes: string[];
   }
+  interface WhatsappTemplate {
+  id: string;
+  label: string;
+  identifier: string;
+  variables: Array<{ slot: string; mappedField: string }>;
+}
+const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsappTemplate[]>([]);
+const [whatsappTemplateValidationError, setWhatsappTemplateValidationError] = useState("");
+const [isAddingWaTemplate, setIsAddingWaTemplate] = useState(false);
+const [waTemplateForm, setWaTemplateForm] = useState({ label: "", identifier: "", varCount: "0" });
+const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, string>>({});
+
   const [categoryMappings, setCategoryMappings] = useState<CategoryMapping[]>([]);
   const [editingMapping, setEditingMapping] = useState<CategoryMapping | null>(null);
   const [isAddingMapping, setIsAddingMapping] = useState(false);
@@ -9155,7 +9169,9 @@ export default function Settings() {
               setMetaSelectedForms([]);
             }
           }}
-          title={`Configure ${selectedIntegration?.name || "Provider"}`}
+          title={selectedIntegration?.id === "whatsapp-business"
+            ? "WhatsApp Outbound Automation"
+            : `Configure ${selectedIntegration?.name || "Provider"}`}
         >
           {selectedIntegration && (
             <div className="space-y-6">
@@ -9601,34 +9617,222 @@ export default function Settings() {
                   )}
 
                   {selectedIntegration?.id === "whatsapp-business" && (
-                    <div className="p-4 bg-green-50 border border-green-200 rounded-xl space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Info className="w-4 h-4 text-green-600 flex-shrink-0" />
-                        <p className="text-sm font-semibold text-green-900">Webhook Endpoint (Auto-generated)</p>
-                      </div>
-                      <p className="text-xs text-green-700">
-                        After saving, register this URL in Meta Developer Portal → WhatsApp → Configuration:
-                      </p>
-                      <div className="flex items-center gap-2 bg-white border border-green-200 rounded-lg px-3 py-2">
-                        <code className="text-xs text-green-800 flex-1 break-all">
-                          https://app.mantraassist.com/api/webhooks/whatsapp
-                        </code>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            navigator.clipboard.writeText("https://app.mantraassist.com/api/webhooks/whatsapp");
-                            toast.success("Webhook URL copied");
-                          }}
-                          className="flex-shrink-0 text-green-600 hover:text-green-800"
-                        >
-                          <Copy className="w-4 h-4" />
-                        </button>
-                      </div>
-                      <p className="text-xs text-green-600">
-                        Subscribe to: <strong>messages</strong> field under <strong>WhatsApp Business Account</strong> object.
-                      </p>
-                    </div>
-                  )}
+  <div className="space-y-6">
+
+
+    {/* Auth type */}
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <label className="block text-sm font-medium">Authentication Type</label>
+        <Tooltip text="Most tools require an auth header on incoming webhook requests.">
+          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+        </Tooltip>
+      </div>
+      <select
+        value={integrationCredentials.authType || "None"}
+        onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, authType: e.target.value })}
+        className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
+      >
+        <option value="None">None</option>
+        <option value="Signing Secret">Signing Secret</option>
+        <option value="Bearer Token">Bearer Token</option>
+      </select>
+    </div>
+
+    {/* Auth value — conditional */}
+    {integrationCredentials.authType && integrationCredentials.authType !== "None" && (
+      <div>
+        <label className="block text-sm font-medium mb-2">Auth Value</label>
+        <div className="relative">
+          <input
+            type={visibleFields["wa_authValue"] ? "text" : "password"}
+            value={integrationCredentials.authValue || ""}
+            onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, authValue: e.target.value })}
+            placeholder="Paste your secret or token"
+            className="w-full px-4 py-2 pr-10 bg-input-background border border-input rounded-xl text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => setVisibleFields({ ...visibleFields, wa_authValue: !visibleFields["wa_authValue"] })}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            {visibleFields["wa_authValue"] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+          </button>
+        </div>
+      </div>
+    )}
+
+    {/* Payload shape */}
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <label className="block text-sm font-medium">Payload Shape</label>
+        <Tooltip text="Paste a sample to auto-detect merge fields. Stored as the runtime payload template.">
+          <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+        </Tooltip>
+      </div>
+      <textarea
+        value={sampleJson}
+        onChange={(e) => setSampleJson(e.target.value)}
+        placeholder='{"phone": "{{contact_phone}}", "template": "{{template_name}}", "variables": {"1": "{{var_1}}"}}'
+        rows={4}
+        className="w-full px-4 py-3 bg-input-background border border-input rounded-xl text-sm font-mono resize-y"
+      />
+      <button
+        type="button"
+        onClick={() => {
+          try {
+            JSON.parse(sampleJson);
+            setIntegrationCredentials({ ...integrationCredentials, payloadTemplate: sampleJson });
+            toast.success("Payload shape saved");
+          } catch {
+            toast.error("Invalid JSON — check and try again");
+          }
+        }}
+        className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl transition-colors"
+      >
+        Parse Payload Shape
+      </button>
+      {integrationCredentials.payloadTemplate && (
+        <p className="text-xs text-secondary flex items-center gap-1">
+          <CheckCircle className="w-3 h-3 text-success" /> Payload shape saved
+        </p>
+      )}
+    </div>
+
+    {/* Template registry */}
+    <div className="border-t border-border pt-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>WhatsApp Templates</h3>
+          <Tooltip text="Register templates this automation can send. The identifier must exactly match the template name in your connected tool.">
+            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+          </Tooltip>
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => {
+            setIsAddingWaTemplate(true);
+            setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
+            setWaTemplateFormErrors({});
+          }}
+        >
+          <Plus className="w-4 h-4" />
+          Add Template
+        </Button>
+      </div>
+
+      {whatsappTemplateValidationError && (
+        <p className="text-xs text-destructive flex items-center gap-1">
+          <AlertCircle className="w-3 h-3" />{whatsappTemplateValidationError}
+        </p>
+      )}
+
+      {whatsappTemplates.length === 0 ? (
+        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+          <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+          <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No templates added yet</h4>
+          <p className="text-sm text-muted-foreground">Add the templates this connection is allowed to send</p>
+        </div>
+      ) : (
+        <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
+          {whatsappTemplates.map((t) => (
+            <div key={t.id} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
+              <div>
+                <p className="text-sm font-medium">{t.label}</p>
+                <p className="text-xs text-muted-foreground font-mono">{t.identifier} · {t.variables.length} variable{t.variables.length !== 1 ? "s" : ""}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWhatsappTemplates(whatsappTemplates.filter(x => x.id !== t.id))}
+                className="p-2 hover:bg-destructive/10 rounded-lg transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isAddingWaTemplate && (
+        <div className="border border-border rounded-xl p-4 space-y-4 bg-muted/20 mt-3">
+          <h4 className="text-sm font-semibold" style={TEXT_STYLES.heading}>New template</h4>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Display name *</label>
+            <input
+              type="text"
+              value={waTemplateForm.label}
+              onChange={(e) => setWaTemplateForm({ ...waTemplateForm, label: e.target.value })}
+              placeholder="e.g. Appointment Reminder"
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
+            />
+            {waTemplateFormErrors.label && (
+              <p className="text-xs text-destructive mt-1">{waTemplateFormErrors.label}</p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Template ID *</label>
+            <input
+              type="text"
+              value={waTemplateForm.identifier}
+              onChange={(e) => setWaTemplateForm({ ...waTemplateForm, identifier: e.target.value })}
+              placeholder="e.g. appt_reminder_v2"
+              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm font-mono"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Must exactly match the template name in your connected tool — copy it, don't retype.</p>
+            {waTemplateFormErrors.identifier && (
+              <p className="text-xs text-destructive mt-1">{waTemplateFormErrors.identifier}</p>
+            )}
+          </div>
+
+
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => {
+                const errors: Record<string, string> = {};
+                if (!waTemplateForm.label.trim()) errors.label = "Display name is required.";
+                if (!waTemplateForm.identifier.trim()) errors.identifier = "Identifier is required.";
+                if (Object.keys(errors).length > 0) { setWaTemplateFormErrors(errors); return; }
+                const variables: Array<{ slot: string; mappedField: string }> = [];
+                setWhatsappTemplates([...whatsappTemplates, {
+                  id: Date.now().toString(),
+                  label: waTemplateForm.label.trim(),
+                  identifier: waTemplateForm.identifier.trim(),
+                  variables,
+                }]);
+                setWhatsappTemplateValidationError("");
+                setIsAddingWaTemplate(false);
+                setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
+                setWaTemplateFormErrors({});
+                toast.success("Template added");
+              }}
+            >
+              Save template
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsAddingWaTemplate(false);
+                setWaTemplateForm({ label: "", identifier: "", varCount: "0" });
+                setWaTemplateFormErrors({});
+              }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+)}
+
+                  
 
                   {/* Test Connection Status */}
                   {testConnectionStatus === "success" && (

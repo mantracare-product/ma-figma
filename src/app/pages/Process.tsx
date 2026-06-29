@@ -4750,27 +4750,28 @@ export default function Process() {
                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                           >
                                             <option value="">Select Template...</option>
-                                            <option value="Appointment Confirmation">Appointment Confirmation</option>
-                                            <option value="Post Visit Follow Up">Post Visit Follow Up</option>
-                                            <option value="Intake Form">Intake Form</option>
+                                            {(() => {
+                                              try {
+                                                const stored: Array<{ templates?: Array<{ label: string; identifier: string }> }> =
+                                                  JSON.parse(localStorage.getItem('whatsappTemplateIntegrations') || '[]');
+                                                const allTemplates: Array<{ label: string; identifier: string }> = [];
+                                                stored.forEach((integration) => {
+                                                  if (Array.isArray(integration.templates)) {
+                                                    integration.templates.forEach((t) => {
+                                                      allTemplates.push({ label: t.label, identifier: t.identifier });
+                                                    });
+                                                  }
+                                                });
+                                                return allTemplates.map(t => (
+                                                  <option key={t.identifier} value={t.identifier}>{t.label}</option>
+                                                ));
+                                              } catch {
+                                                return null;
+                                              }
+                                            })()}
                                           </select>
                                         </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Template Identifier
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={whatsappTemplateIdentifier}
-                                            onChange={e => setWhatsappTemplateIdentifier(e.target.value)}
-                                            placeholder="Enter template identifier..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                          <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            Used for template identification and analytics.
-                                          </p>
-                                        </div>
+
                                         <div>
                                           <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                             Connected Account
