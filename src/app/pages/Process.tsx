@@ -5486,22 +5486,7 @@ export default function Process() {
                                                             </option>
                                                           ))}
                                                         </select>
-                                                        <div className="flex-1 flex flex-col gap-1">
-                                                          <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-muted-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Value</span>
-                                                            <VariablePickerButton
-                                                              targetRef={{
-                                                                get current() { return webhookFieldValueRefs.current.update[idx]; }
-                                                              } as React.RefObject<HTMLInputElement>}
-                                                              value={row.value}
-                                                              onChange={(val) => {
-                                                                const newRows = [...webhookUpdateRows];
-                                                                newRows[idx] = { ...newRows[idx], value: val };
-                                                                setWebhookUpdateRows(newRows);
-                                                              }}
-                                                            />
-                                                          </div>
-                                                          <input
+                                                        <input
                                                             ref={el => { webhookFieldValueRefs.current.update[idx] = el; }}
                                                             type="text"
                                                             placeholder="Value"
@@ -5511,10 +5496,19 @@ export default function Process() {
                                                               newRows[idx] = { ...newRows[idx], value: e.target.value };
                                                               setWebhookUpdateRows(newRows);
                                                             }}
-                                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                           />
-                                                        </div>
+                                                          <VariablePickerButton
+                                                            targetRef={{ get current() { return webhookFieldValueRefs.current.update[idx]; } } as React.RefObject<HTMLInputElement>}
+                                                            value={row.value}
+                                                            onChange={(val) => {
+                                                              const newRows = [...webhookUpdateRows];
+                                                              newRows[idx] = { ...newRows[idx], value: val };
+                                                              setWebhookUpdateRows(newRows);
+                                                            }}
+                                                            label="{ }"
+                                                          />
                                                         {webhookUpdateRows.length > 1 && (
                                                           <button
                                                             type="button"
@@ -5558,22 +5552,7 @@ export default function Process() {
                                                           className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                           style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                         />
-                                                        <div className="flex-1 flex flex-col gap-1">
-                                                          <div className="flex items-center justify-between">
-                                                            <span className="text-xs text-muted-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Value</span>
-                                                            <VariablePickerButton
-                                                              targetRef={{
-                                                                get current() { return webhookFieldValueRefs.current.create[idx]; }
-                                                              } as React.RefObject<HTMLInputElement>}
-                                                              value={row.value}
-                                                              onChange={(val) => {
-                                                                const newRows = [...webhookCreateRows];
-                                                                newRows[idx] = { ...newRows[idx], value: val };
-                                                                setWebhookCreateRows(newRows);
-                                                              }}
-                                                            />
-                                                          </div>
-                                                          <input
+                                                        <input
                                                             ref={el => { webhookFieldValueRefs.current.create[idx] = el; }}
                                                             type="text"
                                                             placeholder="Value"
@@ -5583,10 +5562,19 @@ export default function Process() {
                                                               newRows[idx] = { ...newRows[idx], value: e.target.value };
                                                               setWebhookCreateRows(newRows);
                                                             }}
-                                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                           />
-                                                        </div>
+                                                          <VariablePickerButton
+                                                            targetRef={{ get current() { return webhookFieldValueRefs.current.create[idx]; } } as React.RefObject<HTMLInputElement>}
+                                                            value={row.value}
+                                                            onChange={(val) => {
+                                                              const newRows = [...webhookCreateRows];
+                                                              newRows[idx] = { ...newRows[idx], value: val };
+                                                              setWebhookCreateRows(newRows);
+                                                            }}
+                                                            label="{ }"
+                                                          />
                                                         {webhookCreateRows.length > 1 && (
                                                           <button
                                                             type="button"
@@ -5617,81 +5605,69 @@ export default function Process() {
                                                 {isReplace && (
                                                   <div className="space-y-3">
                                                     {webhookReplaceRows.map((row, idx) => (
-                                                      <div key={idx} className="flex flex-col gap-2 p-3 border border-border rounded-lg bg-muted/5">
-                                                        <div className="flex items-center gap-2">
-                                                          <select
-                                                            value={row.existingFieldKey}
-                                                            onChange={(e) => {
-                                                              const newRows = [...webhookReplaceRows];
-                                                              newRows[idx] = { ...newRows[idx], existingFieldKey: e.target.value };
-                                                              setWebhookReplaceRows(newRows);
-                                                            }}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          >
-                                                            <option value="">Select existing field...</option>
-                                                            {fieldMappings.map((f) => (
-                                                              <option key={f.key} value={f.key}>
-                                                                {f.label || f.key}
-                                                              </option>
-                                                            ))}
-                                                          </select>
-                                                          {webhookReplaceRows.length > 1 && (
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => {
-                                                                const newRows = webhookReplaceRows.filter((_, i) => i !== idx);
-                                                                setWebhookReplaceRows(newRows);
-                                                              }}
-                                                              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                                                            >
-                                                              <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                          )}
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                          <input
+                                                      <div key={idx} className="flex items-center gap-2">
+                                                        <select
+                                                          value={row.existingFieldKey}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookReplaceRows];
+                                                            newRows[idx] = { ...newRows[idx], existingFieldKey: e.target.value };
+                                                            setWebhookReplaceRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                        >
+                                                          <option value="">Select existing field...</option>
+                                                          {fieldMappings.map((f) => (
+                                                            <option key={f.key} value={f.key}>{f.label || f.key}</option>
+                                                          ))}
+                                                        </select>
+                                                        <input
+                                                          type="text"
+                                                          placeholder="New Field Name"
+                                                          value={row.newFieldName}
+                                                          onChange={(e) => {
+                                                            const newRows = [...webhookReplaceRows];
+                                                            newRows[idx] = { ...newRows[idx], newFieldName: e.target.value };
+                                                            setWebhookReplaceRows(newRows);
+                                                          }}
+                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                        />
+                                                        <input
+                                                            ref={el => { webhookFieldValueRefs.current.replace[idx] = el; }}
                                                             type="text"
-                                                            placeholder="New Field Name"
-                                                            value={row.newFieldName}
+                                                            placeholder="New Value"
+                                                            value={row.newValue}
                                                             onChange={(e) => {
                                                               const newRows = [...webhookReplaceRows];
-                                                              newRows[idx] = { ...newRows[idx], newFieldName: e.target.value };
+                                                              newRows[idx] = { ...newRows[idx], newValue: e.target.value };
                                                               setWebhookReplaceRows(newRows);
                                                             }}
                                                             className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                           />
-                                                          <div className="flex-1 flex flex-col gap-1">
-                                                            <div className="flex items-center justify-between">
-                                                              <span className="text-xs text-muted-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>New Value</span>
-                                                              <VariablePickerButton
-                                                                targetRef={{
-                                                                  get current() { return webhookFieldValueRefs.current.replace[idx]; }
-                                                                } as React.RefObject<HTMLInputElement>}
-                                                                value={row.newValue}
-                                                                onChange={(val) => {
-                                                                  const newRows = [...webhookReplaceRows];
-                                                                  newRows[idx] = { ...newRows[idx], newValue: val };
-                                                                  setWebhookReplaceRows(newRows);
-                                                                }}
-                                                              />
-                                                            </div>
-                                                            <input
-                                                              ref={el => { webhookFieldValueRefs.current.replace[idx] = el; }}
-                                                              type="text"
-                                                              placeholder="New Value"
-                                                              value={row.newValue}
-                                                              onChange={(e) => {
-                                                                const newRows = [...webhookReplaceRows];
-                                                                newRows[idx] = { ...newRows[idx], newValue: e.target.value };
-                                                                setWebhookReplaceRows(newRows);
-                                                              }}
-                                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                            />
-                                                          </div>
-                                                        </div>
+                                                          <VariablePickerButton
+                                                            targetRef={{ get current() { return webhookFieldValueRefs.current.replace[idx]; } } as React.RefObject<HTMLInputElement>}
+                                                            value={row.newValue}
+                                                            onChange={(val) => {
+                                                              const newRows = [...webhookReplaceRows];
+                                                              newRows[idx] = { ...newRows[idx], newValue: val };
+                                                              setWebhookReplaceRows(newRows);
+                                                            }}
+                                                            label="{ }"
+                                                          />
+                                                        {webhookReplaceRows.length > 1 && (
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              const newRows = webhookReplaceRows.filter((_, i) => i !== idx);
+                                                              setWebhookReplaceRows(newRows);
+                                                            }}
+                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
+                                                          >
+                                                            <Trash2 className="w-4 h-4" />
+                                                          </button>
+                                                        )}
                                                       </div>
                                                     ))}
                                                     <button
@@ -5896,22 +5872,7 @@ export default function Process() {
                                                             className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                             style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                           />
-                                                          <div className="flex-1 flex flex-col gap-1">
-                                                            <div className="flex items-center justify-between">
-                                                              <span className="text-xs text-muted-foreground font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Value</span>
-                                                              <VariablePickerButton
-                                                                targetRef={{
-                                                                  get current() { return webhookFieldValueRefs.current.create[idx]; }
-                                                                } as React.RefObject<HTMLInputElement>}
-                                                                value={row.value}
-                                                                onChange={(val) => {
-                                                                  const newRows = [...webhookCreateRows];
-                                                                  newRows[idx] = { ...newRows[idx], value: val };
-                                                                  setWebhookCreateRows(newRows);
-                                                                }}
-                                                              />
-                                                            </div>
-                                                            <input
+                                                          <input
                                                               ref={el => { webhookFieldValueRefs.current.create[idx] = el; }}
                                                               type="text"
                                                               placeholder="Value or {{variable}}"
@@ -5921,10 +5882,19 @@ export default function Process() {
                                                                 newRows[idx] = { ...newRows[idx], value: e.target.value };
                                                                 setWebhookCreateRows(newRows);
                                                               }}
-                                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                              className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
                                                               style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
                                                             />
-                                                          </div>
+                                                            <VariablePickerButton
+                                                              targetRef={{ get current() { return webhookFieldValueRefs.current.create[idx]; } } as React.RefObject<HTMLInputElement>}
+                                                              value={row.value}
+                                                              onChange={(val) => {
+                                                                const newRows = [...webhookCreateRows];
+                                                                newRows[idx] = { ...newRows[idx], value: val };
+                                                                setWebhookCreateRows(newRows);
+                                                              }}
+                                                              label="{ }"
+                                                            />
                                                           {webhookCreateRows.length > 1 && (
                                                             <button
                                                               type="button"
