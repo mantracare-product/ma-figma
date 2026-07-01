@@ -154,7 +154,80 @@ const teamMembers = [
   "Amanda Taylor",
 ];
 
+interface Deal {
+  id: string;
+  dealName: string;
+  clientName: string;
+  amount: number;
+  currency: string;
+  createdDate: string;
+  status: "In Progress" | "Won" | "Lost";
+  responsible: string;
+  stage: string;
+}
+
+const initialDeals: Deal[] = [
+  { id: "DEAL-001", dealName: "Patient Intake Package", clientName: "Sarah Johnson", amount: 25000, currency: "₹", createdDate: "2024-05-18", status: "In Progress", responsible: "John Smith", stage: "Patient Intake: Initial Contact" },
+  { id: "DEAL-002", dealName: "Insurance Verification Bundle", clientName: "Michael Chen", amount: 0, currency: "₹", createdDate: "2024-05-17", status: "In Progress", responsible: "Emily Davis", stage: "Patient Intake: Initial Contact" },
+  { id: "DEAL-003", dealName: "Wellness Program", clientName: "Priya Sharma", amount: 15000, currency: "₹", createdDate: "2024-05-16", status: "In Progress", responsible: "Sarah Johnson", stage: "Patient Intake: Initial Contact" },
+  { id: "DEAL-004", dealName: "Billing Support Plan", clientName: "Emily Davis", amount: 8500, currency: "₹", createdDate: "2024-05-15", status: "In Progress", responsible: "Robert Wilson", stage: "Patient Intake: Schedule Appointment" },
+  { id: "DEAL-005", dealName: "Follow-up Package", clientName: "Robert Wilson", amount: 12000, currency: "₹", createdDate: "2024-05-14", status: "In Progress", responsible: "Michael Chen", stage: "Patient Intake: Schedule Appointment" },
+  { id: "DEAL-006", dealName: "Annual Health Check", clientName: "James Taylor", amount: 32000, currency: "₹", createdDate: "2024-05-13", status: "In Progress", responsible: "Amanda Taylor", stage: "Payment Reminder: Billing Inquiry" },
+  { id: "DEAL-007", dealName: "Medication Management", clientName: "Rahul Patel", amount: 7500, currency: "₹", createdDate: "2024-05-12", status: "In Progress", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
+  { id: "DEAL-008", dealName: "Post-Op Care Plan", clientName: "Amanda Clark", amount: 18000, currency: "₹", createdDate: "2024-05-11", status: "In Progress", responsible: "Jessica Brown", stage: "Payment Reminder: Payment Notice" },
+  { id: "DEAL-009", dealName: "Corporate Wellness", clientName: "Lisa Anderson", amount: 85000, currency: "₹", createdDate: "2024-05-10", status: "In Progress", responsible: "John Smith", stage: "Appointment Scheduling: Slot Selection" },
+  { id: "DEAL-010", dealName: "Dental Care Package", clientName: "David Martinez", amount: 22000, currency: "₹", createdDate: "2024-05-09", status: "In Progress", responsible: "Emily Davis", stage: "Appointment Scheduling: Slot Selection" },
+  { id: "DEAL-011", dealName: "Physiotherapy Bundle", clientName: "Arjun Desai", amount: 35000, currency: "₹", createdDate: "2024-05-08", status: "In Progress", responsible: "Michael Chen", stage: "Appointment Scheduling: Confirmation" },
+  { id: "DEAL-012", dealName: "Enterprise Health Plan", clientName: "Vikram Singh", amount: 150000, currency: "₹", createdDate: "2024-05-07", status: "In Progress", responsible: "Robert Wilson", stage: "Insurance Verification: Document Check" },
+  { id: "DEAL-013", dealName: "Mental Health Support", clientName: "Deepika Nair", amount: 45000, currency: "₹", createdDate: "2024-05-06", status: "In Progress", responsible: "Sarah Johnson", stage: "Insurance Verification: Document Check" },
+  { id: "DEAL-014", dealName: "Premium Care Plan", clientName: "Charlotte Evans", amount: 95000, currency: "₹", createdDate: "2024-05-05", status: "Won", responsible: "Amanda Taylor", stage: "Appointment Scheduling: Confirmation" },
+  { id: "DEAL-015", dealName: "Specialist Consultation", clientName: "Oliver Thompson", amount: 28000, currency: "₹", createdDate: "2024-05-04", status: "Won", responsible: "David Martinez", stage: "Payment Reminder: Issue Resolution" },
+  { id: "DEAL-016", dealName: "Lab Test Bundle", clientName: "Kavya Iyer", amount: 12500, currency: "₹", createdDate: "2024-05-03", status: "Won", responsible: "John Smith", stage: "Follow-up Calls: Post-Visit Check" },
+  { id: "DEAL-017", dealName: "Ortho Care Package", clientName: "Fatima Hassan", amount: 55000, currency: "₹", createdDate: "2024-05-02", status: "Lost", responsible: "Emily Davis", stage: "Insurance Verification: Verification" },
+  { id: "DEAL-018", dealName: "Nutrition Counseling", clientName: "Youssef Said", amount: 9000, currency: "₹", createdDate: "2024-05-01", status: "Lost", responsible: "Michael Chen", stage: "Follow-up Calls: Medication Reminder" },
+];
+
+const getProcessFromDealStage = (stage: string): string => {
+  const parts = stage.split(":");
+  const mainStage = parts[0].trim();
+  const subStage = parts.length > 1 ? parts[1].trim() : "";
+
+  const standardProcesses = ["Patient Intake", "Follow-up Calls", "Billing Support", "Appointment Scheduling", "Insurance Verification"];
+  if (standardProcesses.includes(mainStage)) {
+    return mainStage;
+  }
+  if (mainStage === "Payment Reminder") {
+    return "Billing Support";
+  }
+
+  const subStageMap: Record<string, string> = {
+    'Initial Contact': 'Patient Intake',
+    'Insurance Verification': 'Patient Intake',
+    'Insurance Verify': 'Patient Intake',
+    'Schedule Appointment': 'Patient Intake',
+    'Follow-up': 'Follow-up Calls',
+    'Post-Visit Check': 'Follow-up Calls',
+    'Medication Reminder': 'Follow-up Calls',
+    'Billing Inquiry': 'Billing Support',
+    'Issue Resolution': 'Billing Support',
+    'Payment Reminder': 'Billing Support',
+    'Slot Selection': 'Appointment Scheduling',
+    'Confirmation': 'Appointment Scheduling',
+    'Document Check': 'Insurance Verification',
+    'Verification': 'Insurance Verification',
+    'Approval': 'Insurance Verification',
+  };
+  if (subStage && subStageMap[subStage]) {
+    return subStageMap[subStage];
+  }
+  if (subStageMap[mainStage]) {
+    return subStageMap[mainStage];
+  }
+  return mainStage;
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
+
 
 interface ClientProfileProps {
   clientIdProp?: string;
@@ -209,6 +282,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
+  const [processSearchQuery, setProcessSearchQuery] = useState("");
 
   // Initialize selectedProcesses and drawerProcessStages from client
   useEffect(() => {
@@ -220,9 +295,17 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         const parts = processName.split(":");
         if (parts.length >= 1) headings.add(parts[0].trim());
       });
+      const clientDeals = initialDeals.filter((d) => d.clientName === client.name);
       Array.from(headings).forEach((heading, idx) => {
-        const processId = `process-${idx + 1}`;
-        initialStages[processId] = idx === 0 ? "Insurance Verification" : "Initial Contact";
+        const matchingDeal = clientDeals.find((d) => getProcessFromDealStage(d.stage) === heading);
+        const processId = matchingDeal ? matchingDeal.id : `process-${idx + 1}`;
+        if (matchingDeal) {
+          const parts = matchingDeal.stage.split(":");
+          const stageLabel = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+          initialStages[processId] = stageLabel;
+        } else {
+          initialStages[processId] = idx === 0 ? "Insurance Verification" : "Billing Inquiry";
+        }
       });
       setDrawerProcessStages(initialStages);
     }
@@ -270,15 +353,58 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       const parts = processName.split(":");
       if (parts.length >= 1) headings.add(parts[0].trim());
     });
-    return Array.from(headings).map((heading, idx) => ({
-      id: `process-${idx + 1}`,
-      name: heading,
-      currentStage: idx === 0 ? "Insurance Verification" : "Billing Inquiry",
-      lastActivity: "Apr 10, 2024",
-      status: "In Progress" as "In Progress" | "Completed" | "Pending" | "On Hold",
-      created: idx === 0 ? "2024-03-15 09:30" : "2024-04-01 14:20",
-      responsible: idx === 0 ? "John Smith" : "Emily Davis",
-    }));
+
+    const clientDeals = initialDeals.filter((d) => d.clientName === client.name);
+
+    return Array.from(headings).map((heading, idx): {
+      id: string;
+      name: string;
+      currentStage: string;
+      lastActivity: string;
+      status: "Completed" | "In Progress" | "Pending" | "On Hold";
+      created: string;
+      responsible: string;
+      dealType: string;
+      source: string;
+    } => {
+      const matchingDeal = clientDeals.find((d) => getProcessFromDealStage(d.stage) === heading);
+
+      // Derive email-domain source from client object
+      const emailDomain = client.email ? client.email.split("@")[1] || "—" : "—";
+
+      if (matchingDeal) {
+        const parts = matchingDeal.stage.split(":");
+        const stageLabel = parts.length > 1 ? parts[1].trim() : parts[0].trim();
+
+        let statusVal: "Completed" | "In Progress" | "Pending" | "On Hold" = "In Progress";
+        if (matchingDeal.status === "Won") statusVal = "Completed";
+        else if (matchingDeal.status === "Lost") statusVal = "On Hold";
+
+        return {
+          id: matchingDeal.id,
+          name: heading,
+          currentStage: stageLabel,
+          lastActivity: "Apr 10, 2024",
+          status: statusVal,
+          created: matchingDeal.createdDate + " 00:00",
+          responsible: matchingDeal.responsible,
+          dealType: "Organic",
+          source: emailDomain,
+        };
+      } else {
+        return {
+          id: `process-${idx + 1}`,
+          name: heading,
+          currentStage: idx === 0 ? "Insurance Verification" : "Billing Inquiry",
+          lastActivity: "Apr 10, 2024",
+          status: "In Progress" as "Completed" | "In Progress" | "Pending" | "On Hold",
+          created: idx === 0 ? "2024-03-15 09:30" : "2024-04-01 14:20",
+          responsible: idx === 0 ? "John Smith" : "Emily Davis",
+          dealType: "Organic",
+          source: emailDomain,
+        };
+      }
+    });
   })();
 
   const drawerActivityItems = (() => {
@@ -918,41 +1044,284 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {activeProfileTab === "processes" && (
             <div className="space-y-4">
               {(() => {
-                const processToShow = activeProcessTabDrawer === "all" ? drawerClientProcesses[0]?.name : activeProcessTabDrawer;
-                const selectedProcess = drawerClientProcesses.find((p) => p.name === processToShow || p.id === processToShow);
-                if (!selectedProcess) {
-                  return <div className="text-center py-8 text-muted-foreground">No process selected</div>;
-                }
+                // Filter processes client-side by search query
+                const filteredProcesses = drawerClientProcesses.filter((p) =>
+                  p.name.toLowerCase().includes(processSearchQuery.toLowerCase())
+                );
 
-                const processActivities = drawerActivityItems.filter((item) => item.processId === selectedProcess.id);
-                const lastActivity = processActivities.length > 0 ? processActivities[0] : null;
+                const isAllSelected = filteredProcesses.length > 0 && filteredProcesses.every((p) => selectedProcessIds.includes(p.id));
+                const handleToggleSelectAll = () => {
+                  if (isAllSelected) {
+                    setSelectedProcessIds((prev) => prev.filter((id) => !filteredProcesses.some((fp) => fp.id === id)));
+                  } else {
+                    const newSelected = [...selectedProcessIds];
+                    filteredProcesses.forEach((p) => {
+                      if (!newSelected.includes(p.id)) {
+                        newSelected.push(p.id);
+                      }
+                    });
+                    setSelectedProcessIds(newSelected);
+                  }
+                };
 
                 return (
-                  <div
-                    key={selectedProcess.id}
-                    style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}
-                  >
-                    <div className="p-5 space-y-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1">
-                          <h3 style={{ fontFamily: "DM Sans, sans-serif", fontSize: "16px", fontWeight: "bold", color: "#1F2937", marginBottom: "8px" }}>
-                            {selectedProcess.name}
-                          </h3>
-                        </div>
+                  <div className="space-y-3">
+                    {/* Search bar — right-aligned, no redundant label */}
+                    <div className="flex items-center justify-end px-1">
+                      <div className="relative w-52">
+                        <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5" style={{ color: "#9CA3AF" }} />
+                        <input
+                          type="text"
+                          placeholder="Search process..."
+                          value={processSearchQuery}
+                          onChange={(e) => setProcessSearchQuery(e.target.value)}
+                          className="pl-8 pr-3 py-1.5 w-full text-xs bg-white border rounded-lg focus:outline-none transition-colors"
+                          style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937", borderColor: "#E5E7EB" }}
+                          onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                          onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Table View */}
+                    <div style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}>
+                      <div className="overflow-x-auto">
+                        <table className="text-left border-collapse" style={{ fontFamily: "Outfit, sans-serif", minWidth: "960px", width: "100%" }}>
+                          <thead>
+                            <tr style={{ backgroundColor: "#F8FAFC", borderBottom: "1px solid #E5E7EB" }}>
+                              {/* Checkbox */}
+                              <th className="px-3 py-2.5 w-10 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isAllSelected}
+                                  onChange={handleToggleSelectAll}
+                                  className="rounded border-gray-300"
+                                  style={{ accentColor: "#4F8EF7" }}
+                                />
+                              </th>
+                              {/* Process / Deal */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "180px" }}>Process / Deal</th>
+                              {/* Stage */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "220px" }}>Stage</th>
+                              {/* Deal Type */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "110px" }}>Deal Type</th>
+                              {/* Source */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "130px" }}>Source</th>
+                              {/* Status */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "120px" }}>Status</th>
+                              {/* Created */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "140px" }}>Created</th>
+                              {/* Responsible */}
+                              <th className="px-3 py-2.5 text-xs font-bold uppercase tracking-wider whitespace-nowrap" style={{ fontFamily: "DM Sans, sans-serif", color: "#9CA3AF", minWidth: "140px" }}>Responsible</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredProcesses.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} style={{ padding: "24px", textAlign: "center", fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                                  No processes found
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredProcesses.map((process, pIdx) => {
+                                const isSelected = selectedProcessIds.includes(process.id);
+                                const isCurrentRowActive = activeProcessTabDrawer === process.id;
+
+                                // Derive stages
+                                const currentStage = drawerProcessStages[process.id] || process.currentStage;
+                                const stages = getStagesForProcess(process.name);
+                                const currentIndex = stages.findIndex((s) => s.label === currentStage);
+
+                                // Format Code
+                                const processCode = `PRC-${client.id}-${pIdx + 1}`;
+
+                                // Avatar initials
+                                const initials = process.responsible
+                                  ? process.responsible.split(" ").map((n) => n[0]).join("")
+                                  : "JS";
+
+                                const rowBg = isCurrentRowActive ? "#F1F5F9" : isSelected ? "#F8FAFC" : "#FFFFFF";
+
+                                return (
+                                  <tr
+                                    key={process.id}
+                                    onClick={() => setActiveProcessTabDrawer(isCurrentRowActive ? "all" : process.id)}
+                                    className="transition-colors border-b cursor-pointer"
+                                    style={{
+                                      backgroundColor: rowBg,
+                                      borderColor: "#F3F4F6",
+                                      fontFamily: "Outfit, sans-serif",
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      if (!isCurrentRowActive) e.currentTarget.style.backgroundColor = "#F1F5F9";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      if (!isCurrentRowActive) e.currentTarget.style.backgroundColor = rowBg;
+                                    }}
+                                  >
+                                    {/* Checkbox */}
+                                    <td
+                                      className="px-3 text-center"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {
+                                          setSelectedProcessIds((prev) =>
+                                            prev.includes(process.id) ? prev.filter((id) => id !== process.id) : [...prev, process.id]
+                                          );
+                                        }}
+                                        className="rounded border-gray-300"
+                                        style={{ accentColor: "#4F8EF7" }}
+                                      />
+                                    </td>
+                                    {/* Process / Deal */}
+                                    <td className="px-3">
+                                      <div className="flex flex-col" style={{ maxWidth: "172px" }}>
+                                        <span
+                                          title={process.name}
+                                          className="hover:underline overflow-hidden text-ellipsis whitespace-nowrap"
+                                          style={{ color: "#4F8EF7", fontWeight: "600", fontFamily: "DM Sans, sans-serif", fontSize: "13px" }}
+                                        >
+                                          {process.name}
+                                        </span>
+                                        <span className="whitespace-nowrap" style={{ fontSize: "11px", color: "#9CA3AF" }}>{processCode}</span>
+                                      </div>
+                                    </td>
+                                    {/* Stage */}
+                                    <td className="px-3" onClick={(e) => e.stopPropagation()}>
+                                      <div className="flex flex-col gap-1">
+                                        <div className="flex items-center" style={{ gap: "3px" }}>
+                                          {stages.map((stage, sIdx) => {
+                                            const isFilled = sIdx <= currentIndex;
+                                            const stageKey = `${process.id}-${sIdx}`;
+                                            return (
+                                              <div key={stage.id} style={{ position: "relative" }}>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setDrawerProcessStages((prev) => ({ ...prev, [process.id]: stage.label }));
+                                                    toast.success(`Stage updated to ${stage.label}`);
+                                                  }}
+                                                  onMouseEnter={() => setHoveredStage(stageKey)}
+                                                  onMouseLeave={() => setHoveredStage(null)}
+                                                  style={{
+                                                    width: "22px",
+                                                    height: "6px",
+                                                    borderRadius: "1.5px",
+                                                    backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB",
+                                                    border: isFilled ? "none" : "1px solid #D1D5DB",
+                                                    cursor: "pointer",
+                                                    transition: "all 0.2s",
+                                                    padding: 0,
+                                                  }}
+                                                  className="hover:opacity-80"
+                                                />
+                                                {hoveredStage === stageKey && (
+                                                  <div style={{ position: "absolute", bottom: "12px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "10px", borderRadius: "4px", padding: "2px 6px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
+                                                    {stage.label}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                        <span style={{ fontSize: "11px", color: "#9CA3AF", fontFamily: "Outfit, sans-serif", fontWeight: 400 }}>{currentStage}</span>
+                                      </div>
+                                    </td>
+                                    {/* Deal Type */}
+                                    <td className="px-3">
+                                      <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                        {process.dealType}
+                                      </span>
+                                    </td>
+                                    {/* Source */}
+                                    <td className="px-3">
+                                      <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                                        {process.source}
+                                      </span>
+                                    </td>
+                                    {/* Status */}
+                                    <td className="px-3">
+                                      <span
+                                        className="px-2.5 py-1 rounded-full text-xs font-medium border whitespace-nowrap"
+                                        style={{
+                                          backgroundColor: process.status === "Completed" ? "#D1FAE5" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                                          color: process.status === "Completed" ? "#065F46" : process.status === "In Progress" ? "#C2410C" : process.status === "Pending" ? "#92400E" : "#6B7280",
+                                          borderColor: process.status === "Completed" ? "#A7F3D0" : process.status === "In Progress" ? "#FED7AA" : process.status === "Pending" ? "#FDE68A" : "#E5E7EB",
+                                        }}
+                                      >
+                                        {process.status}
+                                      </span>
+                                    </td>
+                                    {/* Created */}
+                                    <td className="px-3">
+                                      <span className="whitespace-nowrap" style={{ fontSize: "12px", color: "#6B7280" }}>{process.created}</span>
+                                    </td>
+                                    {/* Responsible */}
+                                    <td className="px-3">
+                                      <div className="flex items-center gap-2">
+                                        <div
+                                          className="flex items-center justify-center rounded-full text-xs font-semibold"
+                                          style={{ width: "26px", height: "26px", backgroundColor: "#EBF4FF", color: "#4F8EF7", fontFamily: "DM Sans, sans-serif", flexShrink: 0 }}
+                                        >
+                                          {initials}
+                                        </div>
+                                        <span className="whitespace-nowrap" style={{ fontSize: "13px", color: "#1F2937", fontWeight: "500" }}>{process.responsible}</span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
                       </div>
 
-                      {/* STAGE */}
-                      <div className="flex flex-col gap-1.5">
-                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                          STAGE
-                        </label>
-                        <div className="flex items-center gap-3">
-                          {(() => {
-                            const currentStage = drawerProcessStages[selectedProcess.id] || selectedProcess.currentStage;
-                            const stages = getStagesForProcess(selectedProcess.name);
-                            const currentIndex = stages.findIndex((s) => s.label === currentStage);
-                            return (
-                              <>
+                      {/* Footer */}
+                      <div style={{ padding: "10px 16px", backgroundColor: "#F8FAFC", borderTop: "1px solid #E5E7EB", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "12px", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                        <div>
+                          Selected: <span style={{ fontWeight: "600", color: "#1F2937" }}>{selectedProcessIds.length}</span> / <span style={{ fontWeight: "600", color: "#1F2937" }}>{filteredProcesses.length}</span>
+                        </div>
+                        <div>
+                          Total {filteredProcesses.length} {filteredProcesses.length === 1 ? "entry" : "entries"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Single Process Detail View (Expanded below) */}
+                    {activeProcessTabDrawer !== "all" && (() => {
+                      const selectedProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
+                      if (!selectedProcess) return null;
+
+                      const processActivities = drawerActivityItems.filter((item) => item.processId === selectedProcess.id);
+                      const lastActivity = processActivities.length > 0 ? processActivities[0] : null;
+                      const currentStage = drawerProcessStages[selectedProcess.id] || selectedProcess.currentStage;
+                      const stages = getStagesForProcess(selectedProcess.name);
+                      const currentIndex = stages.findIndex((s) => s.label === currentStage);
+
+                      return (
+                        <div
+                          key={selectedProcess.id}
+                          style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}
+                          className="mt-4"
+                        >
+                          <div className="p-5 space-y-4">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex-1">
+                                <h3 style={{ fontFamily: "DM Sans, sans-serif", fontSize: "16px", fontWeight: "bold", color: "#1F2937", marginBottom: "8px" }}>
+                                  {selectedProcess.name} Details
+                                </h3>
+                              </div>
+                            </div>
+
+                            {/* STAGE */}
+                            <div className="flex flex-col gap-1.5">
+                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
+                                STAGE
+                              </label>
+                              <div className="flex items-center gap-3">
                                 <div className="flex items-center" style={{ gap: "4px" }}>
                                   {stages.map((stage, index) => {
                                     const isFilled = index <= currentIndex;
@@ -960,7 +1329,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     return (
                                       <div key={stage.id} style={{ position: "relative" }}>
                                         <button
-                                          onClick={() => { setDrawerProcessStages((prev) => ({ ...prev, [selectedProcess.id]: stage.label })); toast.success(`Stage updated to ${stage.label}`); }}
+                                          type="button"
+                                          onClick={() => {
+                                            setDrawerProcessStages((prev) => ({ ...prev, [selectedProcess.id]: stage.label }));
+                                            toast.success(`Stage updated to ${stage.label}`);
+                                          }}
                                           onMouseEnter={() => setHoveredStage(stageKey)}
                                           onMouseLeave={() => setHoveredStage(null)}
                                           style={{ width: "28px", height: "8px", borderRadius: "2px", backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB", border: isFilled ? "none" : "1px solid #D1D5DB", cursor: "pointer", transition: "all 0.2s", padding: 0 }}
@@ -978,111 +1351,111 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 <span style={{ fontSize: "14px", fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
                                   {currentStage}
                                 </span>
-                              </>
-                            );
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* STATUS */}
-                      <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                          STATUS
-                        </label>
-                        <div className="relative inline-block" style={{ width: "fit-content" }}>
-                          <button
-                            className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
-                            style={{
-                              backgroundColor: selectedProcess.status === "Completed" ? "#D1FAE5" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
-                              color: selectedProcess.status === "Completed" ? "#065F46" : selectedProcess.status === "In Progress" ? "#C2410C" : selectedProcess.status === "Pending" ? "#92400E" : "#6B7280",
-                              border: `1px solid ${selectedProcess.status === "Completed" ? "#A7F3D0" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FDE68A" : "#E5E7EB"}`,
-                              fontFamily: "Outfit, sans-serif",
-                            }}
-                          >
-                            {selectedProcess.status} <ChevronDown className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* DATE and TIME */}
-                      <div className="border-t border-border pt-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                        <div className="flex flex-col gap-1.5">
-                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>DATE</label>
-                          <input
-                            type="date"
-                            defaultValue="2024-03-15"
-                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>TIME</label>
-                          <input
-                            type="time"
-                            defaultValue="09:30"
-                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                          />
-                        </div>
-                      </div>
-
-                      {/* RESPONSIBLE */}
-                      <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                        <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>RESPONSIBLE</label>
-                        <div className="relative inline-block" style={{ width: "fit-content" }}>
-                          <button className="text-sm text-foreground hover:text-primary flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
-                            {selectedProcess.responsible || "John Smith"} <ChevronDown className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* LAST ACTIVITY */}
-                      {lastActivity && (
-                        <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>LAST ACTIVITY</label>
-                          <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
-                            <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "16px", rowGap: "8px", fontSize: "12px" }}>
-                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Date & Time:</div>
-                              <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{lastActivity.date} at {lastActivity.time}</div>
-
-                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Created By:</div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <div style={{ width: "20px", height: "20px", backgroundColor: "#4F8EF7", color: "#FFFFFF", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "bold", fontFamily: "DM Sans, sans-serif" }}>
-                                  {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI" : "JS"}
-                                </div>
-                                <span style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                  {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI Agent" : "John Smith"}
-                                </span>
-                              </div>
-
-                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Event Type:</div>
-                              <div>
-                                <span style={{
-                                  padding: "2px 8px",
-                                  borderRadius: "4px",
-                                  fontSize: "10px",
-                                  fontWeight: "700",
-                                  backgroundColor: lastActivity.type === "stage_change" ? "#4F8EF7" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "#10B981" : "#F59E0B",
-                                  color: "#FFFFFF",
-                                  fontFamily: "Outfit, sans-serif",
-                                }}>
-                                  {lastActivity.type === "stage_change" ? "Stage changed" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Activity created" : "Call scheduled"}
-                                </span>
-                              </div>
-
-                              <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Description:</div>
-                              <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                {(lastActivity as any).description || (lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Contact customer: Call for update" : "New → Can't Contact")}
                               </div>
                             </div>
+
+                            {/* STATUS */}
+                            <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
+                                STATUS
+                              </label>
+                              <div className="relative inline-block" style={{ width: "fit-content" }}>
+                                <button
+                                  className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
+                                  style={{
+                                    backgroundColor: selectedProcess.status === "Completed" ? "#D1FAE5" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
+                                    color: selectedProcess.status === "Completed" ? "#065F46" : selectedProcess.status === "In Progress" ? "#C2410C" : selectedProcess.status === "Pending" ? "#92400E" : "#6B7280",
+                                    border: `1px solid ${selectedProcess.status === "Completed" ? "#A7F3D0" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FDE68A" : "#E5E7EB"}`,
+                                    fontFamily: "Outfit, sans-serif",
+                                  }}
+                                >
+                                  {selectedProcess.status} <ChevronDown className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* DATE and TIME */}
+                            <div className="border-t border-border pt-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                              <div className="flex flex-col gap-1.5">
+                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>DATE</label>
+                                <input
+                                  type="date"
+                                  defaultValue={selectedProcess.created.split(" ")[0]}
+                                  className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                                  style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                                  onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                                  onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                                />
+                              </div>
+                              <div className="flex flex-col gap-1.5">
+                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>TIME</label>
+                                <input
+                                  type="time"
+                                  defaultValue={selectedProcess.created.split(" ")[1] || "09:30"}
+                                  className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                                  style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                                  onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                                  onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                                />
+                              </div>
+                            </div>
+
+                            {/* RESPONSIBLE */}
+                            <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>RESPONSIBLE</label>
+                              <div className="relative inline-block" style={{ width: "fit-content" }}>
+                                <button className="text-sm text-foreground hover:text-primary flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                                  {selectedProcess.responsible || "John Smith"} <ChevronDown className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* LAST ACTIVITY */}
+                            {lastActivity && (
+                              <div className="flex flex-col gap-1.5 border-t border-border pt-4">
+                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>LAST ACTIVITY</label>
+                                <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
+                                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "16px", rowGap: "8px", fontSize: "12px" }}>
+                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Date & Time:</div>
+                                    <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{lastActivity.date} at {lastActivity.time}</div>
+
+                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Created By:</div>
+                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                      <div style={{ width: "20px", height: "20px", backgroundColor: "#4F8EF7", color: "#FFFFFF", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "bold", fontFamily: "DM Sans, sans-serif" }}>
+                                        {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI" : "JS"}
+                                      </div>
+                                      <span style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                        {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI Agent" : "John Smith"}
+                                      </span>
+                                    </div>
+
+                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Event Type:</div>
+                                    <div>
+                                      <span style={{
+                                        padding: "2px 8px",
+                                        borderRadius: "4px",
+                                        fontSize: "10px",
+                                        fontWeight: "700",
+                                        backgroundColor: lastActivity.type === "stage_change" ? "#4F8EF7" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "#10B981" : "#F59E0B",
+                                        color: "#FFFFFF",
+                                        fontFamily: "Outfit, sans-serif",
+                                      }}>
+                                        {lastActivity.type === "stage_change" ? "Stage changed" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Activity created" : "Call scheduled"}
+                                      </span>
+                                    </div>
+
+                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Description:</div>
+                                    <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                                      {(lastActivity as any).description || (lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Contact customer: Call for update" : "New → Can't Contact")}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
                 );
               })()}

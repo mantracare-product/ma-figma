@@ -314,12 +314,6 @@ export default function Clients() {
   const [responsibleSearch, setResponsibleSearch] = useState("");
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("All");
 
-  // New Filter Popup State
-  const [showFilterPopup, setShowFilterPopup] = useState(false);
-  const [filterCreatedWithin, setFilterCreatedWithin] = useState("Any date");
-  const [filterProcess, setFilterProcess] = useState("All Processes");
-  const [filterStatus, setFilterStatus] = useState("All Status");
-  const filterButtonRef = useRef<HTMLButtonElement>(null);
 
   // Bulk action modals
   const [showTriggerCallsModal, setShowTriggerCallsModal] = useState(false);
@@ -449,31 +443,13 @@ export default function Clients() {
       if (showAddFieldPopup && !target.closest('.add-field-popup-container') && !target.closest('.add-field-button')) {
         setShowAddFieldPopup(false);
       }
-      // Close filter popup when clicking outside
-      if (showFilterPopup && !target.closest('.filter-popup-container') && !target.closest('.filter-button-container')) {
-        setShowFilterPopup(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup, showFilterPopup]);
-
-  // Handle Escape key for filter popup
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && showFilterPopup) {
-        setShowFilterPopup(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [showFilterPopup]);
+  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup]);
 
   // Check if table needs horizontal scroll
   useEffect(() => {
@@ -1307,40 +1283,7 @@ export default function Clients() {
       }
     })();
 
-    // New Filter Popup filters
-    // Created within filter (using lastContact as a proxy for creation date)
-    const matchesCreatedWithin = filterCreatedWithin === "Any date" || (() => {
-      const contactDate = new Date(client.lastContact);
-      const today = new Date();
-
-      switch (filterCreatedWithin) {
-        case "Today":
-          return contactDate.toDateString() === today.toDateString();
-        case "Last 7 days":
-          const sevenDaysAgo = new Date(today);
-          sevenDaysAgo.setDate(today.getDate() - 7);
-          return contactDate >= sevenDaysAgo;
-        case "Last 30 days":
-          const thirtyDaysAgo = new Date(today);
-          thirtyDaysAgo.setDate(today.getDate() - 30);
-          return contactDate >= thirtyDaysAgo;
-        case "Last 3 months":
-          const threeMonthsAgo = new Date(today);
-          threeMonthsAgo.setMonth(today.getMonth() - 3);
-          return contactDate >= threeMonthsAgo;
-        default:
-          return true;
-      }
-    })();
-
-    // Process filter from popup
-    const matchesFilterProcess = filterProcess === "All Processes" ||
-      client.processes?.includes(filterProcess);
-
-    // Status filter from popup
-    const matchesFilterStatus = filterStatus === "All Status" || client.status === filterStatus;
-
-    return matchesSearch && matchesName && matchesStatus && matchesProcess && matchesResponsible && matchesLastContact && matchesCreatedWithin && matchesFilterProcess && matchesFilterStatus;
+    return matchesSearch && matchesName && matchesStatus && matchesProcess && matchesResponsible && matchesLastContact;
   });
 
   const totalPages = Math.ceil(totalRecords / rowsPerPage);
@@ -2037,19 +1980,6 @@ export default function Clients() {
             )}
           </div>
 
-          <div className="filter-button-container relative">
-            <Tooltip text="Filter">
-              <Button
-                ref={filterButtonRef}
-                variant="outline"
-                onClick={() => setShowFilterPopup(!showFilterPopup)}
-                className="relative"
-              >
-                <Filter className="w-4 h-4" />
-              </Button>
-            </Tooltip>
-          </div>
-
           <Tooltip text="Add Client">
             <Button variant="primary" onClick={() => setShowAddModal(true)}>
               <Plus className="w-4 h-4" />
@@ -2070,104 +2000,6 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* Filter Popup */}
-      {showFilterPopup && (
-        <div
-          className="filter-popup-container fixed bg-white border border-border rounded-lg shadow-xl p-4 z-50"
-          style={{
-            top: filterButtonRef.current ? filterButtonRef.current.getBoundingClientRect().bottom + 8 : 0,
-            right: filterButtonRef.current ? window.innerWidth - filterButtonRef.current.getBoundingClientRect().right : 0,
-            width: '320px',
-            borderColor: '#E2E8F0',
-            boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-          }}
-        >
-          {/* Title */}
-          <h3 className="text-sm font-semibold mb-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
-            Filters
-          </h3>
-
-          {/* Created within dropdown */}
-          <div className="mb-3">
-            <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-              Created within
-            </label>
-            <select
-              value={filterCreatedWithin}
-              onChange={(e) => setFilterCreatedWithin(e.target.value)}
-              className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-              style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-            >
-              <option>Any date</option>
-              <option>Today</option>
-              <option>Last 7 days</option>
-              <option>Last 30 days</option>
-              <option>Last 3 months</option>
-              <option>Custom range</option>
-            </select>
-          </div>
-
-          {/* Process dropdown */}
-          <div className="mb-3">
-            <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-              Process
-            </label>
-            <select
-              value={filterProcess}
-              onChange={(e) => setFilterProcess(e.target.value)}
-              className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-              style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-            >
-              <option>All Processes</option>
-              {availableProcesses.map((process) => (
-                <option key={process}>{process}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status dropdown */}
-          <div className="mb-4">
-            <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-              Status
-            </label>
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-              style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-            >
-              <option>All Status</option>
-              <option>Active</option>
-              <option>Inactive</option>
-            </select>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setFilterCreatedWithin("Any date");
-                setFilterProcess("All Processes");
-                setFilterStatus("All Status");
-              }}
-              className="flex-1"
-            >
-              Reset
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                setShowFilterPopup(false);
-                toast.success('Filters applied');
-              }}
-              className="flex-1"
-            >
-              Apply
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Filter Panel */}
       {showFilterPanel && (

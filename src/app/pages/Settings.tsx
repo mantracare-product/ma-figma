@@ -59,7 +59,6 @@ import {
   ClipboardList,
   MessageCircle,
   Zap,
-  MessagesSquare,
   PhoneOff,
   Ban,
 } from "lucide-react";
@@ -871,11 +870,6 @@ export default function Settings() {
   const [selectedAuditLog, setSelectedAuditLog] = useState<any>(null);
 
   // Security State
-  const [smsBotSpamPhrases, setSmsBotSpamPhrases] = useState<Array<{ id: number; phrase: string; enabled: boolean }>>([
-    { id: 1, phrase: "", enabled: true }
-  ]);
-  const [smsBotSpammersEnabled, setSmsBotSpammersEnabled] = useState(true);
-  const [smsBotSpammersExpanded, setSmsBotSpammersExpanded] = useState(false);
 
   const [roboCallDetectionEnabled, setRoboCallDetectionEnabled] = useState(true);
   const [roboCallDetectionExpanded, setRoboCallDetectionExpanded] = useState(false);
@@ -6145,101 +6139,6 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                   title="Security"
                   subtitle="Configure security and spam protection settings."
                 />
-
-                {/* SMS Bot Spammers Section */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <div
-                    className="flex items-center justify-between p-4 hover:bg-muted/10 cursor-pointer transition-colors"
-                    onClick={() => {
-                      if (smsBotSpammersExpanded) {
-                        setSmsBotSpammersExpanded(false);
-                      }
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <MessagesSquare className="w-5 h-5 text-primary" />
-                      <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>SMS Bot Spammers</span>
-                      <Tooltip text="Block spam SMS messages by defining phrases that trigger automatic filtering.">
-                        <Info className="w-4 h-4 text-muted-foreground" />
-                      </Tooltip>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <Switch checked={smsBotSpammersEnabled} onCheckedChange={setSmsBotSpammersEnabled} />
-                      </div>
-                      <ChevronDown
-                        className={`w-5 h-5 text-muted-foreground transition-transform cursor-pointer ${smsBotSpammersExpanded ? "rotate-180" : ""
-                          }`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSmsBotSpammersExpanded(!smsBotSpammersExpanded);
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {smsBotSpammersExpanded && (
-                    <div className="border-t border-border p-4 space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>SMS Spam Phrases</span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setSmsBotSpamPhrases([
-                              ...smsBotSpamPhrases,
-                              { id: Date.now(), phrase: "", enabled: true }
-                            ]);
-                          }}
-                        >
-                          <Plus className="w-4 h-4 mr-1" />
-                          Add Phrase
-                        </Button>
-                      </div>
-
-                      {smsBotSpamPhrases.map((item) => (
-                        <div key={item.id} className="flex items-center gap-3 p-3 border border-border rounded-lg">
-                          <Input
-                            value={item.phrase}
-                            onChange={(e) => {
-                              setSmsBotSpamPhrases(smsBotSpamPhrases.map(p =>
-                                p.id === item.id ? { ...p, phrase: e.target.value } : p
-                              ));
-                            }}
-                            placeholder="Enter spam phrase to block"
-                            className="flex-1"
-                          />
-                          <Switch
-                            checked={item.enabled}
-                            onCheckedChange={(checked) => {
-                              setSmsBotSpamPhrases(smsBotSpamPhrases.map(p =>
-                                p.id === item.id ? { ...p, enabled: checked } : p
-                              ));
-                            }}
-                          />
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setSmsBotSpamPhrases(smsBotSpamPhrases.filter(p => p.id !== item.id));
-                            }}
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-
-                      <div className="flex justify-end">
-                        <Button
-                          className="bg-blue-600 text-white hover:bg-blue-700 rounded-lg px-4 py-2 text-sm"
-                          onClick={() => toast.success("SMS Bot Spammer phrases saved")}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
                 {/* Robo Call Detection Section */}
                 <div className="bg-white rounded-xl border border-border overflow-hidden">

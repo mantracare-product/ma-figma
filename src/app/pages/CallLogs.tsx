@@ -2098,7 +2098,7 @@ export default function CallLogs() {
                     backgroundColor: activeDrawerTab === "review" ? "#FFFFFF" : undefined,
                   }}
                 >
-                  Review
+                  Feedback
                 </button>
               </div>
             </div>
@@ -2207,8 +2207,8 @@ export default function CallLogs() {
                     <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
                       <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Transcript</h2>
 
-                      {/* Speed Controls and Rating */}
-                      <div className="flex items-center justify-between mb-4">
+                      {/* Speed Controls */}
+                      <div className="flex items-center mb-4">
                         {/* Playback Speed */}
                         <div className="flex items-center gap-2">
                           {[1, 1.25, 1.5, 2].map((speed) => (
@@ -2224,11 +2224,6 @@ export default function CallLogs() {
                               {speed}x
                             </button>
                           ))}
-                        </div>
-
-                        {/* Star Rating */}
-                        <div className="flex gap-1">
-                          {renderStars()}
                         </div>
                       </div>
 
@@ -2726,6 +2721,22 @@ export default function CallLogs() {
                   {/* Rating & Feedback Card */}
                   <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
                     <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Rating & Feedback</h2>
+                    
+                    <div
+                      className="flex items-start gap-3 p-4 rounded-xl mb-4"
+                      style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}
+                    >
+                      <Star className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: '#1A73E8' }} />
+                      <div>
+                        <p className="text-sm font-medium" style={{ color: '#1E3A8A', fontFamily: 'Outfit, sans-serif' }}>
+                          Rate this call
+                        </p>
+                        <p className="text-xs mt-0.5" style={{ color: '#1E40AF', fontFamily: 'Outfit, sans-serif' }}>
+                          Your feedback helps improve future AI-driven conversations and call quality.
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="space-y-4">
                       <div>
                         <p className="text-sm mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Rating</p>

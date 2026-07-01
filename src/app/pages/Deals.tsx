@@ -1465,44 +1465,18 @@ export default function Deals() {
             </div>
 
             {/* Import Button */}
-            <button
-              onClick={() => setShowImportModal(true)}
-              className="flex items-center gap-2 px-3 border rounded-lg transition-colors"
-              style={{
-                height: '36px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: '#1a56db',
-                borderColor: '#1a56db',
-                borderWidth: '0.5px',
-                borderRadius: '8px',
-                backgroundColor: 'transparent'
-              }}
-            >
-              <Upload className="w-4 h-4" />
-              Import
-            </button>
+            <Tooltip text="Import">
+              <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                <Upload className="w-4 h-4" />
+              </Button>
+            </Tooltip>
 
             {/* Export Button */}
-            <button
-              onClick={handleExport}
-              disabled={isExporting}
-              className="flex items-center gap-2 px-3 border rounded-lg transition-colors"
-              style={{
-                height: '36px',
-                fontSize: '13px',
-                fontWeight: 500,
-                color: '#1a56db',
-                borderColor: '#1a56db',
-                borderWidth: '0.5px',
-                borderRadius: '8px',
-                backgroundColor: 'transparent',
-                opacity: isExporting ? 0.5 : 1
-              }}
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+            <Tooltip text="Export">
+              <Button variant="outline" onClick={handleExport} loading={isExporting}>
+                <Download className="w-4 h-4" />
+              </Button>
+            </Tooltip>
           </div>
         </div>
 
@@ -2803,8 +2777,8 @@ export default function Deals() {
                     <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
                       <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Transcript</h2>
 
-                      {/* Speed Controls and Rating */}
-                      <div className="flex items-center justify-between mb-4">
+                      {/* Speed Controls */}
+                      <div className="flex items-center mb-4">
                         {/* Playback Speed */}
                         <div className="flex items-center gap-2">
                           {[1, 1.25, 1.5, 2].map((speed) => (
@@ -2820,11 +2794,6 @@ export default function Deals() {
                               {speed}x
                             </button>
                           ))}
-                        </div>
-
-                        {/* Star Rating */}
-                        <div className="flex gap-1">
-                          {renderStars()}
                         </div>
                       </div>
 
