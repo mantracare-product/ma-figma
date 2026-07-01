@@ -833,6 +833,17 @@ export default function Process() {
     { id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }
   ]);
   const [conditionOperators, setConditionOperators] = useState<Array<"AND" | "OR">>([]);
+
+  // In-Call split condition groups
+  const [fieldConditions, setFieldConditions] = useState<Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>>([]);
+  const [fieldConditionOperators, setFieldConditionOperators] = useState<Array<"AND" | "OR">>([]);
+  const [fieldConditionsGroupExpanded, setFieldConditionsGroupExpanded] = useState(true);
+  const [fieldExpandedCardIndex, setFieldExpandedCardIndex] = useState<number | null>(null);
+  const [intentConditions, setIntentConditions] = useState<Array<{ id: string; value: string }>>([]);
+  const [intentConditionOperators, setIntentConditionOperators] = useState<Array<"AND" | "OR">>([]);
+  const [intentConditionsGroupExpanded, setIntentConditionsGroupExpanded] = useState(true);
+  const [intentExpandedCardIndex, setIntentExpandedCardIndex] = useState<number | null>(null);
+  const [intentInput, setIntentInput] = useState("");
   const [stepDetailProcess, setStepDetailProcess] = useState<string>("Select process...");
   const [stepDetailStage, setStepDetailStage] = useState<string>("Select stage...");
   const [movementTargetExpanded, setMovementTargetExpanded] = useState(true);
@@ -1005,6 +1016,15 @@ export default function Process() {
     setDelayUnit("Minute");
     setConditions([{ id: "cond-1", fieldSource: "", field: "", operator: "", value: "" }]);
     setConditionOperators([]);
+    setFieldConditions([]);
+    setFieldConditionOperators([]);
+    setFieldConditionsGroupExpanded(true);
+    setFieldExpandedCardIndex(null);
+    setIntentConditions([]);
+    setIntentConditionOperators([]);
+    setIntentConditionsGroupExpanded(true);
+    setIntentExpandedCardIndex(null);
+    setIntentInput("");
     setStepDetailProcess("Select process...");
     setStepDetailStage("Select stage...");
     setFieldUpdateBlocks([
@@ -4829,139 +4849,474 @@ export default function Process() {
                                     <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                       This step will only execute when all specified conditions are met.
                                     </p>
-                                    {conditions.map((cond, index) => (
-                                      <React.Fragment key={cond.id}>
-                                        <div className="border border-border rounded-lg overflow-hidden bg-white">
-                                          {/* Card Header */}
-                                          <div
-                                            onClick={() => setExpandedConditionIndex(expandedConditionIndex === index ? null : index)}
-                                            className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
+                                    {stepTrigger === "incall" ? (
+                                      <div className="space-y-4">
+                                        {/* Section A: Field Conditions */}
+                                        <div className="rounded-lg border border-border overflow-hidden bg-white">
+                                          <button
+                                            onClick={() => setFieldConditionsGroupExpanded(!fieldConditionsGroupExpanded)}
+                                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors"
                                           >
-                                            <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
-                                            </span>
                                             <div className="flex items-center gap-2">
-                                              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedConditionIndex === index ? "rotate-180" : ""}`} />
-                                              {conditions.length > 1 && (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const updated = conditions.filter(c => c.id !== cond.id);
-                                                    setConditions(updated);
-                                                    setConditionOperators(prev => prev.filter((_, i) => i !== index));
-                                                    if (expandedConditionIndex === index) {
-                                                      setExpandedConditionIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
-                                                    } else if (expandedConditionIndex !== null && expandedConditionIndex > index) {
-                                                      setExpandedConditionIndex(expandedConditionIndex - 1);
-                                                    }
-                                                  }}
-                                                  className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
-                                                >
-                                                  <Trash2 className="w-4 h-4 text-red-500" />
-                                                </button>
+                                              <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Field Conditions
+                                              </span>
+                                              {fieldConditions.length > 0 && (
+                                                <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
+                                                  {fieldConditions.length}
+                                                </span>
                                               )}
                                             </div>
-                                          </div>
+                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldConditionsGroupExpanded ? 'rotate-180' : ''}`} />
+                                          </button>
 
-                                          {/* Card Body */}
-                                          {expandedConditionIndex === index && (
-                                            <div className="border-t border-border p-4 space-y-4 bg-white">
-                                              <div className="flex items-start gap-2">
-                                                <select
-                                                  value={cond.fieldSource || ""}
-                                                  onChange={e => setConditions(prev => prev.map(c =>
-                                                    c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
-                                                  ))}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option value="">Source</option>
-                                                  {FETCH_FIELD_SOURCES.map(src => (
-                                                    <option key={src.value} value={src.value}>{src.label}</option>
-                                                  ))}
-                                                </select>
-                                                <select
-                                                  value={cond.field}
-                                                  onChange={e => setConditions(prev => prev.map(c =>
-                                                    c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
-                                                  ))}
-                                                  disabled={!cond.fieldSource}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option value="">Field</option>
-                                                  {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
-                                                    <option key={f.value} value={f.value}>{f.label}</option>
-                                                  ))}
-                                                </select>
-                                                <select
-                                                  value={cond.operator}
-                                                  onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))}
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
-                                                    <option key={o}>{o}</option>
-                                                  ))}
-                                                </select>
-                                              </div>
-                                              <input
-                                                type="text"
-                                                value={cond.value}
-                                                onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))}
-                                                placeholder="Enter value..."
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
+                                          {fieldConditionsGroupExpanded && (
+                                            <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
+                                              {fieldConditions.map((cond, index) => (
+                                                <React.Fragment key={cond.id}>
+                                                  <div className="border border-border rounded-lg overflow-hidden bg-white">
+                                                    <div
+                                                      onClick={() => setFieldExpandedCardIndex(fieldExpandedCardIndex === index ? null : index)}
+                                                      className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
+                                                    >
+                                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                        {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
+                                                      </span>
+                                                      <div className="flex items-center gap-2">
+                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldExpandedCardIndex === index ? 'rotate-180' : ''}`} />
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const updated = fieldConditions.filter(c => c.id !== cond.id);
+                                                            setFieldConditions(updated);
+                                                            setFieldConditionOperators(prev => prev.filter((_, i) => i !== index));
+                                                            if (fieldExpandedCardIndex === index) {
+                                                              setFieldExpandedCardIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
+                                                            } else if (fieldExpandedCardIndex !== null && fieldExpandedCardIndex > index) {
+                                                              setFieldExpandedCardIndex(fieldExpandedCardIndex - 1);
+                                                            }
+                                                          }}
+                                                          className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
+                                                        >
+                                                          <Trash2 className="w-4 h-4 text-red-500" />
+                                                        </button>
+                                                      </div>
+                                                    </div>
+
+                                                    {fieldExpandedCardIndex === index && (
+                                                      <div className="border-t border-border p-4 space-y-4 bg-white">
+                                                        <div className="flex items-start gap-2">
+                                                          <select
+                                                            value={cond.fieldSource || ""}
+                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
+                                                              c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
+                                                            ))}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                          >
+                                                            <option value="">Source</option>
+                                                            {FETCH_FIELD_SOURCES.filter(s => s.value !== "intent").map(src => (
+                                                              <option key={src.value} value={src.value}>{src.label}</option>
+                                                            ))}
+                                                          </select>
+                                                          <select
+                                                            value={cond.field}
+                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
+                                                              c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
+                                                            ))}
+                                                            disabled={!cond.fieldSource}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                          >
+                                                            <option value="">Field</option>
+                                                            {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
+                                                              <option key={f.value} value={f.value}>{f.label}</option>
+                                                            ))}
+                                                          </select>
+                                                          <select
+                                                            value={cond.operator}
+                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
+                                                              c.id === cond.id ? { ...c, operator: e.target.value } : c
+                                                            ))}
+                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                          >
+                                                            {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
+                                                              <option key={o}>{o}</option>
+                                                            ))}
+                                                          </select>
+                                                        </div>
+                                                        <input
+                                                          type="text"
+                                                          value={cond.value}
+                                                          onChange={e => setFieldConditions(prev => prev.map(c =>
+                                                            c.id === cond.id ? { ...c, value: e.target.value } : c
+                                                          ))}
+                                                          placeholder="Enter value..."
+                                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                        />
+                                                      </div>
+                                                    )}
+                                                  </div>
+
+                                                  {index < fieldConditions.length - 1 && (
+                                                    <div className="flex items-center justify-center py-1">
+                                                      <div className="inline-flex rounded-md border border-border bg-white">
+                                                        <button
+                                                          onClick={() => { const ops = [...fieldConditionOperators]; ops[index] = "AND"; setFieldConditionOperators(ops); }}
+                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(fieldConditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                        >
+                                                          AND
+                                                        </button>
+                                                        <button
+                                                          onClick={() => { const ops = [...fieldConditionOperators]; ops[index] = "OR"; setFieldConditionOperators(ops); }}
+                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${fieldConditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                        >
+                                                          OR
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </React.Fragment>
+                                              ))}
+
+                                              <button
+                                                onClick={() => {
+                                                  const newIndex = fieldConditions.length;
+                                                  setFieldConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
+                                                  if (fieldConditions.length > 0) setFieldConditionOperators(prev => [...prev, "AND"]);
+                                                  setFieldExpandedCardIndex(newIndex);
+                                                }}
+                                                className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600 font-semibold"
+                                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                              >
+                                                <Plus className="w-4 h-4" /> Add Condition
+                                              </button>
                                             </div>
                                           )}
                                         </div>
-                                        {index < conditions.length - 1 && (
-                                          <div className="flex items-center justify-center py-1">
-                                            <div className="inline-flex rounded-md border border-border bg-white">
+
+                                        {/* Section B: Intent Conditions */}
+                                        <div className="rounded-lg border border-border overflow-hidden bg-white">
+                                          <button
+                                            onClick={() => setIntentConditionsGroupExpanded(!intentConditionsGroupExpanded)}
+                                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors"
+                                          >
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                Intent Conditions
+                                              </span>
+                                              {intentConditions.length > 0 && (
+                                                <span className="text-xs bg-purple-100 text-purple-700 rounded-full px-2 py-0.5 font-semibold">
+                                                  {intentConditions.length}
+                                                </span>
+                                              )}
+                                            </div>
+                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentConditionsGroupExpanded ? 'rotate-180' : ''}`} />
+                                          </button>
+
+                                          {intentConditionsGroupExpanded && (
+                                            <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
+                                              {intentConditions.map((cond, index) => (
+                                                <React.Fragment key={cond.id}>
+                                                  <div className="border border-border rounded-lg overflow-hidden bg-white">
+                                                    <div
+                                                      onClick={() => setIntentExpandedCardIndex(intentExpandedCardIndex === index ? null : index)}
+                                                      className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
+                                                    >
+                                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                        {(cond.value || "").trim()
+                                                          ? `Intent: ${(cond.value || "").split(",").filter(Boolean).map(k => `"${k.trim()}"`).join(", ")}`
+                                                          : "Intent Condition"}
+                                                      </span>
+                                                      <div className="flex items-center gap-2">
+                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentExpandedCardIndex === index ? 'rotate-180' : ''}`} />
+                                                        <button
+                                                          onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            const updated = intentConditions.filter(c => c.id !== cond.id);
+                                                            setIntentConditions(updated);
+                                                            setIntentConditionOperators(prev => prev.filter((_, i) => i !== index));
+                                                            if (intentExpandedCardIndex === index) {
+                                                              setIntentExpandedCardIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
+                                                            } else if (intentExpandedCardIndex !== null && intentExpandedCardIndex > index) {
+                                                              setIntentExpandedCardIndex(intentExpandedCardIndex - 1);
+                                                            }
+                                                          }}
+                                                          className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
+                                                        >
+                                                          <Trash2 className="w-4 h-4 text-red-500" />
+                                                        </button>
+                                                      </div>
+                                                    </div>
+
+                                                    {intentExpandedCardIndex === index && (
+                                                      <div className="border-t border-border p-4 space-y-3 bg-white">
+                                                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                                          Add keywords or phrases that, when detected in speech, trigger this condition.
+                                                        </p>
+                                                        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-border rounded-md bg-gray-50/50 min-h-[42px]">
+                                                          {(cond.value || "").split(",").filter(Boolean).map((kw, ki) => (
+                                                            <span
+                                                              key={ki}
+                                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                                            >
+                                                              {kw.trim()}
+                                                              <button
+                                                                onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
+                                                                  setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
+                                                                }}
+                                                                className="ml-0.5 hover:text-red-600 transition-colors"
+                                                              >
+                                                                <X className="w-3 h-3" />
+                                                              </button>
+                                                            </span>
+                                                          ))}
+                                                          <input
+                                                            type="text"
+                                                            value={intentInput}
+                                                            onChange={e => setIntentInput(e.target.value)}
+                                                            onKeyDown={e => {
+                                                              if ((e.key === 'Enter' || e.key === ',') && intentInput.trim()) {
+                                                                e.preventDefault();
+                                                                const kw = intentInput.trim().replace(/,$/, "");
+                                                                if (!kw) return;
+                                                                const existing = (cond.value || "").split(",").filter(Boolean);
+                                                                const next = [...existing, kw].join(",");
+                                                                setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
+                                                                setIntentInput("");
+                                                              }
+                                                            }}
+                                                            onBlur={() => {
+                                                              if (intentInput.trim()) {
+                                                                const kw = intentInput.trim();
+                                                                const existing = (cond.value || "").split(",").filter(Boolean);
+                                                                const next = [...existing, kw].join(",");
+                                                                setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
+                                                                setIntentInput("");
+                                                              }
+                                                            }}
+                                                            placeholder={((cond.value || "").trim()) ? "Add another keyword..." : "Type keyword and press Enter..."}
+                                                            className="flex-1 min-w-[140px] bg-transparent text-sm outline-none"
+                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                  </div>
+
+                                                  {index < intentConditions.length - 1 && (
+                                                    <div className="flex items-center justify-center py-1">
+                                                      <div className="inline-flex rounded-md border border-border bg-white">
+                                                        <button
+                                                          onClick={() => { const ops = [...intentConditionOperators]; ops[index] = "AND"; setIntentConditionOperators(ops); }}
+                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(intentConditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                        >
+                                                          AND
+                                                        </button>
+                                                        <button
+                                                          onClick={() => { const ops = [...intentConditionOperators]; ops[index] = "OR"; setIntentConditionOperators(ops); }}
+                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${intentConditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                        >
+                                                          OR
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </React.Fragment>
+                                              ))}
+
                                               <button
-                                                onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }}
-                                                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                onClick={() => {
+                                                  const newIndex = intentConditions.length;
+                                                  setIntentConditions(prev => [...prev, { id: `intent-${Date.now()}`, value: "" }]);
+                                                  if (intentConditions.length > 0) setIntentConditionOperators(prev => [...prev, "AND"]);
+                                                  setIntentExpandedCardIndex(newIndex);
+                                                }}
+                                                className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600 font-semibold"
+                                                style={{ fontFamily: 'DM Sans, sans-serif' }}
                                               >
-                                                AND
-                                              </button>
-                                              <button
-                                                onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }}
-                                                className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                              >
-                                                OR
+                                                <Plus className="w-4 h-4" /> Add Condition
                                               </button>
                                             </div>
+                                          )}
+                                        </div>
+
+                                        {/* CONDITION PREVIEW — In Call */}
+                                        {(fieldConditions.some(c => c.value) || intentConditions.some(c => c.value)) && (
+                                          <div className="p-3 rounded-lg mt-2" style={{ backgroundColor: '#1E3A5F' }}>
+                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              CONDITION PREVIEW
+                                            </p>
+                                            {fieldConditions.map((cond, i) => (
+                                              <div key={cond.id}>
+                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{fieldConditionOperators[i - 1] || 'AND'}</p>}
+                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
+                                                  &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
+                                                </p>
+                                              </div>
+                                            ))}
+                                            {fieldConditions.some(c => c.value) && intentConditions.some(c => c.value) && (
+                                              <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>AND</p>
+                                            )}
+                                            {intentConditions.map((cond, i) => {
+                                              const isFirstOverall = !fieldConditions.some(c => c.value) && i === 0;
+                                              const showOperator = i > 0 && (intentConditionOperators[i - 1] || 'AND');
+                                              return (
+                                                <div key={cond.id}>
+                                                  {isFirstOverall && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                  {showOperator && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{showOperator}</p>}
+                                                  <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
+                                                    &nbsp;&nbsp;Caller says any of: {(cond.value || "").split(",").filter(Boolean).map(k => `"${k.trim()}"`).join(", ")}
+                                                  </p>
+                                                </div>
+                                              );
+                                            })}
+                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
                                           </div>
                                         )}
-                                      </React.Fragment>
-                                    ))}
-                                    <button
-                                      onClick={() => {
-                                        const newIndex = conditions.length;
-                                        setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
-                                        if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]);
-                                        setExpandedConditionIndex(newIndex);
-                                      }}
-                                      className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600"
-                                      style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                    >
-                                      <Plus className="w-4 h-4" /> Add Condition
-                                    </button>
-                                    {conditions.some(c => c.value) && (
-                                      <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
-                                        <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
-                                        {conditions.map((cond, i) => (
-                                          <div key={cond.id}>
-                                            {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                            {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
-                                            <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
-                                              &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
-                                            </p>
-                                          </div>
-                                        ))}
-                                        <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
                                       </div>
+                                    ) : (
+                                      <>
+                                        {conditions.map((cond, index) => (
+                                          <React.Fragment key={cond.id}>
+                                            <div className="border border-border rounded-lg overflow-hidden bg-white">
+                                              {/* Card Header */}
+                                              <div
+                                                onClick={() => setExpandedConditionIndex(expandedConditionIndex === index ? null : index)}
+                                                className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
+                                              >
+                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                                  {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedConditionIndex === index ? "rotate-180" : ""}`} />
+                                                  {conditions.length > 1 && (
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        const updated = conditions.filter(c => c.id !== cond.id);
+                                                        setConditions(updated);
+                                                        setConditionOperators(prev => prev.filter((_, i) => i !== index));
+                                                        if (expandedConditionIndex === index) {
+                                                          setExpandedConditionIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
+                                                        } else if (expandedConditionIndex !== null && expandedConditionIndex > index) {
+                                                          setExpandedConditionIndex(expandedConditionIndex - 1);
+                                                        }
+                                                      }}
+                                                      className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
+                                                    >
+                                                      <Trash2 className="w-4 h-4 text-red-500" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </div>
+
+                                              {/* Card Body */}
+                                              {expandedConditionIndex === index && (
+                                                <div className="border-t border-border p-4 space-y-4 bg-white">
+                                                  <div className="flex items-start gap-2">
+                                                    <select
+                                                      value={cond.fieldSource || ""}
+                                                      onChange={e => setConditions(prev => prev.map(c =>
+                                                        c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
+                                                      ))}
+                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                    >
+                                                      <option value="">Source</option>
+                                                      {FETCH_FIELD_SOURCES.map(src => (
+                                                        <option key={src.value} value={src.value}>{src.label}</option>
+                                                      ))}
+                                                    </select>
+                                                    <select
+                                                      value={cond.field}
+                                                      onChange={e => setConditions(prev => prev.map(c =>
+                                                        c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
+                                                      ))}
+                                                      disabled={!cond.fieldSource}
+                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                    >
+                                                      <option value="">Field</option>
+                                                      {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
+                                                        <option key={f.value} value={f.value}>{f.label}</option>
+                                                      ))}
+                                                    </select>
+                                                    <select
+                                                      value={cond.operator}
+                                                      onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))}
+                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                    >
+                                                      {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
+                                                        <option key={o}>{o}</option>
+                                                      ))}
+                                                    </select>
+                                                  </div>
+                                                  <input
+                                                    type="text"
+                                                    value={cond.value}
+                                                    onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))}
+                                                    placeholder="Enter value..."
+                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                  />
+                                                </div>
+                                              )}
+                                            </div>
+                                            {index < conditions.length - 1 && (
+                                              <div className="flex items-center justify-center py-1">
+                                                <div className="inline-flex rounded-md border border-border bg-white">
+                                                  <button
+                                                    onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }}
+                                                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                  >
+                                                    AND
+                                                  </button>
+                                                  <button
+                                                    onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }}
+                                                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
+                                                  >
+                                                    OR
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            )}
+                                          </React.Fragment>
+                                        ))}
+                                        <button
+                                          onClick={() => {
+                                            const newIndex = conditions.length;
+                                            setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
+                                            if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]);
+                                            setExpandedConditionIndex(newIndex);
+                                          }}
+                                          className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600"
+                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                        >
+                                          <Plus className="w-4 h-4" /> Add Condition
+                                        </button>
+                                        {conditions.some(c => c.value) && (
+                                          <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
+                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
+                                            {conditions.map((cond, i) => (
+                                              <div key={cond.id}>
+                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
+                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
+                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
+                                                  &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
+                                                </p>
+                                              </div>
+                                            ))}
+                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
+                                          </div>
+                                        )}
+                                      </>
                                     )}
                                   </div>
                                 )}
