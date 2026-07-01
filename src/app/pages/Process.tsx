@@ -6789,7 +6789,6 @@ export default function Process() {
                                         />
                                       </div>
                                     )}
-
                                     {/* Auto Hangup Step */}
                                     {currentEditingStep.stepKey === "callhangup" && (
                                       <div className="space-y-4">
