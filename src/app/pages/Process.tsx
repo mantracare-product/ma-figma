@@ -20,6 +20,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
+import { WorkflowStep } from "../types/workflow";
 
 interface AISettings {
   platform: string;
@@ -46,17 +47,6 @@ interface Process {
   aiSettings: AISettings;
 }
 
-type WorkflowStep = {
-  id: string;
-  name: string;
-  description: string;
-  iconKey: string;
-  stepKey?: string;
-  trigger?: "stage" | "incall" | "postcall";
-  executionType?: "wait" | "parallel";
-  delayValue?: number;
-  delayUnit?: string;
-};
 
 const STAGE_COLORS = [
   "#22D3EE", // cyan
@@ -4492,6 +4482,7 @@ export default function Process() {
                             stageName={stage.name}
                             processes={processes}
                             currentProcessId={selectedProcess ?? undefined}
+                            workflowSteps={workflowSteps}
                           />
                         </div>
                       )}
@@ -6088,24 +6079,6 @@ export default function Process() {
                                               </p>
                                             </>
                                           )}
-                                        </div>
-
-                                        {/* Template Identifier */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Template Identifier
-                                          </label>
-                                          <input
-                                            type="text"
-                                            value={templateId}
-                                            onChange={e => setTemplateId(e.target.value)}
-                                            placeholder="e.g. welcome-email, follow-up-day-3"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                          <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            Used for template identification and analytics.
-                                          </p>
                                         </div>
                                       </div>
                                     )}
@@ -8110,10 +8083,6 @@ export default function Process() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (stepTrigger !== "stage" && !stepActionName.trim()) {
-                                    toast.error("Action Name is required for In Call / Post Call triggers");
-                                    return;
-                                  }
                                   if (currentEditingStep) {
                                     const stepToSave: WorkflowStep = {
                                       ...currentEditingStep,
