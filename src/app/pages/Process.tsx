@@ -367,6 +367,49 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
     </div>
   );
 };
+const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
+  callhangup: [
+    "Caller wants to end the call / says goodbye",
+    "Caller asks to be removed from the calling list / stop being contacted",
+    "Caller indicates this is a wrong number",
+    "Caller is abusive, hostile, or uses inappropriate language",
+    "Caller explicitly asks to hang up / end the call now",
+    "Voicemail or answering machine detected (non-human)",
+  ],
+  callaction: [
+    "Caller asks to speak with a human / representative / agent",
+    "Caller asks for a manager or supervisor",
+    "Caller wants the billing/accounts department",
+    "Caller wants the sales department",
+    "Caller wants technical support / service department",
+    "Caller is frustrated, escalating, or expresses dissatisfaction with the AI",
+    "Caller's issue is too complex/urgent for the AI to resolve",
+  ],
+  idlemessages: [
+    "Caller has gone silent / unresponsive",
+    "Caller sounds confused or hesitant",
+    "Caller asks the AI to repeat or wait a moment",
+    "Background noise/distraction detected, no clear response from caller",
+  ],
+  whatsapp: [
+    "Caller asks for information to be sent via WhatsApp/text (menu, pricing, brochure, link)",
+    "Caller requests a booking/scheduling link",
+    "Caller wants order/appointment confirmation sent to their phone",
+    "Caller confirms/shares their phone number for follow-up",
+  ],
+  sms: [
+    "Caller asks for details to be texted (address, link, pricing, instructions)",
+    "Caller requests appointment/booking confirmation via text",
+    "Caller wants a reminder text sent",
+    "Caller confirms/shares their phone number for follow-up",
+  ],
+  email: [
+    "Caller asks for information to be emailed (quote, invoice, brochure, details)",
+    "Caller wants a confirmation or receipt emailed",
+    "Caller provides/confirms their email address for follow-up",
+    "Caller requests documentation or forms via email",
+  ],
+};
 
 const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall">> = {
   "whatsapp": ["stage", "incall", "postcall"],
@@ -3462,7 +3505,7 @@ export default function Process() {
                                                       <SelectValue placeholder="Select a fallback language (optional)" />
                                                     </SelectTrigger>
                                                     <SelectContent>
-                                                      {["English","Spanish","French","German","Italian","Portuguese","Chinese","Japanese","Korean","Arabic"]
+                                                      {["English", "Spanish", "French", "German", "Italian", "Portuguese", "Chinese", "Japanese", "Korean", "Arabic"]
                                                         .filter(lang => lang !== primaryLanguage && !secondaryLanguages.includes(lang))
                                                         .map(lang => (
                                                           <SelectItem key={lang} value={lang}>{lang}</SelectItem>
@@ -5056,54 +5099,118 @@ export default function Process() {
                                                         <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                                           Add keywords or phrases that, when detected in speech, trigger this condition.
                                                         </p>
-                                                        <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-border rounded-md bg-gray-50/50 min-h-[42px]">
-                                                          {(cond.value || "").split(",").filter(Boolean).map((kw, ki) => (
-                                                            <span
-                                                              key={ki}
-                                                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                                                            >
-                                                              {kw.trim()}
-                                                              <button
-                                                                onClick={(e) => {
-                                                                  e.stopPropagation();
-                                                                  const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
-                                                                  setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
-                                                                }}
-                                                                className="ml-0.5 hover:text-red-600 transition-colors"
-                                                              >
-                                                                <X className="w-3 h-3" />
-                                                              </button>
-                                                            </span>
-                                                          ))}
-                                                          <input
-                                                            type="text"
-                                                            value={intentInput}
-                                                            onChange={e => setIntentInput(e.target.value)}
-                                                            onKeyDown={e => {
-                                                              if ((e.key === 'Enter' || e.key === ',') && intentInput.trim()) {
-                                                                e.preventDefault();
-                                                                const kw = intentInput.trim().replace(/,$/, "");
-                                                                if (!kw) return;
-                                                                const existing = (cond.value || "").split(",").filter(Boolean);
-                                                                const next = [...existing, kw].join(",");
-                                                                setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
-                                                                setIntentInput("");
-                                                              }
-                                                            }}
-                                                            onBlur={() => {
-                                                              if (intentInput.trim()) {
-                                                                const kw = intentInput.trim();
-                                                                const existing = (cond.value || "").split(",").filter(Boolean);
-                                                                const next = [...existing, kw].join(",");
-                                                                setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
-                                                                setIntentInput("");
-                                                              }
-                                                            }}
-                                                            placeholder={((cond.value || "").trim()) ? "Add another keyword..." : "Type keyword and press Enter..."}
-                                                            className="flex-1 min-w-[140px] bg-transparent text-sm outline-none"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          />
-                                                        </div>
+                                                        {(() => {
+                                                          const stepKey = currentEditingStep?.stepKey ?? "";
+                                                          const predefinedOptions = INTENT_CONDITION_OPTIONS[stepKey];
+                                                          if (predefinedOptions) {
+                                                            const currentChips = (cond.value || "").split(",").filter(Boolean);
+                                                            const isSelected = (opt: string) => {
+                                                              const parts = opt.split(",").map(p => p.trim()).filter(Boolean);
+                                                              return parts.every(p => currentChips.map(k => k.trim()).includes(p));
+                                                            };
+                                                            return (
+                                                              <div className="space-y-3">
+                                                                {currentChips.length > 0 && (
+                                                                  <div className="flex flex-wrap items-center gap-2">
+                                                                    {currentChips.map((kw, ki) => (
+                                                                      <span
+                                                                        key={ki}
+                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                                                      >
+                                                                        {kw.trim()}
+                                                                        <button
+                                                                          onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
+                                                                            setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
+                                                                          }}
+                                                                          className="ml-0.5 hover:text-red-600 transition-colors"
+                                                                        >
+                                                                          <X className="w-3 h-3" />
+                                                                        </button>
+                                                                      </span>
+                                                                    ))}
+                                                                  </div>
+                                                                )}
+                                                                <select
+                                                                  value=""
+                                                                  onChange={e => {
+                                                                    const val = e.target.value;
+                                                                    if (val) {
+                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
+                                                                      if (!isSelected(val)) {
+                                                                        const next = [...existing, val].join(",");
+                                                                        setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
+                                                                      }
+                                                                    }
+                                                                  }}
+                                                                  className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                                >
+                                                                  <option value="">Select intent...</option>
+                                                                  {predefinedOptions
+                                                                    .filter(opt => !isSelected(opt))
+                                                                    .map(opt => (
+                                                                      <option key={opt} value={opt}>
+                                                                        {opt}
+                                                                      </option>
+                                                                    ))}
+                                                                </select>
+                                                              </div>
+                                                            );
+                                                          } else {
+                                                            return (
+                                                              <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-border rounded-md bg-gray-50/50 min-h-[42px]">
+                                                                {(cond.value || "").split(",").filter(Boolean).map((kw, ki) => (
+                                                                  <span
+                                                                    key={ki}
+                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                                                                  >
+                                                                    {kw.trim()}
+                                                                    <button
+                                                                      onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
+                                                                        setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
+                                                                      }}
+                                                                      className="ml-0.5 hover:text-red-600 transition-colors"
+                                                                    >
+                                                                      <X className="w-3 h-3" />
+                                                                    </button>
+                                                                  </span>
+                                                                ))}
+                                                                <input
+                                                                  type="text"
+                                                                  value={intentInput}
+                                                                  onChange={e => setIntentInput(e.target.value)}
+                                                                  onKeyDown={e => {
+                                                                    if ((e.key === 'Enter' || e.key === ',') && intentInput.trim()) {
+                                                                      e.preventDefault();
+                                                                      const kw = intentInput.trim().replace(/,$/, "");
+                                                                      if (!kw) return;
+                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
+                                                                      const next = [...existing, kw].join(",");
+                                                                      setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
+                                                                      setIntentInput("");
+                                                                    }
+                                                                  }}
+                                                                  onBlur={() => {
+                                                                    if (intentInput.trim()) {
+                                                                      const kw = intentInput.trim();
+                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
+                                                                      const next = [...existing, kw].join(",");
+                                                                      setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
+                                                                      setIntentInput("");
+                                                                    }
+                                                                  }}
+                                                                  placeholder={((cond.value || "").trim()) ? "Add another keyword..." : "Type keyword and press Enter..."}
+                                                                  className="flex-1 min-w-[140px] bg-transparent text-sm outline-none"
+                                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
+                                                                />
+                                                              </div>
+                                                            );
+                                                          }
+                                                        })()}
                                                       </div>
                                                     )}
                                                   </div>
