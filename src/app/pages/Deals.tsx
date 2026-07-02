@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { Link, useLocation } from "react-router";
-import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router";
+import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -167,6 +167,9 @@ const getProcessFromStage = (stage: string): string => {
 
 export default function Deals() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const entityType = "deals";
+  const entityLabel = "deals";
   // Ensure all call logs have process field
   const [callLogs, setCallLogs] = useState<CallLog[]>(
     initialCallLogs.map(log => ({
@@ -181,6 +184,33 @@ export default function Deals() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const [importMethod, setImportMethod] = useState<"csv" | "api" | "webhook">("csv");
+  const [customApiIntegrations, setCustomApiIntegrations] = useState<Array<{
+    id: string; name: string; baseUrl: string;
+    allowedMethods: string[]; fieldMappings: Array<{ key: string; label: string }>;
+  }>>([]);
+  const [selectedImportApiId, setSelectedImportApiId] = useState<string>("");
+  const [webhookLinkMode, setWebhookLinkMode] = useState<"system" | "manual">("system");
+  const [showWebhookInfo, setShowWebhookInfo] = useState(false);
+
+  useEffect(() => {
+    if (showImportModal && importMethod === "api") {
+      try {
+        setCustomApiIntegrations(JSON.parse(localStorage.getItem('customApiIntegrations') || '[]'));
+      } catch { setCustomApiIntegrations([]); }
+    }
+  }, [showImportModal, importMethod]);
+
+  const examplePayloadJson = JSON.stringify({
+    "dealName": "Patient Intake Package",
+    "clientName": "Sarah Johnson",
+    "amount": 25000,
+    "currency": "₹",
+    "status": "In Progress",
+    "responsible": "John Smith",
+    "stage": "Patient Intake: Initial Contact"
+  }, null, 2);
   const [isDragging, setIsDragging] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [showProcessesDropdown, setShowProcessesDropdown] = useState(false);
@@ -980,10 +1010,10 @@ export default function Deals() {
 
           <Star
             className={`w-6 h-6 transition-all ${isFull
+              ? "fill-warning text-warning"
+              : isHalf
                 ? "fill-warning text-warning"
-                : isHalf
-                  ? "fill-warning text-warning"
-                  : "fill-none text-muted-foreground"
+                : "fill-none text-muted-foreground"
               }`}
             style={
               isHalf
@@ -1811,8 +1841,8 @@ export default function Deals() {
                     <tr
                       key={log.id}
                       className={`transition-colors ${selectedRows.has(log.id)
-                          ? "bg-[#E8F0FE]"
-                          : "hover:bg-[#F1F5F9]"
+                        ? "bg-[#E8F0FE]"
+                        : "hover:bg-[#F1F5F9]"
                         }`}
                     >
                       <td className="px-4 py-2.5">
@@ -1935,10 +1965,10 @@ export default function Deals() {
                       {visibleColumns.status && (
                         <td className="px-4 py-2.5 text-center">
                           <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${log.status === "Completed"
-                              ? "bg-success-bg text-success"
-                              : log.status === "Pending"
-                                ? "bg-warning/10 text-warning"
-                                : "bg-error-bg text-error"
+                            ? "bg-success-bg text-success"
+                            : log.status === "Pending"
+                              ? "bg-warning/10 text-warning"
+                              : "bg-error-bg text-error"
                             }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                             {log.status}
                           </span>
@@ -2695,8 +2725,8 @@ export default function Deals() {
                       <div>
                         <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Type</p>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCallForDetails.type === "Outbound"
-                            ? "bg-primary/10 text-primary"
-                            : "bg-secondary/10 text-secondary"
+                          ? "bg-primary/10 text-primary"
+                          : "bg-secondary/10 text-secondary"
                           }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                           {selectedCallForDetails.type}
                         </span>
@@ -2710,10 +2740,10 @@ export default function Deals() {
                       <div>
                         <p style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px', fontFamily: 'Outfit, sans-serif' }}>Call Status</p>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${selectedCallForDetails.status === "Completed"
-                            ? "bg-success/10 text-success"
-                            : selectedCallForDetails.status === "Failed"
-                              ? "bg-destructive/10 text-destructive"
-                              : "bg-warning/10 text-warning"
+                          ? "bg-success/10 text-success"
+                          : selectedCallForDetails.status === "Failed"
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-warning/10 text-warning"
                           }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                           {selectedCallForDetails.status}
                         </span>
@@ -2738,8 +2768,8 @@ export default function Deals() {
                               key={speed}
                               onClick={() => setPlaybackSpeed(speed)}
                               className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground hover:bg-muted/80"
                                 }`}
                             >
                               {speed}x
@@ -2786,8 +2816,8 @@ export default function Deals() {
                               key={speed}
                               onClick={() => setPlaybackSpeed(speed)}
                               className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed
-                                  ? "bg-muted text-foreground border border-border"
-                                  : "bg-white text-muted-foreground hover:bg-muted border border-border"
+                                ? "bg-muted text-foreground border border-border"
+                                : "bg-white text-muted-foreground hover:bg-muted border border-border"
                                 }`}
                               style={{ fontFamily: 'Outfit, sans-serif' }}
                             >
@@ -3353,87 +3383,328 @@ export default function Deals() {
         onClose={() => {
           setShowImportModal(false);
           setSelectedFile(null);
+          setImportMethod("csv");
         }}
         title="Import Process"
         footer={
           <>
-            <Button variant="outline" onClick={() => {
-              setShowImportModal(false);
-              setSelectedFile(null);
-            }}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleImport}>
-              Import
-            </Button>
+            {importMethod === "webhook" ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setSelectedFile(null);
+                  setImportMethod("csv");
+                }}
+              >
+                Close
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowImportModal(false);
+                    setSelectedFile(null);
+                    setImportMethod("csv");
+                  }}
+                >
+                  Cancel
+                </Button>
+                {importMethod === "csv" ? (
+                  <Button variant="primary" onClick={handleImport}>
+                    Import
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    disabled={!selectedImportApiId}
+                    onClick={() => {
+                      const api = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                      toast.success(`Fetching records from ${api?.name || "API"}...`);
+                      setShowImportModal(false);
+                      setSelectedFile(null);
+                      setImportMethod("csv");
+                    }}
+                  >
+                    Fetch & Import
+                  </Button>
+                )}
+              </>
+            )}
           </>
         }
       >
         <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Upload a CSV file to import deals. Make sure your file follows the correct format.
-          </p>
+          <div className="flex gap-2 mb-5 bg-muted/30 p-1 rounded-lg w-fit">
+            {(["csv", "api", "webhook"] as const).map((method) => (
+              <button
+                key={method}
+                onClick={() => setImportMethod(method)}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                  }`}
+              >
+                {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
+              </button>
+            ))}
+          </div>
 
-          {/* Template Download Box */}
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-            <div className="flex items-center justify-between">
+          {importMethod === "csv" && (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Upload a CSV file to import {entityLabel}. Make sure your file follows the correct format.
+              </p>
+
+              {/* Template Download Box */}
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Need a template?</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* File Upload - Drag and Drop */}
               <div>
-                <p className="text-sm font-medium text-foreground">Need a template?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-                <Download className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* File Upload - Drag and Drop */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Upload CSV File</label>
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-input-background"
-                }`}
-            >
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileSelect}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                id="file-upload-deals"
-              />
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">
-                    <label htmlFor="file-upload-deals" className="text-primary cursor-pointer hover:underline">
-                      Click to upload
-                    </label>
-                    {" "}or drag and drop
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
-                </div>
-              </div>
-            </div>
-            {selectedFile && (
-              <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium">{selectedFile.name}</span>
-                </div>
-                <button
-                  onClick={() => setSelectedFile(null)}
-                  className="text-muted-foreground hover:text-destructive transition-colors"
+                <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
+                    ? "border-primary bg-primary/5"
+                    : "border-border bg-input-background"
+                    }`}
                 >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                  <input
+                    type="file"
+                    accept=".csv"
+                    onChange={handleFileSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    id="file-upload-deals"
+                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="w-8 h-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">
+                        <label htmlFor="file-upload-deals" className="text-primary cursor-pointer hover:underline">
+                          Click to upload
+                        </label>
+                        {" "}or drag and drop
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
+                    </div>
+                  </div>
+                </div>
+                {selectedFile && (
+                  <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium">{selectedFile.name}</span>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          )}
+
+          {importMethod === "api" && (
+            <>
+              {customApiIntegrations.length === 0 ? (
+                <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                  <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                  <h4 className="font-semibold mb-1">No API connections yet</h4>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
+                  </p>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                    }}
+                  >
+                    <Plus className="w-4 h-4" /> Add API
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {customApiIntegrations.map((api) => (
+                    <label
+                      key={api.id}
+                      className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                        }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="radio"
+                          name="importApi"
+                          checked={selectedImportApiId === api.id}
+                          onChange={() => setSelectedImportApiId(api.id)}
+                          className="w-4 h-4"
+                        />
+                        <div>
+                          <p className="text-sm font-semibold">{api.name}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                        Connected ✅
+                      </span>
+                    </label>
+                  ))}
+                  <button
+                    onClick={() => {
+                      setShowImportModal(false);
+                      navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                    }}
+                    className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add another API
+                  </button>
+                </div>
+              )}
+
+              {selectedImportApiId && (
+                <div className="mt-4 p-3 bg-muted/20 border border-border rounded-lg">
+                  <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {customApiIntegrations.find(a => a.id === selectedImportApiId)?.fieldMappings.map((f) => (
+                      <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
+                        {f.label || f.key}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {importMethod === "webhook" && (
+            <div className="space-y-5">
+
+              {/* Unified URL container */}
+              <div>
+                {/* Header row */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold">Webhook URL</p>
+                    {/* (i) info button with popover */}
+                    <div className="relative webhook-info-popover">
+                      <button
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        onMouseEnter={() => setShowWebhookInfo(true)}
+                        onMouseLeave={(e) => {
+                          const rel = e.relatedTarget as HTMLElement | null;
+                          if (!rel?.closest('.webhook-info-popover')) setShowWebhookInfo(false);
+                        }}
+                        onClick={() => setShowWebhookInfo(v => !v)}
+                        aria-label="Webhook URL info"
+                      >
+                        <Info className="w-3.5 h-3.5" />
+                      </button>
+                      {showWebhookInfo && (
+                        <div
+                          className="absolute top-full left-0 mt-2 z-50 w-72 bg-white border border-border rounded-lg shadow-lg p-3 webhook-info-popover"
+                          onMouseEnter={() => setShowWebhookInfo(true)}
+                          onMouseLeave={() => setShowWebhookInfo(false)}
+                        >
+                          {webhookLinkMode === "system" ? (
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                              Use this URL if you're embedding the webhook into your own system or backend. Send a POST request with a JSON body (see Example Payload) and an Authorization header.
+                            </p>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="text-xs text-muted-foreground leading-relaxed">
+                                For manual, one-off entries — replace the placeholders (e.g. {'{DEAL_NAME}'}, {'{YOUR_API_KEY}'}) with real values, then open the link in a browser or paste into a tool that supports simple GET requests. No coding required.
+                              </p>
+                              <div className="flex items-start gap-1.5 pt-1 border-t border-border">
+                                <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
+                                <p className="text-xs text-amber-600">API key is exposed in the URL — avoid sharing publicly or using for sensitive/bulk data.</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Copy button */}
+                  <button
+                    onClick={() => {
+                      const url = webhookLinkMode === "system"
+                        ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                        : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&dealName={DEAL_NAME}&clientName={CLIENT_NAME}&amount={AMOUNT}&currency={CURRENCY}&status={STATUS}&responsible={RESPONSIBLE_PERSON}&stage={STAGE_NAME}`;
+                      navigator.clipboard.writeText(url);
+                      toast.success(webhookLinkMode === "system" ? "Webhook URL copied" : "Link copied");
+                    }}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Copy className="w-3 h-3" /> Copy
+                  </button>
+                </div>
+
+                {/* Code block — same container, only content changes */}
+                <div className="bg-white border border-border rounded-lg px-3 py-2">
+                  <code className="text-xs text-foreground break-all font-mono">
+                    {webhookLinkMode === "system"
+                      ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                      : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&dealName={DEAL_NAME}&clientName={CLIENT_NAME}&amount={AMOUNT}&currency={CURRENCY}&status={STATUS}&responsible={RESPONSIBLE_PERSON}&stage={STAGE_NAME}`
+                    }
+                  </code>
+                </div>
+
+                {/* Mode toggle link */}
+                <div className="flex justify-end mt-1.5">
+                  <button
+                    onClick={() => setWebhookLinkMode(m => m === "system" ? "manual" : "system")}
+                    className="text-xs text-primary hover:underline cursor-pointer"
+                  >
+                    {webhookLinkMode === "system" ? "Use quick link" : "Use webhook URL instead"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Example Payload — system mode only */}
+              {webhookLinkMode === "system" && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-semibold">Example Payload</p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(examplePayloadJson);
+                        toast.success("Payload copied");
+                      }}
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" /> Copy
+                    </button>
+                  </div>
+                  <pre className="bg-muted/30 border border-border rounded-lg p-4 text-xs overflow-x-auto font-mono">
+                    {examplePayloadJson}
+                  </pre>
+                </div>
+              )}
+
+              {/* Footer note — POST only */}
+              {webhookLinkMode === "system" && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Shield className="w-3.5 h-3.5" />
+                  <span><span className="font-medium">For POST requests only:</span> Include header <code className="font-mono bg-muted px-1 rounded">Authorization: Bearer &lt;org-api-key&gt;</code></span>
+                </div>
+              )}
+
+            </div>
+          )}
         </div>
       </Modal>
 

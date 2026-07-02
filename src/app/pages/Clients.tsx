@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Outlet } from "react-router";
-import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch } from "lucide-react";
+import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle } from "lucide-react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { Button } from "../components/ui/Button";
@@ -133,6 +133,36 @@ export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const entityType = "clients";
+  const entityLabel = "clients";
+  const [importMethod, setImportMethod] = useState<"csv" | "api" | "webhook">("csv");
+  const [customApiIntegrations, setCustomApiIntegrations] = useState<Array<{
+    id: string; name: string; baseUrl: string;
+    allowedMethods: string[]; fieldMappings: Array<{ key: string; label: string }>;
+  }>>([]);
+  const [selectedImportApiId, setSelectedImportApiId] = useState<string>("");
+  const [webhookLinkMode, setWebhookLinkMode] = useState<"system" | "manual">("system");
+  const [showWebhookInfo, setShowWebhookInfo] = useState(false);
+
+  useEffect(() => {
+    if (showImportModal && importMethod === "api") {
+      try {
+        setCustomApiIntegrations(JSON.parse(localStorage.getItem('customApiIntegrations') || '[]'));
+      } catch { setCustomApiIntegrations([]); }
+    }
+  }, [showImportModal, importMethod]);
+
+  const examplePayloadJson = JSON.stringify({
+    "name": "Sarah Johnson",
+    "email": "sarah.j@email.com",
+    "phone": "+1 5551234567",
+    "country": "US",
+    "processes": ["Patient Intake"],
+    "stage": "Initial Contact",
+    "responsible": "John Smith",
+    "status": "Active"
+  }, null, 2);
+
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
@@ -158,7 +188,7 @@ export default function Clients() {
   const [showBulkActionsDropdown, setShowBulkActionsDropdown] = useState(false);
   const [showBulkStageDropdown, setShowBulkStageDropdown] = useState(false);
   const [isBulkEditMode, setIsBulkEditMode] = useState(false);
-  const [editedClients, setEditedClients] = useState<{[key: string]: {name?: string, email?: string, phone?: string}}>({});
+  const [editedClients, setEditedClients] = useState<{ [key: string]: { name?: string, email?: string, phone?: string } }>({});
 
   // Schedule Call Modal
   const [showScheduleCallModal, setShowScheduleCallModal] = useState(false);
@@ -228,7 +258,7 @@ export default function Clients() {
   const [fieldVisibleToSelected, setFieldVisibleToSelected] = useState(false);
   const [fieldNameError, setFieldNameError] = useState(false);
   const [fieldTypeError, setFieldTypeError] = useState(false);
-  const [customFields, setCustomFields] = useState<Array<{name: string; value: string; type?: string}>>([]);
+  const [customFields, setCustomFields] = useState<Array<{ name: string; value: string; type?: string }>>([]);
 
   // Select field modal states
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>([]);
@@ -288,7 +318,7 @@ export default function Clients() {
     values: string[];
   }
   const [activeFilters, setActiveFilters] = useState<ActiveFilter[]>([]);
-  const [filterDropdowns, setFilterDropdowns] = useState<{[key: string]: boolean}>({});
+  const [filterDropdowns, setFilterDropdowns] = useState<{ [key: string]: boolean }>({});
   const [selectedName, setSelectedName] = useState<string[]>([]);
   const [nameSearch, setNameSearch] = useState("");
   const [selectedStatus, setSelectedStatus] = useState<string[]>([]);
@@ -443,13 +473,17 @@ export default function Clients() {
       if (showAddFieldPopup && !target.closest('.add-field-popup-container') && !target.closest('.add-field-button')) {
         setShowAddFieldPopup(false);
       }
+      // Close webhook info popover when clicking outside
+      if (showWebhookInfo && !target.closest('.webhook-info-popover')) {
+        setShowWebhookInfo(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup]);
+  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup, showWebhookInfo]);
 
   // Check if table needs horizontal scroll
   useEffect(() => {
@@ -687,13 +721,12 @@ export default function Clients() {
               </select>
             ) : (
               <span
-                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                  client.status === "Active"
+                className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${client.status === "Active"
                     ? "bg-success-bg text-success"
                     : client.status === "Pending"
-                    ? "bg-warning-bg text-warning"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                      ? "bg-warning-bg text-warning"
+                      : "bg-muted text-muted-foreground"
+                  }`}
               >
                 {client.status}
               </span>
@@ -795,7 +828,7 @@ export default function Clients() {
     setIsBulkEditMode(true);
     setShowBulkActionsDropdown(false);
     // Initialize edited clients with current values
-    const initialEdits: {[key: string]: {name?: string, email?: string, phone?: string}} = {};
+    const initialEdits: { [key: string]: { name?: string, email?: string, phone?: string } } = {};
     Array.from(selectedRows).forEach(id => {
       const client = clients.find(c => c.id === id);
       if (client) {
@@ -1300,2104 +1333,1983 @@ export default function Clients() {
     <DndProvider backend={HTML5Backend}>
       <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
         <div className="py-6 px-[150px] space-y-8">
-        <PageHeader
-          title="Clients"
-          subtitle="Manage your clients"
-        />
+          <PageHeader
+            title="Clients"
+            subtitle="Manage your clients"
+          />
 
-      {/* Action Bar */}
-      <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Smart Search Bar with Filter Tags */}
-          <div className="flex-1 min-w-64">
-            <div className="relative search-bar-container">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
-              <div
-                className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center cursor-text overflow-hidden"
-                onClick={() => {
-                  setShowSearchModal(true);
-                  setShowColumnToggle(false);
-                }}
-              >
-                {/* Scrollable Tags Area */}
-                <div className="flex items-center gap-2 pl-10 pr-2 flex-1 overflow-x-auto overflow-y-hidden h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                  <style>{`
+          {/* Action Bar */}
+          <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Smart Search Bar with Filter Tags */}
+              <div className="flex-1 min-w-64">
+                <div className="relative search-bar-container">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
+                  <div
+                    className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center cursor-text overflow-hidden"
+                    onClick={() => {
+                      setShowSearchModal(true);
+                      setShowColumnToggle(false);
+                    }}
+                  >
+                    {/* Scrollable Tags Area */}
+                    <div className="flex items-center gap-2 pl-10 pr-2 flex-1 overflow-x-auto overflow-y-hidden h-full" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      <style>{`
                     .flex.items-center.gap-2.pl-10.pr-2.flex-1.overflow-x-auto::-webkit-scrollbar {
                       display: none;
                     }
                   `}</style>
-                  {/* Filter Tags */}
-                  {activeFilters.map((filter, index) => (
-                    <span
-                      key={index}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap flex-shrink-0"
-                      style={{
-                        backgroundColor: '#E8F0FE',
-                        borderColor: '#4F8EF7',
-                        color: '#4F8EF7',
-                        fontFamily: 'Outfit, sans-serif',
-                        fontSize: '13px'
-                      }}
-                    >
-                      {filter.label}: {filter.values.join(', ')}
+                      {/* Filter Tags */}
+                      {activeFilters.map((filter, index) => (
+                        <span
+                          key={index}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium whitespace-nowrap flex-shrink-0"
+                          style={{
+                            backgroundColor: '#E8F0FE',
+                            borderColor: '#4F8EF7',
+                            color: '#4F8EF7',
+                            fontFamily: 'Outfit, sans-serif',
+                            fontSize: '13px'
+                          }}
+                        >
+                          {filter.label}: {filter.values.join(', ')}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const newFilters = activeFilters.filter((_, i) => i !== index);
+                              setActiveFilters(newFilters);
+                              // Reset the specific filter
+                              if (filter.field === 'name') setSelectedName([]);
+                              if (filter.field === 'status') setSelectedStatus([]);
+                              if (filter.field === 'process') setSelectedProcess([]);
+                              if (filter.field === 'responsible') setSelectedResponsible([]);
+                            }}
+                            className="hover:opacity-70"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
+
+                      {/* Search Input */}
+                      <input
+                        type="text"
+                        placeholder={activeFilters.length > 0 ? "" : "Search clients..."}
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onFocus={() => { setShowSearchModal(true); setShowColumnToggle(false); }}
+                        onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearchModal(false); setFilterDropdowns({}); setShowAddFieldPopup(false); } }}
+                        className="flex-1 bg-transparent border-none outline-none min-w-[120px] h-full"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      />
+                    </div>
+
+                    {/* Clear All button - Pinned Right */}
+                    {activeFilters.length > 0 && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          const newFilters = activeFilters.filter((_, i) => i !== index);
-                          setActiveFilters(newFilters);
-                          // Reset the specific filter
-                          if (filter.field === 'name') setSelectedName([]);
-                          if (filter.field === 'status') setSelectedStatus([]);
-                          if (filter.field === 'process') setSelectedProcess([]);
-                          if (filter.field === 'responsible') setSelectedResponsible([]);
+                          setActiveFilters([]);
+                          setSelectedName([]);
+                          setNameSearch("");
+                          setSelectedStatus([]);
+                          setSelectedProcess([]);
+                          setSelectedResponsible([]);
+                          setSelectedLastContact("Any date");
+                          setSelectedCreatedOn("Any date");
                         }}
-                        className="hover:opacity-70"
+                        className="text-xs text-muted-foreground hover:text-foreground px-3 flex-shrink-0"
+                        style={{ fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
                       >
-                        <X className="w-3 h-3" />
+                        ✕ Clear all
                       </button>
-                    </span>
-                  ))}
+                    )}
+                  </div>
 
-                  {/* Search Input */}
-                  <input
-                    type="text"
-                    placeholder={activeFilters.length > 0 ? "" : "Search clients..."}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onFocus={() => { setShowSearchModal(true); setShowColumnToggle(false); }}
-                    onKeyDown={(e) => { if (e.key === 'Escape') { setShowSearchModal(false); setFilterDropdowns({}); setShowAddFieldPopup(false); } }}
-                    className="flex-1 bg-transparent border-none outline-none min-w-[120px] h-full"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  />
-                </div>
+                  {/* Advanced Search Modal */}
+                  {showSearchModal && (
+                    <>
+                      {/* Backdrop to close modal */}
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => {
+                          setShowSearchModal(false);
+                          setFilterDropdowns({});
+                          setShowAddFieldPopup(false);
+                        }}
+                      />
 
-                {/* Clear All button - Pinned Right */}
-                {activeFilters.length > 0 && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveFilters([]);
-                      setSelectedName([]);
-                      setNameSearch("");
-                      setSelectedStatus([]);
-                      setSelectedProcess([]);
-                      setSelectedResponsible([]);
-                      setSelectedLastContact("Any date");
-                      setSelectedCreatedOn("Any date");
-                    }}
-                    className="text-xs text-muted-foreground hover:text-foreground px-3 flex-shrink-0"
-                    style={{ fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                  >
-                    ✕ Clear all
-                  </button>
-                )}
-              </div>
-
-              {/* Advanced Search Modal */}
-              {showSearchModal && (
-                <>
-                  {/* Backdrop to close modal */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => {
-                      setShowSearchModal(false);
-                      setFilterDropdowns({});
-                      setShowAddFieldPopup(false);
-                    }}
-                  />
-
-                {/* Modal Panel */}
-                <div
-                  className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      setShowSearchModal(false);
-                      setFilterDropdowns({});
-                      setShowAddFieldPopup(false);
-                    }
-                  }}
-                  style={{ minWidth: '720px', width: '720px' }}
-                >
-                  <div className="flex" style={{ maxHeight: '580px' }}>
-                    {/* Left Sidebar - Preset Filters */}
-                    <div className="w-56 border-r border-border p-5 overflow-y-auto bg-muted/20 flex-shrink-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Presets</p>
-                      <div className="space-y-1.5">
-                        <button
-                          className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${
-                            activeFilters.length === 0 && searchQuery === ''
-                              ? 'bg-primary/10 text-primary'
-                              : 'hover:bg-muted text-foreground'
-                          }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                          onClick={() => {
-                            setActiveFilters([]);
-                            setSelectedName([]);
-                            setNameSearch("");
-                            setSelectedStatus([]);
-                            setSelectedProcess([]);
-                            setSelectedResponsible([]);
-                            setSelectedLastContact("Any date");
-                            setSelectedCreatedOn("Any date");
-                            setSearchQuery("");
-                          }}
-                        >
-                          All Clients
-                        </button>
-                        <button
-                          className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${
-                            activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Active'
-                              ? 'bg-primary/10 text-primary'
-                              : 'hover:bg-muted text-foreground'
-                          }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                          onClick={() => {
-                            setSelectedStatus(['Active']);
-                            setSelectedName([]);
-                            setSelectedProcess([]);
-                            setSelectedResponsible([]);
-                            setSelectedLastContact("Any date");
-                            setSelectedCreatedOn("Any date");
-                            setSearchQuery("");
-                            setActiveFilters([{ field: 'status', label: 'Status', values: ['Active'] }]);
-                          }}
-                        >
-                          Active Clients
-                        </button>
-                        <button
-                          className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${
-                            activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Inactive'
-                              ? 'bg-primary/10 text-primary'
-                              : 'hover:bg-muted text-foreground'
-                          }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                          onClick={() => {
-                            setSelectedStatus(['Inactive']);
-                            setSelectedName([]);
-                            setSelectedProcess([]);
-                            setSelectedResponsible([]);
-                            setSelectedLastContact("Any date");
-                            setSelectedCreatedOn("Any date");
-                            setSearchQuery("");
-                            setActiveFilters([{ field: 'status', label: 'Status', values: ['Inactive'] }]);
-                          }}
-                        >
-                          Inactive Clients
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Right Side - Filter Fields */}
-                    <div className="flex-1 p-6 overflow-y-auto">
-                      <div className="space-y-5">
-
-                        {/* Row 1: NAME and RESPONSIBLE PERSON */}
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Name — plain text input */}
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Name
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Filter by name..."
-                              value={searchQuery}
-                              onChange={(e) => setSearchQuery(e.target.value)}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-
-                          {/* Responsible person — multi-select dropdown with avatars */}
-                          <div className="relative">
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Responsible person
-                            </label>
-                            <div
-                              onClick={() => setFilterDropdowns(prev => ({ ...prev, responsible: !prev.responsible }))}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
-                            >
-                              {selectedResponsible.length === 0 ? (
-                                <span className="text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Select person(s)...</span>
-                              ) : (
-                                selectedResponsible.map((person) => (
-                                  <span key={person} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    {person}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const next = selectedResponsible.filter(r => r !== person);
-                                        setSelectedResponsible(next);
-                                        if (next.length > 0) {
-                                          setActiveFilters(prev => {
-                                            const exists = prev.find(f => f.field === 'responsible');
-                                            return exists
-                                              ? prev.map(f => f.field === 'responsible' ? { ...f, values: next } : f)
-                                              : [...prev, { field: 'responsible', label: 'Responsible', values: next }];
-                                          });
-                                        } else {
-                                          setActiveFilters(prev => prev.filter(f => f.field !== 'responsible'));
-                                        }
-                                      }}
-                                      className="hover:opacity-70"
-                                    >&times;</button>
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                            {filterDropdowns.responsible && (
-                              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
-                                <div className="p-3 border-b border-border sticky top-0 bg-white">
-                                  <input
-                                    type="text"
-                                    placeholder="Search..."
-                                    value={responsibleSearch}
-                                    onChange={(e) => setResponsibleSearch(e.target.value)}
-                                    className="w-full px-3 py-2 border border-border rounded-lg text-sm"
-                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  />
-                                </div>
-                                {teamMembers
-                                  .filter(m => m.toLowerCase().includes(responsibleSearch.toLowerCase()))
-                                  .map((member) => {
-                                    const initials = member.split(' ').map(n => n[0]).join('');
-                                    return (
-                                      <label key={member} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
-                                        <input
-                                          type="checkbox"
-                                          checked={selectedResponsible.includes(member)}
-                                          onChange={(e) => {
-                                            const next = e.target.checked
-                                              ? [...selectedResponsible, member]
-                                              : selectedResponsible.filter(r => r !== member);
-                                            setSelectedResponsible(next);
-                                            if (next.length > 0) {
-                                              setActiveFilters(prev => {
-                                                const exists = prev.find(f => f.field === 'responsible');
-                                                return exists
-                                                  ? prev.map(f => f.field === 'responsible' ? { ...f, values: next } : f)
-                                                  : [...prev, { field: 'responsible', label: 'Responsible', values: next }];
-                                              });
-                                            } else {
-                                              setActiveFilters(prev => prev.filter(f => f.field !== 'responsible'));
-                                            }
-                                          }}
-                                          className="w-4 h-4"
-                                        />
-                                        <div
-                                          className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white"
-                                          style={{ backgroundColor: '#4F8EF7' }}
-                                        >
-                                          {initials}
-                                        </div>
-                                        <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{member}</span>
-                                      </label>
-                                    );
-                                  })}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Row 2: STATUS and CREATED ON */}
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Status — dropdown selector */}
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Status
-                            </label>
-                            <select
-                              value={selectedStatusFilter}
-                              onChange={(e) => {
-                                setSelectedStatusFilter(e.target.value);
-                                if (e.target.value !== 'All') {
-                                  setActiveFilters(prev => {
-                                    const exists = prev.find(f => f.field === 'status');
-                                    return exists
-                                      ? prev.map(f => f.field === 'status' ? { ...f, values: [e.target.value] } : f)
-                                      : [...prev, { field: 'status', label: 'Status', values: [e.target.value] }];
-                                  });
-                                } else {
-                                  setActiveFilters(prev => prev.filter(f => f.field !== 'status'));
-                                }
-                              }}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            >
-                              <option>All</option>
-                              <option>Active</option>
-                              <option>Inactive</option>
-                            </select>
-                          </div>
-
-                          {/* Created on — date select */}
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Created on
-                            </label>
-                            <select
-                              value={selectedCreatedOn}
-                              onChange={(e) => setSelectedCreatedOn(e.target.value)}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            >
-                              <option>Any date</option>
-                              <option>Today</option>
-                              <option>Yesterday</option>
-                              <option>Last 7 days</option>
-                              <option>Last 30 days</option>
-                              <option>Custom range</option>
-                            </select>
-                            {selectedCreatedOn === "Custom range" && (
-                              <div className="mt-3 grid grid-cols-2 gap-3">
-                                <div>
-                                  <label className="block text-xs font-medium mb-1.5 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>From</label>
-                                  <input
-                                    type="date"
-                                    value={customDateStart}
-                                    onChange={(e) => setCustomDateStart(e.target.value)}
-                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium mb-1.5 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>To</label>
-                                  <input
-                                    type="date"
-                                    value={customDateEnd}
-                                    onChange={(e) => setCustomDateEnd(e.target.value)}
-                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Row 3: PROCESSES and Add field button */}
-                        <div className="grid grid-cols-2 gap-4">
-                          {/* Processes — multi-select dropdown */}
-                          <div className="relative">
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Processes
-                            </label>
-                            <div
-                              onClick={() => setFilterDropdowns(prev => ({ ...prev, processes: !prev.processes }))}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
-                            >
-                              {selectedProcess.length === 0 ? (
-                                <span className="text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Select processes...</span>
-                              ) : (
-                                selectedProcess.map((process) => (
-                                  <span key={process} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    {process}
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        const next = selectedProcess.filter(p => p !== process);
-                                        setSelectedProcess(next);
-                                        if (next.length > 0) {
-                                          setActiveFilters(prev => {
-                                            const exists = prev.find(f => f.field === 'processes');
-                                            return exists
-                                              ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
-                                              : [...prev, { field: 'processes', label: 'Processes', values: next }];
-                                          });
-                                        } else {
-                                          setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
-                                        }
-                                      }}
-                                      className="hover:opacity-70"
-                                    >&times;</button>
-                                  </span>
-                                ))
-                              )}
-                            </div>
-                            {filterDropdowns.processes && (
-                              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
-                                <div className="p-2">
-                                  <label className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedProcess.length === availableProcesses.length}
-                                      onChange={(e) => {
-                                        const next = e.target.checked ? availableProcesses : [];
-                                        setSelectedProcess(next);
-                                        if (next.length > 0) {
-                                          setActiveFilters(prev => {
-                                            const exists = prev.find(f => f.field === 'processes');
-                                            return exists
-                                              ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
-                                              : [...prev, { field: 'processes', label: 'Processes', values: next }];
-                                          });
-                                        } else {
-                                          setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
-                                        }
-                                      }}
-                                      className="w-4 h-4"
-                                    />
-                                    <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
-                                  </label>
-                                  {availableProcesses.map((process) => (
-                                    <label key={process} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedProcess.includes(process)}
-                                        onChange={(e) => {
-                                          const next = e.target.checked
-                                            ? [...selectedProcess, process]
-                                            : selectedProcess.filter(p => p !== process);
-                                          setSelectedProcess(next);
-                                          if (next.length > 0) {
-                                            setActiveFilters(prev => {
-                                              const exists = prev.find(f => f.field === 'processes');
-                                              return exists
-                                                ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
-                                                : [...prev, { field: 'processes', label: 'Processes', values: next }];
-                                            });
-                                          } else {
-                                            setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
-                                          }
-                                        }}
-                                        className="w-4 h-4"
-                                      />
-                                      <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{process}</span>
-                                    </label>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Add field button */}
-                          <div className="relative">
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground opacity-0">Spacer</label>
-                            <button
-                              onClick={() => setShowAddFieldPopup(!showAddFieldPopup)}
-                              className="w-full h-[42px] px-4 flex items-center gap-2 border border-dashed rounded-lg hover:bg-gray-50 transition-colors add-field-button"
-                              style={{ borderColor: '#4F8EF7', color: '#4F8EF7', fontFamily: 'Outfit, sans-serif', fontSize: '14px' }}
-                            >
-                              <Plus className="w-4 h-4" />
-                              Add field
-                            </button>
-
-                            {/* Nested Add Field Popup */}
-                            {showAddFieldPopup && (
-                              <div
-                                className="absolute top-full left-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 add-field-popup-container"
-                                style={{
-                                  width: '320px',
-                                  maxHeight: '400px',
-                                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      {/* Modal Panel */}
+                      <div
+                        className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-2xl border border-border z-50 overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Escape') {
+                            setShowSearchModal(false);
+                            setFilterDropdowns({});
+                            setShowAddFieldPopup(false);
+                          }
+                        }}
+                        style={{ minWidth: '720px', width: '720px' }}
+                      >
+                        <div className="flex" style={{ maxHeight: '580px' }}>
+                          {/* Left Sidebar - Preset Filters */}
+                          <div className="w-56 border-r border-border p-5 overflow-y-auto bg-muted/20 flex-shrink-0">
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-3 mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>Presets</p>
+                            <div className="space-y-1.5">
+                              <button
+                                className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 0 && searchQuery === ''
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted text-foreground'
+                                  }`}
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                                onClick={() => {
+                                  setActiveFilters([]);
+                                  setSelectedName([]);
+                                  setNameSearch("");
+                                  setSelectedStatus([]);
+                                  setSelectedProcess([]);
+                                  setSelectedResponsible([]);
+                                  setSelectedLastContact("Any date");
+                                  setSelectedCreatedOn("Any date");
+                                  setSearchQuery("");
                                 }}
                               >
-                                <div className="p-4">
-                                  <h3 className="font-semibold mb-3" style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#1F2937' }}>
-                                    Add filter fields
-                                  </h3>
-                                  <div className="space-y-2 max-h-80 overflow-y-auto">
-                                    {['Phone', 'Email', 'Location', 'Company', 'Role', 'Last Contact Date', 'Tags'].map((field) => (
-                                      <label
-                                        key={field}
-                                        className="flex items-center gap-2 px-2 py-2 hover:bg-blue-50 rounded cursor-pointer"
-                                      >
-                                        <input
-                                          type="checkbox"
-                                          checked={activeFilterFields.includes(field)}
-                                          onChange={(e) => {
-                                            if (e.target.checked) {
-                                              setActiveFilterFields([...activeFilterFields, field]);
-                                            } else {
-                                              setActiveFilterFields(activeFilterFields.filter(f => f !== field));
-                                            }
-                                          }}
-                                          className="w-4 h-4"
-                                          style={{ accentColor: '#4F8EF7' }}
-                                        />
-                                        <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#374151' }}>
-                                          {field}
+                                All Clients
+                              </button>
+                              <button
+                                className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Active'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted text-foreground'
+                                  }`}
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                                onClick={() => {
+                                  setSelectedStatus(['Active']);
+                                  setSelectedName([]);
+                                  setSelectedProcess([]);
+                                  setSelectedResponsible([]);
+                                  setSelectedLastContact("Any date");
+                                  setSelectedCreatedOn("Any date");
+                                  setSearchQuery("");
+                                  setActiveFilters([{ field: 'status', label: 'Status', values: ['Active'] }]);
+                                }}
+                              >
+                                Active Clients
+                              </button>
+                              <button
+                                className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Inactive'
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-muted text-foreground'
+                                  }`}
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                                onClick={() => {
+                                  setSelectedStatus(['Inactive']);
+                                  setSelectedName([]);
+                                  setSelectedProcess([]);
+                                  setSelectedResponsible([]);
+                                  setSelectedLastContact("Any date");
+                                  setSelectedCreatedOn("Any date");
+                                  setSearchQuery("");
+                                  setActiveFilters([{ field: 'status', label: 'Status', values: ['Inactive'] }]);
+                                }}
+                              >
+                                Inactive Clients
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Right Side - Filter Fields */}
+                          <div className="flex-1 p-6 overflow-y-auto">
+                            <div className="space-y-5">
+
+                              {/* Row 1: NAME and RESPONSIBLE PERSON */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Name — plain text input */}
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Filter by name..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+
+                                {/* Responsible person — multi-select dropdown with avatars */}
+                                <div className="relative">
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Responsible person
+                                  </label>
+                                  <div
+                                    onClick={() => setFilterDropdowns(prev => ({ ...prev, responsible: !prev.responsible }))}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
+                                  >
+                                    {selectedResponsible.length === 0 ? (
+                                      <span className="text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Select person(s)...</span>
+                                    ) : (
+                                      selectedResponsible.map((person) => (
+                                        <span key={person} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          {person}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const next = selectedResponsible.filter(r => r !== person);
+                                              setSelectedResponsible(next);
+                                              if (next.length > 0) {
+                                                setActiveFilters(prev => {
+                                                  const exists = prev.find(f => f.field === 'responsible');
+                                                  return exists
+                                                    ? prev.map(f => f.field === 'responsible' ? { ...f, values: next } : f)
+                                                    : [...prev, { field: 'responsible', label: 'Responsible', values: next }];
+                                                });
+                                              } else {
+                                                setActiveFilters(prev => prev.filter(f => f.field !== 'responsible'));
+                                              }
+                                            }}
+                                            className="hover:opacity-70"
+                                          >&times;</button>
                                         </span>
-                                      </label>
-                                    ))}
+                                      ))
+                                    )}
                                   </div>
-                                  <div className="mt-4 pt-3 border-t border-border">
-                                    <button
-                                      onClick={() => setShowAddFieldPopup(false)}
-                                      className="w-full px-4 py-2 rounded-md text-white text-sm font-medium hover:opacity-90 transition-opacity"
-                                      style={{ backgroundColor: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
-                                    >
-                                      Done
-                                    </button>
-                                  </div>
+                                  {filterDropdowns.responsible && (
+                                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 max-h-48 overflow-y-auto">
+                                      <div className="p-3 border-b border-border sticky top-0 bg-white">
+                                        <input
+                                          type="text"
+                                          placeholder="Search..."
+                                          value={responsibleSearch}
+                                          onChange={(e) => setResponsibleSearch(e.target.value)}
+                                          className="w-full px-3 py-2 border border-border rounded-lg text-sm"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        />
+                                      </div>
+                                      {teamMembers
+                                        .filter(m => m.toLowerCase().includes(responsibleSearch.toLowerCase()))
+                                        .map((member) => {
+                                          const initials = member.split(' ').map(n => n[0]).join('');
+                                          return (
+                                            <label key={member} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={selectedResponsible.includes(member)}
+                                                onChange={(e) => {
+                                                  const next = e.target.checked
+                                                    ? [...selectedResponsible, member]
+                                                    : selectedResponsible.filter(r => r !== member);
+                                                  setSelectedResponsible(next);
+                                                  if (next.length > 0) {
+                                                    setActiveFilters(prev => {
+                                                      const exists = prev.find(f => f.field === 'responsible');
+                                                      return exists
+                                                        ? prev.map(f => f.field === 'responsible' ? { ...f, values: next } : f)
+                                                        : [...prev, { field: 'responsible', label: 'Responsible', values: next }];
+                                                    });
+                                                  } else {
+                                                    setActiveFilters(prev => prev.filter(f => f.field !== 'responsible'));
+                                                  }
+                                                }}
+                                                className="w-4 h-4"
+                                              />
+                                              <div
+                                                className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white"
+                                                style={{ backgroundColor: '#4F8EF7' }}
+                                              >
+                                                {initials}
+                                              </div>
+                                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{member}</span>
+                                            </label>
+                                          );
+                                        })}
+                                    </div>
+                                  )}
                                 </div>
                               </div>
-                            )}
+
+                              {/* Row 2: STATUS and CREATED ON */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Status — dropdown selector */}
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Status
+                                  </label>
+                                  <select
+                                    value={selectedStatusFilter}
+                                    onChange={(e) => {
+                                      setSelectedStatusFilter(e.target.value);
+                                      if (e.target.value !== 'All') {
+                                        setActiveFilters(prev => {
+                                          const exists = prev.find(f => f.field === 'status');
+                                          return exists
+                                            ? prev.map(f => f.field === 'status' ? { ...f, values: [e.target.value] } : f)
+                                            : [...prev, { field: 'status', label: 'Status', values: [e.target.value] }];
+                                        });
+                                      } else {
+                                        setActiveFilters(prev => prev.filter(f => f.field !== 'status'));
+                                      }
+                                    }}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  >
+                                    <option>All</option>
+                                    <option>Active</option>
+                                    <option>Inactive</option>
+                                  </select>
+                                </div>
+
+                                {/* Created on — date select */}
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Created on
+                                  </label>
+                                  <select
+                                    value={selectedCreatedOn}
+                                    onChange={(e) => setSelectedCreatedOn(e.target.value)}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  >
+                                    <option>Any date</option>
+                                    <option>Today</option>
+                                    <option>Yesterday</option>
+                                    <option>Last 7 days</option>
+                                    <option>Last 30 days</option>
+                                    <option>Custom range</option>
+                                  </select>
+                                  {selectedCreatedOn === "Custom range" && (
+                                    <div className="mt-3 grid grid-cols-2 gap-3">
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1.5 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>From</label>
+                                        <input
+                                          type="date"
+                                          value={customDateStart}
+                                          onChange={(e) => setCustomDateStart(e.target.value)}
+                                          className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                          style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                        />
+                                      </div>
+                                      <div>
+                                        <label className="block text-xs font-medium mb-1.5 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>To</label>
+                                        <input
+                                          type="date"
+                                          value={customDateEnd}
+                                          onChange={(e) => setCustomDateEnd(e.target.value)}
+                                          className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                                          style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Row 3: PROCESSES and Add field button */}
+                              <div className="grid grid-cols-2 gap-4">
+                                {/* Processes — multi-select dropdown */}
+                                <div className="relative">
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Processes
+                                  </label>
+                                  <div
+                                    onClick={() => setFilterDropdowns(prev => ({ ...prev, processes: !prev.processes }))}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
+                                  >
+                                    {selectedProcess.length === 0 ? (
+                                      <span className="text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Select processes...</span>
+                                    ) : (
+                                      selectedProcess.map((process) => (
+                                        <span key={process} className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                          {process}
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              const next = selectedProcess.filter(p => p !== process);
+                                              setSelectedProcess(next);
+                                              if (next.length > 0) {
+                                                setActiveFilters(prev => {
+                                                  const exists = prev.find(f => f.field === 'processes');
+                                                  return exists
+                                                    ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
+                                                    : [...prev, { field: 'processes', label: 'Processes', values: next }];
+                                                });
+                                              } else {
+                                                setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
+                                              }
+                                            }}
+                                            className="hover:opacity-70"
+                                          >&times;</button>
+                                        </span>
+                                      ))
+                                    )}
+                                  </div>
+                                  {filterDropdowns.processes && (
+                                    <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                                      <div className="p-2">
+                                        <label className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            checked={selectedProcess.length === availableProcesses.length}
+                                            onChange={(e) => {
+                                              const next = e.target.checked ? availableProcesses : [];
+                                              setSelectedProcess(next);
+                                              if (next.length > 0) {
+                                                setActiveFilters(prev => {
+                                                  const exists = prev.find(f => f.field === 'processes');
+                                                  return exists
+                                                    ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
+                                                    : [...prev, { field: 'processes', label: 'Processes', values: next }];
+                                                });
+                                              } else {
+                                                setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
+                                              }
+                                            }}
+                                            className="w-4 h-4"
+                                          />
+                                          <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
+                                        </label>
+                                        {availableProcesses.map((process) => (
+                                          <label key={process} className="flex items-center gap-2.5 px-3 py-2.5 hover:bg-muted cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              checked={selectedProcess.includes(process)}
+                                              onChange={(e) => {
+                                                const next = e.target.checked
+                                                  ? [...selectedProcess, process]
+                                                  : selectedProcess.filter(p => p !== process);
+                                                setSelectedProcess(next);
+                                                if (next.length > 0) {
+                                                  setActiveFilters(prev => {
+                                                    const exists = prev.find(f => f.field === 'processes');
+                                                    return exists
+                                                      ? prev.map(f => f.field === 'processes' ? { ...f, values: next } : f)
+                                                      : [...prev, { field: 'processes', label: 'Processes', values: next }];
+                                                  });
+                                                } else {
+                                                  setActiveFilters(prev => prev.filter(f => f.field !== 'processes'));
+                                                }
+                                              }}
+                                              className="w-4 h-4"
+                                            />
+                                            <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{process}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Add field button */}
+                                <div className="relative">
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground opacity-0">Spacer</label>
+                                  <button
+                                    onClick={() => setShowAddFieldPopup(!showAddFieldPopup)}
+                                    className="w-full h-[42px] px-4 flex items-center gap-2 border border-dashed rounded-lg hover:bg-gray-50 transition-colors add-field-button"
+                                    style={{ borderColor: '#4F8EF7', color: '#4F8EF7', fontFamily: 'Outfit, sans-serif', fontSize: '14px' }}
+                                  >
+                                    <Plus className="w-4 h-4" />
+                                    Add field
+                                  </button>
+
+                                  {/* Nested Add Field Popup */}
+                                  {showAddFieldPopup && (
+                                    <div
+                                      className="absolute top-full left-0 mt-1.5 bg-white border border-border rounded-lg shadow-lg z-50 add-field-popup-container"
+                                      style={{
+                                        width: '320px',
+                                        maxHeight: '400px',
+                                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                                      }}
+                                    >
+                                      <div className="p-4">
+                                        <h3 className="font-semibold mb-3" style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#1F2937' }}>
+                                          Add filter fields
+                                        </h3>
+                                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                                          {['Phone', 'Email', 'Location', 'Company', 'Role', 'Last Contact Date', 'Tags'].map((field) => (
+                                            <label
+                                              key={field}
+                                              className="flex items-center gap-2 px-2 py-2 hover:bg-blue-50 rounded cursor-pointer"
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={activeFilterFields.includes(field)}
+                                                onChange={(e) => {
+                                                  if (e.target.checked) {
+                                                    setActiveFilterFields([...activeFilterFields, field]);
+                                                  } else {
+                                                    setActiveFilterFields(activeFilterFields.filter(f => f !== field));
+                                                  }
+                                                }}
+                                                className="w-4 h-4"
+                                                style={{ accentColor: '#4F8EF7' }}
+                                              />
+                                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#374151' }}>
+                                                {field}
+                                              </span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                        <div className="mt-4 pt-3 border-t border-border">
+                                          <button
+                                            onClick={() => setShowAddFieldPopup(false)}
+                                            className="w-full px-4 py-2 rounded-md text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                                            style={{ backgroundColor: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
+                                          >
+                                            Done
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Optional fields that can be added */}
+                              {activeFilterFields.includes("Phone") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Phone
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter phone number..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Email") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Email
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter email..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Location") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Location
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter location..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Company") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Company
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter company..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Role") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Role
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter role..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Last Contact Date") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Last Contact Date
+                                  </label>
+                                  <select
+                                    value={selectedLastContact}
+                                    onChange={(e) => setSelectedLastContact(e.target.value)}
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  >
+                                    <option>Any date</option>
+                                    <option>Today</option>
+                                    <option>Yesterday</option>
+                                    <option>Last 7 days</option>
+                                    <option>Last 30 days</option>
+                                    <option>Custom range</option>
+                                  </select>
+                                </div>
+                              )}
+
+                              {activeFilterFields.includes("Tags") && (
+                                <div>
+                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    Tags
+                                  </label>
+                                  <input
+                                    type="text"
+                                    placeholder="Enter tags..."
+                                    className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                                    style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
+                                  />
+                                </div>
+                              )}
+
+                            </div>
+
+                            {/* Footer actions */}
+                            <div className="flex items-center justify-between mt-6 pt-5 border-t border-border">
+                              <div className="flex items-center gap-4">
+                                <button
+                                  className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                  onClick={() => {
+                                    setActiveFilterFields(["Name", "Status", "Processes", "Responsible", "Created on"]);
+                                  }}
+                                >
+                                  <span>&#8635;</span> Restore default fields
+                                </button>
+                              </div>
+                              <button
+                                className="text-sm text-primary hover:text-primary/80 flex items-center gap-1.5 font-medium transition-colors"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              >
+                                <span>+</span> Save filter
+                              </button>
+                            </div>
                           </div>
                         </div>
-
-                        {/* Optional fields that can be added */}
-                        {activeFilterFields.includes("Phone") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Phone
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter phone number..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Email") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Email
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter email..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Location") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Location
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter location..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Company") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Company
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter company..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Role") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Role
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter role..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Last Contact Date") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Last Contact Date
-                            </label>
-                            <select
-                              value={selectedLastContact}
-                              onChange={(e) => setSelectedLastContact(e.target.value)}
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            >
-                              <option>Any date</option>
-                              <option>Today</option>
-                              <option>Yesterday</option>
-                              <option>Last 7 days</option>
-                              <option>Last 30 days</option>
-                              <option>Custom range</option>
-                            </select>
-                          </div>
-                        )}
-
-                        {activeFilterFields.includes("Tags") && (
-                          <div>
-                            <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Tags
-                            </label>
-                            <input
-                              type="text"
-                              placeholder="Enter tags..."
-                              className="w-full px-4 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                              style={{ fontFamily: 'Outfit, sans-serif', height: '42px' }}
-                            />
-                          </div>
-                        )}
-
                       </div>
-
-                      {/* Footer actions */}
-                      <div className="flex items-center justify-between mt-6 pt-5 border-t border-border">
-                        <div className="flex items-center gap-4">
-                          <button
-                            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1.5 transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                            onClick={() => {
-                              setActiveFilterFields(["Name", "Status", "Processes", "Responsible", "Created on"]);
-                            }}
-                          >
-                            <span>&#8635;</span> Restore default fields
-                          </button>
-                        </div>
-                        <button
-                          className="text-sm text-primary hover:text-primary/80 flex items-center gap-1.5 font-medium transition-colors"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          <span>+</span> Save filter
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                    </>
+                  )}
                 </div>
-              </>
-            )}
+
+                {/* Results count when filters active */}
+                {activeFilters.length > 0 && (
+                  <p className="text-xs text-muted-foreground mt-1 ml-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    {filteredClients.length} results found
+                  </p>
+                )}
+              </div>
+
+              <Tooltip text="Add Client">
+                <Button variant="primary" onClick={() => setShowAddModal(true)}>
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </Tooltip>
+
+              <Tooltip text="Import">
+                <Button variant="outline" onClick={() => setShowImportModal(true)}>
+                  <Upload className="w-4 h-4" />
+                </Button>
+              </Tooltip>
+
+              <Tooltip text="Export">
+                <Button variant="outline" onClick={handleExport} loading={isExporting}>
+                  <Download className="w-4 h-4" />
+                </Button>
+              </Tooltip>
+            </div>
           </div>
 
-            {/* Results count when filters active */}
-            {activeFilters.length > 0 && (
-              <p className="text-xs text-muted-foreground mt-1 ml-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                {filteredClients.length} results found
-              </p>
-            )}
-          </div>
 
-          <Tooltip text="Add Client">
-            <Button variant="primary" onClick={() => setShowAddModal(true)}>
-              <Plus className="w-4 h-4" />
-            </Button>
-          </Tooltip>
+          {/* Filter Panel */}
+          {showFilterPanel && (
+            <div
+              className="bg-white border border-t-0 border-border rounded-b-xl shadow-lg p-4 mb-4 filter-panel-container"
+              style={{
+                borderColor: '#E2E8F0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                animation: 'slideDown 200ms ease'
+              }}
+            >
+              {/* Filter Fields Row 1 - NAME and RESPONSIBLE PERSON */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* Name Filter */}
+                {activeFilterFields.includes("Name") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      NAME
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, name: !filterDropdowns.name })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">
+                        {selectedName.length > 0 ? `${selectedName.length} selected` : 'Search by name...'}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
 
-          <Tooltip text="Import">
-            <Button variant="outline" onClick={() => setShowImportModal(true)}>
-              <Upload className="w-4 h-4" />
-            </Button>
-          </Tooltip>
-
-          <Tooltip text="Export">
-            <Button variant="outline" onClick={handleExport} loading={isExporting}>
-              <Download className="w-4 h-4" />
-            </Button>
-          </Tooltip>
-        </div>
-      </div>
-
-
-      {/* Filter Panel */}
-      {showFilterPanel && (
-        <div
-          className="bg-white border border-t-0 border-border rounded-b-xl shadow-lg p-4 mb-4 filter-panel-container"
-          style={{
-            borderColor: '#E2E8F0',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-            animation: 'slideDown 200ms ease'
-          }}
-        >
-          {/* Filter Fields Row 1 - NAME and RESPONSIBLE PERSON */}
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            {/* Name Filter */}
-            {activeFilterFields.includes("Name") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  NAME
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, name: !filterDropdowns.name })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">
-                    {selectedName.length > 0 ? `${selectedName.length} selected` : 'Search by name...'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-
-                {/* Name Dropdown */}
-                {filterDropdowns.name && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2 border-b" style={{ borderColor: '#E2E8F0' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Search by name..."
-                          value={nameSearch}
-                          onChange={(e) => setNameSearch(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 border rounded text-sm"
-                          style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                        />
+                    {/* Name Dropdown */}
+                    {filterDropdowns.name && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2 border-b" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                              type="text"
+                              placeholder="Search by name..."
+                              value={nameSearch}
+                              onChange={(e) => setNameSearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-2 border rounded text-sm"
+                              style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="p-2 max-h-48 overflow-y-auto">
+                          {clients
+                            .map(c => c.name)
+                            .filter((name, index, self) => self.indexOf(name) === index)
+                            .filter(name => name.toLowerCase().includes(nameSearch.toLowerCase()))
+                            .map((name) => (
+                              <label key={name} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedName.includes(name)}
+                                  onChange={(e) => {
+                                    const newName = e.target.checked
+                                      ? [...selectedName, name]
+                                      : selectedName.filter(n => n !== name);
+                                    setSelectedName(newName);
+                                    // Update tags immediately
+                                    if (newName.length > 0) {
+                                      const existingFilter = activeFilters.find(f => f.field === 'name');
+                                      if (existingFilter) {
+                                        setActiveFilters(activeFilters.map(f =>
+                                          f.field === 'name' ? { ...f, values: newName } : f
+                                        ));
+                                      } else {
+                                        setActiveFilters([...activeFilters, { field: 'name', label: 'Name', values: newName }]);
+                                      }
+                                    } else {
+                                      setActiveFilters(activeFilters.filter(f => f.field !== 'name'));
+                                    }
+                                  }}
+                                  className="w-4 h-4"
+                                  style={{ accentColor: '#4F8EF7' }}
+                                />
+                                <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{name}</span>
+                              </label>
+                            ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-2 max-h-48 overflow-y-auto">
-                      {clients
-                        .map(c => c.name)
-                        .filter((name, index, self) => self.indexOf(name) === index)
-                        .filter(name => name.toLowerCase().includes(nameSearch.toLowerCase()))
-                        .map((name) => (
-                        <label key={name} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedName.includes(name)}
-                            onChange={(e) => {
-                              const newName = e.target.checked
-                                ? [...selectedName, name]
-                                : selectedName.filter(n => n !== name);
-                              setSelectedName(newName);
-                              // Update tags immediately
-                              if (newName.length > 0) {
-                                const existingFilter = activeFilters.find(f => f.field === 'name');
-                                if (existingFilter) {
-                                  setActiveFilters(activeFilters.map(f =>
-                                    f.field === 'name' ? { ...f, values: newName } : f
-                                  ));
+                    )}
+                  </div>
+                )}
+
+                {/* Responsible Person Filter */}
+                {activeFilterFields.includes("Responsible") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      RESPONSIBLE PERSON
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, responsible: !filterDropdowns.responsible })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">
+                        {selectedResponsible.length > 0 ? `${selectedResponsible.length} selected` : 'Select responsible person'}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+
+                    {/* Responsible Dropdown */}
+                    {filterDropdowns.responsible && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2 border-b" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="relative">
+                            <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                            <input
+                              type="text"
+                              placeholder="Search..."
+                              value={responsibleSearch}
+                              onChange={(e) => setResponsibleSearch(e.target.value)}
+                              className="w-full pl-8 pr-3 py-2 border rounded text-sm"
+                              style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                            />
+                          </div>
+                        </div>
+                        <div className="p-2 max-h-48 overflow-y-auto">
+                          <label className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedResponsible.length === teamMembers.length}
+                              onChange={(e) => {
+                                const newResponsible = e.target.checked ? teamMembers : [];
+                                setSelectedResponsible(newResponsible);
+                                // Update tags immediately
+                                if (newResponsible.length > 0) {
+                                  const existingFilter = activeFilters.find(f => f.field === 'responsible');
+                                  if (existingFilter) {
+                                    setActiveFilters(activeFilters.map(f =>
+                                      f.field === 'responsible' ? { ...f, values: newResponsible } : f
+                                    ));
+                                  } else {
+                                    setActiveFilters([...activeFilters, { field: 'responsible', label: 'Responsible', values: newResponsible }]);
+                                  }
                                 } else {
-                                  setActiveFilters([...activeFilters, { field: 'name', label: 'Name', values: newName }]);
+                                  setActiveFilters(activeFilters.filter(f => f.field !== 'responsible'));
                                 }
-                              } else {
-                                setActiveFilters(activeFilters.filter(f => f.field !== 'name'));
-                              }
-                            }}
-                            className="w-4 h-4"
-                            style={{ accentColor: '#4F8EF7' }}
-                          />
-                          <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{name}</span>
-                        </label>
-                      ))}
-                    </div>
+                              }}
+                              className="w-4 h-4"
+                              style={{ accentColor: '#4F8EF7' }}
+                            />
+                            <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
+                          </label>
+                          {teamMembers
+                            .filter(member => member.toLowerCase().includes(responsibleSearch.toLowerCase()))
+                            .map((member) => {
+                              const initials = member.split(' ').map(n => n[0]).join('');
+                              return (
+                                <label key={member} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedResponsible.includes(member)}
+                                    onChange={(e) => {
+                                      const newResponsible = e.target.checked
+                                        ? [...selectedResponsible, member]
+                                        : selectedResponsible.filter(m => m !== member);
+                                      setSelectedResponsible(newResponsible);
+                                      // Update tags immediately
+                                      if (newResponsible.length > 0) {
+                                        const existingFilter = activeFilters.find(f => f.field === 'responsible');
+                                        if (existingFilter) {
+                                          setActiveFilters(activeFilters.map(f =>
+                                            f.field === 'responsible' ? { ...f, values: newResponsible } : f
+                                          ));
+                                        } else {
+                                          setActiveFilters([...activeFilters, { field: 'responsible', label: 'Responsible', values: newResponsible }]);
+                                        }
+                                      } else {
+                                        setActiveFilters(activeFilters.filter(f => f.field !== 'responsible'));
+                                      }
+                                    }}
+                                    className="w-4 h-4"
+                                    style={{ accentColor: '#4F8EF7' }}
+                                  />
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white"
+                                      style={{ backgroundColor: '#4F8EF7' }}
+                                    >
+                                      {initials}
+                                    </div>
+                                    <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{member}</span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
 
-            {/* Responsible Person Filter */}
-            {activeFilterFields.includes("Responsible") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  RESPONSIBLE PERSON
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, responsible: !filterDropdowns.responsible })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">
-                    {selectedResponsible.length > 0 ? `${selectedResponsible.length} selected` : 'Select responsible person'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
+              {/* Filter Fields Row 2 - STATUS and CREATED ON */}
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                {/* Status Filter */}
+                {activeFilterFields.includes("Status") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      STATUS
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, status: !filterDropdowns.status })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">
+                        {selectedStatusFilter}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
 
-                {/* Responsible Dropdown */}
-                {filterDropdowns.responsible && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2 border-b" style={{ borderColor: '#E2E8F0' }}>
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <input
-                          type="text"
-                          placeholder="Search..."
-                          value={responsibleSearch}
-                          onChange={(e) => setResponsibleSearch(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 border rounded text-sm"
-                          style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                        />
+                    {/* Status Dropdown */}
+                    {filterDropdowns.status && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2">
+                          {['All', 'Active', 'Inactive'].map((status) => (
+                            <button
+                              key={status}
+                              onClick={() => {
+                                setSelectedStatusFilter(status);
+                                setFilterDropdowns({ ...filterDropdowns, status: false });
+                                // Update tags
+                                if (status !== 'All') {
+                                  const existingFilter = activeFilters.find(f => f.field === 'status');
+                                  if (existingFilter) {
+                                    setActiveFilters(activeFilters.map(f =>
+                                      f.field === 'status' ? { ...f, values: [status] } : f
+                                    ));
+                                  } else {
+                                    setActiveFilters([...activeFilters, { field: 'status', label: 'Status', values: [status] }]);
+                                  }
+                                } else {
+                                  setActiveFilters(activeFilters.filter(f => f.field !== 'status'));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm ${selectedStatusFilter === status ? 'bg-blue-50' : ''}`}
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                    <div className="p-2 max-h-48 overflow-y-auto">
-                      <label className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedResponsible.length === teamMembers.length}
-                          onChange={(e) => {
-                            const newResponsible = e.target.checked ? teamMembers : [];
-                            setSelectedResponsible(newResponsible);
-                            // Update tags immediately
-                            if (newResponsible.length > 0) {
-                              const existingFilter = activeFilters.find(f => f.field === 'responsible');
-                              if (existingFilter) {
-                                setActiveFilters(activeFilters.map(f =>
-                                  f.field === 'responsible' ? { ...f, values: newResponsible } : f
-                                ));
-                              } else {
-                                setActiveFilters([...activeFilters, { field: 'responsible', label: 'Responsible', values: newResponsible }]);
-                              }
-                            } else {
-                              setActiveFilters(activeFilters.filter(f => f.field !== 'responsible'));
-                            }
-                          }}
-                          className="w-4 h-4"
-                          style={{ accentColor: '#4F8EF7' }}
-                        />
-                        <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
-                      </label>
-                      {teamMembers
-                        .filter(member => member.toLowerCase().includes(responsibleSearch.toLowerCase()))
-                        .map((member) => {
-                          const initials = member.split(' ').map(n => n[0]).join('');
-                          return (
-                            <label key={member} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={selectedResponsible.includes(member)}
-                                onChange={(e) => {
-                                  const newResponsible = e.target.checked
-                                    ? [...selectedResponsible, member]
-                                    : selectedResponsible.filter(m => m !== member);
-                                  setSelectedResponsible(newResponsible);
-                                  // Update tags immediately
-                                  if (newResponsible.length > 0) {
-                                    const existingFilter = activeFilters.find(f => f.field === 'responsible');
+                    )}
+                  </div>
+                )}
+
+                {/* Created On Filter */}
+                {activeFilterFields.includes("Created on") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      CREATED ON
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, createdOn: !filterDropdowns.createdOn })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">{selectedCreatedOn}</span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+
+                    {/* Created On Dropdown */}
+                    {filterDropdowns.createdOn && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2">
+                          {['Any date', 'Today', 'Yesterday', 'This week', 'Last 7 days', 'This month', 'Custom range'].map((option) => (
+                            <button
+                              key={option}
+                              onClick={() => {
+                                setSelectedCreatedOn(option);
+                                if (option !== 'Custom range') {
+                                  setFilterDropdowns({ ...filterDropdowns, createdOn: false });
+                                  if (option !== 'Any date') {
+                                    const existingFilter = activeFilters.find(f => f.field === 'createdOn');
                                     if (existingFilter) {
                                       setActiveFilters(activeFilters.map(f =>
-                                        f.field === 'responsible' ? { ...f, values: newResponsible } : f
+                                        f.field === 'createdOn' ? { ...f, values: [option] } : f
                                       ));
                                     } else {
-                                      setActiveFilters([...activeFilters, { field: 'responsible', label: 'Responsible', values: newResponsible }]);
+                                      setActiveFilters([...activeFilters, { field: 'createdOn', label: 'Created on', values: [option] }]);
+                                    }
+                                  }
+                                }
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Filter Fields Row 3 - PROCESSES and Add field */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* Processes Filter */}
+                {activeFilterFields.includes("Processes") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      PROCESSES
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, processes: !filterDropdowns.processes })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">
+                        {selectedProcess.length > 0 ? `${selectedProcess.length} selected` : 'Select processes'}
+                      </span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+
+                    {/* Processes Dropdown */}
+                    {filterDropdowns.processes && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2 max-h-64 overflow-y-auto">
+                          <label className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedProcess.length === availableProcesses.length}
+                              onChange={(e) => {
+                                const newProcess = e.target.checked ? availableProcesses : [];
+                                setSelectedProcess(newProcess);
+                                // Update tags immediately
+                                if (newProcess.length > 0) {
+                                  const existingFilter = activeFilters.find(f => f.field === 'processes');
+                                  if (existingFilter) {
+                                    setActiveFilters(activeFilters.map(f =>
+                                      f.field === 'processes' ? { ...f, values: newProcess } : f
+                                    ));
+                                  } else {
+                                    setActiveFilters([...activeFilters, { field: 'processes', label: 'Processes', values: newProcess }]);
+                                  }
+                                } else {
+                                  setActiveFilters(activeFilters.filter(f => f.field !== 'processes'));
+                                }
+                              }}
+                              className="w-4 h-4"
+                              style={{ accentColor: '#4F8EF7' }}
+                            />
+                            <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
+                          </label>
+                          {availableProcesses.map((process) => (
+                            <label key={process} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selectedProcess.includes(process)}
+                                onChange={(e) => {
+                                  const newProcess = e.target.checked
+                                    ? [...selectedProcess, process]
+                                    : selectedProcess.filter(p => p !== process);
+                                  setSelectedProcess(newProcess);
+                                  // Update tags immediately
+                                  if (newProcess.length > 0) {
+                                    const existingFilter = activeFilters.find(f => f.field === 'processes');
+                                    if (existingFilter) {
+                                      setActiveFilters(activeFilters.map(f =>
+                                        f.field === 'processes' ? { ...f, values: newProcess } : f
+                                      ));
+                                    } else {
+                                      setActiveFilters([...activeFilters, { field: 'processes', label: 'Processes', values: newProcess }]);
                                     }
                                   } else {
-                                    setActiveFilters(activeFilters.filter(f => f.field !== 'responsible'));
+                                    setActiveFilters(activeFilters.filter(f => f.field !== 'processes'));
                                   }
                                 }}
                                 className="w-4 h-4"
                                 style={{ accentColor: '#4F8EF7' }}
                               />
-                              <div className="flex items-center gap-2">
-                                <div
-                                  className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold text-white"
-                                  style={{ backgroundColor: '#4F8EF7' }}
-                                >
-                                  {initials}
-                                </div>
-                                <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{member}</span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Filter Fields Row 2 - STATUS and CREATED ON */}
-          <div className="grid grid-cols-2 gap-3 mb-3">
-            {/* Status Filter */}
-            {activeFilterFields.includes("Status") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  STATUS
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, status: !filterDropdowns.status })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">
-                    {selectedStatusFilter}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-
-                {/* Status Dropdown */}
-                {filterDropdowns.status && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2">
-                      {['All', 'Active', 'Inactive'].map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => {
-                            setSelectedStatusFilter(status);
-                            setFilterDropdowns({ ...filterDropdowns, status: false });
-                            // Update tags
-                            if (status !== 'All') {
-                              const existingFilter = activeFilters.find(f => f.field === 'status');
-                              if (existingFilter) {
-                                setActiveFilters(activeFilters.map(f =>
-                                  f.field === 'status' ? { ...f, values: [status] } : f
-                                ));
-                              } else {
-                                setActiveFilters([...activeFilters, { field: 'status', label: 'Status', values: [status] }]);
-                              }
-                            } else {
-                              setActiveFilters(activeFilters.filter(f => f.field !== 'status'));
-                            }
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm ${selectedStatusFilter === status ? 'bg-blue-50' : ''}`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Created On Filter */}
-            {activeFilterFields.includes("Created on") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  CREATED ON
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, createdOn: !filterDropdowns.createdOn })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">{selectedCreatedOn}</span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-
-                {/* Created On Dropdown */}
-                {filterDropdowns.createdOn && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2">
-                      {['Any date', 'Today', 'Yesterday', 'This week', 'Last 7 days', 'This month', 'Custom range'].map((option) => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedCreatedOn(option);
-                            if (option !== 'Custom range') {
-                              setFilterDropdowns({ ...filterDropdowns, createdOn: false });
-                              if (option !== 'Any date') {
-                                const existingFilter = activeFilters.find(f => f.field === 'createdOn');
-                                if (existingFilter) {
-                                  setActiveFilters(activeFilters.map(f =>
-                                    f.field === 'createdOn' ? { ...f, values: [option] } : f
-                                  ));
-                                } else {
-                                  setActiveFilters([...activeFilters, { field: 'createdOn', label: 'Created on', values: [option] }]);
-                                }
-                              }
-                            }
-                          }}
-                          className="w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Filter Fields Row 3 - PROCESSES and Add field */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {/* Processes Filter */}
-            {activeFilterFields.includes("Processes") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  PROCESSES
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, processes: !filterDropdowns.processes })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">
-                    {selectedProcess.length > 0 ? `${selectedProcess.length} selected` : 'Select processes'}
-                  </span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-
-                {/* Processes Dropdown */}
-                {filterDropdowns.processes && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2 max-h-64 overflow-y-auto">
-                      <label className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedProcess.length === availableProcesses.length}
-                          onChange={(e) => {
-                            const newProcess = e.target.checked ? availableProcesses : [];
-                            setSelectedProcess(newProcess);
-                            // Update tags immediately
-                            if (newProcess.length > 0) {
-                              const existingFilter = activeFilters.find(f => f.field === 'processes');
-                              if (existingFilter) {
-                                setActiveFilters(activeFilters.map(f =>
-                                  f.field === 'processes' ? { ...f, values: newProcess } : f
-                                ));
-                              } else {
-                                setActiveFilters([...activeFilters, { field: 'processes', label: 'Processes', values: newProcess }]);
-                              }
-                            } else {
-                              setActiveFilters(activeFilters.filter(f => f.field !== 'processes'));
-                            }
-                          }}
-                          className="w-4 h-4"
-                          style={{ accentColor: '#4F8EF7' }}
-                        />
-                        <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>Select all</span>
-                      </label>
-                      {availableProcesses.map((process) => (
-                        <label key={process} className="flex items-center gap-2 px-3 py-2 hover:bg-blue-50 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedProcess.includes(process)}
-                            onChange={(e) => {
-                              const newProcess = e.target.checked
-                                ? [...selectedProcess, process]
-                                : selectedProcess.filter(p => p !== process);
-                              setSelectedProcess(newProcess);
-                              // Update tags immediately
-                              if (newProcess.length > 0) {
-                                const existingFilter = activeFilters.find(f => f.field === 'processes');
-                                if (existingFilter) {
-                                  setActiveFilters(activeFilters.map(f =>
-                                    f.field === 'processes' ? { ...f, values: newProcess } : f
-                                  ));
-                                } else {
-                                  setActiveFilters([...activeFilters, { field: 'processes', label: 'Processes', values: newProcess }]);
-                                }
-                              } else {
-                                setActiveFilters(activeFilters.filter(f => f.field !== 'processes'));
-                              }
-                            }}
-                            className="w-4 h-4"
-                            style={{ accentColor: '#4F8EF7' }}
-                          />
-                          <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{process}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Add Field Button with Nested Popup */}
-            <div className="relative">
-              <label className="block text-xs uppercase font-semibold mb-1.5 opacity-0">SPACER</label>
-              <button
-                onClick={() => setShowAddFieldPopup(!showAddFieldPopup)}
-                className="h-10 px-4 flex items-center gap-2 border border-dashed rounded-md hover:bg-gray-50 transition-colors add-field-button"
-                style={{ borderColor: '#4F8EF7', color: '#4F8EF7', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-              >
-                <Plus className="w-4 h-4" />
-                Add field
-              </button>
-
-              {/* Nested Add Field Popup */}
-              {showAddFieldPopup && (
-                <div
-                  className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg z-50 add-field-popup-container"
-                  style={{
-                    borderColor: '#E2E8F0',
-                    width: '320px',
-                    maxHeight: '400px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                  }}
-                >
-                  <div className="p-4">
-                    <h3 className="font-semibold mb-3" style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#1F2937' }}>
-                      Add filter fields
-                    </h3>
-                    <div className="space-y-2 max-h-80 overflow-y-auto">
-                      {['Phone', 'Email', 'Location', 'Company', 'Role', 'Last Contact Date', 'Tags'].map((field) => (
-                        <label
-                          key={field}
-                          className="flex items-center gap-2 px-2 py-2 hover:bg-blue-50 rounded cursor-pointer"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={activeFilterFields.includes(field)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setActiveFilterFields([...activeFilterFields, field]);
-                              } else {
-                                setActiveFilterFields(activeFilterFields.filter(f => f !== field));
-                              }
-                            }}
-                            className="w-4 h-4"
-                            style={{ accentColor: '#4F8EF7' }}
-                          />
-                          <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#374151' }}>
-                            {field}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                    <div className="mt-4 pt-3 border-t" style={{ borderColor: '#E2E8F0' }}>
-                      <button
-                        onClick={() => setShowAddFieldPopup(false)}
-                        className="w-full px-4 py-2 rounded-md text-white text-sm font-medium hover:opacity-90 transition-opacity"
-                        style={{ backgroundColor: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        Done
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Optional Fields that can be added */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {/* Last Contact Date Filter */}
-            {activeFilterFields.includes("Last Contact Date") && (
-              <div className="relative">
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  LAST CONTACT DATE
-                </label>
-                <button
-                  onClick={() => setFilterDropdowns({ ...filterDropdowns, lastContact: !filterDropdowns.lastContact })}
-                  className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
-                >
-                  <span className="text-muted-foreground">{selectedLastContact}</span>
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                </button>
-
-                {/* Last Contact Dropdown */}
-                {filterDropdowns.lastContact && (
-                  <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
-                    <div className="p-2">
-                      {['Any date', 'Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'Custom range'].map((option) => (
-                        <button
-                          key={option}
-                          onClick={() => {
-                            setSelectedLastContact(option);
-                            if (option !== 'Custom range') {
-                              setFilterDropdowns({ ...filterDropdowns, lastContact: false });
-                              if (option !== 'Any date') {
-                                const existingFilter = activeFilters.find(f => f.field === 'lastContact');
-                                if (existingFilter) {
-                                  setActiveFilters(activeFilters.map(f =>
-                                    f.field === 'lastContact' ? { ...f, values: [option] } : f
-                                  ));
-                                } else {
-                                  setActiveFilters([...activeFilters, { field: 'lastContact', label: 'Last Contact', values: [option] }]);
-                                }
-                              }
-                            }
-                          }}
-                          className="w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          {option}
-                        </button>
-                      ))}
-                      {selectedLastContact === 'Custom range' && (
-                        <div className="p-3 border-t" style={{ borderColor: '#E2E8F0' }}>
-                          <div className="space-y-2">
-                            <input
-                              type="date"
-                              value={customDateStart}
-                              onChange={(e) => setCustomDateStart(e.target.value)}
-                              className="w-full px-3 py-2 border rounded text-sm"
-                              style={{ borderColor: '#E2E8F0' }}
-                            />
-                            <input
-                              type="date"
-                              value={customDateEnd}
-                              onChange={(e) => setCustomDateEnd(e.target.value)}
-                              className="w-full px-3 py-2 border rounded text-sm"
-                              style={{ borderColor: '#E2E8F0' }}
-                            />
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              className="w-full"
-                              onClick={() => {
-                                setFilterDropdowns({ ...filterDropdowns, lastContact: false });
-                                const dateRange = `${customDateStart} - ${customDateEnd}`;
-                                const existingFilter = activeFilters.find(f => f.field === 'lastContact');
-                                if (existingFilter) {
-                                  setActiveFilters(activeFilters.map(f =>
-                                    f.field === 'lastContact' ? { ...f, values: [dateRange] } : f
-                                  ));
-                                } else {
-                                  setActiveFilters([...activeFilters, { field: 'lastContact', label: 'Last Contact', values: [dateRange] }]);
-                                }
-                              }}
-                              style={{ backgroundColor: '#4F8EF7', fontSize: '13px' }}
-                            >
-                              Apply
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Phone Filter */}
-            {activeFilterFields.includes("Phone") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  PHONE
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter phone number..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-
-            {/* Email Filter */}
-            {activeFilterFields.includes("Email") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  EMAIL
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter email..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-
-            {/* Location Filter */}
-            {activeFilterFields.includes("Location") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  LOCATION
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter location..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-
-            {/* Company Filter */}
-            {activeFilterFields.includes("Company") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  COMPANY
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter company..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-
-            {/* Role Filter */}
-            {activeFilterFields.includes("Role") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  ROLE
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter role..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-
-            {/* Tags Filter */}
-            {activeFilterFields.includes("Tags") && (
-              <div>
-                <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                  TAGS
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter tags..."
-                  className="w-full h-10 px-3 bg-white border rounded-md text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Bottom Action Bar */}
-          <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: '#E2E8F0' }}>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    const allIds = new Set(filteredClients.map(c => c.id));
-                    setSelectedRows(allIds);
-                  } else {
-                    setSelectedRows(new Set());
-                  }
-                }}
-                className="w-4 h-4"
-                style={{ accentColor: '#4F8EF7' }}
-              />
-              <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>select all</span>
-            </label>
-
-            <div className="flex items-center gap-3">
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setShowFilterPanel(false);
-                  toast.success('Filters applied');
-                }}
-                style={{ backgroundColor: '#4F8EF7', height: '36px', borderRadius: '6px', fontFamily: 'Outfit, sans-serif' }}
-              >
-                <Search className="w-4 h-4" />
-                Search
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setActiveFilters([]);
-                  setSelectedName([]);
-                  setNameSearch("");
-                  setSelectedStatus([]);
-                  setSelectedProcess([]);
-                  setSelectedResponsible([]);
-                  setResponsibleSearch("");
-                  setSelectedLastContact("Any date");
-                  setSelectedCreatedOn("Any date");
-                  toast.info('Filters reset');
-                }}
-                style={{ fontFamily: 'Outfit, sans-serif' }}
-              >
-                Reset
-              </Button>
-
-              <button
-                className="text-sm hover:underline"
-                style={{ color: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
-                onClick={() => toast.info('Save filter feature coming soon')}
-              >
-                Save filter
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Bulk Action Bar */}
-      {selectedRows.size > 0 && (
-        <div className="bg-card rounded-xl border border-border shadow-sm">
-          <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                {selectedRows.size} selected
-              </span>
-              <button
-                onClick={handleClearSelection}
-                className="text-xs hover:text-foreground transition-colors"
-                style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
-              >
-                Clear selection
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              {!isBulkEditMode ? (
-                <>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={() => setShowTriggerCallsModal(true)}
-                  >
-                    <Phone className="w-3.5 h-3.5" />
-                    Trigger Calls
-                  </Button>
-
-                  <Tooltip text="Delete selected clients">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
-                          setClients(prev => prev.filter(client => !selectedRows.has(client.id)));
-                          setSelectedRows(new Set());
-                          toast.success(`${selectedRows.size} client(s) deleted successfully`);
-                        }
-                      }}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
-                  </Tooltip>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleEnterBulkEdit}
-                  >
-                    <Edit className="w-3.5 h-3.5" />
-                    Edit
-                  </Button>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelBulkEdit}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveBulkEdit}
-                  >
-                    Save
-                  </Button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
-        <div
-          ref={tableScrollRef}
-          className="overflow-x-auto scrollbar-hide"
-          style={{ scrollBehavior: 'auto' }}
-          onScroll={() => {
-            if (tableScrollRef.current) {
-              const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
-              const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
-              const canScrollLeft = scrollLeft > 10;
-              setShowScrollIndicator(canScrollRight);
-              setShowScrollLeftIndicator(canScrollLeft);
-            }
-          }}
-        >
-          <table className="w-full min-w-[1200px]">
-            <thead className="border-b border-border" style={{ backgroundColor: '#1F2937' }}>
-              <tr>
-                {/* Checkbox column */}
-                <th className="px-4 py-2.5 w-10">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected;
-                    }}
-                    onChange={handleSelectAll}
-                    className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                  />
-                </th>
-                {/* Settings icon above hamburger menu column */}
-                <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
-                  <div className="relative inline-block">
-                    <button
-                      onClick={() => {
-                        setShowColumnToggle(!showColumnToggle);
-                        setShowFilterPanel(false);
-                      }}
-                      className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
-                      aria-label="Customize Columns"
-                    >
-                      <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
-                    </button>
-                    {showColumnToggle && (
-                      <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
-                        <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
-                        <div className="space-y-2">
-                          {Object.keys(visibleColumns).map((col) => (
-                            <label key={col} className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={visibleColumns[col as keyof typeof visibleColumns]}
-                                onChange={(e) =>
-                                  setVisibleColumns({
-                                    ...visibleColumns,
-                                    [col]: e.target.checked,
-                                  })
-                                }
-                                className="w-4 h-4"
-                              />
-                              <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>{col}</span>
+                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif' }}>{process}</span>
                             </label>
                           ))}
                         </div>
                       </div>
                     )}
                   </div>
-                </th>
-                {columnOrder.map((columnKey, index) => {
-                  const columnLabels: { [key: string]: string } = {
-                    name: 'Name',
-                    email: 'Email',
-                    phone: 'Phone',
-                    responsible: 'Responsible',
-                    lastContact: 'Last Contact',
-                    status: 'Status',
-                  };
+                )}
 
-                  return visibleColumns[columnKey as keyof typeof visibleColumns] ? (
-                    <DraggableColumnHeader
-                      key={columnKey}
-                      columnKey={columnKey}
-                      index={index}
-                      label={columnLabels[columnKey]}
-                      moveColumn={moveColumn}
-                    />
-                  ) : null;
-                })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {paginatedClients.map((client) => (
-                <tr
-                  key={client.id}
-                  className={`transition-colors ${
-                    selectedRows.has(client.id)
-                      ? "bg-[#E8F0FE]"
-                      : "hover:bg-[#F1F5F9]"
-                  }`}
-                >
-                  {/* Checkbox column */}
-                  <td className="px-4 py-2.5">
-                    <input
-                      type="checkbox"
-                      checked={selectedRows.has(client.id)}
-                      onChange={() => handleSelectRow(client.id)}
-                      className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
-                    />
-                  </td>
-                  {/* Hamburger menu column */}
-                  <td className="px-2 py-2.5 relative">
-                    <div className="hamburger-menu-container">
-                      <button
-                        onClick={() => setOpenMenuClientId(openMenuClientId === client.id ? null : client.id)}
-                        className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
-                        style={{ width: '24px', height: '24px' }}
-                      >
-                        <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
-                      </button>
+                {/* Add Field Button with Nested Popup */}
+                <div className="relative">
+                  <label className="block text-xs uppercase font-semibold mb-1.5 opacity-0">SPACER</label>
+                  <button
+                    onClick={() => setShowAddFieldPopup(!showAddFieldPopup)}
+                    className="h-10 px-4 flex items-center gap-2 border border-dashed rounded-md hover:bg-gray-50 transition-colors add-field-button"
+                    style={{ borderColor: '#4F8EF7', color: '#4F8EF7', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add field
+                  </button>
 
-                      {/* Hamburger menu popup */}
-                      {openMenuClientId === client.id && (
-                        <div
-                          className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
-                          style={{
-                            boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                            minWidth: '160px',
-                            padding: '4px'
-                          }}
-                        >
+                  {/* Nested Add Field Popup */}
+                  {showAddFieldPopup && (
+                    <div
+                      className="absolute top-full left-0 mt-1 bg-white border rounded-lg shadow-lg z-50 add-field-popup-container"
+                      style={{
+                        borderColor: '#E2E8F0',
+                        width: '320px',
+                        maxHeight: '400px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    >
+                      <div className="p-4">
+                        <h3 className="font-semibold mb-3" style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#1F2937' }}>
+                          Add filter fields
+                        </h3>
+                        <div className="space-y-2 max-h-80 overflow-y-auto">
+                          {['Phone', 'Email', 'Location', 'Company', 'Role', 'Last Contact Date', 'Tags'].map((field) => (
+                            <label
+                              key={field}
+                              className="flex items-center gap-2 px-2 py-2 hover:bg-blue-50 rounded cursor-pointer"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={activeFilterFields.includes(field)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setActiveFilterFields([...activeFilterFields, field]);
+                                  } else {
+                                    setActiveFilterFields(activeFilterFields.filter(f => f !== field));
+                                  }
+                                }}
+                                className="w-4 h-4"
+                                style={{ accentColor: '#4F8EF7' }}
+                              />
+                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#374151' }}>
+                                {field}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                        <div className="mt-4 pt-3 border-t" style={{ borderColor: '#E2E8F0' }}>
                           <button
-                            onClick={() => {
-                              setOpenMenuClientId(null);
-                              navigate(`/clients/${client.id}`);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                            onClick={() => setShowAddFieldPopup(false)}
+                            className="w-full px-4 py-2 rounded-md text-white text-sm font-medium hover:opacity-90 transition-opacity"
+                            style={{ backgroundColor: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
                           >
-                            <Eye className="w-4 h-4" />
-                            <span>View Profile</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleOpenScheduleModal(client);
-                              setOpenMenuClientId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                          >
-                            <Phone className="w-4 h-4" />
-                            <span>Call</span>
-                          </button>
-                          <button
-                            onClick={() => {
-                              handleDeleteClient(client.id);
-                              setOpenMenuClientId(null);
-                            }}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            <span>Delete</span>
+                            Done
                           </button>
                         </div>
-                      )}
+                      </div>
                     </div>
-                  </td>
-                  {columnOrder.map((columnKey) =>
-                    visibleColumns[columnKey as keyof typeof visibleColumns] ? renderCell(columnKey, client) : null
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Scroll Right Indicator */}
-        {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
-        <button
-          className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-          style={{
-            top: '50%',
-            transform: 'translateY(-50%)',
-            height: '112px', // Approximately 2 table rows (56px each)
-            width: '40px',
-            backgroundColor: 'rgba(255, 255, 255, 0.5)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            borderTopLeftRadius: '9999px',
-            borderBottomLeftRadius: '9999px',
-            borderTopRightRadius: '0',
-            borderBottomRightRadius: '0',
-            opacity: showScrollIndicator ? 1 : 0.2,
-            pointerEvents: showScrollIndicator ? 'auto' : 'none'
-          }}
-          onMouseEnter={(e) => {
-            if (showScrollIndicator) {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1.1)';
-              }
-              handleScrollRightMouseEnter();
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-            e.currentTarget.style.boxShadow = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) {
-              (icon as SVGElement).style.transform = 'scale(1)';
-            }
-            handleScrollMouseLeave();
-          }}
-        >
-          <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-        </button>
-
-        {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
-        <button
-          className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
-          style={{
-            top: '50%',
-            transform: 'translateY(-50%)',
-            height: '112px', // Approximately 2 table rows (56px each)
-            width: '40px',
-            backgroundColor: 'rgba(255, 255, 255, 0.5)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
-            borderTopRightRadius: '9999px',
-            borderBottomRightRadius: '9999px',
-            borderTopLeftRadius: '0',
-            borderBottomLeftRadius: '0',
-            opacity: showScrollLeftIndicator ? 1 : 0.2,
-            pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
-          }}
-          onMouseEnter={(e) => {
-            if (showScrollLeftIndicator) {
-              e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
-              e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
-              const icon = e.currentTarget.querySelector('svg');
-              if (icon) {
-                (icon as SVGElement).style.transform = 'scale(1.1)';
-              }
-              handleScrollLeftMouseEnter();
-            }
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-            e.currentTarget.style.boxShadow = '';
-            const icon = e.currentTarget.querySelector('svg');
-            if (icon) {
-              (icon as SVGElement).style.transform = 'scale(1)';
-            }
-            handleScrollMouseLeave();
-          }}
-        >
-          <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
-        </button>
-
-        {/* Pagination Controls */}
-        <div className="border-t border-border px-4 py-3">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
-                  className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
-                >
-                  <option value={15}>15</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                </select>
-              </div>
-              <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1">
-              <Tooltip text="First Page">
-                <button
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronsLeft className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip text="Previous Page">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <span className="text-xs px-2 hidden sm:inline" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                Page {currentPage} of {totalPages}
-              </span>
-              <span className="text-xs px-2 sm:hidden" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                {currentPage}/{totalPages}
-              </span>
-              <Tooltip text="Next Page">
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-              <Tooltip text="Last Page">
-                <button
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronsRight className="w-3.5 h-3.5" />
-                </button>
-              </Tooltip>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Add Client Modal */}
-      <Modal
-        isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false);
-          setShowAdditionalDetails(false);
-        }}
-        title="Add New Client"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowAddModal(false);
-                setShowAdditionalDetails(false);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleAddClient}
-              disabled={!newClient.name || !newClient.phone || newClient.stage.length === 0 || !newClient.responsible}
-            >
-              Add Client
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-6">
-          {/* Section 1: Client Information (Primary) */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Client Information</h3>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                  Client Name <span className="text-destructive">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newClient.name}
-                  onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
-                  placeholder="Enter client name"
-                  className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                  Phone Number <span className="text-destructive">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <select
-                    value={`${newClient.countryFlag}|${newClient.countryCode}`}
+              {/* Optional Fields that can be added */}
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* Last Contact Date Filter */}
+                {activeFilterFields.includes("Last Contact Date") && (
+                  <div className="relative">
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      LAST CONTACT DATE
+                    </label>
+                    <button
+                      onClick={() => setFilterDropdowns({ ...filterDropdowns, lastContact: !filterDropdowns.lastContact })}
+                      className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                    >
+                      <span className="text-muted-foreground">{selectedLastContact}</span>
+                      <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                    </button>
+
+                    {/* Last Contact Dropdown */}
+                    {filterDropdowns.lastContact && (
+                      <div className="absolute top-full left-0 mt-1 w-full bg-white border rounded-lg shadow-lg z-50 filter-dropdown-container" style={{ borderColor: '#E2E8F0' }}>
+                        <div className="p-2">
+                          {['Any date', 'Today', 'Yesterday', 'Last 7 days', 'Last 30 days', 'Custom range'].map((option) => (
+                            <button
+                              key={option}
+                              onClick={() => {
+                                setSelectedLastContact(option);
+                                if (option !== 'Custom range') {
+                                  setFilterDropdowns({ ...filterDropdowns, lastContact: false });
+                                  if (option !== 'Any date') {
+                                    const existingFilter = activeFilters.find(f => f.field === 'lastContact');
+                                    if (existingFilter) {
+                                      setActiveFilters(activeFilters.map(f =>
+                                        f.field === 'lastContact' ? { ...f, values: [option] } : f
+                                      ));
+                                    } else {
+                                      setActiveFilters([...activeFilters, { field: 'lastContact', label: 'Last Contact', values: [option] }]);
+                                    }
+                                  }
+                                }
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-blue-50 rounded text-sm"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {option}
+                            </button>
+                          ))}
+                          {selectedLastContact === 'Custom range' && (
+                            <div className="p-3 border-t" style={{ borderColor: '#E2E8F0' }}>
+                              <div className="space-y-2">
+                                <input
+                                  type="date"
+                                  value={customDateStart}
+                                  onChange={(e) => setCustomDateStart(e.target.value)}
+                                  className="w-full px-3 py-2 border rounded text-sm"
+                                  style={{ borderColor: '#E2E8F0' }}
+                                />
+                                <input
+                                  type="date"
+                                  value={customDateEnd}
+                                  onChange={(e) => setCustomDateEnd(e.target.value)}
+                                  className="w-full px-3 py-2 border rounded text-sm"
+                                  style={{ borderColor: '#E2E8F0' }}
+                                />
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  className="w-full"
+                                  onClick={() => {
+                                    setFilterDropdowns({ ...filterDropdowns, lastContact: false });
+                                    const dateRange = `${customDateStart} - ${customDateEnd}`;
+                                    const existingFilter = activeFilters.find(f => f.field === 'lastContact');
+                                    if (existingFilter) {
+                                      setActiveFilters(activeFilters.map(f =>
+                                        f.field === 'lastContact' ? { ...f, values: [dateRange] } : f
+                                      ));
+                                    } else {
+                                      setActiveFilters([...activeFilters, { field: 'lastContact', label: 'Last Contact', values: [dateRange] }]);
+                                    }
+                                  }}
+                                  style={{ backgroundColor: '#4F8EF7', fontSize: '13px' }}
+                                >
+                                  Apply
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Phone Filter */}
+                {activeFilterFields.includes("Phone") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      PHONE
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter phone number..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+
+                {/* Email Filter */}
+                {activeFilterFields.includes("Email") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      EMAIL
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter email..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+
+                {/* Location Filter */}
+                {activeFilterFields.includes("Location") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      LOCATION
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter location..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+
+                {/* Company Filter */}
+                {activeFilterFields.includes("Company") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      COMPANY
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter company..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+
+                {/* Role Filter */}
+                {activeFilterFields.includes("Role") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      ROLE
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter role..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+
+                {/* Tags Filter */}
+                {activeFilterFields.includes("Tags") && (
+                  <div>
+                    <label className="block text-xs uppercase font-semibold mb-1.5" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                      TAGS
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Enter tags..."
+                      className="w-full h-10 px-3 bg-white border rounded-md text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom Action Bar */}
+              <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: '#E2E8F0' }}>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
                     onChange={(e) => {
-                      const [flag, code] = e.target.value.split("|");
-                      setNewClient({ ...newClient, countryFlag: flag, countryCode: code });
+                      if (e.target.checked) {
+                        const allIds = new Set(filteredClients.map(c => c.id));
+                        setSelectedRows(allIds);
+                      } else {
+                        setSelectedRows(new Set());
+                      }
                     }}
-                    className="w-32 px-3 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                    className="w-4 h-4"
+                    style={{ accentColor: '#4F8EF7' }}
+                  />
+                  <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>select all</span>
+                </label>
+
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setShowFilterPanel(false);
+                      toast.success('Filters applied');
+                    }}
+                    style={{ backgroundColor: '#4F8EF7', height: '36px', borderRadius: '6px', fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    <Search className="w-4 h-4" />
+                    Search
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setActiveFilters([]);
+                      setSelectedName([]);
+                      setNameSearch("");
+                      setSelectedStatus([]);
+                      setSelectedProcess([]);
+                      setSelectedResponsible([]);
+                      setResponsibleSearch("");
+                      setSelectedLastContact("Any date");
+                      setSelectedCreatedOn("Any date");
+                      toast.info('Filters reset');
+                    }}
                     style={{ fontFamily: 'Outfit, sans-serif' }}
                   >
-                    {countries.map((country) => (
-                      <option key={`${country.flag}-${country.code}`} value={`${country.flag}|${country.code}`}>
-                        {country.flag} {country.code}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    type="tel"
-                    value={newClient.phone}
-                    onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
-                    placeholder="5551234567"
-                    className="flex-1 px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  />
+                    Reset
+                  </Button>
+
+                  <button
+                    className="text-sm hover:underline"
+                    style={{ color: '#4F8EF7', fontFamily: 'Outfit, sans-serif' }}
+                    onClick={() => toast.info('Save filter feature coming soon')}
+                  >
+                    Save filter
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Email Address</label>
-                <input
-                  type="email"
-                  value={newClient.email}
-                  onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
-                  placeholder="client@email.com"
-                  className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
             </div>
-          </div>
+          )}
 
-          <div className="border-t border-border/50"></div>
-
-          {/* Section 2: Process Details */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Process Details</h3>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Stage <span className="text-destructive">*</span>
-              </label>
-
-              {/* Selected stages as capsules */}
-              {newClient.stage.length > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3 p-3 bg-muted/30 rounded-xl border border-border/50">
-                  {newClient.stage.map((selectedStage) => (
-                    <div
-                      key={selectedStage}
-                      className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-primary/15 to-primary/10 text-primary rounded-lg text-sm font-medium border border-primary/30 shadow-sm hover:shadow-md transition-all"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      <span>{selectedStage}</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setNewClient({
-                            ...newClient,
-                            stage: newClient.stage.filter((s) => s !== selectedStage),
-                          });
-                        }}
-                        className="hover:bg-primary/30 rounded-full p-1 transition-all hover:scale-110"
+          {/* Bulk Action Bar */}
+          {selectedRows.size > 0 && (
+            <div className="bg-card rounded-xl border border-border shadow-sm">
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                    {selectedRows.size} selected
+                  </span>
+                  <button
+                    onClick={handleClearSelection}
+                    className="text-xs hover:text-foreground transition-colors"
+                    style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    Clear selection
+                  </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {!isBulkEditMode ? (
+                    <>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={() => setShowTriggerCallsModal(true)}
                       >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                        <Phone className="w-3.5 h-3.5" />
+                        Trigger Calls
+                      </Button>
+
+                      <Tooltip text="Delete selected clients">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (confirm(`Are you sure you want to delete ${selectedRows.size} client(s)?`)) {
+                              setClients(prev => prev.filter(client => !selectedRows.has(client.id)));
+                              setSelectedRows(new Set());
+                              toast.success(`${selectedRows.size} client(s) deleted successfully`);
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </Tooltip>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleEnterBulkEdit}
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                        Edit
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleCancelBulkEdit}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        onClick={handleSaveBulkEdit}
+                      >
+                        Save
+                      </Button>
+                    </>
+                  )}
                 </div>
-              )}
-
-              {/* Dropdown to add stages */}
-              <div className="relative">
-                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                <select
-                  value=""
-                  onChange={(e) => {
-                    if (e.target.value && !newClient.stage.includes(e.target.value)) {
-                      setNewClient({
-                        ...newClient,
-                        stage: [...newClient.stage, e.target.value],
-                      });
-                    }
-                  }}
-                  className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                >
-                  <option value="">Select stage to add...</option>
-                  {combinedStages
-                    .filter((stage) => !newClient.stage.includes(stage))
-                    .map((stage) => (
-                      <option key={stage} value={stage}>
-                        {stage}
-                      </option>
-                    ))}
-                </select>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="border-t border-border/50"></div>
-
-          {/* Section 3: Responsible Person */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Assignment</h3>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Responsible <span className="text-destructive">*</span>
-              </label>
-              <div className="relative">
-                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <select
-                  value={newClient.responsible}
-                  onChange={(e) => setNewClient({ ...newClient, responsible: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                >
-                  <option value="">Select team member...</option>
-                  {teamMembers.map((member) => (
-                    <option key={member} value={member}>
-                      {member}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="border-t border-border/50"></div>
-
-          {/* Progressive Disclosure Toggle */}
-          <div>
-            <button
-              type="button"
-              onClick={() => setShowAdditionalDetails(!showAdditionalDetails)}
-              className="flex items-center justify-between w-full px-5 py-4 bg-gradient-to-r from-muted/40 to-muted/20 hover:from-muted/60 hover:to-muted/30 rounded-xl transition-all border border-border/50 hover:border-border shadow-sm hover:shadow"
+          {/* Table */}
+          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
+            <div
+              ref={tableScrollRef}
+              className="overflow-x-auto scrollbar-hide"
+              style={{ scrollBehavior: 'auto' }}
+              onScroll={() => {
+                if (tableScrollRef.current) {
+                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+                  const canScrollRight = scrollWidth > clientWidth && scrollLeft < (scrollWidth - clientWidth - 10);
+                  const canScrollLeft = scrollLeft > 10;
+                  setShowScrollIndicator(canScrollRight);
+                  setShowScrollLeftIndicator(canScrollLeft);
+                }
+              }}
             >
-              <div className="flex items-center gap-3">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
-                  showAdditionalDetails ? "bg-primary/10" : "bg-muted/50"
-                }`}>
-                  <svg className={`w-4 h-4 transition-colors ${
-                    showAdditionalDetails ? "text-primary" : "text-muted-foreground"
-                  }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
-                  </svg>
-                </div>
-                <span className="text-sm font-semibold text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Additional Details (Optional)</span>
-              </div>
-              <svg
-                className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${
-                  showAdditionalDetails ? "rotate-180" : ""
-                }`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <table className="w-full min-w-[1200px]">
+                <thead className="border-b border-border" style={{ backgroundColor: '#1F2937' }}>
+                  <tr>
+                    {/* Checkbox column */}
+                    <th className="px-4 py-2.5 w-10">
+                      <input
+                        type="checkbox"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = someSelected;
+                        }}
+                        onChange={handleSelectAll}
+                        className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                      />
+                    </th>
+                    {/* Settings icon above hamburger menu column */}
+                    <th className="px-2 py-2.5 text-center relative" style={{ width: '32px' }}>
+                      <div className="relative inline-block">
+                        <button
+                          onClick={() => {
+                            setShowColumnToggle(!showColumnToggle);
+                            setShowFilterPanel(false);
+                          }}
+                          className="inline-flex items-center justify-center w-8 h-8 rounded transition-colors hover:bg-white/10"
+                          aria-label="Customize Columns"
+                        >
+                          <SettingsIcon className="w-4 h-4 text-[#E5E7EB] hover:text-white transition-colors" />
+                        </button>
+                        {showColumnToggle && (
+                          <div className="absolute left-0 top-full mt-2 w-56 bg-card border border-border rounded-xl shadow-lg p-4 z-50">
+                            <h3 className="font-semibold mb-3" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Visible Columns</h3>
+                            <div className="space-y-2">
+                              {Object.keys(visibleColumns).map((col) => (
+                                <label key={col} className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={visibleColumns[col as keyof typeof visibleColumns]}
+                                    onChange={(e) =>
+                                      setVisibleColumns({
+                                        ...visibleColumns,
+                                        [col]: e.target.checked,
+                                      })
+                                    }
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-sm capitalize" style={{ fontFamily: 'Outfit, sans-serif' }}>{col}</span>
+                                </label>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </th>
+                    {columnOrder.map((columnKey, index) => {
+                      const columnLabels: { [key: string]: string } = {
+                        name: 'Name',
+                        email: 'Email',
+                        phone: 'Phone',
+                        responsible: 'Responsible',
+                        lastContact: 'Last Contact',
+                        status: 'Status',
+                      };
+
+                      return visibleColumns[columnKey as keyof typeof visibleColumns] ? (
+                        <DraggableColumnHeader
+                          key={columnKey}
+                          columnKey={columnKey}
+                          index={index}
+                          label={columnLabels[columnKey]}
+                          moveColumn={moveColumn}
+                        />
+                      ) : null;
+                    })}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {paginatedClients.map((client) => (
+                    <tr
+                      key={client.id}
+                      className={`transition-colors ${selectedRows.has(client.id)
+                          ? "bg-[#E8F0FE]"
+                          : "hover:bg-[#F1F5F9]"
+                        }`}
+                    >
+                      {/* Checkbox column */}
+                      <td className="px-4 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedRows.has(client.id)}
+                          onChange={() => handleSelectRow(client.id)}
+                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                        />
+                      </td>
+                      {/* Hamburger menu column */}
+                      <td className="px-2 py-2.5 relative">
+                        <div className="hamburger-menu-container">
+                          <button
+                            onClick={() => setOpenMenuClientId(openMenuClientId === client.id ? null : client.id)}
+                            className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                            style={{ width: '24px', height: '24px' }}
+                          >
+                            <MoreVertical className="w-4 h-4" style={{ color: '#9CA3AF' }} />
+                          </button>
+
+                          {/* Hamburger menu popup */}
+                          {openMenuClientId === client.id && (
+                            <div
+                              className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-lg z-50"
+                              style={{
+                                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                                minWidth: '160px',
+                                padding: '4px'
+                              }}
+                            >
+                              <button
+                                onClick={() => {
+                                  setOpenMenuClientId(null);
+                                  navigate(`/clients/${client.id}`);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                              >
+                                <Eye className="w-4 h-4" />
+                                <span>View Profile</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleOpenScheduleModal(client);
+                                  setOpenMenuClientId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                              >
+                                <Phone className="w-4 h-4" />
+                                <span>Call</span>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  handleDeleteClient(client.id);
+                                  setOpenMenuClientId(null);
+                                }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-sm rounded hover:bg-[#E8F0FE] transition-colors"
+                                style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span>Delete</span>
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      {columnOrder.map((columnKey) =>
+                        visibleColumns[columnKey as keyof typeof visibleColumns] ? renderCell(columnKey, client) : null
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Scroll Right Indicator */}
+            {/* Scroll Right Button - Semicircle (2 rows height, centered) */}
+            <button
+              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+              style={{
+                top: '50%',
+                transform: 'translateY(-50%)',
+                height: '112px', // Approximately 2 table rows (56px each)
+                width: '40px',
+                backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderTopLeftRadius: '9999px',
+                borderBottomLeftRadius: '9999px',
+                borderTopRightRadius: '0',
+                borderBottomRightRadius: '0',
+                opacity: showScrollIndicator ? 1 : 0.2,
+                pointerEvents: showScrollIndicator ? 'auto' : 'none'
+              }}
+              onMouseEnter={(e) => {
+                if (showScrollIndicator) {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) {
+                    (icon as SVGElement).style.transform = 'scale(1.1)';
+                  }
+                  handleScrollRightMouseEnter();
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                e.currentTarget.style.boxShadow = '';
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) {
+                  (icon as SVGElement).style.transform = 'scale(1)';
+                }
+                handleScrollMouseLeave();
+              }}
+            >
+              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
             </button>
+
+            {/* Scroll Left Button - Semicircle (2 rows height, centered) */}
+            <button
+              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+              style={{
+                top: '50%',
+                transform: 'translateY(-50%)',
+                height: '112px', // Approximately 2 table rows (56px each)
+                width: '40px',
+                backgroundColor: 'rgba(255, 255, 255, 0.5)',
+                backdropFilter: 'blur(8px)',
+                WebkitBackdropFilter: 'blur(8px)',
+                borderTopRightRadius: '9999px',
+                borderBottomRightRadius: '9999px',
+                borderTopLeftRadius: '0',
+                borderBottomLeftRadius: '0',
+                opacity: showScrollLeftIndicator ? 1 : 0.2,
+                pointerEvents: showScrollLeftIndicator ? 'auto' : 'none'
+              }}
+              onMouseEnter={(e) => {
+                if (showScrollLeftIndicator) {
+                  e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.65)';
+                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)';
+                  const icon = e.currentTarget.querySelector('svg');
+                  if (icon) {
+                    (icon as SVGElement).style.transform = 'scale(1.1)';
+                  }
+                  handleScrollLeftMouseEnter();
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+                e.currentTarget.style.boxShadow = '';
+                const icon = e.currentTarget.querySelector('svg');
+                if (icon) {
+                  (icon as SVGElement).style.transform = 'scale(1)';
+                }
+                handleScrollMouseLeave();
+              }}
+            >
+              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: '#1F2937', opacity: 1 }} />
+            </button>
+
+            {/* Pagination Controls */}
+            <div className="border-t border-border px-4 py-3">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>Rows per page:</span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(e) => handleRowsPerPageChange(Number(e.target.value))}
+                      className="px-2 py-1 bg-input-background border border-input rounded-lg text-xs"
+                    >
+                      <option value={15}>15</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                    </select>
+                  </div>
+                  <span className="text-xs" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                    Showing {startIndex + 1}–{endIndex} of {totalRecords.toLocaleString()}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Tooltip text="First Page">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronsLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip text="Previous Page">
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                  <span className="text-xs px-2 hidden sm:inline" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <span className="text-xs px-2 sm:hidden" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                    {currentPage}/{totalPages}
+                  </span>
+                  <Tooltip text="Next Page">
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip text="Last Page">
+                    <button
+                      onClick={() => setCurrentPage(totalPages)}
+                      disabled={currentPage === totalPages}
+                      className="p-1.5 hover:bg-muted rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <ChevronsRight className="w-3.5 h-3.5" />
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+            </div>
           </div>
 
-          {showAdditionalDetails && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200 p-4 bg-muted/10 rounded-xl border border-border/30">
-              {/* Section 3: Call Preferences */}
+          {/* Add Client Modal */}
+          <Modal
+            isOpen={showAddModal}
+            onClose={() => {
+              setShowAddModal(false);
+              setShowAdditionalDetails(false);
+            }}
+            title="Add New Client"
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setShowAdditionalDetails(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleAddClient}
+                  disabled={!newClient.name || !newClient.phone || newClient.stage.length === 0 || !newClient.responsible}
+                >
+                  Add Client
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-6">
+              {/* Section 1: Client Information (Primary) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-success/10 flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Call Preferences</h3>
+                  <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Client Information</h3>
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Preferred Calling Time</label>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      Client Name <span className="text-destructive">*</span>
+                    </label>
                     <input
-                      type="time"
-                      value={newClient.preferredCallingTime}
-                      onChange={(e) => setNewClient({ ...newClient, preferredCallingTime: e.target.value })}
+                      type="text"
+                      value={newClient.name}
+                      onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                      placeholder="Enter client name"
                       className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                       style={{ fontFamily: 'Outfit, sans-serif' }}
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Timezone</label>
-                    <select
-                      value={newClient.timezone}
-                      onChange={(e) => setNewClient({ ...newClient, timezone: e.target.value })}
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                      Phone Number <span className="text-destructive">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        value={`${newClient.countryFlag}|${newClient.countryCode}`}
+                        onChange={(e) => {
+                          const [flag, code] = e.target.value.split("|");
+                          setNewClient({ ...newClient, countryFlag: flag, countryCode: code });
+                        }}
+                        className="w-32 px-3 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        {countries.map((country) => (
+                          <option key={`${country.flag}-${country.code}`} value={`${country.flag}|${country.code}`}>
+                            {country.flag} {country.code}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="tel"
+                        value={newClient.phone}
+                        onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                        placeholder="5551234567"
+                        className="flex-1 px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Email Address</label>
+                    <input
+                      type="email"
+                      value={newClient.email}
+                      onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                      placeholder="client@email.com"
                       className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
                       style={{ fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-border/50"></div>
+
+              {/* Section 2: Process Details */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <div className="w-8 h-8 rounded-lg bg-secondary/10 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                    </svg>
+                  </div>
+                  <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Process Details</h3>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Stage <span className="text-destructive">*</span>
+                  </label>
+
+                  {/* Selected stages as capsules */}
+                  {newClient.stage.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3 p-3 bg-muted/30 rounded-xl border border-border/50">
+                      {newClient.stage.map((selectedStage) => (
+                        <div
+                          key={selectedStage}
+                          className="inline-flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-primary/15 to-primary/10 text-primary rounded-lg text-sm font-medium border border-primary/30 shadow-sm hover:shadow-md transition-all"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <span>{selectedStage}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNewClient({
+                                ...newClient,
+                                stage: newClient.stage.filter((s) => s !== selectedStage),
+                              });
+                            }}
+                            className="hover:bg-primary/30 rounded-full p-1 transition-all hover:scale-110"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Dropdown to add stages */}
+                  <div className="relative">
+                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                    <select
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value && !newClient.stage.includes(e.target.value)) {
+                          setNewClient({
+                            ...newClient,
+                            stage: [...newClient.stage, e.target.value],
+                          });
+                        }
+                      }}
+                      className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
                     >
-                      <option value="America/New_York">Eastern Time (ET)</option>
-                      <option value="America/Chicago">Central Time (CT)</option>
-                      <option value="America/Denver">Mountain Time (MT)</option>
-                      <option value="America/Los_Angeles">Pacific Time (PT)</option>
-                      <option value="America/Anchorage">Alaska Time (AKT)</option>
-                      <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
-                      <option value="Asia/Kolkata">India Standard Time (IST)</option>
-                      <option value="Europe/London">Greenwich Mean Time (GMT)</option>
-                      <option value="Australia/Sydney">Australian Eastern Time (AET)</option>
+                      <option value="">Select stage to add...</option>
+                      {combinedStages
+                        .filter((stage) => !newClient.stage.includes(stage))
+                        .map((stage) => (
+                          <option key={stage} value={stage}>
+                            {stage}
+                          </option>
+                        ))}
                     </select>
                   </div>
                 </div>
@@ -3405,1061 +3317,1414 @@ export default function Clients() {
 
               <div className="border-t border-border/50"></div>
 
-              {/* Section 4: Business / Context Info */}
+              {/* Section 3: Responsible Person */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
                   </div>
-                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Business & Context Info</h3>
+                  <h3 className="text-base font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Assignment</h3>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Source</label>
-                  <input
-                    type="text"
-                    value={newClient.source}
-                    onChange={(e) => setNewClient({ ...newClient, source: e.target.value })}
-                    placeholder="e.g., Website, Referral, Social"
-                    className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  />
+                  <label className="block text-sm font-semibold mb-3 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                    Responsible <span className="text-destructive">*</span>
+                  </label>
+                  <div className="relative">
+                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <select
+                      value={newClient.responsible}
+                      onChange={(e) => setNewClient({ ...newClient, responsible: e.target.value })}
+                      className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <option value="">Select team member...</option>
+                      {teamMembers.map((member) => (
+                        <option key={member} value={member}>
+                          {member}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
               <div className="border-t border-border/50"></div>
 
-              {/* Section 5: Company Details */}
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center">
-                    <svg className="w-3.5 h-3.5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                    </svg>
-                  </div>
-                  <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Company Details</h3>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Company Name</label>
-                    <input
-                      type="text"
-                      value={newClient.companyName}
-                      onChange={(e) => setNewClient({ ...newClient, companyName: e.target.value })}
-                      placeholder="Company name"
-                      className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Job Position</label>
-                      <input
-                        type="text"
-                        value={newClient.jobPosition}
-                        onChange={(e) => setNewClient({ ...newClient, jobPosition: e.target.value })}
-                        placeholder="Job title"
-                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Number of Employees</label>
-                      <input
-                        type="number"
-                        value={newClient.numberOfEmployees}
-                        onChange={(e) => setNewClient({ ...newClient, numberOfEmployees: e.target.value })}
-                        placeholder="e.g., 50"
-                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
-      </Modal>
-
-      {/* Import Clients Modal */}
-      <Modal
-        isOpen={showImportModal}
-        onClose={() => {
-          setShowImportModal(false);
-          setSelectedFile(null);
-        }}
-        title="Import Clients"
-        footer={
-          <>
-            <Button variant="outline" onClick={() => {
-              setShowImportModal(false);
-              setSelectedFile(null);
-            }}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleImport}>
-              Import
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Upload a CSV file to import clients. Make sure your file follows the correct format.
-          </p>
-
-          {/* Template Download Box */}
-          <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-            <div className="flex items-center justify-between">
+              {/* Progressive Disclosure Toggle */}
               <div>
-                <p className="text-sm font-medium text-foreground">Need a template?</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-                <Download className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* File Upload - Drag and Drop */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Upload CSV File</label>
-            <div
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${
-                isDragging
-                  ? "border-primary bg-primary/5"
-                  : "border-border bg-input-background"
-              }`}
-            >
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileSelect}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                id="file-upload"
-              />
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground" />
-                <div>
-                  <p className="text-sm font-medium">
-                    <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
-                      Click to upload
-                    </label>
-                    {" "}or drag and drop
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
-                </div>
-              </div>
-            </div>
-            {selectedFile && (
-              <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-medium">{selectedFile.name}</span>
-                </div>
                 <button
-                  onClick={() => setSelectedFile(null)}
-                  className="text-muted-foreground hover:text-destructive transition-colors"
+                  type="button"
+                  onClick={() => setShowAdditionalDetails(!showAdditionalDetails)}
+                  className="flex items-center justify-between w-full px-5 py-4 bg-gradient-to-r from-muted/40 to-muted/20 hover:from-muted/60 hover:to-muted/30 rounded-xl transition-all border border-border/50 hover:border-border shadow-sm hover:shadow"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <div className="flex items-center gap-3">
+                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${showAdditionalDetails ? "bg-primary/10" : "bg-muted/50"
+                      }`}>
+                      <svg className={`w-4 h-4 transition-colors ${showAdditionalDetails ? "text-primary" : "text-muted-foreground"
+                        }`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                      </svg>
+                    </div>
+                    <span className="text-sm font-semibold text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Additional Details (Optional)</span>
+                  </div>
+                  <svg
+                    className={`w-5 h-5 text-muted-foreground transition-transform duration-200 ${showAdditionalDetails ? "rotate-180" : ""
+                      }`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
                 </button>
               </div>
-            )}
-          </div>
-        </div>
-      </Modal>
 
-      {/* Schedule Call Drawer */}
-      {showScheduleCallModal && (
-        <>
-          {/* Overlay */}
-          <div
-            className="fixed inset-0 bg-black/30 z-40"
-            onClick={() => {
-              setShowScheduleCallModal(false);
-              setSelectedClientForScheduling(null);
-              setScheduledDate("");
-              setScheduledTime("");
+              {showAdditionalDetails && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200 p-4 bg-muted/10 rounded-xl border border-border/30">
+                  {/* Section 3: Call Preferences */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-7 h-7 rounded-lg bg-success/10 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Call Preferences</h3>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Preferred Calling Time</label>
+                        <input
+                          type="time"
+                          value={newClient.preferredCallingTime}
+                          onChange={(e) => setNewClient({ ...newClient, preferredCallingTime: e.target.value })}
+                          className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Timezone</label>
+                        <select
+                          value={newClient.timezone}
+                          onChange={(e) => setNewClient({ ...newClient, timezone: e.target.value })}
+                          className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <option value="America/New_York">Eastern Time (ET)</option>
+                          <option value="America/Chicago">Central Time (CT)</option>
+                          <option value="America/Denver">Mountain Time (MT)</option>
+                          <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                          <option value="America/Anchorage">Alaska Time (AKT)</option>
+                          <option value="Pacific/Honolulu">Hawaii Time (HT)</option>
+                          <option value="Asia/Kolkata">India Standard Time (IST)</option>
+                          <option value="Europe/London">Greenwich Mean Time (GMT)</option>
+                          <option value="Australia/Sydney">Australian Eastern Time (AET)</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-border/50"></div>
+
+                  {/* Section 4: Business / Context Info */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Business & Context Info</h3>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Source</label>
+                      <input
+                        type="text"
+                        value={newClient.source}
+                        onChange={(e) => setNewClient({ ...newClient, source: e.target.value })}
+                        placeholder="e.g., Website, Referral, Social"
+                        className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-border/50"></div>
+
+                  {/* Section 5: Company Details */}
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-7 h-7 rounded-lg bg-secondary/10 flex items-center justify-center">
+                        <svg className="w-3.5 h-3.5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                        </svg>
+                      </div>
+                      <h3 className="text-sm font-bold text-foreground" style={{ fontFamily: 'DM Sans, sans-serif' }}>Company Details</h3>
+                    </div>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Company Name</label>
+                        <input
+                          type="text"
+                          value={newClient.companyName}
+                          onChange={(e) => setNewClient({ ...newClient, companyName: e.target.value })}
+                          placeholder="Company name"
+                          className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Job Position</label>
+                          <input
+                            type="text"
+                            value={newClient.jobPosition}
+                            onChange={(e) => setNewClient({ ...newClient, jobPosition: e.target.value })}
+                            placeholder="Job title"
+                            className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-semibold mb-2 text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>Number of Employees</label>
+                          <input
+                            type="number"
+                            value={newClient.numberOfEmployees}
+                            onChange={(e) => setNewClient({ ...newClient, numberOfEmployees: e.target.value })}
+                            placeholder="e.g., 50"
+                            className="w-full px-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
+                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </Modal>
+
+          {/* Import Clients Modal */}
+          <Modal
+            isOpen={showImportModal}
+            onClose={() => {
+              setShowImportModal(false);
+              setSelectedFile(null);
+              setImportMethod("csv");
             }}
-          />
-
-          {/* Drawer */}
-          <div className="fixed right-0 top-0 h-full w-[440px] bg-white z-50 shadow-xl flex flex-col animate-slide-in-right">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-gray-700" />
-                <h2 className="text-base font-bold text-gray-900">Schedule Call</h2>
+            title="Import Clients"
+            footer={
+              <>
+                {importMethod === "webhook" ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowImportModal(false);
+                      setSelectedFile(null);
+                      setImportMethod("csv");
+                    }}
+                  >
+                    Close
+                  </Button>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowImportModal(false);
+                        setSelectedFile(null);
+                        setImportMethod("csv");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    {importMethod === "csv" ? (
+                      <Button variant="primary" onClick={handleImport}>
+                        Import
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="primary"
+                        disabled={!selectedImportApiId}
+                        onClick={() => {
+                          const api = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                          toast.success(`Fetching records from ${api?.name || "API"}...`);
+                          setShowImportModal(false);
+                          setSelectedFile(null);
+                          setImportMethod("csv");
+                        }}
+                      >
+                        Fetch & Import
+                      </Button>
+                    )}
+                  </>
+                )}
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div className="flex gap-2 mb-5 bg-muted/30 p-1 rounded-lg w-fit">
+                {(["csv", "api", "webhook"] as const).map((method) => (
+                  <button
+                    key={method}
+                    onClick={() => setImportMethod(method)}
+                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                      }`}
+                  >
+                    {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
+                  </button>
+                ))}
               </div>
-              <button
+
+              {importMethod === "csv" && (
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Upload a CSV file to import {entityLabel}. Make sure your file follows the correct format.
+                  </p>
+
+                  {/* Template Download Box */}
+                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Need a template?</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
+                      </div>
+                      <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                        <Download className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* File Upload - Drag and Drop */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
+                          ? "border-primary bg-primary/5"
+                          : "border-border bg-input-background"
+                        }`}
+                    >
+                      <input
+                        type="file"
+                        accept=".csv"
+                        onChange={handleFileSelect}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        id="file-upload"
+                      />
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="w-8 h-8 text-muted-foreground" />
+                        <div>
+                          <p className="text-sm font-medium">
+                            <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
+                              Click to upload
+                            </label>
+                            {" "}or drag and drop
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
+                        </div>
+                      </div>
+                    </div>
+                    {selectedFile && (
+                      <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-primary" />
+                          <span className="text-sm font-medium">{selectedFile.name}</span>
+                        </div>
+                        <button
+                          onClick={() => setSelectedFile(null)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {importMethod === "api" && (
+                <>
+                  {customApiIntegrations.length === 0 ? (
+                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                      <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                      <h4 className="font-semibold mb-1">No API connections yet</h4>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
+                      </p>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          setShowImportModal(false);
+                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                        }}
+                      >
+                        <Plus className="w-4 h-4" /> Add API
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {customApiIntegrations.map((api) => (
+                        <label
+                          key={api.id}
+                          className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                            }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="importApi"
+                              checked={selectedImportApiId === api.id}
+                              onChange={() => setSelectedImportApiId(api.id)}
+                              className="w-4 h-4"
+                            />
+                            <div>
+                              <p className="text-sm font-semibold">{api.name}</p>
+                              <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                            Connected ✅
+                          </span>
+                        </label>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setShowImportModal(false);
+                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                        }}
+                        className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add another API
+                      </button>
+                    </div>
+                  )}
+
+                  {selectedImportApiId && (
+                    <div className="mt-4 p-3 bg-muted/20 border border-border rounded-lg">
+                      <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {customApiIntegrations.find(a => a.id === selectedImportApiId)?.fieldMappings.map((f) => (
+                          <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
+                            {f.label || f.key}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {importMethod === "webhook" && (
+                <div className="space-y-5">
+
+                  {/* Unified URL container */}
+                  <div>
+                    {/* Header row */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm font-semibold">Webhook URL</p>
+                        {/* (i) info button with popover */}
+                        <div className="relative webhook-info-popover">
+                          <button
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            onMouseEnter={() => setShowWebhookInfo(true)}
+                            onMouseLeave={(e) => {
+                              const rel = e.relatedTarget as HTMLElement | null;
+                              if (!rel?.closest('.webhook-info-popover')) setShowWebhookInfo(false);
+                            }}
+                            onClick={() => setShowWebhookInfo(v => !v)}
+                            aria-label="Webhook URL info"
+                          >
+                            <Info className="w-3.5 h-3.5" />
+                          </button>
+                          {showWebhookInfo && (
+                            <div
+                              className="absolute top-full left-0 mt-2 z-50 w-72 bg-white border border-border rounded-lg shadow-lg p-3 webhook-info-popover"
+                              onMouseEnter={() => setShowWebhookInfo(true)}
+                              onMouseLeave={() => setShowWebhookInfo(false)}
+                            >
+                              {webhookLinkMode === "system" ? (
+                                <p className="text-xs text-muted-foreground leading-relaxed">
+                                  Use this URL if you're embedding the webhook into your own system or backend. Send a POST request with a JSON body (see Example Payload) and an Authorization header.
+                                </p>
+                              ) : (
+                                <div className="space-y-2">
+                                  <p className="text-xs text-muted-foreground leading-relaxed">
+                                    For manual, one-off entries — replace the placeholders (e.g. {'{CLIENT_NAME}'}, {'{YOUR_API_KEY}'}) with real values, then open the link in a browser or paste into a tool that supports simple GET requests. No coding required.
+                                  </p>
+                                  <div className="flex items-start gap-1.5 pt-1 border-t border-border">
+                                    <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
+                                    <p className="text-xs text-amber-600">API key is exposed in the URL — avoid sharing publicly or using for sensitive/bulk data.</p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {/* Copy button */}
+                      <button
+                        onClick={() => {
+                          const url = webhookLinkMode === "system"
+                            ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                            : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&name={CLIENT_NAME}&email={CLIENT_EMAIL}&phone={CLIENT_PHONE}&country={COUNTRY_CODE}&processes={PROCESS_NAME}&stage={STAGE_NAME}&responsible={RESPONSIBLE_PERSON}&status={STATUS}`;
+                          navigator.clipboard.writeText(url);
+                          toast.success(webhookLinkMode === "system" ? "Webhook URL copied" : "Link copied");
+                        }}
+                        className="text-xs text-primary hover:underline flex items-center gap-1"
+                      >
+                        <Copy className="w-3 h-3" /> Copy
+                      </button>
+                    </div>
+
+                    {/* Code block — same container, only content changes */}
+                    <div className="bg-white border border-border rounded-lg px-3 py-2">
+                      <code className="text-xs text-foreground break-all font-mono">
+                        {webhookLinkMode === "system"
+                          ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                          : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&name={CLIENT_NAME}&email={CLIENT_EMAIL}&phone={CLIENT_PHONE}&country={COUNTRY_CODE}&processes={PROCESS_NAME}&stage={STAGE_NAME}&responsible={RESPONSIBLE_PERSON}&status={STATUS}`
+                        }
+                      </code>
+                    </div>
+
+                    {/* Mode toggle link */}
+                    <div className="flex justify-end mt-1.5">
+                      <button
+                        onClick={() => setWebhookLinkMode(m => m === "system" ? "manual" : "system")}
+                        className="text-xs text-primary hover:underline cursor-pointer"
+                      >
+                        {webhookLinkMode === "system" ? "Use quick link" : "Use webhook URL instead"}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Example Payload — system mode only */}
+                  {webhookLinkMode === "system" && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-sm font-semibold">Example Payload</p>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(examplePayloadJson);
+                            toast.success("Payload copied");
+                          }}
+                          className="text-xs text-primary hover:underline flex items-center gap-1"
+                        >
+                          <Copy className="w-3 h-3" /> Copy
+                        </button>
+                      </div>
+                      <pre className="bg-muted/30 border border-border rounded-lg p-4 text-xs overflow-x-auto font-mono">
+                        {examplePayloadJson}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Footer note — POST only */}
+                  {webhookLinkMode === "system" && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Shield className="w-3.5 h-3.5" />
+                      <span><span className="font-medium">For POST requests only:</span> Include header <code className="font-mono bg-muted px-1 rounded">Authorization: Bearer &lt;org-api-key&gt;</code></span>
+                    </div>
+                  )}
+
+                </div>
+              )}
+            </div>
+          </Modal>
+
+          {/* Schedule Call Drawer */}
+          {showScheduleCallModal && (
+            <>
+              {/* Overlay */}
+              <div
+                className="fixed inset-0 bg-black/30 z-40"
                 onClick={() => {
                   setShowScheduleCallModal(false);
                   setSelectedClientForScheduling(null);
                   setScheduledDate("");
                   setScheduledTime("");
                 }}
-                className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
-              >
-                <X className="w-4 h-4 text-white" />
-              </button>
-            </div>
+              />
 
-            {/* Scrollable Body */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
-        {selectedClientForScheduling && (
-          <>
-            {/* Section 1: Select Client */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <User className="w-4 h-4 text-gray-500" />
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Client</h3>
-              </div>
-              <div className="relative p-4 bg-gradient-to-br from-blue-700 to-blue-600 rounded-lg">
-                <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
-                    <User className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <p className="font-bold text-white text-[15px]">{selectedClientForScheduling.name}</p>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium">
-                        LEAD
-                      </span>
-                    </div>
-                    <p className="text-xs text-blue-100">
-                      • Since {selectedClientForScheduling.lastContact}
-                    </p>
+              {/* Drawer */}
+              <div className="fixed right-0 top-0 h-full w-[440px] bg-white z-50 shadow-xl flex flex-col animate-slide-in-right">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-gray-700" />
+                    <h2 className="text-base font-bold text-gray-900">Schedule Call</h2>
                   </div>
                   <button
                     onClick={() => {
                       setShowScheduleCallModal(false);
                       setSelectedClientForScheduling(null);
+                      setScheduledDate("");
+                      setScheduledTime("");
                     }}
-                    className="text-[13px] text-white hover:underline"
+                    className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
                   >
-                    Change
+                    <X className="w-4 h-4 text-white" />
                   </button>
                 </div>
-              </div>
-            </div>
 
-            {/* Section 2: Contact Details */}
-            <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact Details</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
-                  <Phone className="w-4 h-4 text-green-600" />
-                  <span className="text-sm text-gray-900">{selectedClientForScheduling.phone || "Not provided"}</span>
-                </div>
-                <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
-                  <Mail className="w-4 h-4 text-red-500" />
-                  <span className="text-sm text-gray-900">{selectedClientForScheduling.email || "Not provided"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 3: Pipeline Info */}
-            <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pipeline Info</h3>
-              <div className="border border-gray-200 rounded-lg overflow-hidden">
-                <div className="p-3">
-                  <p className="text-[11px] text-gray-500 mb-1">Current Stage</p>
-                  <div className="flex items-center gap-1.5">
-                    <div className="w-2 h-2 rounded-full bg-blue-600"></div>
-                    <p className="text-sm font-bold text-gray-900">{selectedClientForScheduling.stage}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Section 4: Select Date & Time */}
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Clock className="w-4 h-4 text-teal-600" />
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Date & Time</h3>
-              </div>
-
-              <div className="border border-gray-200 rounded-lg p-4">
-                {/* Month/Year Selector */}
-                <div className="flex items-center justify-between mb-4">
-                  <select
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="text-sm font-bold text-gray-900 border-none bg-transparent focus:outline-none cursor-pointer"
-                  >
-                    {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month, idx) => (
-                      <option key={idx} value={idx}>{month.substring(0, 3)}</option>
-                    ))}
-                  </select>
-                  <span className="text-sm font-bold text-gray-900">{selectedYear}</span>
-                </div>
-
-                {/* Calendar View */}
-                <div className="mb-4">
-                  <div className="grid grid-cols-7 gap-1 mb-2">
-                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                      <div key={day} className="text-center text-xs text-gray-500 py-1">
-                        {day}
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto px-4 py-4 space-y-6">
+                  {selectedClientForScheduling && (
+                    <>
+                      {/* Section 1: Select Client */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <User className="w-4 h-4 text-gray-500" />
+                          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Client</h3>
+                        </div>
+                        <div className="relative p-4 bg-gradient-to-br from-blue-700 to-blue-600 rounded-lg">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
+                              <User className="w-5 h-5 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="font-bold text-white text-[15px]">{selectedClientForScheduling.name}</p>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 text-white font-medium">
+                                  LEAD
+                                </span>
+                              </div>
+                              <p className="text-xs text-blue-100">
+                                • Since {selectedClientForScheduling.lastContact}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setShowScheduleCallModal(false);
+                                setSelectedClientForScheduling(null);
+                              }}
+                              className="text-[13px] text-white hover:underline"
+                            >
+                              Change
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1">
-                    {(() => {
-                      const firstDay = new Date(selectedYear, selectedMonth, 1).getDay();
-                      const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-                      const today = new Date();
-                      const days = [];
 
-                      // Empty cells for days before month starts
-                      for (let i = 0; i < firstDay; i++) {
-                        days.push(
-                          <div key={`empty-${i}`} className="aspect-square"></div>
-                        );
-                      }
+                      {/* Section 2: Contact Details */}
+                      <div>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contact Details</h3>
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
+                            <Phone className="w-4 h-4 text-green-600" />
+                            <span className="text-sm text-gray-900">{selectedClientForScheduling.phone || "Not provided"}</span>
+                          </div>
+                          <div className="flex items-center gap-3 px-3 py-2.5 border border-gray-200 rounded-lg">
+                            <Mail className="w-4 h-4 text-red-500" />
+                            <span className="text-sm text-gray-900">{selectedClientForScheduling.email || "Not provided"}</span>
+                          </div>
+                        </div>
+                      </div>
 
-                      // Days of the month
-                      for (let day = 1; day <= daysInMonth; day++) {
-                        const date = new Date(selectedYear, selectedMonth, day);
-                        const dateString = date.toISOString().split("T")[0];
-                        const isSelected = scheduledDate === dateString;
-                        const isPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                        const isToday = date.toDateString() === today.toDateString();
+                      {/* Section 3: Pipeline Info */}
+                      <div>
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Pipeline Info</h3>
+                        <div className="border border-gray-200 rounded-lg overflow-hidden">
+                          <div className="p-3">
+                            <p className="text-[11px] text-gray-500 mb-1">Current Stage</p>
+                            <div className="flex items-center gap-1.5">
+                              <div className="w-2 h-2 rounded-full bg-blue-600"></div>
+                              <p className="text-sm font-bold text-gray-900">{selectedClientForScheduling.stage}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
 
-                        days.push(
-                          <button
-                            key={day}
-                            onClick={() => !isPast && setScheduledDate(dateString)}
-                            disabled={isPast}
-                            className={`aspect-square flex items-center justify-center text-[13px] transition-colors ${
-                              isSelected || isToday
-                                ? "bg-blue-600 text-white rounded-full font-semibold"
-                                : isPast
-                                ? "text-gray-300 cursor-not-allowed"
-                                : "text-gray-700 hover:bg-blue-100 rounded-full"
-                            }`}
+                      {/* Section 4: Select Date & Time */}
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Clock className="w-4 h-4 text-teal-600" />
+                          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Select Date & Time</h3>
+                        </div>
+
+                        <div className="border border-gray-200 rounded-lg p-4">
+                          {/* Month/Year Selector */}
+                          <div className="flex items-center justify-between mb-4">
+                            <select
+                              value={selectedMonth}
+                              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                              className="text-sm font-bold text-gray-900 border-none bg-transparent focus:outline-none cursor-pointer"
+                            >
+                              {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((month, idx) => (
+                                <option key={idx} value={idx}>{month.substring(0, 3)}</option>
+                              ))}
+                            </select>
+                            <span className="text-sm font-bold text-gray-900">{selectedYear}</span>
+                          </div>
+
+                          {/* Calendar View */}
+                          <div className="mb-4">
+                            <div className="grid grid-cols-7 gap-1 mb-2">
+                              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                                <div key={day} className="text-center text-xs text-gray-500 py-1">
+                                  {day}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="grid grid-cols-7 gap-1">
+                              {(() => {
+                                const firstDay = new Date(selectedYear, selectedMonth, 1).getDay();
+                                const daysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+                                const today = new Date();
+                                const days = [];
+
+                                // Empty cells for days before month starts
+                                for (let i = 0; i < firstDay; i++) {
+                                  days.push(
+                                    <div key={`empty-${i}`} className="aspect-square"></div>
+                                  );
+                                }
+
+                                // Days of the month
+                                for (let day = 1; day <= daysInMonth; day++) {
+                                  const date = new Date(selectedYear, selectedMonth, day);
+                                  const dateString = date.toISOString().split("T")[0];
+                                  const isSelected = scheduledDate === dateString;
+                                  const isPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                                  const isToday = date.toDateString() === today.toDateString();
+
+                                  days.push(
+                                    <button
+                                      key={day}
+                                      onClick={() => !isPast && setScheduledDate(dateString)}
+                                      disabled={isPast}
+                                      className={`aspect-square flex items-center justify-center text-[13px] transition-colors ${isSelected || isToday
+                                          ? "bg-blue-600 text-white rounded-full font-semibold"
+                                          : isPast
+                                            ? "text-gray-300 cursor-not-allowed"
+                                            : "text-gray-700 hover:bg-blue-100 rounded-full"
+                                        }`}
+                                    >
+                                      {day}
+                                    </button>
+                                  );
+                                }
+
+                                return days;
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* Time Picker */}
+                          <div className="border-t border-gray-200 pt-4">
+                            <p className="text-[11px] text-gray-500 text-center font-semibold mb-3 tracking-wide">24H FORMAT</p>
+                            <div className="flex items-center justify-center gap-2 mb-3">
+                              <input
+                                type="number"
+                                min="0"
+                                max="23"
+                                value={scheduledTime ? scheduledTime.split(":")[0] : "14"}
+                                onChange={(e) => {
+                                  const hours = e.target.value.padStart(2, "0");
+                                  const minutes = scheduledTime ? scheduledTime.split(":")[1] : "00";
+                                  setScheduledTime(`${hours}:${minutes}`);
+                                }}
+                                className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                              <span className="text-2xl font-bold text-gray-400">:</span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="59"
+                                value={scheduledTime ? scheduledTime.split(":")[1] : "00"}
+                                onChange={(e) => {
+                                  const hours = scheduledTime ? scheduledTime.split(":")[0] : "14";
+                                  const minutes = e.target.value.padStart(2, "0");
+                                  setScheduledTime(`${hours}:${minutes}`);
+                                }}
+                                className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              />
+                            </div>
+
+                            {/* Selected Summary */}
+                            {scheduledDate && scheduledTime && (
+                              <p className="text-xs text-blue-600 text-center">
+                                {new Date(scheduledDate).toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })} at {scheduledTime} IST
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* No Phone Warning */}
+                      {!selectedClientForScheduling.phone && (
+                        <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                          <svg
+                            className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
                           >
-                            {day}
-                          </button>
-                        );
-                      }
-
-                      return days;
-                    })()}
-                  </div>
-                </div>
-
-                {/* Time Picker */}
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-[11px] text-gray-500 text-center font-semibold mb-3 tracking-wide">24H FORMAT</p>
-                  <div className="flex items-center justify-center gap-2 mb-3">
-                    <input
-                      type="number"
-                      min="0"
-                      max="23"
-                      value={scheduledTime ? scheduledTime.split(":")[0] : "14"}
-                      onChange={(e) => {
-                        const hours = e.target.value.padStart(2, "0");
-                        const minutes = scheduledTime ? scheduledTime.split(":")[1] : "00";
-                        setScheduledTime(`${hours}:${minutes}`);
-                      }}
-                      className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <span className="text-2xl font-bold text-gray-400">:</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      value={scheduledTime ? scheduledTime.split(":")[1] : "00"}
-                      onChange={(e) => {
-                        const hours = scheduledTime ? scheduledTime.split(":")[0] : "14";
-                        const minutes = e.target.value.padStart(2, "0");
-                        setScheduledTime(`${hours}:${minutes}`);
-                      }}
-                      className="w-14 h-11 text-center text-2xl font-bold text-gray-900 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  {/* Selected Summary */}
-                  {scheduledDate && scheduledTime && (
-                    <p className="text-xs text-blue-600 text-center">
-                      {new Date(scheduledDate).toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric",
-                        year: "numeric",
-                      })} at {scheduledTime} IST
-                    </p>
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                            />
+                          </svg>
+                          <div>
+                            <p className="text-sm font-medium text-red-900">No Phone Number</p>
+                            <p className="text-sm text-gray-600 mt-1">
+                              This client doesn't have a phone number. Please add one before scheduling a call.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
-              </div>
-            </div>
 
-            {/* No Phone Warning */}
-            {!selectedClientForScheduling.phone && (
-              <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
-                <svg
-                  className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                  />
-                </svg>
-                <div>
-                  <p className="text-sm font-medium text-red-900">No Phone Number</p>
-                  <p className="text-sm text-gray-600 mt-1">
-                    This client doesn't have a phone number. Please add one before scheduling a call.
-                  </p>
+                {/* Fixed Footer */}
+                <div className="border-t border-gray-200 px-4 py-3.5 flex items-center justify-end gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setShowScheduleCallModal(false);
+                      setSelectedClientForScheduling(null);
+                      setScheduledDate("");
+                      setScheduledTime("");
+                    }}
+                    className="border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg text-sm"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleScheduleCall}
+                    disabled={!selectedClientForScheduling?.phone || !scheduledDate || !scheduledTime}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold"
+                  >
+                    Schedule
+                  </Button>
                 </div>
               </div>
-            )}
-          </>
-        )}
-            </div>
+            </>
+          )}
 
-            {/* Fixed Footer */}
-            <div className="border-t border-gray-200 px-4 py-3.5 flex items-center justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowScheduleCallModal(false);
-                  setSelectedClientForScheduling(null);
-                  setScheduledDate("");
-                  setScheduledTime("");
-                }}
-                className="border-gray-300 text-gray-700 px-5 py-2.5 rounded-lg text-sm"
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="primary"
-                onClick={handleScheduleCall}
-                disabled={!selectedClientForScheduling?.phone || !scheduledDate || !scheduledTime}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg text-sm font-semibold"
-              >
-                Schedule
-              </Button>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Trigger Calls Modal */}
-      <Modal
-        isOpen={showTriggerCallsModal}
-        onClose={() => {
-          setShowTriggerCallsModal(false);
-          setScheduleOption("immediate");
-          setTriggerScheduledDate("");
-          setTriggerScheduledTime("");
-        }}
-        title="Trigger Calls"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowTriggerCallsModal(false);
-                setScheduleOption("immediate");
-                setTriggerScheduledDate("");
-                setTriggerScheduledTime("");
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleTriggerCalls}
-              disabled={scheduleOption === "scheduled" && (!triggerScheduledDate || !triggerScheduledTime)}
-            >
-              Confirm
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            You are about to trigger calls for <span className="font-semibold text-foreground">{selectedRows.size}</span> client{selectedRows.size > 1 ? 's' : ''}
-          </p>
-
-          <div className="space-y-3">
-            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
-              <input
-                type="radio"
-                name="schedule"
-                checked={scheduleOption === "immediate"}
-                onChange={() => setScheduleOption("immediate")}
-                className="w-4 h-4"
-              />
-              <div>
-                <p className="font-medium">Start Immediately</p>
-                <p className="text-xs text-muted-foreground">Calls will be triggered right away</p>
-              </div>
-            </label>
-
-            <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
-              <input
-                type="radio"
-                name="schedule"
-                checked={scheduleOption === "scheduled"}
-                onChange={() => setScheduleOption("scheduled")}
-                className="w-4 h-4"
-              />
-              <div className="flex-1">
-                <p className="font-medium">Schedule for Later</p>
-                <p className="text-xs text-muted-foreground mb-3">Choose a specific date and time</p>
-
-                {scheduleOption === "scheduled" && (
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Date</label>
-                      <div className="relative">
-                        <input
-                          type="date"
-                          value={triggerScheduledDate}
-                          onChange={(e) => setTriggerScheduledDate(e.target.value)}
-                          className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                        />
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-2">Time</label>
-                      <input
-                        type="time"
-                        value={triggerScheduledTime}
-                        onChange={(e) => setTriggerScheduledTime(e.target.value)}
-                        className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </label>
-          </div>
-        </div>
-      </Modal>
-
-      
-
-
-
-      {/* Edit Client Modal */}
-      <Modal
-        isOpen={showEditClientModal}
-        onClose={() => setShowEditClientModal(false)}
-        title="Edit Client Information"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowEditClientModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSaveEditClient}
-            >
-              Save Changes
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Name</label>
-            <Input
-              value={editClientForm.name}
-              onChange={(e) => setEditClientForm({ ...editClientForm, name: e.target.value })}
-              placeholder="Enter client name"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Email</label>
-            <Input
-              type="email"
-              value={editClientForm.email}
-              onChange={(e) => setEditClientForm({ ...editClientForm, email: e.target.value })}
-              placeholder="Enter email address"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Phone</label>
-            <Input
-              value={editClientForm.phone}
-              onChange={(e) => setEditClientForm({ ...editClientForm, phone: e.target.value })}
-              placeholder="Enter phone number"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Location</label>
-            <Input
-              value={editClientForm.location}
-              onChange={(e) => setEditClientForm({ ...editClientForm, location: e.target.value })}
-              placeholder="Enter location"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Status</label>
-            <select
-              value={editClientForm.status}
-              onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value })}
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
-            >
-              <option value="Active">Active</option>
-              <option value="Inactive">Inactive</option>
-              <option value="Pending">Pending</option>
-            </select>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Send Message Modal */}
-      <Modal
-        isOpen={showSendMessageModal}
-        onClose={() => setShowSendMessageModal(false)}
-        title={selectedClientForProfile ? `Send Message to ${selectedClientForProfile.name}` : "Send Message"}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowSendMessageModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSendMessageSubmit}
-            >
-              Send
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Recipient</label>
-            <Input
-              value={selectedClientForProfile?.name || ""}
-              disabled
-              className="bg-muted"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Phone Number</label>
-            <Input
-              value={selectedClientForProfile?.phone || ""}
-              disabled
-              className="bg-muted"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Message</label>
-            <textarea
-              value={messageForm.message}
-              onChange={(e) => setMessageForm({ message: e.target.value })}
-              placeholder="Type your message here..."
-              rows={5}
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Schedule Call From Profile Modal */}
-      <Modal
-        isOpen={showScheduleCallFromProfile}
-        onClose={() => setShowScheduleCallFromProfile(false)}
-        title={selectedClientForProfile ? `Schedule Call with ${selectedClientForProfile.name}` : "Schedule Call"}
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowScheduleCallFromProfile(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSaveScheduleCallFromProfile}
-            >
-              Schedule Call
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Client Name</label>
-            <Input
-              value={selectedClientForProfile?.name || ""}
-              disabled
-              className="bg-muted"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Date</label>
-            <Input
-              type="date"
-              value={scheduledDate}
-              onChange={(e) => setScheduledDate(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Time</label>
-            <Input
-              type="time"
-              value={scheduledTime}
-              onChange={(e) => setScheduledTime(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
-            <textarea
-              placeholder="Add any notes about this call..."
-              rows={3}
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
-            />
-          </div>
-        </div>
-      </Modal>
-
-      {/* Update Stage Modal */}
-      <Modal
-        isOpen={showUpdateStageModal}
-        onClose={() => setShowUpdateStageModal(false)}
-        title="Update Client Stage"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => setShowUpdateStageModal(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSaveUpdateStage}
-            >
-              Update Stage
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Client Name</label>
-            <Input
-              value={selectedClientForProfile?.name || ""}
-              disabled
-              className="bg-muted"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-2">Select New Stage</label>
-            <select
-              value={selectedStage}
-              onChange={(e) => setSelectedStage(e.target.value)}
-              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
-            >
-              <option value="">Select a stage</option>
-              {selectedClientForProfile && processStages[selectedClientForProfile.processes[0]]?.map((stage) => (
-                <option key={stage} value={stage}>{stage}</option>
-              ))}
-            </select>
-          </div>
-          <div className="bg-muted/50 border border-border rounded-lg p-4">
-            <p className="text-sm" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-              <strong>Current Stage:</strong> {selectedClientForProfile?.stage}
-            </p>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Filter Field Settings Modal */}
-      {showFilterFieldSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
-          <div className="bg-white rounded-xl w-full flex flex-col overflow-hidden" style={{ width: '560px', maxHeight: '70vh', boxShadow: '0 8px 32px rgba(0,0,0,0.16)' }}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#E2E8F0' }}>
-              <h2 className="font-bold" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif', fontSize: '18px' }}>
-                Filter field settings
-              </h2>
-              <button
-                onClick={() => setShowFilterFieldSettings(false)}
-                className="hover:bg-gray-100 p-1 rounded transition-colors"
-              >
-                <X className="w-5 h-5" style={{ color: '#6B7280' }} />
-              </button>
-            </div>
-
-            {/* Search */}
-            <div className="px-6 pt-6 pb-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <input
-                  type="text"
-                  placeholder="Find field..."
-                  value={fieldSearchQuery}
-                  onChange={(e) => setFieldSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm"
-                  style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
-                />
-              </div>
-            </div>
-
-            {/* Pill Tabs */}
-            <div className="px-6 pb-4 flex gap-2">
-              <button
-                onClick={() => setFilterFieldCategories({ ...filterFieldCategories, client: !filterFieldCategories.client })}
-                className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: filterFieldCategories.client ? '#E8F0FE' : 'white',
-                  borderColor: filterFieldCategories.client ? '#4F8EF7' : '#E2E8F0',
-                  color: filterFieldCategories.client ? '#4F8EF7' : '#6B7280',
-                  fontFamily: 'Outfit, sans-serif',
-                  borderRadius: '20px'
-                }}
-              >
-                Client {filterFieldCategories.client && '✓'}
-              </button>
-              <button
-                onClick={() => setFilterFieldCategories({ ...filterFieldCategories, process: !filterFieldCategories.process })}
-                className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: filterFieldCategories.process ? '#E8F0FE' : 'white',
-                  borderColor: filterFieldCategories.process ? '#4F8EF7' : '#E2E8F0',
-                  color: filterFieldCategories.process ? '#4F8EF7' : '#6B7280',
-                  fontFamily: 'Outfit, sans-serif',
-                  borderRadius: '20px'
-                }}
-              >
-                Process {filterFieldCategories.process && '✓'}
-              </button>
-              <button
-                onClick={() => setFilterFieldCategories({ ...filterFieldCategories, activity: !filterFieldCategories.activity })}
-                className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
-                style={{
-                  backgroundColor: filterFieldCategories.activity ? '#E8F0FE' : 'white',
-                  borderColor: filterFieldCategories.activity ? '#4F8EF7' : '#E2E8F0',
-                  color: filterFieldCategories.activity ? '#4F8EF7' : '#6B7280',
-                  fontFamily: 'Outfit, sans-serif',
-                  borderRadius: '20px'
-                }}
-              >
-                Activity {filterFieldCategories.activity && '✓'}
-              </button>
-            </div>
-
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto px-6 pb-4">
-              {/* CLIENT INFO Section */}
-              <div style={{ marginTop: '16px' }}>
-                <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
-                  CLIENT INFO
-                </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size']
-                    .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
-                    .map((field) => (
-                    <label
-                      key={field}
-                      className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
-                      style={{ gap: '8px' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={availableFilterFields.includes(field)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAvailableFilterFields([...availableFilterFields, field]);
-                          } else {
-                            setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
-                          }
-                        }}
-                        className="flex-shrink-0"
-                        style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
-                      />
-                      <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* PROCESS & ACTIVITY Section */}
-              <div style={{ marginTop: '16px' }}>
-                <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
-                  PROCESS & ACTIVITY
-                </h3>
-                <div className="grid grid-cols-3 gap-2">
-                  {['Process', 'Responsible', 'Created On']
-                    .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
-                    .map((field) => (
-                    <label
-                      key={field}
-                      className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
-                      style={{ gap: '8px' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={availableFilterFields.includes(field)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAvailableFilterFields([...availableFilterFields, field]);
-                          } else {
-                            setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
-                          }
-                        }}
-                        className="flex-shrink-0"
-                        style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
-                      />
-                      <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* SMART TIME FILTERS Section */}
-              <div style={{ marginTop: '16px' }}>
-                <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
-                  SMART TIME FILTERS
-                </h3>
-                <div className="flex flex-col">
-                  {[
-                    'Last Contact: Today',
-                    'Last Contact: Yesterday',
-                    'Last Contact: Last 7 days',
-                    'Last Contact: Last 30 days',
-                    'Last Call: Last 24 hours',
-                    'Last Call: Last 7 days',
-                    'No activity in 7 days',
-                    'No activity in 30 days',
-                    'Created: Today',
-                    'Created: This week',
-                    'Created: This month',
-                    'Overdue follow-up'
-                  ]
-                    .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
-                    .map((field) => (
-                    <label
-                      key={field}
-                      className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
-                      style={{ gap: '8px', height: '36px' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={availableFilterFields.includes(field)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAvailableFilterFields([...availableFilterFields, field]);
-                          } else {
-                            setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
-                          }
-                        }}
-                        className="flex-shrink-0"
-                        style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
-                      />
-                      <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer Actions - Fixed */}
-            <div className="flex items-center justify-between p-4 border-t" style={{ borderColor: '#E2E8F0' }}>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={availableFilterFields.length > 0 && availableFilterFields.length === 23}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      const allFields = ['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size', 'Process', 'Responsible', 'Created On', 'Last Contact: Today', 'Last Contact: Yesterday', 'Last Contact: Last 7 days', 'Last Contact: Last 30 days', 'Last Call: Last 24 hours', 'Last Call: Last 7 days', 'No activity in 7 days', 'No activity in 30 days', 'Created: Today', 'Created: This week', 'Created: This month', 'Overdue follow-up'];
-                      setAvailableFilterFields(allFields);
-                    } else {
-                      setAvailableFilterFields([]);
-                    }
-                  }}
-                  className="w-4 h-4"
-                  style={{ accentColor: '#4F8EF7' }}
-                />
-                <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>select all</span>
-              </label>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => {
-                    setAvailableFilterFields(['Name', 'Status', 'Process', 'Responsible', 'Last Contact']);
-                    setActiveFilterFields(['Name', 'Status', 'Process', 'Responsible', 'Last Contact']);
-                    toast.info('Reset to default fields');
-                  }}
-                  className="text-sm hover:underline"
-                  style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
-                >
-                  ↺ default
-                </button>
-
+          {/* Trigger Calls Modal */}
+          <Modal
+            isOpen={showTriggerCallsModal}
+            onClose={() => {
+              setShowTriggerCallsModal(false);
+              setScheduleOption("immediate");
+              setTriggerScheduledDate("");
+              setTriggerScheduledTime("");
+            }}
+            title="Trigger Calls"
+            footer={
+              <>
                 <Button
                   variant="outline"
-                  onClick={() => setShowFilterFieldSettings(false)}
-                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                  onClick={() => {
+                    setShowTriggerCallsModal(false);
+                    setScheduleOption("immediate");
+                    setTriggerScheduledDate("");
+                    setTriggerScheduledTime("");
+                  }}
                 >
-                  CANCEL
+                  Cancel
                 </Button>
-
                 <Button
                   variant="primary"
-                  onClick={() => {
-                    // Add smart time filters as tags immediately
-                    const smartTimeFilters = availableFilterFields.filter(f =>
-                      f.includes('Last Contact:') || f.includes('Last Call:') ||
-                      f.includes('No activity') || f.includes('Created:') || f.includes('Overdue')
-                    );
-
-                    if (smartTimeFilters.length > 0) {
-                      const newFilters = [...activeFilters];
-                      smartTimeFilters.forEach(filter => {
-                        if (!newFilters.find(f => f.label === filter)) {
-                          newFilters.push({ field: filter.toLowerCase().replace(/[^a-z0-9]/g, '_'), label: filter, values: ['Active'] });
-                        }
-                      });
-                      setActiveFilters(newFilters);
-                    }
-
-                    // Add other fields to filter panel dropdowns
-                    const regularFields = availableFilterFields.filter(f =>
-                      !f.includes('Last Contact:') && !f.includes('Last Call:') &&
-                      !f.includes('No activity') && !f.includes('Created:') && !f.includes('Overdue')
-                    );
-                    setActiveFilterFields(regularFields);
-                    setShowFilterFieldSettings(false);
-                    toast.success('Filter fields updated');
-                  }}
-                  style={{ backgroundColor: '#4F8EF7', height: '40px', borderRadius: '6px', fontFamily: 'Outfit, sans-serif' }}
+                  onClick={handleTriggerCalls}
+                  disabled={scheduleOption === "scheduled" && (!triggerScheduledDate || !triggerScheduledTime)}
                 >
-                  APPLY
+                  Confirm
                 </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                You are about to trigger calls for <span className="font-semibold text-foreground">{selectedRows.size}</span> client{selectedRows.size > 1 ? 's' : ''}
+              </p>
+
+              <div className="space-y-3">
+                <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+                  <input
+                    type="radio"
+                    name="schedule"
+                    checked={scheduleOption === "immediate"}
+                    onChange={() => setScheduleOption("immediate")}
+                    className="w-4 h-4"
+                  />
+                  <div>
+                    <p className="font-medium">Start Immediately</p>
+                    <p className="text-xs text-muted-foreground">Calls will be triggered right away</p>
+                  </div>
+                </label>
+
+                <label className="flex items-center gap-3 p-4 border border-border rounded-xl cursor-pointer hover:bg-muted transition-colors">
+                  <input
+                    type="radio"
+                    name="schedule"
+                    checked={scheduleOption === "scheduled"}
+                    onChange={() => setScheduleOption("scheduled")}
+                    className="w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="font-medium">Schedule for Later</p>
+                    <p className="text-xs text-muted-foreground mb-3">Choose a specific date and time</p>
+
+                    {scheduleOption === "scheduled" && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Date</label>
+                          <div className="relative">
+                            <input
+                              type="date"
+                              value={triggerScheduledDate}
+                              onChange={(e) => setTriggerScheduledDate(e.target.value)}
+                              className="w-full pl-10 pr-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                            />
+                            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium mb-2">Time</label>
+                          <input
+                            type="time"
+                            value={triggerScheduledTime}
+                            onChange={(e) => setTriggerScheduledTime(e.target.value)}
+                            className="w-full px-3 py-2 bg-input-background border border-input rounded-xl text-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </label>
               </div>
             </div>
-          </div>
+          </Modal>
+
+
+
+
+
+          {/* Edit Client Modal */}
+          <Modal
+            isOpen={showEditClientModal}
+            onClose={() => setShowEditClientModal(false)}
+            title="Edit Client Information"
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEditClientModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveEditClient}
+                >
+                  Save Changes
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Name</label>
+                <Input
+                  value={editClientForm.name}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, name: e.target.value })}
+                  placeholder="Enter client name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <Input
+                  type="email"
+                  value={editClientForm.email}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, email: e.target.value })}
+                  placeholder="Enter email address"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Phone</label>
+                <Input
+                  value={editClientForm.phone}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, phone: e.target.value })}
+                  placeholder="Enter phone number"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Location</label>
+                <Input
+                  value={editClientForm.location}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, location: e.target.value })}
+                  placeholder="Enter location"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Status</label>
+                <select
+                  value={editClientForm.status}
+                  onChange={(e) => setEditClientForm({ ...editClientForm, status: e.target.value })}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                  <option value="Pending">Pending</option>
+                </select>
+              </div>
+            </div>
+          </Modal>
+
+          {/* Send Message Modal */}
+          <Modal
+            isOpen={showSendMessageModal}
+            onClose={() => setShowSendMessageModal(false)}
+            title={selectedClientForProfile ? `Send Message to ${selectedClientForProfile.name}` : "Send Message"}
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSendMessageModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSendMessageSubmit}
+                >
+                  Send
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Recipient</label>
+                <Input
+                  value={selectedClientForProfile?.name || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Phone Number</label>
+                <Input
+                  value={selectedClientForProfile?.phone || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Message</label>
+                <textarea
+                  value={messageForm.message}
+                  onChange={(e) => setMessageForm({ message: e.target.value })}
+                  placeholder="Type your message here..."
+                  rows={5}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
+                />
+              </div>
+            </div>
+          </Modal>
+
+          {/* Schedule Call From Profile Modal */}
+          <Modal
+            isOpen={showScheduleCallFromProfile}
+            onClose={() => setShowScheduleCallFromProfile(false)}
+            title={selectedClientForProfile ? `Schedule Call with ${selectedClientForProfile.name}` : "Schedule Call"}
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowScheduleCallFromProfile(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveScheduleCallFromProfile}
+                >
+                  Schedule Call
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Client Name</label>
+                <Input
+                  value={selectedClientForProfile?.name || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Date</label>
+                <Input
+                  type="date"
+                  value={scheduledDate}
+                  onChange={(e) => setScheduledDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Time</label>
+                <Input
+                  type="time"
+                  value={scheduledTime}
+                  onChange={(e) => setScheduledTime(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Notes (Optional)</label>
+                <textarea
+                  placeholder="Add any notes about this call..."
+                  rows={3}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl resize-none"
+                />
+              </div>
+            </div>
+          </Modal>
+
+          {/* Update Stage Modal */}
+          <Modal
+            isOpen={showUpdateStageModal}
+            onClose={() => setShowUpdateStageModal(false)}
+            title="Update Client Stage"
+            footer={
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowUpdateStageModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleSaveUpdateStage}
+                >
+                  Update Stage
+                </Button>
+              </>
+            }
+          >
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Client Name</label>
+                <Input
+                  value={selectedClientForProfile?.name || ""}
+                  disabled
+                  className="bg-muted"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Select New Stage</label>
+                <select
+                  value={selectedStage}
+                  onChange={(e) => setSelectedStage(e.target.value)}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+                >
+                  <option value="">Select a stage</option>
+                  {selectedClientForProfile && processStages[selectedClientForProfile.processes[0]]?.map((stage) => (
+                    <option key={stage} value={stage}>{stage}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="bg-muted/50 border border-border rounded-lg p-4">
+                <p className="text-sm" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
+                  <strong>Current Stage:</strong> {selectedClientForProfile?.stage}
+                </p>
+              </div>
+            </div>
+          </Modal>
+
+          {/* Filter Field Settings Modal */}
+          {showFilterFieldSettings && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.4)' }}>
+              <div className="bg-white rounded-xl w-full flex flex-col overflow-hidden" style={{ width: '560px', maxHeight: '70vh', boxShadow: '0 8px 32px rgba(0,0,0,0.16)' }}>
+                {/* Header */}
+                <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: '#E2E8F0' }}>
+                  <h2 className="font-bold" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif', fontSize: '18px' }}>
+                    Filter field settings
+                  </h2>
+                  <button
+                    onClick={() => setShowFilterFieldSettings(false)}
+                    className="hover:bg-gray-100 p-1 rounded transition-colors"
+                  >
+                    <X className="w-5 h-5" style={{ color: '#6B7280' }} />
+                  </button>
+                </div>
+
+                {/* Search */}
+                <div className="px-6 pt-6 pb-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      placeholder="Find field..."
+                      value={fieldSearchQuery}
+                      onChange={(e) => setFieldSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border rounded-lg text-sm"
+                      style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif' }}
+                    />
+                  </div>
+                </div>
+
+                {/* Pill Tabs */}
+                <div className="px-6 pb-4 flex gap-2">
+                  <button
+                    onClick={() => setFilterFieldCategories({ ...filterFieldCategories, client: !filterFieldCategories.client })}
+                    className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: filterFieldCategories.client ? '#E8F0FE' : 'white',
+                      borderColor: filterFieldCategories.client ? '#4F8EF7' : '#E2E8F0',
+                      color: filterFieldCategories.client ? '#4F8EF7' : '#6B7280',
+                      fontFamily: 'Outfit, sans-serif',
+                      borderRadius: '20px'
+                    }}
+                  >
+                    Client {filterFieldCategories.client && '✓'}
+                  </button>
+                  <button
+                    onClick={() => setFilterFieldCategories({ ...filterFieldCategories, process: !filterFieldCategories.process })}
+                    className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: filterFieldCategories.process ? '#E8F0FE' : 'white',
+                      borderColor: filterFieldCategories.process ? '#4F8EF7' : '#E2E8F0',
+                      color: filterFieldCategories.process ? '#4F8EF7' : '#6B7280',
+                      fontFamily: 'Outfit, sans-serif',
+                      borderRadius: '20px'
+                    }}
+                  >
+                    Process {filterFieldCategories.process && '✓'}
+                  </button>
+                  <button
+                    onClick={() => setFilterFieldCategories({ ...filterFieldCategories, activity: !filterFieldCategories.activity })}
+                    className="px-4 py-2 rounded-full border text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: filterFieldCategories.activity ? '#E8F0FE' : 'white',
+                      borderColor: filterFieldCategories.activity ? '#4F8EF7' : '#E2E8F0',
+                      color: filterFieldCategories.activity ? '#4F8EF7' : '#6B7280',
+                      fontFamily: 'Outfit, sans-serif',
+                      borderRadius: '20px'
+                    }}
+                  >
+                    Activity {filterFieldCategories.activity && '✓'}
+                  </button>
+                </div>
+
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto px-6 pb-4">
+                  {/* CLIENT INFO Section */}
+                  <div style={{ marginTop: '16px' }}>
+                    <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
+                      CLIENT INFO
+                    </h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size']
+                        .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
+                        .map((field) => (
+                          <label
+                            key={field}
+                            className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
+                            style={{ gap: '8px' }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={availableFilterFields.includes(field)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAvailableFilterFields([...availableFilterFields, field]);
+                                } else {
+                                  setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
+                                }
+                              }}
+                              className="flex-shrink-0"
+                              style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
+                            />
+                            <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* PROCESS & ACTIVITY Section */}
+                  <div style={{ marginTop: '16px' }}>
+                    <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
+                      PROCESS & ACTIVITY
+                    </h3>
+                    <div className="grid grid-cols-3 gap-2">
+                      {['Process', 'Responsible', 'Created On']
+                        .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
+                        .map((field) => (
+                          <label
+                            key={field}
+                            className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
+                            style={{ gap: '8px' }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={availableFilterFields.includes(field)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAvailableFilterFields([...availableFilterFields, field]);
+                                } else {
+                                  setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
+                                }
+                              }}
+                              className="flex-shrink-0"
+                              style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
+                            />
+                            <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+
+                  {/* SMART TIME FILTERS Section */}
+                  <div style={{ marginTop: '16px' }}>
+                    <h3 className="uppercase font-semibold mb-3" style={{ color: '#9CA3AF', fontFamily: 'Outfit, sans-serif', fontSize: '11px', letterSpacing: '0.08em' }}>
+                      SMART TIME FILTERS
+                    </h3>
+                    <div className="flex flex-col">
+                      {[
+                        'Last Contact: Today',
+                        'Last Contact: Yesterday',
+                        'Last Contact: Last 7 days',
+                        'Last Contact: Last 30 days',
+                        'Last Call: Last 24 hours',
+                        'Last Call: Last 7 days',
+                        'No activity in 7 days',
+                        'No activity in 30 days',
+                        'Created: Today',
+                        'Created: This week',
+                        'Created: This month',
+                        'Overdue follow-up'
+                      ]
+                        .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
+                        .map((field) => (
+                          <label
+                            key={field}
+                            className="flex items-center p-2 hover:bg-blue-50 rounded cursor-pointer"
+                            style={{ gap: '8px', height: '36px' }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={availableFilterFields.includes(field)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setAvailableFilterFields([...availableFilterFields, field]);
+                                } else {
+                                  setAvailableFilterFields(availableFilterFields.filter(f => f !== field));
+                                }
+                              }}
+                              className="flex-shrink-0"
+                              style={{ accentColor: '#4F8EF7', width: '16px', height: '16px', borderRadius: '3px' }}
+                            />
+                            <span style={{ fontFamily: 'Outfit, sans-serif', fontSize: '14px', color: '#374151' }}>{field}</span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Actions - Fixed */}
+                <div className="flex items-center justify-between p-4 border-t" style={{ borderColor: '#E2E8F0' }}>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={availableFilterFields.length > 0 && availableFilterFields.length === 23}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          const allFields = ['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size', 'Process', 'Responsible', 'Created On', 'Last Contact: Today', 'Last Contact: Yesterday', 'Last Contact: Last 7 days', 'Last Contact: Last 30 days', 'Last Call: Last 24 hours', 'Last Call: Last 7 days', 'No activity in 7 days', 'No activity in 30 days', 'Created: Today', 'Created: This week', 'Created: This month', 'Overdue follow-up'];
+                          setAvailableFilterFields(allFields);
+                        } else {
+                          setAvailableFilterFields([]);
+                        }
+                      }}
+                      className="w-4 h-4"
+                      style={{ accentColor: '#4F8EF7' }}
+                    />
+                    <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>select all</span>
+                  </label>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setAvailableFilterFields(['Name', 'Status', 'Process', 'Responsible', 'Last Contact']);
+                        setActiveFilterFields(['Name', 'Status', 'Process', 'Responsible', 'Last Contact']);
+                        toast.info('Reset to default fields');
+                      }}
+                      className="text-sm hover:underline"
+                      style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      ↺ default
+                    </button>
+
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowFilterFieldSettings(false)}
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      CANCEL
+                    </Button>
+
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        // Add smart time filters as tags immediately
+                        const smartTimeFilters = availableFilterFields.filter(f =>
+                          f.includes('Last Contact:') || f.includes('Last Call:') ||
+                          f.includes('No activity') || f.includes('Created:') || f.includes('Overdue')
+                        );
+
+                        if (smartTimeFilters.length > 0) {
+                          const newFilters = [...activeFilters];
+                          smartTimeFilters.forEach(filter => {
+                            if (!newFilters.find(f => f.label === filter)) {
+                              newFilters.push({ field: filter.toLowerCase().replace(/[^a-z0-9]/g, '_'), label: filter, values: ['Active'] });
+                            }
+                          });
+                          setActiveFilters(newFilters);
+                        }
+
+                        // Add other fields to filter panel dropdowns
+                        const regularFields = availableFilterFields.filter(f =>
+                          !f.includes('Last Contact:') && !f.includes('Last Call:') &&
+                          !f.includes('No activity') && !f.includes('Created:') && !f.includes('Overdue')
+                        );
+                        setActiveFilterFields(regularFields);
+                        setShowFilterFieldSettings(false);
+                        toast.success('Filter fields updated');
+                      }}
+                      style={{ backgroundColor: '#4F8EF7', height: '40px', borderRadius: '6px', fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      APPLY
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      )}
       </div>
-    </div>
-    <Outlet />
+      <Outlet />
     </DndProvider>
   );
 }

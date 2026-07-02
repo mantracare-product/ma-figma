@@ -697,14 +697,6 @@ export default function Settings() {
   }, [setCollapsed]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    if (tab) {
-      setActiveTab(tab);
-    }
-  }, []);
-
-  useEffect(() => {
     try {
       const stored = localStorage.getItem('whatsappTemplateIntegrations');
       if (stored) {
@@ -2514,6 +2506,23 @@ export default function Settings() {
   const [salesforceProcessValidationError, setSalesforceProcessValidationError] = useState<string>("");
   const [isMappingSectionExpanded, setIsMappingSectionExpanded] = useState(false);
   const [sampleJson, setSampleJson] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get('tab');
+    if (tab) setActiveTab(tab);
+
+    const integrationId = params.get('integration');
+    const category = params.get('category');
+    const action = params.get('action');
+    if (integrationId && action === 'connect') {
+      const targetIntegration = integrations.find((i) => i.id === integrationId);
+      if (targetIntegration) {
+        if (category) setIntegrationTab(category as typeof integrationTab);
+        handleConnectIntegration(targetIntegration);
+      }
+    }
+  }, [integrations]);
 
   // Bitrix Category Mapping State
   interface CategoryMapping {
