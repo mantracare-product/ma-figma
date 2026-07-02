@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router";
+import { createPortal } from "react-dom";
 import { Plus, FileText, Sliders, X, Trash2, GripVertical, Settings as SettingsIcon, Minus, ChevronDown, Upload, Eye, EyeOff, Star, Calendar, Clock, MapPin, Code, Minus as MinusIcon, Palette, Copy, Zap } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -10,6 +11,7 @@ interface FieldOption {
   id: number;
   label: string;
   value: string;
+  sourceVariable?: string;
 }
 
 interface FormField {
@@ -36,6 +38,217 @@ interface Template {
   stats: string;
 }
 
+const FETCH_FIELD_SOURCES = [
+  {
+    value: "system", label: "System Fields", fields: [
+      { value: "contact_name", label: "Contact Name" },
+      { value: "contact_email", label: "Contact Email" },
+      { value: "contact_phone", label: "Contact Phone" },
+      { value: "country", label: "Country" },
+      { value: "language", label: "Language" },
+    ]
+  },
+  {
+    value: "call-log", label: "Call Log Fields", fields: [
+      { value: "call_status", label: "Call Status" },
+      { value: "call_duration", label: "Call Duration" },
+      { value: "call_sentiment", label: "Sentiment" },
+      { value: "call_intent", label: "Intent" },
+      { value: "call_summary", label: "Call Summary" },
+      { value: "call_transcription", label: "Call Transcription" },
+    ]
+  },
+  {
+    value: "stage", label: "Stage Fields", fields: [
+      { value: "stage_name", label: "Stage Name" },
+      { value: "stage_entered_at", label: "Stage Entered At" },
+    ]
+  },
+  {
+    value: "process", label: "Process Fields", fields: [
+      { value: "process_name", label: "Process Name" },
+      { value: "process_status", label: "Process Status" },
+    ]
+  },
+  {
+    value: "appointment", label: "Appointment Fields", fields: [
+      { value: "appointment_date", label: "Appointment Date" },
+      { value: "appointment_time", label: "Appointment Time" },
+      { value: "appointment_status", label: "Appointment Status" },
+      { value: "appointment_with", label: "Appointment With" },
+    ]
+  },
+  {
+    value: "org", label: "Organization Fields", fields: [
+      { value: "org_name", label: "Organization Name" },
+      { value: "org_domain", label: "Organization Domain" },
+    ]
+  },
+  {
+    value: "custom", label: "Custom Fields", fields: [
+      { value: "custom_field_1", label: "Custom Field 1" },
+      { value: "custom_field_2", label: "Custom Field 2" },
+    ]
+  },
+];
+
+const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
+  FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
+);
+
+interface VariablePickerButtonProps {
+  targetRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  value: string;
+  onChange: (newValue: string) => void;
+  label?: string;
+  onBeforeOpen?: () => void;
+  mode?: "insert" | "replace";
+}
+
+const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
+  targetRef,
+  value,
+  onChange,
+  label = "Insert Variable",
+  onBeforeOpen,
+  mode = "insert"
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const dropdownPanelRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectField = (fieldValue: string) => {
+    const insertText = `{{${fieldValue}}}`;
+    if (mode === "replace") {
+      onChange(insertText);
+      setIsOpen(false);
+      return;
+    }
+    const textarea = targetRef?.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart ?? 0;
+    const end = textarea.selectionEnd ?? 0;
+    const currentVal = value || "";
+
+    const newValue = currentVal.slice(0, start) + insertText + currentVal.slice(end);
+    onChange(newValue);
+    setIsOpen(false);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + insertText.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
+  const openDropdown = () => {
+    if (onBeforeOpen) {
+      onBeforeOpen();
+    }
+    if (!buttonRef.current) return;
+    const rect = buttonRef.current.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + 4,
+      right: window.innerWidth - rect.right,
+    });
+    setIsOpen(true);
+  };
+
+  const closeDropdown = () => {
+    setIsOpen(false);
+    setDropdownPos(null);
+  };
+
+  // Close on ancestor scroll/resize, but NOT when the user scrolls inside the dropdown list itself
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e: Event) => {
+      if (dropdownPanelRef.current && dropdownPanelRef.current.contains(e.target as Node)) return;
+      closeDropdown();
+    };
+    const handleResize = () => closeDropdown();
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className="relative inline-block">
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={() => (isOpen ? closeDropdown() : openDropdown())}
+        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
+        style={{ fontFamily: 'DM Sans, sans-serif' }}
+      >
+        {label}
+      </button>
+
+      {isOpen && dropdownPos && createPortal(
+        <>
+          <div
+            className="fixed inset-0 cursor-default"
+            style={{ zIndex: 9998 }}
+            onClick={closeDropdown}
+          />
+          <div
+            ref={dropdownPanelRef}
+            className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden flex flex-col"
+            style={{
+              position: 'fixed',
+              top: dropdownPos.top,
+              right: dropdownPos.right,
+              width: '256px',
+              maxHeight: '256px',
+              zIndex: 9999,
+            }}
+          >
+            <div className="p-2 border-b border-gray-100 bg-gray-50/50">
+              <span className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Insert Field Variable
+              </span>
+            </div>
+            <div className="overflow-y-auto flex-1 py-1 max-h-[220px]">
+              {FETCH_FIELD_SOURCES.map(group => (
+                <div key={group.value}>
+                  <div
+                    className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50 first:border-t-0"
+                    style={{ fontFamily: 'Outfit, sans-serif' }}
+                  >
+                    {group.label}
+                  </div>
+                  <div className="py-0.5">
+                    {group.fields.map(field => (
+                      <button
+                        key={field.value}
+                        type="button"
+                        onClick={() => handleSelectField(field.value)}
+                        className="w-full text-left px-4 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between"
+                        style={{ fontFamily: 'Outfit, sans-serif' }}
+                      >
+                        <span>{field.label}</span>
+                        <span className="text-[9px] text-gray-400 font-mono">
+                          {`{{${field.value}}}`}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+};
+
 export default function FormBuilder() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,6 +262,10 @@ export default function FormBuilder() {
     status?: string;
   } | undefined;
   const returnTo = location.state?.returnTo as { tab: string; flowId: number } | undefined;
+
+  const sidebarInputRef = useRef<HTMLInputElement>(null);
+  const sidebarSelectRef = useRef<HTMLInputElement>(null);
+  // optionSourceRefs not needed with replace mode — removed
 
   const [currentTab, setCurrentTab] = useState<"build" | "design" | "live">("build");
   const [formTitle, setFormTitle] = useState("");
@@ -374,7 +591,7 @@ export default function FormBuilder() {
                     </div>
                   ) : (
                     formFields.map((field) => (
-                      <FieldRenderer
+                       <FieldRenderer
                         key={field.id}
                         field={field}
                         isSelected={selectedField?.id === field.id}
@@ -617,7 +834,7 @@ export default function FormBuilder() {
                             </label>
                             <input
                               type="text"
-                              value={selectedField.label || selectedField.name}
+                              value={selectedField.label !== undefined ? selectedField.label : selectedField.name}
                               onChange={(e) => handleUpdateField({ ...selectedField, label: e.target.value })}
                               className="w-full px-2.5 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                               style={{ fontFamily: 'Outfit, sans-serif' }}
@@ -674,10 +891,19 @@ export default function FormBuilder() {
                           {/* Default Value for text/number fields */}
                           {["text", "number", "email", "url", "tel"].includes(selectedField.type) && (
                             <div>
-                              <label className="block text-xs font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                                Default Value
-                              </label>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="block text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                                  Default Value
+                                </label>
+                                <VariablePickerButton
+                                  targetRef={sidebarInputRef}
+                                  value={selectedField.defaultValue || ""}
+                                  onChange={(newValue) => handleUpdateField({ ...selectedField, defaultValue: newValue })}
+                                  label="{ } Insert Variable"
+                                />
+                              </div>
                               <input
+                                ref={sidebarInputRef}
                                 type="text"
                                 value={selectedField.defaultValue || ""}
                                 onChange={(e) => handleUpdateField({ ...selectedField, defaultValue: e.target.value })}
@@ -747,23 +973,58 @@ export default function FormBuilder() {
                                         placeholder="Display text"
                                       />
                                     </div>
-                                    <div>
-                                      <label className="block text-xs mb-1 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                        Value
-                                      </label>
-                                      <input
-                                        type="text"
-                                        value={option.value}
-                                        onChange={(e) => {
-                                          const newOptions = selectedField.options?.map((o) =>
-                                            o.id === option.id ? { ...o, value: e.target.value } : o
-                                          );
-                                          handleUpdateField({ ...selectedField, options: newOptions });
-                                        }}
-                                        className="w-full px-2 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        placeholder="Submitted value"
-                                      />
+                                    <div className="space-y-2">
+                                      {/* Source row: Insert Variable trigger + chip */}
+                                      <div>
+                                        <div className="flex items-center justify-between mb-1">
+                                          <label className="block text-xs text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>Source</label>
+                                          <VariablePickerButton
+                                            mode="replace"
+                                            value={option.sourceVariable || ""}
+                                            onChange={(newValue) => {
+                                              const newOptions = selectedField.options?.map((o) =>
+                                                o.id === option.id ? { ...o, sourceVariable: newValue } : o
+                                              );
+                                              handleUpdateField({ ...selectedField, options: newOptions });
+                                            }}
+                                            label="{ } Insert Variable"
+                                          />
+                                        </div>
+                                        {option.sourceVariable && (
+                                          <div className="flex items-center justify-between px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs">
+                                            <span className="font-mono text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>{option.sourceVariable}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                const newOptions = selectedField.options?.map((o) =>
+                                                  o.id === option.id ? { ...o, sourceVariable: "" } : o
+                                                );
+                                                handleUpdateField({ ...selectedField, options: newOptions });
+                                              }}
+                                              className="text-blue-400 hover:text-blue-600 ml-2"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                      {/* Value row: always-editable, fully independent of Source */}
+                                      <div>
+                                        <label className="block text-xs mb-1 text-gray-600" style={{ fontFamily: 'Outfit, sans-serif' }}>Value</label>
+                                        <input
+                                          type="text"
+                                          value={option.value}
+                                          onChange={(e) => {
+                                            const newOptions = selectedField.options?.map((o) =>
+                                              o.id === option.id ? { ...o, value: e.target.value } : o
+                                            );
+                                            handleUpdateField({ ...selectedField, options: newOptions });
+                                          }}
+                                          className="w-full px-2 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                          placeholder="Submitted value"
+                                        />
+                                      </div>
                                     </div>
                                   </div>
                                 ))}
@@ -792,17 +1053,21 @@ export default function FormBuilder() {
                                   <label className="block text-xs font-medium mb-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                                     Default Selection
                                   </label>
-                                  <select
+                                  <input
+                                    ref={sidebarSelectRef}
+                                    type="text"
                                     value={selectedField.defaultValue || ""}
                                     onChange={(e) => handleUpdateField({ ...selectedField, defaultValue: e.target.value })}
                                     className="w-full px-2.5 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                                     style={{ fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    <option value="">None</option>
+                                    placeholder="None, or enter value / {{variable}}"
+                                    list={`select-options-${selectedField.id}`}
+                                  />
+                                  <datalist id={`select-options-${selectedField.id}`}>
                                     {selectedField.options?.map((option) => (
                                       <option key={option.id} value={option.value}>{option.label}</option>
                                     ))}
-                                  </select>
+                                  </datalist>
                                 </div>
                               )}
 
