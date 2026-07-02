@@ -19,6 +19,7 @@ import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import FlowBuilderTab from "../components/process/FlowBuilderTab";
 
 interface AISettings {
   platform: string;
@@ -2946,6 +2947,7 @@ export default function Process() {
                           { id: "basic", label: "Basic" },
                           { id: "advanced", label: "Advance" },
                           { id: "automation", label: "Automation" },
+                          { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
                           <button
                             key={tab.id}
@@ -4479,6 +4481,18 @@ export default function Process() {
                               </div>
                             )}
                           </div>
+                        </div>
+                      )}
+
+                      {/* Flow Builder Tab */}
+                      {activeTab === "flowbuilder" && (
+                        <div className="-m-6 h-[calc(100%+3rem)]">
+                          <FlowBuilderTab
+                            processName={selectedProcessData?.name ?? "Current Process"}
+                            stageName={stage.name}
+                            processes={processes}
+                            currentProcessId={selectedProcess ?? undefined}
+                          />
                         </div>
                       )}
 
