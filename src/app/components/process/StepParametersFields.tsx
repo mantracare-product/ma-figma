@@ -1068,8 +1068,6 @@ export default function StepParametersFields({
                             <div>
                               <div className="flex items-center justify-between mb-1.5">
                                 <label className="text-xs font-semibold text-[#020817]">Value</label>
-                              </div>
-                              <div className="mb-1">
                                 <VariablePickerButton
                                   targetRef={getRefForField(`create-${index}`)}
                                   value={field.value}
@@ -1148,8 +1146,6 @@ export default function StepParametersFields({
                           <div>
                             <div className="flex items-center justify-between mb-1.5">
                               <label className="text-xs font-semibold text-[#020817]">Value</label>
-                            </div>
-                            <div className="mb-1">
                               <VariablePickerButton
                                 targetRef={getRefForField(`update-${index}`)}
                                 value={field.value}
@@ -1277,8 +1273,6 @@ export default function StepParametersFields({
                                 <div>
                                   <div className="flex items-center justify-between mb-1.5">
                                     <label className="text-xs font-semibold text-[#020817]">Value</label>
-                                  </div>
-                                  <div className="mb-1">
                                     <VariablePickerButton
                                       targetRef={getRefForField(`replace-${index}`)}
                                       value={row.newValue}
