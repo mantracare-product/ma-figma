@@ -11,6 +11,7 @@ import VariableSelectorModal from "./VariableSelectorModal";
 import type { WorkflowStep } from "../../types/workflow";
 import StepParametersFields from "./StepParametersFields";
 import { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
+import { toast } from "sonner";
 
 interface ParallelGroup {
   id: string;
@@ -50,7 +51,8 @@ type NodeType =
   | "send-email" | "send-sms" | "send-whatsapp"
   | "field-update" | "assign-responsible" | "move-stage" | "move-process"
   | "book-appointment" | "reschedule-appointment" | "cancel-appointment"
-  | "webhook" | "api";
+  | "webhook" | "api"
+  | "idle-messages";
 
 interface FlowNode {
   id: string;
@@ -102,6 +104,7 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "webhook": "webhook_trigger",
   "api": "wh_trigger",
   "end": "endworkflow",
+  "idle-messages": "idlemessages",
 };
 
 const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
@@ -124,6 +127,7 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "webhook": "webhook",
   "api": "globe",
   "end": "x",
+  "idle-messages": "messagesquare",
 };
 
 const NODE_CATEGORIES = [
@@ -132,8 +136,9 @@ const NODE_CATEGORIES = [
     label: "Logic",
     icon: <GitBranch className="w-3.5 h-3.5" />,
     nodes: [
-      // "condition", "wait", "parallel" are no longer standalone addable.
-      // They are derived from step data (conditionsEnabled / executionType / delayValue).
+      { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
+      { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
+      { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run this step alongside adjacent steps" },
       { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate the workflow" },
     ],
   },
@@ -144,10 +149,8 @@ const NODE_CATEGORIES = [
     nodes: [
       { type: "call-transfer" as NodeType, label: "Call Transfer", icon: <ArrowRight className="w-4 h-4" />, desc: "Transfer active call" },
       { type: "call-transfer-human" as NodeType, label: "Transfer to Human", icon: <User className="w-4 h-4" />, desc: "Transfer to a phone number" },
-      { type: "call-transfer-ai" as NodeType, label: "Transfer to AI", icon: <PhoneForwarded className="w-4 h-4" />, desc: "Transfer to AI agent" },
       { type: "call-hangup" as NodeType, label: "Call Hangup", icon: <PhoneOff className="w-4 h-4" />, desc: "End the active call" },
-      { type: "fetch-availability" as NodeType, label: "Fetch Availability", icon: <Eye className="w-4 h-4" />, desc: "Check calendar availability" },
-      { type: "fetch-field-value" as NodeType, label: "Fetch Field Value", icon: <Hash className="w-4 h-4" />, desc: "Read a field value" },
+      { type: "idle-messages" as NodeType, label: "Idle Messages", icon: <MessageSquare className="w-4 h-4" />, desc: "Speak a message if the caller goes idle" },
     ],
   },
   {
@@ -169,16 +172,6 @@ const NODE_CATEGORIES = [
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member" },
       { type: "move-stage" as NodeType, label: "Move Stage", icon: <ArrowRight className="w-4 h-4" />, desc: "Move contact to another stage" },
       { type: "move-process" as NodeType, label: "Move Process", icon: <Workflow className="w-4 h-4" />, desc: "Move contact to another process" },
-    ],
-  },
-  {
-    id: "calendar",
-    label: "Calendar",
-    icon: <Calendar className="w-3.5 h-3.5" />,
-    nodes: [
-      { type: "book-appointment" as NodeType, label: "Book Appointment", icon: <Calendar className="w-4 h-4" />, desc: "Book a new appointment" },
-      { type: "reschedule-appointment" as NodeType, label: "Reschedule", icon: <Calendar className="w-4 h-4" />, desc: "Reschedule an appointment" },
-      { type: "cancel-appointment" as NodeType, label: "Cancel Appointment", icon: <XCircle className="w-4 h-4" />, desc: "Cancel an appointment" },
     ],
   },
   {
@@ -218,6 +211,7 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "cancel-appointment":  { bg: "bg-rose-50 dark:bg-rose-900/20",     border: "border-rose-400",   text: "text-rose-700 dark:text-rose-400" },
   webhook:               { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-400", text: "text-orange-700 dark:text-orange-400" },
   api:                   { bg: "bg-orange-50 dark:bg-orange-900/20", border: "border-orange-400", text: "text-orange-700 dark:text-orange-400" },
+  "idle-messages":       { bg: "bg-sky-50 dark:bg-sky-900/20", border: "border-sky-400", text: "text-sky-700 dark:text-sky-400" },
 };
 
 function getNodeIcon(type: NodeType) {
@@ -263,6 +257,7 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   endworkflow: "end",
   crmupdate: "field-update",
   ehrupdate: "field-update",
+  idlemessages: "idle-messages",
 };
 
 const FALLBACK_NODE_TYPE: NodeType = "wait";
@@ -737,9 +732,48 @@ export default function FlowBuilderTab({
 
   // ── Node CRUD ─────────────────────────────────────────────────────────────────
 
+  /**
+   * Attaches a logic modifier (Condition / Wait / Parallel) to whichever real
+   * automation-step node is currently selected on the canvas. Opens that step's
+   * existing config drawer and pre-sets the relevant field so the user can
+   * confirm the change with a single "Apply" click.
+   */
+  const addLogicToSelectedNode = (logicType: "condition" | "wait" | "parallel") => {
+    const targetNode = nodes.find(
+      (n) => n.id === selectedId && n.config?.autoGenerated && !n.config?.syntheticFor
+    );
+
+    if (!targetNode) {
+      toast.error(
+        "Select a step on the canvas first, then add a Condition, Wait, or Parallel Branch to it."
+      );
+      return;
+    }
+
+    // openConfig does synchronous setState calls; wrap the follow-up
+    // patchConfig / setDrawer* calls in setTimeout(0) so they run as a
+    // functional update against the already-committed configNode state.
+    openConfig(targetNode);
+
+    setTimeout(() => {
+      if (logicType === "condition") {
+        patchConfig({ conditionsEnabled: true });
+      } else if (logicType === "wait") {
+        setDrawerExecType("wait");
+        setDrawerDelayValue((prev) => (prev === 0 ? 5 : prev));
+      } else {
+        // parallel
+        setDrawerExecType("parallel");
+      }
+    }, 0);
+  };
+
   const addNode = (type: NodeType) => {
-    // "condition", "wait", "parallel" are derived from step data — not standalone addable
-    if (type === "condition" || type === "wait" || type === "parallel") return;
+    // Logic modifiers attach to the selected step — not standalone nodes
+    if (type === "condition" || type === "wait" || type === "parallel") {
+      addLogicToSelectedNode(type);
+      return;
+    }
 
     const stepKey = NODE_TYPE_TO_STEP_KEY[type];
     if (stepKey && onWorkflowStepsChange) {
