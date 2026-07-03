@@ -4525,6 +4525,7 @@ export default function Process() {
                             currentProcessId={selectedProcess ?? undefined}
                             workflowSteps={workflowSteps}
                             onWorkflowStepsChange={setWorkflowSteps}
+                            stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
                           />
                         </div>
                       )}
