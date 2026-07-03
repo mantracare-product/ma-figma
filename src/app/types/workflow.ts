@@ -15,4 +15,5 @@ export type WorkflowStep = {
     intentOperators?: Array<"AND" | "OR">;
     enabled?: boolean;
   };
+  params?: Record<string, any>;
 };

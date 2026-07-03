@@ -21,6 +21,8 @@ import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
 import { WorkflowStep } from "../types/workflow";
+import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
+import StepParametersFields from "../components/process/StepParametersFields";
 
 interface AISettings {
   platform: string;
@@ -429,207 +431,6 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "managecalendar": ["incall", "postcall"],
 };
 
-const FETCH_FIELD_SOURCES = [
-  {
-    value: "system", label: "System Fields", fields: [
-      { value: "contact_name", label: "Contact Name" },
-      { value: "contact_email", label: "Contact Email" },
-      { value: "contact_phone", label: "Contact Phone" },
-      { value: "country", label: "Country" },
-      { value: "language", label: "Language" },
-    ]
-  },
-  {
-    value: "call-log", label: "Call Log Fields", fields: [
-      { value: "call_status", label: "Call Status" },
-      { value: "call_duration", label: "Call Duration" },
-      { value: "call_sentiment", label: "Sentiment" },
-      { value: "call_intent", label: "Intent" },
-      { value: "call_summary", label: "Call Summary" },
-      { value: "call_transcription", label: "Call Transcription" },
-    ]
-  },
-  {
-    value: "stage", label: "Stage Fields", fields: [
-      { value: "stage_name", label: "Stage Name" },
-      { value: "stage_entered_at", label: "Stage Entered At" },
-    ]
-  },
-  {
-    value: "process", label: "Process Fields", fields: [
-      { value: "process_name", label: "Process Name" },
-      { value: "process_status", label: "Process Status" },
-    ]
-  },
-  {
-    value: "appointment", label: "Appointment Fields", fields: [
-      { value: "appointment_date", label: "Appointment Date" },
-      { value: "appointment_time", label: "Appointment Time" },
-      { value: "appointment_status", label: "Appointment Status" },
-      { value: "appointment_with", label: "Appointment With" },
-    ]
-  },
-  {
-    value: "org", label: "Organization Fields", fields: [
-      { value: "org_name", label: "Organization Name" },
-      { value: "org_domain", label: "Organization Domain" },
-    ]
-  },
-  {
-    value: "custom", label: "Custom Fields", fields: [
-      { value: "custom_field_1", label: "Custom Field 1" },
-      { value: "custom_field_2", label: "Custom Field 2" },
-    ]
-  },
-];
-
-const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
-  FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
-);
-
-interface VariablePickerButtonProps {
-  targetRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
-  value: string;
-  onChange: (newValue: string) => void;
-  label?: string;
-}
-
-const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
-  targetRef,
-  value,
-  onChange,
-  label = "Insert Variable"
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownPanelRef = useRef<HTMLDivElement>(null);
-
-  const handleSelectField = (fieldValue: string) => {
-    const textarea = targetRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart ?? 0;
-    const end = textarea.selectionEnd ?? 0;
-    const insertText = `{{${fieldValue}}}`;
-    const currentVal = value || "";
-
-    const newValue = currentVal.slice(0, start) + insertText + currentVal.slice(end);
-    onChange(newValue);
-    setIsOpen(false);
-
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + insertText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
-
-  const openDropdown = () => {
-    if (!buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setDropdownPos({
-      top: rect.bottom + 4,
-      right: window.innerWidth - rect.right,
-    });
-    setIsOpen(true);
-  };
-
-  const closeDropdown = () => {
-    setIsOpen(false);
-    setDropdownPos(null);
-  };
-
-  // Close on ancestor scroll/resize, but NOT when the user scrolls inside the dropdown list itself
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleScroll = (e: Event) => {
-      // If the scroll originated inside the dropdown panel, let it through
-      if (dropdownPanelRef.current && dropdownPanelRef.current.contains(e.target as Node)) return;
-      closeDropdown();
-    };
-    const handleResize = () => closeDropdown();
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [isOpen]);
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => (isOpen ? closeDropdown() : openDropdown())}
-        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
-        style={{ fontFamily: 'DM Sans, sans-serif' }}
-      >
-        {label}
-      </button>
-
-      {isOpen && dropdownPos && createPortal(
-        <>
-          {/* Backdrop — click-outside to close */}
-          <div
-            className="fixed inset-0 cursor-default"
-            style={{ zIndex: 9998 }}
-            onClick={closeDropdown}
-          />
-          {/* Dropdown panel — portaled to body, fixed-positioned */}
-          <div
-            ref={dropdownPanelRef}
-            className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden flex flex-col"
-            style={{
-              position: 'fixed',
-              top: dropdownPos.top,
-              right: dropdownPos.right,
-              width: '256px',
-              maxHeight: '256px',
-              zIndex: 9999,
-            }}
-          >
-            <div className="p-2 border-b border-gray-100 bg-gray-50/50">
-              <span className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Insert Field Variable
-              </span>
-            </div>
-            <div className="overflow-y-auto flex-1 py-1 max-h-[220px]">
-              {FETCH_FIELD_SOURCES.map(group => (
-                <div key={group.value}>
-                  <div
-                    className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50 first:border-t-0"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  >
-                    {group.label}
-                  </div>
-                  <div className="py-0.5">
-                    {group.fields.map(field => (
-                      <button
-                        key={field.value}
-                        type="button"
-                        onClick={() => handleSelectField(field.value)}
-                        className="w-full text-left px-4 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        <span>{field.label}</span>
-                        <span className="text-[9px] text-gray-400 font-mono">
-                          {`{{${field.value}}}`}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>,
-        document.body
-      )}
-    </div>
-  );
-};
 
 const WEBHOOK_ACTIONS: Record<string, string[]> = {
   athenahealth: ["Update Patient Record", "Create Appointment Task", "Add Clinical Note", "Mark Visit Complete"],
@@ -1043,6 +844,248 @@ export default function Process() {
     }
   }, [currentEditingStep?.stepKey, stepTrigger]);
 
+  // Email / CRM / EHR state — declared here so stateGetters/stateSetters can reference them
+  const [showCustomEmail, setShowCustomEmail] = useState(false);
+  const [emailConnectedAccount, setEmailConnectedAccount] = useState("");
+  const [emailHtmlBody, setEmailHtmlBody] = useState("");
+  const [htmlBodyViewMode, setHtmlBodyViewMode] = useState<"code" | "preview">("code");
+  const [emailRichBody, setEmailRichBody] = useState("");
+  const [crmUpdateValue, setCrmUpdateValue] = useState("");
+  const [ehrUpdateValue, setEhrUpdateValue] = useState("");
+
+  // Ticket / Collect Info / Call Analysis states — declared here so stateGetters/stateSetters can reference them
+  const [ticketChecklist, setTicketChecklist] = useState<{ id: string; text: string }[]>([{ id: "check-1", text: "" }]);
+  const [ticketEntries, setTicketEntries] = useState<Array<{
+    taskName: string; taskDesc: string; assignee: string; deadline: string; priority: string;
+    clientEmail: string; clientNumber: string; pauseProcess: string;
+    checklist: { id: string; text: string }[];
+  }>>([{
+    taskName: "", taskDesc: "", assignee: "", deadline: "", priority: "Normal",
+    clientEmail: "", clientNumber: "", pauseProcess: "No", checklist: [{ id: "check-1", text: "" }]
+  }]);
+
+  const [collectInfoSelectedForm, setCollectInfoSelectedForm] = useState<string>("");
+  const [showCollectInfoDropdown, setShowCollectInfoDropdown] = useState(false);
+
+  const [callAnalysisEnabled, setCallAnalysisEnabled] = useState(true);
+  const [callAnalysisScenarios, setCallAnalysisScenarios] = useState<Array<{
+    id: number;
+    name: string;
+    description: string;
+    dataFormat: string;
+  }>>([]);
+
+  // Maps each stepKey to the list of state-variable names whose values should be
+  // captured into WorkflowStep.params on save, and restored from WorkflowStep.params
+  // on edit. Keep this in sync whenever a new parameter field is added to any step type.
+  // Condition fields persisted for every step type
+  const CONDITION_FIELDS = [
+    "conditionsEnabled", "conditions", "conditionOperators",
+    "fieldConditions", "fieldConditionOperators",
+    "intentConditions", "intentConditionOperators",
+  ];
+
+  const STEP_PARAM_FIELDS: Record<string, string[]> = {
+    fieldupdate:       ["fieldUpdateBlocks", ...CONDITION_FIELDS],
+    assignhuman:       ["assignedUser", ...CONDITION_FIELDS],
+    callaction:        [
+      "callActionTransferType", "callActionCountryCode", "callActionPhoneNumber",
+      "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
+      ...CONDITION_FIELDS,
+    ],
+    whatsapp:          ["whatsappTemplate", "whatsappTemplateIdentifier", ...CONDITION_FIELDS],
+    sms:               ["smsMessage", "smsConnectedAccount", ...CONDITION_FIELDS],
+    email:             [
+      "emailConnectedAccount", "showCustomEmail", "emailSubject",
+      "emailRichBody", "emailHtmlBody", "htmlBodyViewMode",
+      ...CONDITION_FIELDS,
+    ],
+    crmupdate:         ["crmName", "crmField", "crmUpdateValue", ...CONDITION_FIELDS],
+    ehrupdate:         ["ehrName", "ehrField", "ehrUpdateValue", ...CONDITION_FIELDS],
+    wh_trigger:        [
+      "webhookIntegration", "webhookAction", "webhookSelectedFields",
+      "webhookUpdateRows", "webhookCreateRows", "webhookReplaceRows",
+      ...CONDITION_FIELDS,
+    ],
+    webhook_trigger:   ["webhookIntegration", "webhookPayloadMode", "webhookCreateRows", "webhookJsonBody", ...CONDITION_FIELDS],
+    fetchavailability: ["fetchAvailCalendarUser", "fetchAvailDateSource", "fetchAvailTimeSource", "fetchAvailSummary", ...CONDITION_FIELDS],
+    fetchfieldvalue:   ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
+    managecalendar:    ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
+    processmovement:   ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    stagemovement:     ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    greetingphrase:    ["greetingPhrase", ...CONDITION_FIELDS],
+    bypasstohuman:     ["bypassStepNumbers", ...CONDITION_FIELDS],
+    liveintaketicket:  ["ticketEntries", ...CONDITION_FIELDS],
+    collectinformation:["collectInfoSelectedForm", ...CONDITION_FIELDS],
+    scheduleappointment:["appointmentBookingMethod", ...CONDITION_FIELDS],
+    smartcallanalysis: ["callAnalysisScenarios", ...CONDITION_FIELDS],
+    autohangupsilence: ["autoHangupSilenceStageDuration", ...CONDITION_FIELDS],
+    callhangup:        ["callHangupMessage", ...CONDITION_FIELDS],
+    idlemessages:      ["idleMessageStageText", "idleMessageStageDelay", "idleHangupMessageStage", "idleHangupDelayStage", ...CONDITION_FIELDS],
+  };
+
+  const stateGetters: Record<string, () => any> = {
+    fieldUpdateBlocks: () => fieldUpdateBlocks,
+    assignedUser: () => assignedUser,
+    callActionTransferType: () => callActionTransferType,
+    callActionCountryCode: () => callActionCountryCode,
+    callActionPhoneNumber: () => callActionPhoneNumber,
+    callActionAgentId: () => callActionAgentId,
+    callActionReason: () => callActionReason,
+    callActionVoiceResponse: () => callActionVoiceResponse,
+    callActionExtension: () => callActionExtension,
+    whatsappTemplate: () => whatsappTemplate,
+    whatsappTemplateIdentifier: () => whatsappTemplateIdentifier,
+    smsMessage: () => smsMessage,
+    smsConnectedAccount: () => smsConnectedAccount,
+    emailConnectedAccount: () => emailConnectedAccount,
+    showCustomEmail: () => showCustomEmail,
+    emailSubject: () => emailSubject,
+    emailRichBody: () => emailRichBody,
+    emailHtmlBody: () => emailHtmlBody,
+    htmlBodyViewMode: () => htmlBodyViewMode,
+    crmName: () => crmName,
+    crmField: () => crmField,
+    crmUpdateValue: () => crmUpdateValue,
+    ehrName: () => ehrName,
+    ehrField: () => ehrField,
+    ehrUpdateValue: () => ehrUpdateValue,
+    webhookIntegration: () => webhookIntegration,
+    webhookAction: () => webhookAction,
+    webhookSelectedFields: () => webhookSelectedFields,
+    webhookUpdateRows: () => webhookUpdateRows,
+    webhookCreateRows: () => webhookCreateRows,
+    webhookReplaceRows: () => webhookReplaceRows,
+    webhookPayloadMode: () => webhookPayloadMode,
+    webhookJsonBody: () => webhookJsonBody,
+    fetchAvailCalendarUser: () => fetchAvailCalendarUser,
+    fetchAvailDateSource: () => fetchAvailDateSource,
+    fetchAvailTimeSource: () => fetchAvailTimeSource,
+    fetchAvailSummary: () => fetchAvailSummary,
+    fetchFieldSource: () => fetchFieldSource,
+    fetchFieldSelected: () => fetchFieldSelected,
+    fetchFieldReason: () => fetchFieldReason,
+    calendarMode: () => calendarMode,
+    calendarMeetingId: () => calendarMeetingId,
+    calendarConnected: () => calendarConnected,
+    calendarDate: () => calendarDate,
+    calendarTime: () => calendarTime,
+    stepDetailProcess: () => stepDetailProcess,
+    stepDetailStage: () => stepDetailStage,
+    greetingPhrase: () => greetingPhrase,
+    bypassStepNumbers: () => bypassStepNumbers,
+    ticketEntries: () => ticketEntries,
+    collectInfoSelectedForm: () => collectInfoSelectedForm,
+    appointmentBookingMethod: () => appointmentBookingMethod,
+    callAnalysisScenarios: () => callAnalysisScenarios,
+    autoHangupSilenceStageDuration: () => autoHangupSilenceStageDuration,
+    callHangupMessage: () => callHangupMessage,
+    idleMessageStageText: () => idleMessageStageText,
+    idleMessageStageDelay: () => idleMessageStageDelay,
+    idleHangupMessageStage: () => idleHangupMessageStage,
+    idleHangupDelayStage: () => idleHangupDelayStage,
+    // Condition fields
+    conditionsEnabled: () => conditionsEnabled,
+    conditions: () => conditions,
+    conditionOperators: () => conditionOperators,
+    fieldConditions: () => fieldConditions,
+    fieldConditionOperators: () => fieldConditionOperators,
+    intentConditions: () => intentConditions,
+    intentConditionOperators: () => intentConditionOperators,
+  };
+
+  const stateSetters: Record<string, (v: any) => void> = {
+    fieldUpdateBlocks: setFieldUpdateBlocks,
+    assignedUser: setAssignedUser,
+    callActionTransferType: setCallActionTransferType,
+    callActionCountryCode: setCallActionCountryCode,
+    callActionPhoneNumber: setCallActionPhoneNumber,
+    callActionAgentId: setCallActionAgentId,
+    callActionReason: setCallActionReason,
+    callActionVoiceResponse: setCallActionVoiceResponse,
+    callActionExtension: setCallActionExtension,
+    whatsappTemplate: setWhatsappTemplate,
+    whatsappTemplateIdentifier: setWhatsappTemplateIdentifier,
+    smsMessage: setSmsMessage,
+    smsConnectedAccount: setSmsConnectedAccount,
+    emailConnectedAccount: setEmailConnectedAccount,
+    showCustomEmail: setShowCustomEmail,
+    emailSubject: setEmailSubject,
+    emailRichBody: setEmailRichBody,
+    emailHtmlBody: setEmailHtmlBody,
+    htmlBodyViewMode: setHtmlBodyViewMode,
+    crmName: setCrmName,
+    crmField: setCrmField,
+    crmUpdateValue: setCrmUpdateValue,
+    ehrName: setEhrName,
+    ehrField: setEhrField,
+    ehrUpdateValue: setEhrUpdateValue,
+    webhookIntegration: setWebhookIntegration,
+    webhookAction: setWebhookAction,
+    webhookSelectedFields: setWebhookSelectedFields,
+    webhookUpdateRows: setWebhookUpdateRows,
+    webhookCreateRows: setWebhookCreateRows,
+    webhookReplaceRows: setWebhookReplaceRows,
+    webhookPayloadMode: setWebhookPayloadMode,
+    webhookJsonBody: setWebhookJsonBody,
+    fetchAvailCalendarUser: setFetchAvailCalendarUser,
+    fetchAvailDateSource: setFetchAvailDateSource,
+    fetchAvailTimeSource: setFetchAvailTimeSource,
+    fetchAvailSummary: setFetchAvailSummary,
+    fetchFieldSource: setFetchFieldSource,
+    fetchFieldSelected: setFetchFieldSelected,
+    fetchFieldReason: setFetchFieldReason,
+    calendarMode: setCalendarMode,
+    calendarMeetingId: setCalendarMeetingId,
+    calendarConnected: setCalendarConnected,
+    calendarDate: setCalendarDate,
+    calendarTime: setCalendarTime,
+    stepDetailProcess: setStepDetailProcess,
+    stepDetailStage: setStepDetailStage,
+    greetingPhrase: setGreetingPhrase,
+    bypassStepNumbers: setBypassStepNumbers,
+    ticketEntries: setTicketEntries,
+    collectInfoSelectedForm: setCollectInfoSelectedForm,
+    appointmentBookingMethod: setAppointmentBookingMethod,
+    callAnalysisScenarios: setCallAnalysisScenarios,
+    autoHangupSilenceStageDuration: setAutoHangupSilenceStageDuration,
+    callHangupMessage: setCallHangupMessage,
+    idleMessageStageText: setIdleMessageStageText,
+    idleMessageStageDelay: setIdleMessageStageDelay,
+    idleHangupMessageStage: setIdleHangupMessageStage,
+    idleHangupDelayStage: setIdleHangupDelayStage,
+    // Condition fields
+    conditionsEnabled: setConditionsEnabled,
+    conditions: setConditions,
+    conditionOperators: setConditionOperators,
+    fieldConditions: setFieldConditions,
+    fieldConditionOperators: setFieldConditionOperators,
+    intentConditions: setIntentConditions,
+    intentConditionOperators: setIntentConditionOperators,
+  };
+
+  // Builds a params object from current state for the given stepKey.
+  const captureStepParams = (stepKey?: string): Record<string, any> => {
+    const fields = STEP_PARAM_FIELDS[stepKey ?? ""] ?? [];
+    const out: Record<string, any> = {};
+    fields.forEach(field => {
+      const getter = stateGetters[field];
+      if (getter) out[field] = getter();
+    });
+    return out;
+  };
+
+  // Restores state from a step's saved params object for the given stepKey.
+  // Fields not present in params are left at whatever resetStepDetailState() set them to.
+  const restoreStepParams = (stepKey?: string, params?: Record<string, any>) => {
+    if (!params) return;
+    const fields = STEP_PARAM_FIELDS[stepKey ?? ""] ?? [];
+    fields.forEach(field => {
+      const setter = stateSetters[field];
+      if (setter && field in params) setter(params[field]);
+    });
+  };
+
   // Reset function to clear all step detail state
   const resetStepDetailState = () => {
     setExecutionType("wait");
@@ -1187,14 +1230,6 @@ export default function Process() {
     return url;
   };
 
-  const [showCustomEmail, setShowCustomEmail] = useState(false);
-  const [emailConnectedAccount, setEmailConnectedAccount] = useState("");
-  const [emailHtmlBody, setEmailHtmlBody] = useState("");
-  const [htmlBodyViewMode, setHtmlBodyViewMode] = useState<"code" | "preview">("code");
-  const [emailRichBody, setEmailRichBody] = useState("");
-  const [crmUpdateValue, setCrmUpdateValue] = useState("");
-  const [ehrUpdateValue, setEhrUpdateValue] = useState("");
-
   const smsMessageRef = useRef<HTMLTextAreaElement>(null);
   const emailRichBodyRef = useRef<HTMLTextAreaElement>(null);
   const emailHtmlBodyRef = useRef<HTMLTextAreaElement>(null);
@@ -1217,15 +1252,6 @@ export default function Process() {
   const [tcTimeIntervalsEnabled, setTcTimeIntervalsEnabled] = useState(false);
   const [tcCallDurationMinutes, setTcCallDurationMinutes] = useState<number>(5);
   const [tcHangupWindowMinutes, setTcHangupWindowMinutes] = useState<number>(1);
-  const [ticketChecklist, setTicketChecklist] = useState<{ id: string; text: string }[]>([{ id: "check-1", text: "" }]);
-  const [ticketEntries, setTicketEntries] = useState<Array<{
-    taskName: string; taskDesc: string; assignee: string; deadline: string; priority: string;
-    clientEmail: string; clientNumber: string; pauseProcess: string;
-    checklist: { id: string; text: string }[];
-  }>>([{
-    taskName: "", taskDesc: "", assignee: "", deadline: "", priority: "Normal",
-    clientEmail: "", clientNumber: "", pauseProcess: "No", checklist: [{ id: "check-1", text: "" }]
-  }]);
 
   // CHANGE 2: Caller Pitch accordion and mode state
   const [callerPitchExpanded, setCallerPitchExpanded] = useState(true);
@@ -1324,8 +1350,6 @@ export default function Process() {
   const [showAddFormDropdown, setShowAddFormDropdown] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [collectInfoSelectedForm, setCollectInfoSelectedForm] = useState<string>("");
-  const [showCollectInfoDropdown, setShowCollectInfoDropdown] = useState(false);
   const [smartAnalysisTrackWhat, setSmartAnalysisTrackWhat] = useState("");
   const [smartAnalysisFieldName, setSmartAnalysisFieldName] = useState("");
   const [smartAnalysisCaptureDesc, setSmartAnalysisCaptureDesc] = useState("");
@@ -1350,13 +1374,6 @@ export default function Process() {
     textMessage: string;
     nextAction: string;
     askBeforeSending: boolean;
-  }>>([]);
-  const [callAnalysisEnabled, setCallAnalysisEnabled] = useState(true);
-  const [callAnalysisScenarios, setCallAnalysisScenarios] = useState<Array<{
-    id: number;
-    name: string;
-    description: string;
-    dataFormat: string;
   }>>([]);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   const [showAnalysisScenarioModal, setShowAnalysisScenarioModal] = useState(false);
@@ -3638,8 +3655,14 @@ export default function Process() {
                                                   index={idx}
                                                   moveStep={moveStageStep}
                                                   onEdit={() => {
+                                                    resetStepDetailState();
                                                     setCurrentEditingStep(step);
                                                     setIsCreatingNewStep(false);
+                                                    setStepTrigger(step.trigger ?? "stage");
+                                                    setExecutionType(step.executionType ?? "wait");
+                                                    setDelayValue(step.delayValue ?? 5);
+                                                    setDelayUnit(step.delayUnit ?? "Minute");
+                                                    restoreStepParams(step.stepKey, step.params);
                                                     setStepDetailDrawerOpen(true);
                                                   }}
                                                   onDuplicate={() => {
@@ -3678,8 +3701,14 @@ export default function Process() {
                                                     if ((e.target as HTMLElement).closest('button')) {
                                                       return;
                                                     }
+                                                    resetStepDetailState();
                                                     setCurrentEditingStep(step);
                                                     setIsCreatingNewStep(false);
+                                                    setStepTrigger(step.trigger ?? "stage");
+                                                    setExecutionType(step.executionType ?? "wait");
+                                                    setDelayValue(step.delayValue ?? 5);
+                                                    setDelayUnit(step.delayUnit ?? "Minute");
+                                                    restoreStepParams(step.stepKey, step.params);
                                                     setStepDetailDrawerOpen(true);
                                                   }}
                                                 >
@@ -3711,8 +3740,14 @@ export default function Process() {
                                                       title="Edit"
                                                       onClick={(e) => {
                                                         e.stopPropagation();
+                                                        resetStepDetailState();
                                                         setCurrentEditingStep(step);
                                                         setIsCreatingNewStep(false);
+                                                        setStepTrigger(step.trigger ?? "stage");
+                                                        setExecutionType(step.executionType ?? "wait");
+                                                        setDelayValue(step.delayValue ?? 5);
+                                                        setDelayUnit(step.delayUnit ?? "Minute");
+                                                        restoreStepParams(step.stepKey, step.params);
                                                         setStepDetailDrawerOpen(true);
                                                       }}
                                                     >
@@ -3777,8 +3812,14 @@ export default function Process() {
                                                       index={idx}
                                                       moveStep={movePostCallStep}
                                                       onEdit={() => {
+                                                        resetStepDetailState();
                                                         setCurrentEditingStep(step);
                                                         setIsCreatingNewStep(false);
+                                                        setStepTrigger(step.trigger ?? "stage");
+                                                        setExecutionType(step.executionType ?? "wait");
+                                                        setDelayValue(step.delayValue ?? 5);
+                                                        setDelayUnit(step.delayUnit ?? "Minute");
+                                                        restoreStepParams(step.stepKey, step.params);
                                                         setStepDetailDrawerOpen(true);
                                                       }}
                                                       onDuplicate={() => {
@@ -4483,6 +4524,7 @@ export default function Process() {
                             processes={processes}
                             currentProcessId={selectedProcess ?? undefined}
                             workflowSteps={workflowSteps}
+                            onWorkflowStepsChange={setWorkflowSteps}
                           />
                         </div>
                       )}
@@ -4844,3227 +4886,19 @@ export default function Process() {
                                 )}
                               </div>
 
-                              {/* ───────────── CONDITIONS ───────────── */}
-                              <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
-                                {/* Header row — label + optional tag + toggle, always visible */}
-                                <div
-                                  onClick={() => {
-                                    if (conditionsEnabled) {
-                                      setConditionsSectionExpanded(!conditionsSectionExpanded);
-                                    }
-                                  }}
-                                  className={`flex items-center justify-between px-4 py-3 ${conditionsEnabled ? "cursor-pointer select-none" : ""}`}
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Conditions
-                                    </span>
-                                    <span className="text-xs text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>— optional</span>
-                                  </div>
-                                  <div className="flex items-center gap-3">
-                                    <ChevronDown
-                                      className={`w-4 h-4 text-muted-foreground transition-transform ${!conditionsEnabled
-                                        ? "text-gray-300 cursor-not-allowed opacity-50"
-                                        : conditionsSectionExpanded
-                                          ? "rotate-180"
-                                          : ""
-                                        }`}
-                                    />
-                                    <label
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="relative inline-flex items-center cursor-pointer"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        className="sr-only peer"
-                                        checked={conditionsEnabled}
-                                        onChange={(e) => {
-                                          const val = e.target.checked;
-                                          setConditionsEnabled(val);
-                                          if (val) {
-                                            setConditionsSectionExpanded(true);
-                                          }
-                                        }}
-                                      />
-                                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                                    </label>
-                                  </div>
-                                </div>
-
-                                {/* Expanded content — only shown when toggle is ON */}
-                                {conditionsEnabled && conditionsSectionExpanded && (
-                                  <div className="border-t border-gray-100 px-5 py-4 space-y-3 bg-gray-50/40">
-                                    <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                      This step will only execute when all specified conditions are met.
-                                    </p>
-                                    {stepTrigger === "incall" ? (
-                                      <div className="space-y-4">
-                                        {/* Section A: Field Conditions */}
-                                        <div className="rounded-lg border border-border overflow-hidden bg-white">
-                                          <button
-                                            onClick={() => setFieldConditionsGroupExpanded(!fieldConditionsGroupExpanded)}
-                                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Field Conditions
-                                              </span>
-                                              {fieldConditions.length > 0 && (
-                                                <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
-                                                  {fieldConditions.length}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldConditionsGroupExpanded ? 'rotate-180' : ''}`} />
-                                          </button>
-
-                                          {fieldConditionsGroupExpanded && (
-                                            <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                                              {fieldConditions.map((cond, index) => (
-                                                <React.Fragment key={cond.id}>
-                                                  <div className="border border-border rounded-lg overflow-hidden bg-white">
-                                                    <div
-                                                      onClick={() => setFieldExpandedCardIndex(fieldExpandedCardIndex === index ? null : index)}
-                                                      className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
-                                                    >
-                                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
-                                                      </span>
-                                                      <div className="flex items-center gap-2">
-                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${fieldExpandedCardIndex === index ? 'rotate-180' : ''}`} />
-                                                        <button
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            const updated = fieldConditions.filter(c => c.id !== cond.id);
-                                                            setFieldConditions(updated);
-                                                            setFieldConditionOperators(prev => prev.filter((_, i) => i !== index));
-                                                            if (fieldExpandedCardIndex === index) {
-                                                              setFieldExpandedCardIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
-                                                            } else if (fieldExpandedCardIndex !== null && fieldExpandedCardIndex > index) {
-                                                              setFieldExpandedCardIndex(fieldExpandedCardIndex - 1);
-                                                            }
-                                                          }}
-                                                          className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
-                                                        >
-                                                          <Trash2 className="w-4 h-4 text-red-500" />
-                                                        </button>
-                                                      </div>
-                                                    </div>
-
-                                                    {fieldExpandedCardIndex === index && (
-                                                      <div className="border-t border-border p-4 space-y-4 bg-white">
-                                                        <div className="flex items-start gap-2">
-                                                          <select
-                                                            value={cond.fieldSource || ""}
-                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
-                                                              c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
-                                                            ))}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          >
-                                                            <option value="">Source</option>
-                                                            {FETCH_FIELD_SOURCES.filter(s => s.value !== "intent").map(src => (
-                                                              <option key={src.value} value={src.value}>{src.label}</option>
-                                                            ))}
-                                                          </select>
-                                                          <select
-                                                            value={cond.field}
-                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
-                                                              c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
-                                                            ))}
-                                                            disabled={!cond.fieldSource}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          >
-                                                            <option value="">Field</option>
-                                                            {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
-                                                              <option key={f.value} value={f.value}>{f.label}</option>
-                                                            ))}
-                                                          </select>
-                                                          <select
-                                                            value={cond.operator}
-                                                            onChange={e => setFieldConditions(prev => prev.map(c =>
-                                                              c.id === cond.id ? { ...c, operator: e.target.value } : c
-                                                            ))}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          >
-                                                            {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
-                                                              <option key={o}>{o}</option>
-                                                            ))}
-                                                          </select>
-                                                        </div>
-                                                        <input
-                                                          type="text"
-                                                          value={cond.value}
-                                                          onChange={e => setFieldConditions(prev => prev.map(c =>
-                                                            c.id === cond.id ? { ...c, value: e.target.value } : c
-                                                          ))}
-                                                          placeholder="Enter value..."
-                                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                      </div>
-                                                    )}
-                                                  </div>
-
-                                                  {index < fieldConditions.length - 1 && (
-                                                    <div className="flex items-center justify-center py-1">
-                                                      <div className="inline-flex rounded-md border border-border bg-white">
-                                                        <button
-                                                          onClick={() => { const ops = [...fieldConditionOperators]; ops[index] = "AND"; setFieldConditionOperators(ops); }}
-                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(fieldConditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                        >
-                                                          AND
-                                                        </button>
-                                                        <button
-                                                          onClick={() => { const ops = [...fieldConditionOperators]; ops[index] = "OR"; setFieldConditionOperators(ops); }}
-                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${fieldConditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                        >
-                                                          OR
-                                                        </button>
-                                                      </div>
-                                                    </div>
-                                                  )}
-                                                </React.Fragment>
-                                              ))}
-
-                                              <button
-                                                onClick={() => {
-                                                  const newIndex = fieldConditions.length;
-                                                  setFieldConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
-                                                  if (fieldConditions.length > 0) setFieldConditionOperators(prev => [...prev, "AND"]);
-                                                  setFieldExpandedCardIndex(newIndex);
-                                                }}
-                                                className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600 font-semibold"
-                                                style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                <Plus className="w-4 h-4" /> Add Condition
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* Section B: Intent Conditions */}
-                                        <div className="rounded-lg border border-border overflow-hidden bg-white">
-                                          <button
-                                            onClick={() => setIntentConditionsGroupExpanded(!intentConditionsGroupExpanded)}
-                                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50/70 hover:bg-gray-100/50 transition-colors"
-                                          >
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Intent Conditions
-                                              </span>
-                                              {intentConditions.length > 0 && (
-                                                <span className="text-xs bg-purple-100 text-purple-700 rounded-full px-2 py-0.5 font-semibold">
-                                                  {intentConditions.length}
-                                                </span>
-                                              )}
-                                            </div>
-                                            <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentConditionsGroupExpanded ? 'rotate-180' : ''}`} />
-                                          </button>
-
-                                          {intentConditionsGroupExpanded && (
-                                            <div className="border-t border-border px-4 py-3 space-y-3 bg-white">
-                                              {intentConditions.map((cond, index) => (
-                                                <React.Fragment key={cond.id}>
-                                                  <div className="border border-border rounded-lg overflow-hidden bg-white">
-                                                    <div
-                                                      onClick={() => setIntentExpandedCardIndex(intentExpandedCardIndex === index ? null : index)}
-                                                      className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
-                                                    >
-                                                      <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                        {(cond.value || "").trim()
-                                                          ? `Intent: ${(cond.value || "").split(",").filter(Boolean).map(k => `"${k.trim()}"`).join(", ")}`
-                                                          : "Intent Condition"}
-                                                      </span>
-                                                      <div className="flex items-center gap-2">
-                                                        <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${intentExpandedCardIndex === index ? 'rotate-180' : ''}`} />
-                                                        <button
-                                                          onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            const updated = intentConditions.filter(c => c.id !== cond.id);
-                                                            setIntentConditions(updated);
-                                                            setIntentConditionOperators(prev => prev.filter((_, i) => i !== index));
-                                                            if (intentExpandedCardIndex === index) {
-                                                              setIntentExpandedCardIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
-                                                            } else if (intentExpandedCardIndex !== null && intentExpandedCardIndex > index) {
-                                                              setIntentExpandedCardIndex(intentExpandedCardIndex - 1);
-                                                            }
-                                                          }}
-                                                          className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
-                                                        >
-                                                          <Trash2 className="w-4 h-4 text-red-500" />
-                                                        </button>
-                                                      </div>
-                                                    </div>
-
-                                                    {intentExpandedCardIndex === index && (
-                                                      <div className="border-t border-border p-4 space-y-3 bg-white">
-                                                        <p className="text-xs text-gray-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                          Add keywords or phrases that, when detected in speech, trigger this condition.
-                                                        </p>
-                                                        {(() => {
-                                                          const stepKey = currentEditingStep?.stepKey ?? "";
-                                                          const predefinedOptions = INTENT_CONDITION_OPTIONS[stepKey];
-                                                          if (predefinedOptions) {
-                                                            const currentChips = (cond.value || "").split(",").filter(Boolean);
-                                                            const isSelected = (opt: string) => {
-                                                              const parts = opt.split(",").map(p => p.trim()).filter(Boolean);
-                                                              return parts.every(p => currentChips.map(k => k.trim()).includes(p));
-                                                            };
-                                                            return (
-                                                              <div className="space-y-3">
-                                                                {currentChips.length > 0 && (
-                                                                  <div className="flex flex-wrap items-center gap-2">
-                                                                    {currentChips.map((kw, ki) => (
-                                                                      <span
-                                                                        key={ki}
-                                                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                                                                      >
-                                                                        {kw.trim()}
-                                                                        <button
-                                                                          onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
-                                                                            setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
-                                                                          }}
-                                                                          className="ml-0.5 hover:text-red-600 transition-colors"
-                                                                        >
-                                                                          <X className="w-3 h-3" />
-                                                                        </button>
-                                                                      </span>
-                                                                    ))}
-                                                                  </div>
-                                                                )}
-                                                                <select
-                                                                  value=""
-                                                                  onChange={e => {
-                                                                    const val = e.target.value;
-                                                                    if (val) {
-                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
-                                                                      if (!isSelected(val)) {
-                                                                        const next = [...existing, val].join(",");
-                                                                        setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
-                                                                      }
-                                                                    }
-                                                                  }}
-                                                                  className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                                >
-                                                                  <option value="">Select intent...</option>
-                                                                  {predefinedOptions
-                                                                    .filter(opt => !isSelected(opt))
-                                                                    .map(opt => (
-                                                                      <option key={opt} value={opt}>
-                                                                        {opt}
-                                                                      </option>
-                                                                    ))}
-                                                                </select>
-                                                              </div>
-                                                            );
-                                                          } else {
-                                                            return (
-                                                              <div className="flex flex-wrap items-center gap-2 px-3 py-2 border border-border rounded-md bg-gray-50/50 min-h-[42px]">
-                                                                {(cond.value || "").split(",").filter(Boolean).map((kw, ki) => (
-                                                                  <span
-                                                                    key={ki}
-                                                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
-                                                                  >
-                                                                    {kw.trim()}
-                                                                    <button
-                                                                      onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        const updated = (cond.value || "").split(",").filter(Boolean).filter((_, i) => i !== ki).join(",");
-                                                                        setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: updated } : c));
-                                                                      }}
-                                                                      className="ml-0.5 hover:text-red-600 transition-colors"
-                                                                    >
-                                                                      <X className="w-3 h-3" />
-                                                                    </button>
-                                                                  </span>
-                                                                ))}
-                                                                <input
-                                                                  type="text"
-                                                                  value={intentInput}
-                                                                  onChange={e => setIntentInput(e.target.value)}
-                                                                  onKeyDown={e => {
-                                                                    if ((e.key === 'Enter' || e.key === ',') && intentInput.trim()) {
-                                                                      e.preventDefault();
-                                                                      const kw = intentInput.trim().replace(/,$/, "");
-                                                                      if (!kw) return;
-                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
-                                                                      const next = [...existing, kw].join(",");
-                                                                      setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
-                                                                      setIntentInput("");
-                                                                    }
-                                                                  }}
-                                                                  onBlur={() => {
-                                                                    if (intentInput.trim()) {
-                                                                      const kw = intentInput.trim();
-                                                                      const existing = (cond.value || "").split(",").filter(Boolean);
-                                                                      const next = [...existing, kw].join(",");
-                                                                      setIntentConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: next } : c));
-                                                                      setIntentInput("");
-                                                                    }
-                                                                  }}
-                                                                  placeholder={((cond.value || "").trim()) ? "Add another keyword..." : "Type keyword and press Enter..."}
-                                                                  className="flex-1 min-w-[140px] bg-transparent text-sm outline-none"
-                                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                                />
-                                                              </div>
-                                                            );
-                                                          }
-                                                        })()}
-                                                      </div>
-                                                    )}
-                                                  </div>
-
-                                                  {index < intentConditions.length - 1 && (
-                                                    <div className="flex items-center justify-center py-1">
-                                                      <div className="inline-flex rounded-md border border-border bg-white">
-                                                        <button
-                                                          onClick={() => { const ops = [...intentConditionOperators]; ops[index] = "AND"; setIntentConditionOperators(ops); }}
-                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(intentConditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                        >
-                                                          AND
-                                                        </button>
-                                                        <button
-                                                          onClick={() => { const ops = [...intentConditionOperators]; ops[index] = "OR"; setIntentConditionOperators(ops); }}
-                                                          className={`px-4 py-1.5 text-xs font-semibold transition-colors ${intentConditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                        >
-                                                          OR
-                                                        </button>
-                                                      </div>
-                                                    </div>
-                                                  )}
-                                                </React.Fragment>
-                                              ))}
-
-                                              <button
-                                                onClick={() => {
-                                                  const newIndex = intentConditions.length;
-                                                  setIntentConditions(prev => [...prev, { id: `intent-${Date.now()}`, value: "" }]);
-                                                  if (intentConditions.length > 0) setIntentConditionOperators(prev => [...prev, "AND"]);
-                                                  setIntentExpandedCardIndex(newIndex);
-                                                }}
-                                                className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600 font-semibold"
-                                                style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                <Plus className="w-4 h-4" /> Add Condition
-                                              </button>
-                                            </div>
-                                          )}
-                                        </div>
-
-                                        {/* CONDITION PREVIEW — In Call */}
-                                        {(fieldConditions.some(c => c.value) || intentConditions.some(c => c.value)) && (
-                                          <div className="p-3 rounded-lg mt-2" style={{ backgroundColor: '#1E3A5F' }}>
-                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              CONDITION PREVIEW
-                                            </p>
-                                            {fieldConditions.map((cond, i) => (
-                                              <div key={cond.id}>
-                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{fieldConditionOperators[i - 1] || 'AND'}</p>}
-                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
-                                                  &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
-                                                </p>
-                                              </div>
-                                            ))}
-                                            {fieldConditions.some(c => c.value) && intentConditions.some(c => c.value) && (
-                                              <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>AND</p>
-                                            )}
-                                            {intentConditions.map((cond, i) => {
-                                              const isFirstOverall = !fieldConditions.some(c => c.value) && i === 0;
-                                              const showOperator = i > 0 && (intentConditionOperators[i - 1] || 'AND');
-                                              return (
-                                                <div key={cond.id}>
-                                                  {isFirstOverall && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                                  {showOperator && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{showOperator}</p>}
-                                                  <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
-                                                    &nbsp;&nbsp;Caller says any of: {(cond.value || "").split(",").filter(Boolean).map(k => `"${k.trim()}"`).join(", ")}
-                                                  </p>
-                                                </div>
-                                              );
-                                            })}
-                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <>
-                                        {conditions.map((cond, index) => (
-                                          <React.Fragment key={cond.id}>
-                                            <div className="border border-border rounded-lg overflow-hidden bg-white">
-                                              {/* Card Header */}
-                                              <div
-                                                onClick={() => setExpandedConditionIndex(expandedConditionIndex === index ? null : index)}
-                                                className="flex items-center justify-between px-4 py-3 bg-gray-50/70 cursor-pointer select-none"
-                                              >
-                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  {FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || `Condition ${index + 1}`}
-                                                </span>
-                                                <div className="flex items-center gap-2">
-                                                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedConditionIndex === index ? "rotate-180" : ""}`} />
-                                                  {conditions.length > 1 && (
-                                                    <button
-                                                      onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        const updated = conditions.filter(c => c.id !== cond.id);
-                                                        setConditions(updated);
-                                                        setConditionOperators(prev => prev.filter((_, i) => i !== index));
-                                                        if (expandedConditionIndex === index) {
-                                                          setExpandedConditionIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
-                                                        } else if (expandedConditionIndex !== null && expandedConditionIndex > index) {
-                                                          setExpandedConditionIndex(expandedConditionIndex - 1);
-                                                        }
-                                                      }}
-                                                      className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
-                                                    >
-                                                      <Trash2 className="w-4 h-4 text-red-500" />
-                                                    </button>
-                                                  )}
-                                                </div>
-                                              </div>
-
-                                              {/* Card Body */}
-                                              {expandedConditionIndex === index && (
-                                                <div className="border-t border-border p-4 space-y-4 bg-white">
-                                                  <div className="flex items-start gap-2">
-                                                    <select
-                                                      value={cond.fieldSource || ""}
-                                                      onChange={e => setConditions(prev => prev.map(c =>
-                                                        c.id === cond.id ? { ...c, fieldSource: e.target.value, field: "", operator: "" } : c
-                                                      ))}
-                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                    >
-                                                      <option value="">Source</option>
-                                                      {FETCH_FIELD_SOURCES.map(src => (
-                                                        <option key={src.value} value={src.value}>{src.label}</option>
-                                                      ))}
-                                                    </select>
-                                                    <select
-                                                      value={cond.field}
-                                                      onChange={e => setConditions(prev => prev.map(c =>
-                                                        c.id === cond.id ? { ...c, field: e.target.value, operator: "" } : c
-                                                      ))}
-                                                      disabled={!cond.fieldSource}
-                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                    >
-                                                      <option value="">Field</option>
-                                                      {(FIELDS_BY_SOURCE_MAP[cond.fieldSource || ""] || []).map(f => (
-                                                        <option key={f.value} value={f.value}>{f.label}</option>
-                                                      ))}
-                                                    </select>
-                                                    <select
-                                                      value={cond.operator}
-                                                      onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, operator: e.target.value } : c))}
-                                                      className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                    >
-                                                      {["Equal To", "Not Equal To", "Contains", "Does Not Contain", "Starts With", "Ends With", "Greater Than", "Less Than", "Is Empty", "Is Not Empty"].map(o => (
-                                                        <option key={o}>{o}</option>
-                                                      ))}
-                                                    </select>
-                                                  </div>
-                                                  <input
-                                                    type="text"
-                                                    value={cond.value}
-                                                    onChange={e => setConditions(prev => prev.map(c => c.id === cond.id ? { ...c, value: e.target.value } : c))}
-                                                    placeholder="Enter value..."
-                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  />
-                                                </div>
-                                              )}
-                                            </div>
-                                            {index < conditions.length - 1 && (
-                                              <div className="flex items-center justify-center py-1">
-                                                <div className="inline-flex rounded-md border border-border bg-white">
-                                                  <button
-                                                    onClick={() => { const ops = [...conditionOperators]; ops[index] = "AND"; setConditionOperators(ops); }}
-                                                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${(conditionOperators[index] || "AND") === "AND" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                  >
-                                                    AND
-                                                  </button>
-                                                  <button
-                                                    onClick={() => { const ops = [...conditionOperators]; ops[index] = "OR"; setConditionOperators(ops); }}
-                                                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${conditionOperators[index] === "OR" ? "bg-blue-500 text-white" : "text-gray-600 hover:bg-gray-50"}`}
-                                                  >
-                                                    OR
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            )}
-                                          </React.Fragment>
-                                        ))}
-                                        <button
-                                          onClick={() => {
-                                            const newIndex = conditions.length;
-                                            setConditions(prev => [...prev, { id: `cond-${Date.now()}`, fieldSource: "", field: "", operator: "", value: "" }]);
-                                            if (conditions.length > 0) setConditionOperators(prev => [...prev, "AND"]);
-                                            setExpandedConditionIndex(newIndex);
-                                          }}
-                                          className="flex items-center justify-center gap-2 py-2 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-400 hover:bg-blue-50/30 transition-colors w-full text-blue-600"
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          <Plus className="w-4 h-4" /> Add Condition
-                                        </button>
-                                        {conditions.some(c => c.value) && (
-                                          <div className="mt-2 p-3 rounded-lg" style={{ backgroundColor: '#1E3A5F' }}>
-                                            <p className="text-xs font-bold text-white mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>CONDITION PREVIEW</p>
-                                            {conditions.map((cond, i) => (
-                                              <div key={cond.id}>
-                                                {i === 0 && <p className="text-xs text-blue-200" style={{ fontFamily: 'monospace' }}>IF</p>}
-                                                {i > 0 && <p className="text-xs text-yellow-300 font-bold" style={{ fontFamily: 'monospace' }}>{conditionOperators[i - 1] || 'AND'}</p>}
-                                                <p className="text-xs text-white" style={{ fontFamily: 'monospace' }}>
-                                                  &nbsp;&nbsp;{FETCH_FIELD_SOURCES.find(s => s.value === cond.fieldSource)?.fields.find(f => f.value === cond.field)?.label || cond.field} {cond.operator || "Equal To"}{(cond.operator !== "Is Empty" && cond.operator !== "Is Not Empty") ? ` "${cond.value}"` : ""}
-                                                </p>
-                                              </div>
-                                            ))}
-                                            <p className="text-xs text-green-300 mt-1" style={{ fontFamily: 'monospace' }}>Then execute this step.</p>
-                                          </div>
-                                        )}
-                                      </>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Parameters Collapsible Wrapper */}
-                              <div className="rounded-lg border border-border overflow-hidden">
-                                <button
-                                  onClick={() => setParametersExpanded(!parametersExpanded)}
-                                  className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <Sliders className="w-4 h-4 text-primary" />
-                                    <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Parameters
-                                    </span>
-                                  </div>
-                                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${parametersExpanded ? "rotate-180" : ""}`} />
-                                </button>
-                                {parametersExpanded && (
-                                  <div className="border-t border-border p-4 space-y-4">
-
-                                    {/* Field Update Step */}
-                                    {/* Field Update Step */}
-                                    {currentEditingStep.stepKey === "fieldupdate" && (
-                                      <div className="space-y-4">
-                                        {fieldUpdateBlocks.map((block, index) => (
-                                          <div key={index} className="border border-border rounded-lg overflow-hidden bg-white">
-                                            <div
-                                              className="flex items-center justify-between px-4 py-3 bg-gray-50/70 border-b border-border cursor-pointer select-none"
-                                              onClick={() => setExpandedBlockIndex(expandedBlockIndex === index ? null : index)}
-                                            >
-                                              <div className="flex items-center gap-2">
-                                                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${expandedBlockIndex === index ? "rotate-180" : ""}`} />
-                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  {block.fieldToEdit && block.fieldToEdit !== "Select field..." ? block.fieldToEdit : `Field ${index + 1}`}
-                                                </span>
-                                              </div>
-                                              {fieldUpdateBlocks.length > 1 && (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    const updated = fieldUpdateBlocks.filter((_, i) => i !== index);
-                                                    setFieldUpdateBlocks(updated);
-                                                    if (expandedBlockIndex === index) {
-                                                      setExpandedBlockIndex(updated.length > 0 ? Math.max(0, index - 1) : null);
-                                                    } else if (expandedBlockIndex !== null && expandedBlockIndex > index) {
-                                                      setExpandedBlockIndex(expandedBlockIndex - 1);
-                                                    }
-                                                  }}
-                                                  className="p-1 hover:bg-red-50 hover:text-red-500 rounded transition-colors text-muted-foreground"
-                                                >
-                                                  <Trash2 className="w-4 h-4" />
-                                                </button>
-                                              )}
-                                            </div>
-                                            {expandedBlockIndex === index && (
-                                              <div className="p-4 space-y-4">
-                                                {/* Field Type */}
-                                                <div>
-                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Field Type
-                                                  </label>
-                                                  <select
-                                                    value={block.fieldType}
-                                                    onChange={e => {
-                                                      const val = e.target.value;
-                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, fieldType: val } : b));
-                                                    }}
-                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  >
-                                                    <option>System Fields</option>
-                                                    <option>Custom Fields</option>
-                                                  </select>
-                                                </div>
-
-                                                {/* Select Field to Edit */}
-                                                <div>
-                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Select Field to Edit
-                                                  </label>
-                                                  <select
-                                                    value={block.fieldToEdit}
-                                                    onChange={e => {
-                                                      const val = e.target.value;
-                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, fieldToEdit: val } : b));
-                                                    }}
-                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  >
-                                                    <option>Select field...</option>
-                                                    <option>Stage Name</option>
-                                                    <option>Contact Name</option>
-                                                    <option>Call Status</option>
-                                                    <option>Call Duration</option>
-                                                    <option>Country</option>
-                                                    <option>Sentiment</option>
-                                                    <option>Intent</option>
-                                                    <option>Appointment Date</option>
-                                                    <option>Appointment Time</option>
-                                                    <option>AI Summary</option>
-                                                    <option>Call Transcription</option>
-                                                  </select>
-                                                </div>
-
-                                                {/* Value Source */}
-                                                <div>
-                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Value Source
-                                                  </label>
-                                                  <div className="flex items-center gap-4 mb-3">
-                                                    {[
-                                                      { v: "static", l: "Static" },
-                                                      { v: "variable", l: "Variable" },
-                                                    ].map((opt) => (
-                                                      <label key={opt.v} className="flex items-center gap-2 cursor-pointer">
-                                                        <input
-                                                          type="radio"
-                                                          name={`fieldUpdateValueSource-${index}`}
-                                                          value={opt.v}
-                                                          checked={block.valueSource === opt.v}
-                                                          onChange={() => {
-                                                            setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, valueSource: opt.v as any, updateValue: "" } : b));
-                                                          }}
-                                                          className="w-4 h-4 text-blue-600"
-                                                        />
-                                                        <span className="text-sm" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
-                                                      </label>
-                                                    ))}
-                                                  </div>
-                                                  <div className="flex items-center justify-between mb-2">
-                                                    <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                      {block.valueSource === "variable" ? "Variable" : "Static Value"}
-                                                    </label>
-                                                    <VariablePickerButton
-                                                      targetRef={{
-                                                        get current() {
-                                                          return fieldUpdateValueRefs.current[index];
-                                                        }
-                                                      } as React.RefObject<HTMLInputElement>}
-                                                      value={block.updateValue}
-                                                      onChange={val => {
-                                                        setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, updateValue: val } : b));
-                                                      }}
-                                                    />
-                                                  </div>
-                                                  <input
-                                                    ref={el => { fieldUpdateValueRefs.current[index] = el; }}
-                                                    type="text"
-                                                    value={block.updateValue}
-                                                    onChange={e => {
-                                                      const val = e.target.value;
-                                                      setFieldUpdateBlocks(prev => prev.map((b, i) => i === index ? { ...b, updateValue: val } : b));
-                                                    }}
-                                                    placeholder={
-                                                      block.valueSource === "variable"
-                                                        ? "{{ContactName}}"
-                                                        : "Enter static value..."
-                                                    }
-                                                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                    style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                  />
-                                                </div>
-                                              </div>
-                                            )}
-                                          </div>
-                                        ))}
-                                        <button
-                                          onClick={() => {
-                                            const newBlock = { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static" as const, updateValue: "" };
-                                            setFieldUpdateBlocks(prev => [...prev, newBlock]);
-                                            setExpandedBlockIndex(fieldUpdateBlocks.length);
-                                          }}
-                                          className="flex items-center justify-center gap-2 py-2.5 text-sm rounded-md border border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50/20 transition-colors w-full text-blue-600 font-semibold"
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          <Plus className="w-4 h-4" /> Add fields to be updated
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {/* Assign to Human Step */}
-                                    {currentEditingStep.stepKey === "assignhuman" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Assign To
-                                          </label>
-                                          <select
-                                            value={assignedUser}
-                                            onChange={e => setAssignedUser(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select user...</option>
-                                            {availableEmployees.map(emp => (
-                                              <option key={emp.id} value={emp.id}>
-                                                {emp.name}
-                                              </option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {currentEditingStep.stepKey === "callaction" && (
-                                      <div className="space-y-4">
-                                        {/* Transfer Type */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Type</label>
-                                          <div className="flex gap-3">
-                                            {[{ v: "human", l: "Human" }, { v: "agent", l: "AI Agent" }].map((opt) => (
-                                              <label key={opt.v} className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${callActionTransferType === opt.v ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40"}`}>
-                                                <input
-                                                  type="radio"
-                                                  name="callActionTransferType"
-                                                  value={opt.v}
-                                                  checked={callActionTransferType === opt.v}
-                                                  onChange={() => setCallActionTransferType(opt.v as any)}
-                                                  className="accent-primary"
-                                                />
-                                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{opt.l}</span>
-                                              </label>
-                                            ))}
-                                          </div>
-                                        </div>
-
-                                        {/* Human fields */}
-                                        {callActionTransferType === "human" && (
-                                          <>
-                                            <div className="grid grid-cols-2 gap-3">
-                                              <div>
-                                                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Country Code</label>
-                                                <select
-                                                  value={callActionCountryCode}
-                                                  onChange={e => setCallActionCountryCode(e.target.value)}
-                                                  className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                >
-                                                  <option value="+1">+1 (US/CA)</option>
-                                                  <option value="+44">+44 (UK)</option>
-                                                  <option value="+91">+91 (IN)</option>
-                                                  <option value="+61">+61 (AU)</option>
-                                                  <option value="+49">+49 (DE)</option>
-                                                </select>
-                                              </div>
-                                              <div>
-                                                <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>Phone Number</label>
-                                                <input
-                                                  type="tel"
-                                                  value={callActionPhoneNumber}
-                                                  onChange={e => setCallActionPhoneNumber(e.target.value)}
-                                                  placeholder="5551234567"
-                                                  className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                              </div>
-                                            </div>
-
-                                          </>
-                                        )}
-
-                                        {/* Agent fields */}
-                                        {callActionTransferType === "agent" && (
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select AI Agent</label>
-                                            <div className="rounded-xl border border-border overflow-hidden divide-y divide-border">
-                                              {[
-                                                { id: "a1", number: "+1 (800) 555-0101", process: "Patient Intake", stage: "Initial Contact" },
-                                                { id: "a2", number: "+1 (800) 555-0202", process: "Follow-up Calls", stage: "Follow-up Pending" },
-                                                { id: "a3", number: "+1 (800) 555-0303", process: "Insurance Verify", stage: "Pending Verification" },
-                                              ].map(agent => (
-                                                <label
-                                                  key={agent.id}
-                                                  className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors ${callActionAgentId === agent.id ? "bg-primary/5" : ""}`}
-                                                >
-                                                  <input
-                                                    type="radio"
-                                                    name="callActionAgent"
-                                                    value={agent.id}
-                                                    checked={callActionAgentId === agent.id}
-                                                    onChange={() => setCallActionAgentId(agent.id)}
-                                                    className="accent-primary"
-                                                  />
-                                                  <div className="flex-1">
-                                                    <p className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{agent.number}</p>
-                                                    <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{agent.process} · {agent.stage}</p>
-                                                  </div>
-                                                  {callActionAgentId === agent.id && <span className="text-primary text-sm">✓</span>}
-                                                </label>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Voice Response */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-1.5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Voice Response</label>
-                                          <input
-                                            type="text"
-                                            value={callActionVoiceResponse}
-                                            onChange={e => setCallActionVoiceResponse(e.target.value)}
-                                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-
-                                        {/* Transfer Reason */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-1.5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Transfer Reason</label>
-                                          <input
-                                            type="text"
-                                            value={callActionReason}
-                                            onChange={e => setCallActionReason(e.target.value)}
-                                            placeholder="Why this call is being transferred..."
-                                            className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                          <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            Sent as <code style={{ color: '#2563EB' }}>request_reason</code> in the backend payload.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* WhatsApp Step */}
-                                    {currentEditingStep.stepKey === "whatsapp" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Template
-                                          </label>
-                                          <select
-                                            value={whatsappTemplate}
-                                            onChange={e => setWhatsappTemplate(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select Template...</option>
-                                            {(() => {
-                                              try {
-                                                const globalTemplates: Array<{ id: string; name: string; identifier: string; category: string }> =
-                                                  JSON.parse(localStorage.getItem('whatsappGlobalTemplates') || '[]');
-                                                if (globalTemplates.length === 0) return (
-                                                  <option value="" disabled>No templates yet — create one in Chats → Template Builder</option>
-                                                );
-                                                return globalTemplates.map(t => (
-                                                  <option key={t.id} value={t.identifier}>{t.name} ({t.category})</option>
-                                                ));
-                                              } catch {
-                                                return null;
-                                              }
-                                            })()}
-                                          </select>
-                                          <Link to="/chats?tab=templates" className="text-xs text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-1 mt-1">
-                                            <Plus className="w-3 h-3" /> Create a new template
-                                          </Link>
-                                        </div>
-
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Connected Account
-                                          </label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select WhatsApp account...</option>
-                                            <option>+1 (555) 123-4567</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* SMS Step */}
-                                    {currentEditingStep.stepKey === "sms" && (
-                                      <div className="space-y-4">
-                                        {/* Message label + Insert Variable button */}
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Message
-                                            </label>
-                                            <VariablePickerButton
-                                              targetRef={smsMessageRef}
-                                              value={smsMessage}
-                                              onChange={setSmsMessage}
-                                              label="{ } Insert Variable"
-                                            />
-                                          </div>
-
-                                          {/* Textarea */}
-                                          <textarea
-                                            ref={smsMessageRef}
-                                            rows={5}
-                                            value={smsMessage}
-                                            onChange={e => setSmsMessage(e.target.value)}
-                                            placeholder="Type your SMS message here, or use Insert Variable to personalise it..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors resize-none"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', lineHeight: '1.55' }}
-                                          />
-
-                                          {/* Character / segment counter */}
-                                          {(() => {
-                                            const len = smsMessage.length;
-                                            const segmentSize = 160;
-                                            const segments = Math.ceil(len / segmentSize) || 1;
-                                            return (
-                                              <div className="flex items-center justify-between mt-1">
-                                                <span
-                                                  className="text-xs"
-                                                  style={{ color: len > segmentSize ? '#EF4444' : '#64748B', fontFamily: 'Outfit, sans-serif' }}
-                                                >
-                                                  {len} / {segmentSize}
-                                                </span>
-                                                {segments > 1 && (
-                                                  <span
-                                                    className="text-xs font-medium"
-                                                    style={{ color: '#EF4444', fontFamily: 'Outfit, sans-serif' }}
-                                                  >
-                                                    {segments} SMS segments
-                                                  </span>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-
-                                        {/* Connected Account */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Connected Account
-                                          </label>
-                                          <select
-                                            value={smsConnectedAccount}
-                                            onChange={e => setSmsConnectedAccount(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select SMS account...</option>
-                                            <option value="+15551234567">+1 (555) 123-4567</option>
-                                            <option value="+15559876543">+1 (555) 987-6543</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Email Step */}
-                                    {currentEditingStep.stepKey === "email" && (
-                                      <div className="space-y-4">
-                                        {/* Connected Account */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Connected Account
-                                          </label>
-                                          <select
-                                            value={emailConnectedAccount}
-                                            onChange={e => setEmailConnectedAccount(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select email account...</option>
-                                            <option>support@company.com</option>
-                                            <option>noreply@company.com</option>
-                                          </select>
-                                        </div>
-
-                                        {/* Template Mode */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Template Mode
-                                          </label>
-                                          <div className="flex items-center gap-4">
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                              <input
-                                                type="radio"
-                                                name="emailTemplateMode"
-                                                value="rich"
-                                                checked={!showCustomEmail}
-                                                className="w-4 h-4 text-blue-600"
-                                                onChange={() => setShowCustomEmail(false)}
-                                              />
-                                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>Rich Editor</span>
-                                            </label>
-                                            <label className="flex items-center gap-2 cursor-pointer">
-                                              <input
-                                                type="radio"
-                                                name="emailTemplateMode"
-                                                value="html"
-                                                checked={showCustomEmail}
-                                                className="w-4 h-4 text-blue-600"
-                                                onChange={() => setShowCustomEmail(true)}
-                                              />
-                                              <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>HTML Source</span>
-                                            </label>
-                                          </div>
-                                        </div>
-
-                                        {/* Subject */}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Subject</label>
-                                          <input
-                                            type="text"
-                                            value={emailSubject}
-                                            onChange={e => setEmailSubject(e.target.value)}
-                                            placeholder="e.g. Your appointment confirmation"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-
-                                        {/* Email Body */}
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Email Body</label>
-                                            <VariablePickerButton
-                                              targetRef={!showCustomEmail ? emailRichBodyRef : emailHtmlBodyRef}
-                                              value={!showCustomEmail ? emailRichBody : emailHtmlBody}
-                                              onChange={!showCustomEmail ? setEmailRichBody : setEmailHtmlBody}
-                                              label="</> + Variable"
-                                            />
-                                          </div>
-
-                                          {!showCustomEmail ? (
-                                            <>
-                                              {/* Rich text toolbar — Rich Editor mode */}
-                                              <div className="flex items-center gap-0.5 px-2 py-1.5 bg-gray-50 border border-b-0 border-border rounded-t-md">
-                                                {[
-                                                  { label: 'B', title: 'Bold', style: 'font-bold', wrap: ['**', '**'] },
-                                                  { label: 'I', title: 'Italic', style: 'italic', wrap: ['_', '_'] },
-                                                  { label: 'U', title: 'Underline', style: 'underline', wrap: ['<u>', '</u>'] },
-                                                ].map(btn => (
-                                                  <button
-                                                    key={btn.label}
-                                                    title={btn.title}
-                                                    type="button"
-                                                    className={`w-7 h-7 flex items-center justify-center text-xs rounded hover:bg-gray-200 transition-colors ${btn.style}`}
-                                                    style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}
-                                                  >
-                                                    {btn.label}
-                                                  </button>
-                                                ))}
-                                                <div className="w-px h-4 bg-gray-300 mx-1" />
-                                                <button type="button" title="Bullet List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
-                                                    <circle cx="2" cy="4" r="1.3" /><rect x="5" y="3.2" width="9" height="1.6" rx="0.8" />
-                                                    <circle cx="2" cy="8" r="1.3" /><rect x="5" y="7.2" width="9" height="1.6" rx="0.8" />
-                                                    <circle cx="2" cy="12" r="1.3" /><rect x="5" y="11.2" width="9" height="1.6" rx="0.8" />
-                                                  </svg>
-                                                </button>
-                                                <button type="button" title="Numbered List" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="currentColor" style={{ color: '#64748B' }}>
-                                                    <text x="1" y="5" fontSize="5" fontFamily="monospace">1.</text>
-                                                    <rect x="6" y="3.2" width="8" height="1.6" rx="0.8" />
-                                                    <text x="1" y="9" fontSize="5" fontFamily="monospace">2.</text>
-                                                    <rect x="6" y="7.2" width="8" height="1.6" rx="0.8" />
-                                                    <text x="1" y="13" fontSize="5" fontFamily="monospace">3.</text>
-                                                    <rect x="6" y="11.2" width="8" height="1.6" rx="0.8" />
-                                                  </svg>
-                                                </button>
-                                                <div className="w-px h-4 bg-gray-300 mx-1" />
-                                                <button type="button" title="Insert Link" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                                  <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ color: '#64748B' }}>
-                                                    <path d="M6.5 9.5a3.5 3.5 0 0 0 5 0l1.5-1.5a3.5 3.5 0 0 0-5-5L7 4" strokeLinecap="round" />
-                                                    <path d="M9.5 6.5a3.5 3.5 0 0 0-5 0L3 8a3.5 3.5 0 0 0 5 5L9 12" strokeLinecap="round" />
-                                                  </svg>
-                                                </button>
-                                                <button type="button" title="Attach File" className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 transition-colors">
-                                                  <Paperclip className="w-3.5 h-3.5" style={{ color: '#64748B' }} />
-                                                </button>
-                                              </div>
-                                              <textarea
-                                                ref={emailRichBodyRef}
-                                                value={emailRichBody}
-                                                onChange={e => setEmailRichBody(e.target.value)}
-                                                placeholder="Hello {{ContactName}}, ..."
-                                                className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-b-md"
-                                                rows={5}
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </>
-                                          ) : (
-                                            <>
-                                              {/* Code / Preview tab toggle — HTML Source mode */}
-                                              <div className="flex items-center gap-1 mb-2">
-                                                {(['code', 'preview'] as const).map(tab => (
-                                                  <button
-                                                    key={tab}
-                                                    type="button"
-                                                    onClick={() => setHtmlBodyViewMode(tab)}
-                                                    className={`px-3 py-1 text-xs font-semibold rounded-md border transition-colors ${htmlBodyViewMode === tab
-                                                      ? 'bg-blue-600 text-white border-blue-600'
-                                                      : 'bg-white text-gray-500 border-gray-200 hover:border-blue-400 hover:text-blue-600'
-                                                      }`}
-                                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                                  >
-                                                    {tab === 'code' ? 'Code' : 'Preview'}
-                                                  </button>
-                                                ))}
-                                              </div>
-
-                                              {htmlBodyViewMode === 'code' ? (
-                                                <textarea
-                                                  ref={emailHtmlBodyRef}
-                                                  value={emailHtmlBody}
-                                                  onChange={e => setEmailHtmlBody(e.target.value)}
-                                                  placeholder={`<div style="font-family: sans-serif;">
-  <p>Hello {{ContactName}},</p>
-  <p>Your appointment is confirmed for {{AppointmentDate}}.</p>
-</div>`}
-                                                  className="w-full px-3 py-2.5 text-sm border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors rounded-md"
-                                                  rows={8}
-                                                  style={{ fontFamily: 'monospace', color: '#020817' }}
-                                                />
-                                              ) : (
-                                                <div className="w-full rounded-md border border-border p-4" style={{ background: '#F1F5F9' }}>
-                                                  {emailHtmlBody.trim() ? (
-                                                    <div className="mx-auto bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm" style={{ maxWidth: '600px' }}>
-                                                      {/* Email Header */}
-                                                      <div className="p-4 bg-white border-b border-gray-100 text-xs space-y-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                        <div className="flex items-start gap-1">
-                                                          <span className="font-semibold text-gray-500 min-w-[50px]">From:</span>
-                                                          <span className="text-gray-800 font-medium">{emailConnectedAccount || 'your-email@company.com'}</span>
-                                                        </div>
-                                                        <div className="flex items-start gap-1">
-                                                          <span className="font-semibold text-gray-500 min-w-[50px]">Subject:</span>
-                                                          <span className="text-gray-800 font-medium">{emailSubject || '(No subject)'}</span>
-                                                        </div>
-                                                      </div>
-                                                      {/* Email Body */}
-                                                      <div className="px-6 py-5 text-sm overflow-auto" style={{ fontFamily: 'sans-serif', color: '#020817' }}>
-                                                        <div dangerouslySetInnerHTML={{ __html: emailHtmlBody }} />
-                                                      </div>
-                                                    </div>
-                                                  ) : (
-                                                    <div className="flex items-center justify-center py-10">
-                                                      <span className="text-gray-400 text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                        Nothing to preview yet — switch to Code and write your HTML.
-                                                      </span>
-                                                    </div>
-                                                  )}
-                                                </div>
-                                              )}
-
-                                              <p className="text-xs mt-1.5 text-gray-400" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                Write raw HTML. Variables like &#123;&#123;ContactName&#125;&#125; will be replaced when the email is sent.
-                                              </p>
-                                            </>
-                                          )}
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* CRM Update Step */}
-                                    {currentEditingStep.stepKey === "crmupdate" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Platform</label>
-                                          <select
-                                            value={crmName}
-                                            onChange={e => setCrmName(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select CRM...</option>
-                                            <option>Salesforce</option>
-                                            <option>HubSpot</option>
-                                            <option>Zoho CRM</option>
-                                            <option>Pipedrive</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Update Record</option>
-                                            <option>Create Record</option>
-                                            <option>Create or Update</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>CRM Object</label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Contact</option>
-                                            <option>Lead</option>
-                                            <option>Deal</option>
-                                            <option>Account</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
-                                          <select
-                                            value={crmField}
-                                            onChange={e => setCrmField(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select field...</option>
-                                            <option>Status</option>
-                                            <option>Priority</option>
-                                            <option>Notes</option>
-                                            <option>Stage</option>
-                                            <option>Owner</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                            <VariablePickerButton
-                                              targetRef={crmUpdateValueRef}
-                                              value={crmUpdateValue}
-                                              onChange={setCrmUpdateValue}
-                                            />
-                                          </div>
-                                          <input
-                                            ref={crmUpdateValueRef}
-                                            value={crmUpdateValue}
-                                            onChange={e => setCrmUpdateValue(e.target.value)}
-                                            type="text"
-                                            placeholder="Enter value or use variable..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* EHR Update Step */}
-                                    {currentEditingStep.stepKey === "ehrupdate" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Platform</label>
-                                          <select
-                                            value={ehrName}
-                                            onChange={e => setEhrName(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select EHR...</option>
-                                            <option>Epic</option>
-                                            <option>Cerner</option>
-                                            <option>athenahealth</option>
-                                            <option>Meditech</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Action</label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Update Record</option>
-                                            <option>Create Record</option>
-                                            <option>Create or Update</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>EHR Object</label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Patient</option>
-                                            <option>Appointment</option>
-                                            <option>Encounter</option>
-                                            <option>Medication</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Field to Update</label>
-                                          <select
-                                            value={ehrField}
-                                            onChange={e => setEhrField(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select field...</option>
-                                            <option>Patient Status</option>
-                                            <option>Appointment Notes</option>
-                                            <option>Medication</option>
-                                            <option>Visit Type</option>
-                                            <option>Provider</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Value</label>
-                                            <VariablePickerButton
-                                              targetRef={ehrUpdateValueRef}
-                                              value={ehrUpdateValue}
-                                              onChange={setEhrUpdateValue}
-                                            />
-                                          </div>
-                                          <input
-                                            ref={ehrUpdateValueRef}
-                                            value={ehrUpdateValue}
-                                            onChange={e => setEhrUpdateValue(e.target.value)}
-                                            type="text"
-                                            placeholder="Enter value or use variable..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Trigger Webhook Step */}
-                                    {currentEditingStep.stepKey === "wh_trigger" && (() => {
-
-                                      const getIntegrationLabel = (id: string) => {
-                                        const customInt = customApiIntegrations.find((c: any) => c.id === id);
-                                        return customInt ? customInt.name : "";
-                                      };
-
-                                      const METHOD_LABELS: Record<string, string> = {
-                                        "GET": "Fetch / Read",
-                                        "POST": "Create New",
-                                        "PUT": "Replace Record",
-                                        "PATCH": "Update Record",
-                                        "DELETE": "Delete Record",
-                                      };
-
-                                      const selectedCustomInt = customApiIntegrations.find((c: any) => c.id === webhookIntegration);
-                                      const actionOptions: string[] = selectedCustomInt
-                                        ? (selectedCustomInt.allowedMethods || [])
-                                          .filter((m: string) => m !== "GET")
-                                          .map((m: string) => METHOD_LABELS[m] ?? m)
-                                        : (WEBHOOK_ACTIONS[webhookIntegration] || []).filter((a: string) => a !== "GET" && a !== "Fetch / Read");
-
-                                      const fieldMappings: { key: string; label: string }[] = selectedCustomInt
-                                        ? (Array.isArray(selectedCustomInt.fieldMappings)
-                                          ? selectedCustomInt.fieldMappings
-                                          : JSON.parse(selectedCustomInt.fieldMappings || '[]'))
-                                        : [];
-
-                                      return (
-                                        <div className="space-y-4">
-                                          {/* Step 1 — Integration */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Connected Integration
-                                            </label>
-                                            <div className="relative">
-                                              <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                  if (webhookIntOpen) {
-                                                    setWebhookIntOpen(false);
-                                                    setWebhookIntPos(null);
-                                                  } else {
-                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                    setWebhookIntPos({
-                                                      top: rect.bottom + 4,
-                                                      left: rect.left,
-                                                      width: rect.width,
-                                                    });
-                                                    setWebhookIntOpen(true);
-                                                  }
-                                                }}
-                                                className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors cursor-pointer text-left"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              >
-                                                <span>{webhookIntegration ? getIntegrationLabel(webhookIntegration) : "Select integration..."}</span>
-                                                <div className="flex items-center gap-1.5">
-                                                  {webhookIntegration && (
-                                                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                      Connected ✅
-                                                    </span>
-                                                  )}
-                                                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                                </div>
-                                              </button>
-                                              {webhookIntOpen && webhookIntPos && createPortal(
-                                                <>
-                                                  {/* Backdrop — click-outside to close */}
-                                                  <div
-                                                    className="fixed inset-0 cursor-default bg-transparent"
-                                                    style={{ zIndex: 9998 }}
-                                                    onClick={() => {
-                                                      setWebhookIntOpen(false);
-                                                      setWebhookIntPos(null);
-                                                    }}
-                                                  />
-                                                  {/* Dropdown panel — portaled to body, fixed-positioned */}
-                                                  <div
-                                                    ref={webhookIntDropdownRef}
-                                                    className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
-                                                    style={{
-                                                      position: 'fixed',
-                                                      top: webhookIntPos.top,
-                                                      left: webhookIntPos.left,
-                                                      width: `${webhookIntPos.width}px`,
-                                                      zIndex: 9999,
-                                                    }}
-                                                  >
-                                                    {customApiIntegrations.map((c: any) => ({ id: c.id, name: c.name })).map(opt => (
-                                                      <button
-                                                        key={opt.id}
-                                                        type="button"
-                                                        onClick={() => {
-                                                          setWebhookIntegration(opt.id);
-                                                          setWebhookAction("");
-                                                          setWebhookSelectedFields([]);
-                                                          setWebhookIntOpen(false);
-                                                          setWebhookIntPos(null);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
-                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                      >
-                                                        <span>{opt.name}</span>
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
-                                                          Connected ✅
-                                                        </span>
-                                                      </button>
-                                                    ))}
-                                                    <Link
-                                                      to="/settings?tab=integrations"
-                                                      onClick={() => {
-                                                        setWebhookIntOpen(false);
-                                                        setWebhookIntPos(null);
-                                                      }}
-                                                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-1.5 text-blue-600 font-semibold border-t border-border mt-1 pt-2"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    >
-                                                      <Plus className="w-3.5 h-3.5" />
-                                                      Add Integration →
-                                                    </Link>
-                                                  </div>
-                                                </>,
-                                                document.body
-                                              )}
-                                            </div>
-                                          </div>
-
-                                          {/* Step 2 — Action */}
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Action
-                                            </label>
-                                            <div className="relative">
-                                              <button
-                                                type="button"
-                                                disabled={!webhookIntegration}
-                                                onClick={(e) => {
-                                                  if (webhookActionOpen) {
-                                                    setWebhookActionOpen(false);
-                                                    setWebhookActionPos(null);
-                                                  } else {
-                                                    const rect = e.currentTarget.getBoundingClientRect();
-                                                    setWebhookActionPos({
-                                                      top: rect.bottom + 4,
-                                                      left: rect.left,
-                                                      width: rect.width,
-                                                    });
-                                                    setWebhookActionOpen(true);
-                                                  }
-                                                }}
-                                                className="w-full flex items-center justify-between px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              >
-                                                <span>{webhookAction || "Select action..."}</span>
-                                                <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                              </button>
-                                              {webhookActionOpen && webhookActionPos && webhookIntegration && createPortal(
-                                                <>
-                                                  {/* Backdrop — click-outside to close */}
-                                                  <div
-                                                    className="fixed inset-0 cursor-default bg-transparent"
-                                                    style={{ zIndex: 9998 }}
-                                                    onClick={() => {
-                                                      setWebhookActionOpen(false);
-                                                      setWebhookActionPos(null);
-                                                    }}
-                                                  />
-                                                  {/* Dropdown panel — portaled to body, fixed-positioned */}
-                                                  <div
-                                                    ref={webhookActionDropdownRef}
-                                                    className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
-                                                    style={{
-                                                      position: 'fixed',
-                                                      top: webhookActionPos.top,
-                                                      left: webhookActionPos.left,
-                                                      width: `${webhookActionPos.width}px`,
-                                                      zIndex: 9999,
-                                                    }}
-                                                  >
-                                                    {actionOptions.map((act: string) => (
-                                                      <button
-                                                        key={act}
-                                                        type="button"
-                                                        onClick={() => {
-                                                          setWebhookAction(act);
-                                                          setWebhookSelectedFields([]);
-                                                          setWebhookActionOpen(false);
-                                                          setWebhookActionPos(null);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors"
-                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                      >
-                                                        {act}
-                                                      </button>
-                                                    ))}
-                                                  </div>
-                                                </>,
-                                                document.body
-                                              )}
-                                            </div>
-                                          </div>
-
-
-                                          {/* Section 3 — Field Values */}
-                                          {selectedCustomInt && fieldMappings.length > 0 && webhookAction && (() => {
-                                            const actionLower = webhookAction.toLowerCase();
-                                            const isUpdate = actionLower.includes("update") || actionLower.includes("patch");
-                                            const isCreate = actionLower.includes("create") || actionLower.includes("post");
-                                            const isReplace = actionLower.includes("replace") || actionLower.includes("put");
-                                            const isDelete = actionLower.includes("delete");
-
-                                            if (!isUpdate && !isCreate && !isReplace && !isDelete) return null;
-
-                                            return (
-                                              <div className="space-y-2">
-                                                <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                  Field Values
-                                                </label>
-                                                <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                  {isDelete ? "Select which fields to include in this API call" : "Configure the fields and values for this action"}
-                                                </p>
-
-                                                {/* Case 1: Update Action */}
-                                                {isUpdate && (
-                                                  <div className="space-y-3">
-                                                    {webhookUpdateRows.map((row, idx) => (
-                                                      <div key={idx} className="flex items-center gap-2">
-                                                        <select
-                                                          value={row.fieldKey}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookUpdateRows];
-                                                            newRows[idx] = { ...newRows[idx], fieldKey: e.target.value };
-                                                            setWebhookUpdateRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        >
-                                                          <option value="">Select field...</option>
-                                                          {fieldMappings.map((f) => (
-                                                            <option key={f.key} value={f.key}>
-                                                              {f.label || f.key}
-                                                            </option>
-                                                          ))}
-                                                        </select>
-                                                        <input
-                                                          ref={el => { webhookFieldValueRefs.current.update[idx] = el; }}
-                                                          type="text"
-                                                          placeholder="Value"
-                                                          value={row.value}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookUpdateRows];
-                                                            newRows[idx] = { ...newRows[idx], value: e.target.value };
-                                                            setWebhookUpdateRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                        <VariablePickerButton
-                                                          targetRef={{ get current() { return webhookFieldValueRefs.current.update[idx]; } } as React.RefObject<HTMLInputElement>}
-                                                          value={row.value}
-                                                          onChange={(val) => {
-                                                            const newRows = [...webhookUpdateRows];
-                                                            newRows[idx] = { ...newRows[idx], value: val };
-                                                            setWebhookUpdateRows(newRows);
-                                                          }}
-                                                          label="{ }"
-                                                        />
-                                                        {webhookUpdateRows.length > 1 && (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                              const newRows = webhookUpdateRows.filter((_, i) => i !== idx);
-                                                              setWebhookUpdateRows(newRows);
-                                                            }}
-                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                                                          >
-                                                            <Trash2 className="w-4 h-4" />
-                                                          </button>
-                                                        )}
-                                                      </div>
-                                                    ))}
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setWebhookUpdateRows([...webhookUpdateRows, { fieldKey: "", value: "" }])}
-                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    >
-                                                      <Plus className="w-3.5 h-3.5" />
-                                                      Add Field
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {/* Case 2: Create Action */}
-                                                {isCreate && (
-                                                  <div className="space-y-3">
-                                                    {webhookCreateRows.map((row, idx) => (
-                                                      <div key={idx} className="flex items-center gap-2">
-                                                        <input
-                                                          type="text"
-                                                          placeholder="Field Name"
-                                                          value={row.fieldName}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookCreateRows];
-                                                            newRows[idx] = { ...newRows[idx], fieldName: e.target.value };
-                                                            setWebhookCreateRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                        <input
-                                                          ref={el => { webhookFieldValueRefs.current.create[idx] = el; }}
-                                                          type="text"
-                                                          placeholder="Value"
-                                                          value={row.value}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookCreateRows];
-                                                            newRows[idx] = { ...newRows[idx], value: e.target.value };
-                                                            setWebhookCreateRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                        <VariablePickerButton
-                                                          targetRef={{ get current() { return webhookFieldValueRefs.current.create[idx]; } } as React.RefObject<HTMLInputElement>}
-                                                          value={row.value}
-                                                          onChange={(val) => {
-                                                            const newRows = [...webhookCreateRows];
-                                                            newRows[idx] = { ...newRows[idx], value: val };
-                                                            setWebhookCreateRows(newRows);
-                                                          }}
-                                                          label="{ }"
-                                                        />
-                                                        {webhookCreateRows.length > 1 && (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                              const newRows = webhookCreateRows.filter((_, i) => i !== idx);
-                                                              setWebhookCreateRows(newRows);
-                                                            }}
-                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                                                          >
-                                                            <Trash2 className="w-4 h-4" />
-                                                          </button>
-                                                        )}
-                                                      </div>
-                                                    ))}
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setWebhookCreateRows([...webhookCreateRows, { fieldName: "", value: "" }])}
-                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    >
-                                                      <Plus className="w-3.5 h-3.5" />
-                                                      Add Field
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {/* Case 3: Replace Action */}
-                                                {isReplace && (
-                                                  <div className="space-y-3">
-                                                    {webhookReplaceRows.map((row, idx) => (
-                                                      <div key={idx} className="flex items-center gap-2">
-                                                        <select
-                                                          value={row.existingFieldKey}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookReplaceRows];
-                                                            newRows[idx] = { ...newRows[idx], existingFieldKey: e.target.value };
-                                                            setWebhookReplaceRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        >
-                                                          <option value="">Select existing field...</option>
-                                                          {fieldMappings.map((f) => (
-                                                            <option key={f.key} value={f.key}>{f.label || f.key}</option>
-                                                          ))}
-                                                        </select>
-                                                        <input
-                                                          type="text"
-                                                          placeholder="New Field Name"
-                                                          value={row.newFieldName}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookReplaceRows];
-                                                            newRows[idx] = { ...newRows[idx], newFieldName: e.target.value };
-                                                            setWebhookReplaceRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                        <input
-                                                          ref={el => { webhookFieldValueRefs.current.replace[idx] = el; }}
-                                                          type="text"
-                                                          placeholder="New Value"
-                                                          value={row.newValue}
-                                                          onChange={(e) => {
-                                                            const newRows = [...webhookReplaceRows];
-                                                            newRows[idx] = { ...newRows[idx], newValue: e.target.value };
-                                                            setWebhookReplaceRows(newRows);
-                                                          }}
-                                                          className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                        />
-                                                        <VariablePickerButton
-                                                          targetRef={{ get current() { return webhookFieldValueRefs.current.replace[idx]; } } as React.RefObject<HTMLInputElement>}
-                                                          value={row.newValue}
-                                                          onChange={(val) => {
-                                                            const newRows = [...webhookReplaceRows];
-                                                            newRows[idx] = { ...newRows[idx], newValue: val };
-                                                            setWebhookReplaceRows(newRows);
-                                                          }}
-                                                          label="{ }"
-                                                        />
-                                                        {webhookReplaceRows.length > 1 && (
-                                                          <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                              const newRows = webhookReplaceRows.filter((_, i) => i !== idx);
-                                                              setWebhookReplaceRows(newRows);
-                                                            }}
-                                                            className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                                                          >
-                                                            <Trash2 className="w-4 h-4" />
-                                                          </button>
-                                                        )}
-                                                      </div>
-                                                    ))}
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => setWebhookReplaceRows([...webhookReplaceRows, { existingFieldKey: "", newFieldName: "", newValue: "" }])}
-                                                      className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                    >
-                                                      <Plus className="w-3.5 h-3.5" />
-                                                      Add Field
-                                                    </button>
-                                                  </div>
-                                                )}
-
-                                                {/* Case 4: Delete Action */}
-                                                {isDelete && (
-                                                  <div className="space-y-2">
-                                                    {fieldMappings.map((field: { key: string; label: string }) => (
-                                                      <label
-                                                        key={field.key}
-                                                        className="flex items-center gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-muted/20 bg-white"
-                                                      >
-                                                        <input
-                                                          type="checkbox"
-                                                          checked={webhookSelectedFields.includes(field.key)}
-                                                          onChange={(e) => {
-                                                            if (e.target.checked) {
-                                                              setWebhookSelectedFields(prev => [...prev, field.key]);
-                                                            } else {
-                                                              setWebhookSelectedFields(prev => prev.filter(k => k !== field.key));
-                                                            }
-                                                          }}
-                                                          className="w-4 h-4 rounded"
-                                                        />
-                                                        <div className="flex-1">
-                                                          <p className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}>
-                                                            {field.label !== "" ? field.label : field.key}
-                                                          </p>
-                                                          <p className="text-xs text-muted-foreground font-mono">
-                                                            {field.key}
-                                                          </p>
-                                                        </div>
-                                                      </label>
-                                                    ))}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-
-                                          {/* Read-only info box */}
-                                          <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
-                                            <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                                            <div className="flex-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                              Credentials and endpoint configuration for{" "}
-                                              <span className="font-semibold">{getIntegrationLabel(webhookIntegration) || "selected integration"}</span>{" "}
-                                              are managed in{" "}
-                                              <Link to="/settings?tab=integrations" className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-0.5">
-                                                Settings → Integrations
-                                                <ExternalLink className="w-3.5 h-3.5" />
-                                              </Link>
-                                            </div>
-                                          </div>
-                                        </div>
-                                      );
-                                    })()}
-
-
-                                    {/* Webhook Automation Step */}
-                                    {currentEditingStep.stepKey === "webhook_trigger" && (() => {
-
-                                      const webhookIntLabel = (customWebhookIntegrations.find((c: any) => c.id === webhookIntegration) || {}).name || "";
-                                      const webhookIntegrationObj = customWebhookIntegrations.find((c: any) => c.id === webhookIntegration);
-                                      const webhookFieldMappings: { key: string; label: string }[] = webhookIntegrationObj
-                                        ? (Array.isArray(webhookIntegrationObj.fieldMappings)
-                                          ? webhookIntegrationObj.fieldMappings
-                                          : (() => { try { return JSON.parse(webhookIntegrationObj.fieldMappings || '[]'); } catch { return []; } })())
-                                        : [];
-
-                                      return (
-                                        <div className="space-y-4">
-
-                                          {/* Section 1 — Connected Integration */}
-                                          <div className="space-y-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Connected Integration
-                                            </label>
-                                            <button
-                                              type="button"
-                                              onClick={(e) => {
-                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                                setWebhookIntPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-                                                setWebhookIntOpen(true);
-                                              }}
-                                              className="w-full text-left px-3 py-2.5 text-sm rounded-md border border-border bg-white flex items-center justify-between hover:border-blue-400 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: webhookIntegration ? '#020817' : '#94a3b8' }}
-                                            >
-                                              <span>{webhookIntLabel || "Select Integration..."}</span>
-                                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                            </button>
-                                            {webhookIntOpen && webhookIntPos && createPortal(
-                                              <>
-                                                <div className="fixed inset-0 z-[9998]" onClick={() => { setWebhookIntOpen(false); setWebhookIntPos(null); }} />
-                                                <div
-                                                  ref={webhookIntDropdownRef}
-                                                  className="bg-white border border-border rounded-md shadow-lg max-h-60 overflow-y-auto py-1"
-                                                  style={{ position: 'fixed', top: webhookIntPos.top, left: webhookIntPos.left, width: `${webhookIntPos.width}px`, zIndex: 9999 }}
-                                                >
-                                                  {customWebhookIntegrations.length === 0 ? (
-                                                    <div className="px-3 py-4 text-sm text-muted-foreground text-center" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                      No webhook integrations added yet
-                                                    </div>
-                                                  ) : (
-                                                    customWebhookIntegrations.map((c: any) => (
-                                                      <button
-                                                        key={c.id}
-                                                        type="button"
-                                                        onClick={() => {
-                                                          setWebhookIntegration(c.id);
-                                                          setWebhookCreateRows(
-                                                            (() => {
-                                                              const fm = Array.isArray(c.fieldMappings) ? c.fieldMappings : (() => { try { return JSON.parse(c.fieldMappings || '[]'); } catch { return []; } })();
-                                                              return fm.length > 0 ? fm.map((f: any) => ({ fieldName: f.key, value: "" })) : [{ fieldName: "", value: "" }];
-                                                            })()
-                                                          );
-                                                          setWebhookIntOpen(false);
-                                                          setWebhookIntPos(null);
-                                                        }}
-                                                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
-                                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                      >
-                                                        <span>{c.name}</span>
-                                                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">Connected ✅</span>
-                                                      </button>
-                                                    ))
-                                                  )}
-                                                  <Link
-                                                    to="/settings?tab=integrations"
-                                                    onClick={() => { setWebhookIntOpen(false); setWebhookIntPos(null); }}
-                                                    className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center gap-1.5 text-blue-600 font-semibold border-t border-border mt-1 pt-2"
-                                                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                  >
-                                                    <Plus className="w-3.5 h-3.5" />
-                                                    Add Integration →
-                                                  </Link>
-                                                </div>
-                                              </>,
-                                              document.body
-                                            )}
-                                          </div>
-
-                                          {/* Section 2 — Payload Mode Toggle + Editor */}
-                                          {webhookIntegration && (() => {
-                                            return (
-                                              <div className="space-y-3">
-                                                {/* Mode Toggle */}
-                                                <div>
-                                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Payload Mode
-                                                  </label>
-                                                  <div className="inline-flex items-center p-1 rounded-lg border border-border bg-muted/20">
-                                                    {([
-                                                      { key: "fields", label: "Field Builder" },
-                                                      { key: "json", label: "Raw JSON" },
-                                                    ] as const).map((mode, idx) => (
-                                                      <React.Fragment key={mode.key}>
-                                                        {idx > 0 && <div className="w-px h-5 bg-gray-300 mx-0.5" />}
-                                                        <button
-                                                          type="button"
-                                                          onClick={() => setWebhookPayloadMode(mode.key)}
-                                                          className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${webhookPayloadMode === mode.key
-                                                            ? "bg-primary text-white"
-                                                            : "text-gray-600 hover:text-gray-900"
-                                                            }`}
-                                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                        >
-                                                          {mode.label}
-                                                        </button>
-                                                      </React.Fragment>
-                                                    ))}
-                                                  </div>
-                                                </div>
-
-                                                {/* Field Builder Mode */}
-                                                {webhookPayloadMode === "fields" && (
-                                                  <div className="space-y-2">
-                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                      Configure the fields sent in this webhook payload
-                                                    </p>
-                                                    <div className="space-y-3">
-                                                      {webhookCreateRows.map((row, idx) => (
-                                                        <div key={idx} className="flex items-center gap-2">
-                                                          <input
-                                                            type="text"
-                                                            placeholder="Field Name"
-                                                            value={row.fieldName}
-                                                            onChange={(e) => {
-                                                              const newRows = [...webhookCreateRows];
-                                                              newRows[idx] = { ...newRows[idx], fieldName: e.target.value };
-                                                              setWebhookCreateRows(newRows);
-                                                            }}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          />
-                                                          <input
-                                                            ref={el => { webhookFieldValueRefs.current.create[idx] = el; }}
-                                                            type="text"
-                                                            placeholder="Value or {{variable}}"
-                                                            value={row.value}
-                                                            onChange={(e) => {
-                                                              const newRows = [...webhookCreateRows];
-                                                              newRows[idx] = { ...newRows[idx], value: e.target.value };
-                                                              setWebhookCreateRows(newRows);
-                                                            }}
-                                                            className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                          />
-                                                          <VariablePickerButton
-                                                            targetRef={{ get current() { return webhookFieldValueRefs.current.create[idx]; } } as React.RefObject<HTMLInputElement>}
-                                                            value={row.value}
-                                                            onChange={(val) => {
-                                                              const newRows = [...webhookCreateRows];
-                                                              newRows[idx] = { ...newRows[idx], value: val };
-                                                              setWebhookCreateRows(newRows);
-                                                            }}
-                                                            label="{ }"
-                                                          />
-                                                          {webhookCreateRows.length > 1 && (
-                                                            <button
-                                                              type="button"
-                                                              onClick={() => setWebhookCreateRows(webhookCreateRows.filter((_, i) => i !== idx))}
-                                                              className="p-2 text-muted-foreground hover:text-destructive transition-colors"
-                                                            >
-                                                              <Trash2 className="w-4 h-4" />
-                                                            </button>
-                                                          )}
-                                                        </div>
-                                                      ))}
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setWebhookCreateRows([...webhookCreateRows, { fieldName: "", value: "" }])}
-                                                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 font-semibold hover:text-blue-700 transition-colors"
-                                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                      >
-                                                        <Plus className="w-3.5 h-3.5" />
-                                                        Add Field
-                                                      </button>
-                                                    </div>
-                                                  </div>
-                                                )}
-
-                                                {/* Raw JSON Mode */}
-                                                {webhookPayloadMode === "json" && (
-                                                  <div className="space-y-2">
-                                                    <p className="text-xs text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                      Write the raw JSON body to send. Use <code className="text-blue-600 font-mono text-[10px]">{"{{variable}}"}</code> placeholders anywhere in the JSON.
-                                                    </p>
-
-                                                    {/* Toolbar: Format + Variable Picker */}
-                                                    <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border border-b-0 border-border rounded-t-md">
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                          try {
-                                                            const parsed = JSON.parse(webhookJsonBody);
-                                                            setWebhookJsonBody(JSON.stringify(parsed, null, 2));
-                                                            setWebhookJsonError("");
-                                                          } catch {
-                                                            setWebhookJsonError("Invalid JSON — cannot format.");
-                                                          }
-                                                        }}
-                                                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 transition-colors flex items-center gap-1"
-                                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                                      >
-                                                        <span className="font-mono">{"{ }"}</span> Format JSON
-                                                      </button>
-                                                      <VariablePickerButton
-                                                        targetRef={webhookJsonBodyRef}
-                                                        value={webhookJsonBody}
-                                                        onChange={(val) => {
-                                                          setWebhookJsonBody(val);
-                                                          setWebhookJsonError("");
-                                                        }}
-                                                        label="+ Insert Variable"
-                                                      />
-                                                    </div>
-
-                                                    {/* JSON Textarea */}
-                                                    <textarea
-                                                      ref={webhookJsonBodyRef}
-                                                      value={webhookJsonBody}
-                                                      onChange={(e) => {
-                                                        setWebhookJsonBody(e.target.value);
-                                                        // Live validation
-                                                        try {
-                                                          if (e.target.value.trim()) JSON.parse(e.target.value);
-                                                          setWebhookJsonError("");
-                                                        } catch (err) {
-                                                          setWebhookJsonError(err instanceof Error ? err.message : "Invalid JSON");
-                                                        }
-                                                      }}
-                                                      placeholder={`{\n  "event": "stage_entered",\n  "contact_name": "{{contact_name}}",\n  "call_summary": "{{call_summary}}"\n}`}
-                                                      rows={10}
-                                                      className={`w-full px-3 py-2.5 text-sm border rounded-b-md bg-white resize-none outline-none transition-colors font-mono ${webhookJsonError ? "border-red-400 focus:border-red-500" : "border-border focus:border-blue-500"
-                                                        }`}
-                                                      style={{ color: '#020817', lineHeight: '1.6' }}
-                                                      spellCheck={false}
-                                                    />
-
-                                                    {/* Validation feedback */}
-                                                    {webhookJsonError ? (
-                                                      <div className="flex items-start gap-2 px-3 py-2 rounded-md bg-red-50 border border-red-200">
-                                                        <AlertCircle className="w-3.5 h-3.5 text-red-500 flex-shrink-0 mt-0.5" />
-                                                        <p className="text-xs text-red-600 font-mono" style={{ fontFamily: 'monospace' }}>{webhookJsonError}</p>
-                                                      </div>
-                                                    ) : webhookJsonBody.trim() ? (
-                                                      <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-green-50 border border-green-200">
-                                                        <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
-                                                        <p className="text-xs text-green-700 font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>Valid JSON</p>
-                                                      </div>
-                                                    ) : null}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-
-                                          {/* Read-only info box */}
-                                          {webhookIntegration && (
-                                            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-border bg-muted/20 text-xs text-muted-foreground mt-4">
-                                              <Info className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                                              <div className="flex-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                                Credentials and endpoint configuration for{" "}
-                                                <span className="font-semibold">{webhookIntLabel || "selected integration"}</span>{" "}
-                                                are managed in{" "}
-                                                <Link to="/settings?tab=integrations" className="text-blue-600 hover:text-blue-700 font-medium inline-flex items-center gap-0.5">
-                                                  Settings → Integrations
-                                                  <ExternalLink className="w-3.5 h-3.5" />
-                                                </Link>
-                                              </div>
-                                            </div>
-                                          )}
-
-                                        </div>
-                                      );
-                                    })()}
-                                    {/* Stage Movement / Process Movement Steps */}
-                                    {(currentEditingStep.stepKey === "stagemovement" || currentEditingStep.stepKey === "processmovement") && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Target Process
-                                          </label>
-                                          <select
-                                            value={stepDetailProcess}
-                                            onChange={e => { setStepDetailProcess(e.target.value); setStepDetailStage("Select stage..."); }}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select process...</option>
-                                            <option>Patient Intake</option>
-                                            <option>Follow-up Calls</option>
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Target Stage
-                                          </label>
-                                          <select
-                                            value={stepDetailStage}
-                                            onChange={e => setStepDetailStage(e.target.value)}
-                                            disabled={stepDetailProcess === "Select process..."}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option>Select stage...</option>
-                                            {stepDetailProcess === "Patient Intake" && (
-                                              <>
-                                                <option>Initial Contact</option>
-                                                <option>Insurance Verify</option>
-                                                <option>Schedule Appointment</option>
-                                              </>
-                                            )}
-                                            {stepDetailProcess === "Follow-up Calls" && (
-                                              <>
-                                                <option>Post-Visit Check</option>
-                                                <option>Medication Reminder</option>
-                                              </>
-                                            )}
-                                          </select>
-                                        </div>
-                                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                                          <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            The contact will be moved to the selected process and stage when this step executes.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Greeting Phrase Step */}
-                                    {currentEditingStep.stepKey === "greetingphrase" && (
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Greeting Phrase</label>
-                                        <textarea
-                                          value={greetingPhrase}
-                                          onChange={(e) => setGreetingPhrase(e.target.value)}
-                                          placeholder="Hi, this is Alex from [Your Business], who do I have the pleasure of speaking with today?"
-                                          className="w-full p-4 bg-white rounded-lg border border-border resize-none h-24"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        />
-                                      </div>
-                                    )}
-
-                                    {/* Bypass to Human Step */}
-                                    {currentEditingStep.stepKey === "bypasstohuman" && (
-                                      <div className="space-y-5">
-                                        <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
-                                          <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                                          <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            When this step runs, the active call will be immediately forwarded to the phone number(s) configured below, bypassing the AI entirely and connecting the caller directly to a human agent.
-                                          </p>
-                                        </div>
-
-                                        <div>
-                                          <div className="flex items-center justify-between mb-3">
-                                            <label className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Forward to Phone Number(s)
-                                            </label>
-                                            <button
-                                              onClick={() => setBypassStepNumbers(prev => [...prev, { id: Date.now(), phoneNumber: "", countryCode: "+1" }])}
-                                              className="flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors"
-                                              style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                            >
-                                              <Plus className="w-4 h-4" />
-                                              Add Number
-                                            </button>
-                                          </div>
-
-                                          <div className="space-y-3">
-                                            {bypassStepNumbers.map((entry, idx) => (
-                                              <div key={entry.id} className="flex items-center gap-2">
-                                                <select
-                                                  value={entry.countryCode}
-                                                  onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, countryCode: e.target.value } : n))}
-                                                  className="px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817', minWidth: '90px' }}
-                                                >
-                                                  <option value="+1">🇺🇸 +1</option>
-                                                  <option value="+44">🇬🇧 +44</option>
-                                                  <option value="+91">🇮🇳 +91</option>
-                                                  <option value="+61">🇦🇺 +61</option>
-                                                  <option value="+49">🇩🇪 +49</option>
-                                                  <option value="+33">🇫🇷 +33</option>
-                                                  <option value="+52">🇲🇽 +52</option>
-                                                  <option value="+55">🇧🇷 +55</option>
-                                                </select>
-                                                <input
-                                                  type="tel"
-                                                  value={entry.phoneNumber}
-                                                  onChange={e => setBypassStepNumbers(prev => prev.map(n => n.id === entry.id ? { ...n, phoneNumber: e.target.value } : n))}
-                                                  placeholder="(555) 123-4567"
-                                                  className="flex-1 px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                  style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                />
-                                                {bypassStepNumbers.length > 1 && (
-                                                  <button
-                                                    onClick={() => setBypassStepNumbers(prev => prev.filter(n => n.id !== entry.id))}
-                                                    className="p-2 rounded hover:bg-red-50 transition-colors flex-shrink-0"
-                                                  >
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                )}
-                                              </div>
-                                            ))}
-                                          </div>
-
-                                          <p className="text-xs mt-2" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                            If multiple numbers are added, the system will attempt them in order until one connects.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Live Intake Ticket Step */}
-                                    {currentEditingStep.stepKey === "liveintaketicket" && (
-                                      <div className="space-y-5">
-                                        {ticketEntries.map((entry, entryIdx) => (
-                                          <div key={entryIdx} className={entryIdx > 0 ? "pt-5 border-t border-border space-y-4" : "space-y-4"}>
-                                            {entryIdx > 0 && (
-                                              <div className="flex items-center justify-between mb-2">
-                                                <span className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Ticket #{entryIdx + 1}</span>
-                                              </div>
-                                            )}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Name</label>
-                                              <input
-                                                type="text"
-                                                value={entry.taskName}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskName: e.target.value } : t))}
-                                                placeholder="Enter task name..."
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Description</label>
-                                              <textarea
-                                                value={entry.taskDesc}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, taskDesc: e.target.value } : t))}
-                                                placeholder="Describe the task..."
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                                rows={3}
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Assignee</label>
-                                              <select
-                                                value={entry.assignee}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, assignee: e.target.value } : t))}
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              >
-                                                <option value="">Select team member...</option>
-                                                {availableEmployees.map(emp => (
-                                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                                ))}
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Deadline</label>
-                                              <input
-                                                type="date"
-                                                value={entry.deadline}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, deadline: e.target.value } : t))}
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Priority</label>
-                                              <select
-                                                value={entry.priority}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, priority: e.target.value } : t))}
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              >
-                                                <option>Normal</option>
-                                                <option>High</option>
-                                                <option>Urgent</option>
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <div className="flex items-center justify-between mb-2">
-                                                <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Email</label>
-                                                <VariablePickerButton
-                                                  targetRef={{
-                                                    get current() {
-                                                      return ticketClientEmailRefs.current[entryIdx];
-                                                    }
-                                                  } as React.RefObject<HTMLInputElement>}
-                                                  value={entry.clientEmail}
-                                                  onChange={val => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: val } : t))}
-                                                />
-                                              </div>
-                                              <input
-                                                ref={el => { ticketClientEmailRefs.current[entryIdx] = el; }}
-                                                type="text"
-                                                value={entry.clientEmail}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientEmail: e.target.value } : t))}
-                                                placeholder="client@example.com"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <div className="flex items-center justify-between mb-2">
-                                                <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Task Client Number</label>
-                                                <VariablePickerButton
-                                                  targetRef={{
-                                                    get current() {
-                                                      return ticketClientNumberRefs.current[entryIdx];
-                                                    }
-                                                  } as React.RefObject<HTMLInputElement>}
-                                                  value={entry.clientNumber}
-                                                  onChange={val => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: val } : t))}
-                                                />
-                                              </div>
-                                              <input
-                                                ref={el => { ticketClientNumberRefs.current[entryIdx] = el; }}
-                                                type="text"
-                                                value={entry.clientNumber}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, clientNumber: e.target.value } : t))}
-                                                placeholder="+1 (555) 000-0000"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Pause process while task running</label>
-                                              <select
-                                                value={entry.pauseProcess}
-                                                onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? { ...t, pauseProcess: e.target.value } : t))}
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              >
-                                                <option>No</option>
-                                                <option>Yes</option>
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-3" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Checklist</label>
-                                              <div className="space-y-2">
-                                                {entry.checklist.map((item, itemIdx) => (
-                                                  <div key={item.id} className="flex items-center gap-2">
-                                                    <input
-                                                      type="text"
-                                                      value={item.text}
-                                                      onChange={e => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                        ...t,
-                                                        checklist: t.checklist.map((c, ci) => ci === itemIdx ? { ...c, text: e.target.value } : c)
-                                                      } : t))}
-                                                      placeholder={`Checklist item ${itemIdx + 1}...`}
-                                                      className="flex-1 px-3 py-2 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                      style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                                    />
-                                                    <button
-                                                      onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                        ...t,
-                                                        checklist: t.checklist.filter((_, ci) => ci !== itemIdx)
-                                                      } : t))}
-                                                      className="p-1.5 rounded hover:bg-red-50 transition-colors"
-                                                    >
-                                                      <X className="w-4 h-4" style={{ color: '#EF4444' }} />
-                                                    </button>
-                                                  </div>
-                                                ))}
-                                              </div>
-                                              <button
-                                                onClick={() => setTicketEntries(prev => prev.map((t, i) => i === entryIdx ? {
-                                                  ...t,
-                                                  checklist: [...t.checklist, { id: `check-${Date.now()}`, text: "" }]
-                                                } : t))}
-                                                className="mt-2 text-sm font-medium flex items-center gap-1"
-                                                style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                              >
-                                                <Plus className="w-4 h-4" /> Add Checklist Item
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ))}
-                                        <button
-                                          onClick={() => setTicketEntries(prev => [...prev, {
-                                            taskName: "", taskDesc: "", assignee: "", deadline: "", priority: "Normal",
-                                            clientEmail: "", clientNumber: "", pauseProcess: "No",
-                                            checklist: [{ id: `check-${Date.now()}`, text: "" }]
-                                          }])}
-                                          className="w-full py-2.5 text-sm font-medium rounded-md border border-dashed border-blue-300 hover:border-blue-500 hover:bg-blue-50/40 transition-colors flex items-center justify-center gap-2"
-                                          style={{ color: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                        >
-                                          <Copy className="w-4 h-4" /> + Duplicate Fields
-                                        </button>
-                                      </div>
-                                    )}
-
-                                    {/* Collect Information Step */}
-                                    {currentEditingStep.stepKey === "collectinformation" && (
-                                      <div className="relative">
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Form Template</label>
-                                        <button
-                                          onClick={() => setShowCollectInfoDropdown(!showCollectInfoDropdown)}
-                                          className="w-full h-[44px] flex items-center justify-between px-3 border border-border rounded-lg bg-white hover:border-blue-500 hover:bg-blue-50/50 transition-all cursor-pointer"
-                                        >
-                                          <span className="text-sm" style={{ color: collectInfoSelectedForm ? '#020817' : '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            {collectInfoSelectedForm || "Select the form to collect caller information"}
-                                          </span>
-                                          <span className="text-xs font-semibold text-primary">+ Add</span>
-                                        </button>
-                                        <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                          Choose a form template to collect information from callers.
-                                        </p>
-
-                                        {/* Inline Dropdown */}
-                                        {showCollectInfoDropdown && (
-                                          <>
-                                            {/* Backdrop */}
-                                            <div
-                                              className="fixed inset-0 z-40"
-                                              onClick={() => setShowCollectInfoDropdown(false)}
-                                            />
-                                            {/* Dropdown Panel */}
-                                            <div className="absolute top-full left-0 right-0 mt-1 bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.14)] z-50 overflow-hidden">
-                                              {/* Form Templates List */}
-                                              <div className="py-3">
-                                                {FORM_TEMPLATES.map((template, index) => (
-                                                  <div key={template.id}>
-                                                    <button
-                                                      onClick={() => {
-                                                        setCollectInfoSelectedForm(template.name);
-                                                        setShowCollectInfoDropdown(false);
-                                                        toast.success(`${template.name} template added successfully!`);
-                                                      }}
-                                                      className="group w-full h-[44px] flex items-center justify-between px-4 hover:bg-[#F9FAFB] transition-colors"
-                                                    >
-                                                      <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
-                                                        {template.name}
-                                                      </span>
-                                                      <ChevronRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                                                    </button>
-                                                    {index < FORM_TEMPLATES.length - 1 && <div className="h-px bg-[#F3F4F6]"></div>}
-                                                  </div>
-                                                ))}
-                                              </div>
-
-                                              {/* Separator */}
-                                              <div className="h-px bg-[#F3F4F6]"></div>
-
-                                              {/* Create New Form Button */}
-                                              <div className="px-4 pb-3 pt-2">
-                                                <button
-                                                  onClick={() => {
-                                                    setShowCollectInfoDropdown(false);
-                                                    toast.info("Redirecting to Web Forms page...");
-                                                  }}
-                                                  className="w-full h-[44px] flex items-center hover:bg-[#F0F7FF] transition-colors rounded-md px-2"
-                                                >
-                                                  <Plus className="w-3.5 h-3.5 text-[#2563EB] mr-2" />
-                                                  <span className="text-sm font-medium text-[#2563EB]" style={{ fontFamily: 'Outfit, sans-serif' }}>Create New Form</span>
-                                                </button>
-                                              </div>
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Schedule an Appointment Step */}
-                                    {currentEditingStep.stepKey === "scheduleappointment" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-1" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Appointment Booking Method</label>
-                                          <p className="text-xs mb-3" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            Select how you'd like to handle appointment scheduling with your callers
-                                          </p>
-                                          <select
-                                            value={appointmentBookingMethod}
-                                            onChange={(e) => setAppointmentBookingMethod(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                                          >
-                                            <option value="">Select a booking method...</option>
-                                            <option value="text-link">Text Booking Link — Automatically send your calendar booking link via text message</option>
-                                            <option value="collect-request">Collect Booking Request — AI collects caller availability and creates a booking request</option>
-                                            <option value="schedule-phone">Schedule Over Phone — AI assistant books appointments directly during the call</option>
-                                          </select>
-                                        </div>
-
-                                        {/* Conditional fields based on selection */}
-                                        {appointmentBookingMethod === "text-link" && (
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Booking Link URL</label>
-                                            <input
-                                              type="url"
-                                              placeholder="https://calendly.com/your-link"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                                            />
-                                            <p className="text-xs mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                              This link will be sent via SMS to the caller after the call ends.
-                                            </p>
-                                          </div>
-                                        )}
-
-                                        {appointmentBookingMethod === "collect-request" && (
-                                          <>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>What availability should the AI collect?</label>
-                                              <textarea
-                                                placeholder="e.g. Ask the caller for their preferred date and time window"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                                rows={3}
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Assigned To</label>
-                                              <select
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                <option>Select team member...</option>
-                                                {availableEmployees.map((emp) => (
-                                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                                ))}
-                                              </select>
-                                            </div>
-                                          </>
-                                        )}
-
-                                        {appointmentBookingMethod === "schedule-phone" && (
-                                          <>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Calendar to book on</label>
-                                              <select
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                <option>Select calendar...</option>
-                                                {availableEmployees.map((emp) => (
-                                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                                ))}
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Appointment Duration (minutes)</label>
-                                              <input
-                                                type="number"
-                                                placeholder="30"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-                                          </>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* Smart Call Analysis Step */}
-                                    {currentEditingStep.stepKey === "smartcallanalysis" && (
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select Template</label>
-                                        <button
-                                          onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                                          className="w-full px-4 py-2.5 text-sm rounded-md border border-border bg-white hover:bg-muted/20 transition-colors flex items-center justify-between"
-                                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                                        >
-                                          <span style={{ color: '#020817' }}>Choose a template</span>
-                                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
-                                        </button>
-                                        {showTemplateDropdown && (
-                                          <div className="mt-2 border border-border rounded-md bg-white shadow-lg">
-                                            {[
-                                              {
-                                                id: "customer-feedback",
-                                                name: "Customer Feedback",
-                                                trackWhat: "Customer satisfaction",
-                                                fieldName: "customer_satisfaction_score",
-                                                captureDescription: "Rate the overall customer satisfaction based on tone, sentiment, and feedback during the call",
-                                                dataFormat: "Number - Numeric values",
-                                                outputExample: "8",
-                                                expectedFormat: "1-10 scale"
-                                              },
-                                              {
-                                                id: "sales-data",
-                                                name: "Sales Data",
-                                                trackWhat: "Revenue potential",
-                                                fieldName: "estimated_deal_value",
-                                                captureDescription: "Extract the estimated deal value or revenue opportunity mentioned during the sales call",
-                                                dataFormat: "Number - Numeric values",
-                                                outputExample: "5000",
-                                                expectedFormat: "Dollar amount without currency symbol"
-                                              },
-                                              {
-                                                id: "call-classification",
-                                                name: "Call Classification",
-                                                trackWhat: "Call type",
-                                                fieldName: "call_category",
-                                                captureDescription: "Classify the call into categories: Support, Sales, Complaint, Inquiry, Follow-up",
-                                                dataFormat: "Text - Simple text responses like summaries or comments",
-                                                outputExample: "Support",
-                                                expectedFormat: "One of: Support, Sales, Complaint, Inquiry, Follow-up"
-                                              },
-                                              {
-                                                id: "call-outcome",
-                                                name: "Call Outcome",
-                                                trackWhat: "Call resolution",
-                                                fieldName: "call_resolved",
-                                                captureDescription: "Determine if the caller's issue or request was fully resolved during the call",
-                                                dataFormat: "Boolean - Yes/No values",
-                                                outputExample: "true",
-                                                expectedFormat: "true or false"
-                                              }
-                                            ].map((template) => (
-                                              <button
-                                                key={template.id}
-                                                onClick={() => {
-                                                  setSmartAnalysisSelectedTemplate(template.name);
-                                                  setSmartAnalysisTrackWhat(template.trackWhat);
-                                                  setSmartAnalysisFieldName(template.fieldName);
-                                                  setSmartAnalysisCaptureDesc(template.captureDescription);
-                                                  setSmartAnalysisDataFormat(template.dataFormat);
-                                                  setSmartAnalysisOutputExample(template.outputExample);
-                                                  setSmartAnalysisExpectedFormat(template.expectedFormat);
-                                                  setShowTemplateDropdown(false);
-                                                }}
-                                                className="w-full px-4 py-2.5 text-sm text-left hover:bg-muted/20 transition-colors"
-                                                style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                {template.name}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        {/* Inline Fields */}
-                                        {smartAnalysisSelectedTemplate !== "" && (
-                                          <div className="space-y-4 mt-4 p-4 border border-border rounded-lg bg-white">
-                                            {/* What do you want to track? */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <span className="text-red-500">*</span> What do you want to track?
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <input
-                                                type="text"
-                                                value={smartAnalysisTrackWhat}
-                                                onChange={(e) => setSmartAnalysisTrackWhat(e.target.value)}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-
-                                            {/* Field Name */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <span className="text-red-500">*</span> Field Name
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <input
-                                                type="text"
-                                                value={smartAnalysisFieldName}
-                                                onChange={(e) => setSmartAnalysisFieldName(e.target.value)}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-
-                                            {/* What the AI will capture during calls */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <span className="text-red-500">*</span> What the AI will capture during calls
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <textarea
-                                                value={smartAnalysisCaptureDesc}
-                                                onChange={(e) => setSmartAnalysisCaptureDesc(e.target.value)}
-                                                rows={3}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-
-                                            {/* Format of data */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <span className="text-red-500">*</span> Format of data
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <select
-                                                value={smartAnalysisDataFormat}
-                                                onChange={(e) => setSmartAnalysisDataFormat(e.target.value)}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                <option>Text - Simple text responses like summaries or comments</option>
-                                                <option>JSON - Structured data format</option>
-                                                <option>Number - Numeric values</option>
-                                                <option>Boolean - Yes/No values</option>
-                                              </select>
-                                            </div>
-
-                                            {/* Output Format Example */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                                Output Format Example
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <textarea
-                                                value={smartAnalysisOutputExample}
-                                                onChange={(e) => setSmartAnalysisOutputExample(e.target.value)}
-                                                rows={2}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-
-                                            {/* Expected Output Format */}
-                                            <div>
-                                              <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                <span className="text-red-500">*</span> Expected Output Format
-                                                <Info className="w-4 h-4 inline-block ml-1 text-muted-foreground" />
-                                              </label>
-                                              <textarea
-                                                value={smartAnalysisExpectedFormat}
-                                                onChange={(e) => setSmartAnalysisExpectedFormat(e.target.value)}
-                                                rows={2}
-                                                className="w-full px-3 py-2.5 text-sm rounded-lg border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              />
-                                            </div>
-
-                                            {/* Add Scenario Button */}
-                                            <button
-                                              onClick={() => {
-                                                if (!smartAnalysisTrackWhat || !smartAnalysisFieldName || !smartAnalysisCaptureDesc || !smartAnalysisExpectedFormat) {
-                                                  toast.error("Please fill in all required fields");
-                                                  return;
-                                                }
-                                                setCallAnalysisScenarios([
-                                                  ...callAnalysisScenarios,
-                                                  {
-                                                    id: Date.now(),
-                                                    name: smartAnalysisTrackWhat,
-                                                    description: smartAnalysisCaptureDesc,
-                                                    dataFormat: smartAnalysisDataFormat
-                                                  }
-                                                ]);
-                                                setSmartAnalysisTrackWhat("");
-                                                setSmartAnalysisFieldName("");
-                                                setSmartAnalysisCaptureDesc("");
-                                                setSmartAnalysisDataFormat("Text - Simple text responses like summaries or comments");
-                                                setSmartAnalysisOutputExample("");
-                                                setSmartAnalysisExpectedFormat("");
-                                                setSmartAnalysisSelectedTemplate("");
-                                                toast.success("Analysis scenario added successfully");
-                                              }}
-                                              className="w-full px-4 py-2.5 text-sm font-semibold rounded-lg text-white transition-colors hover:opacity-90"
-                                              style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                                            >
-                                              Add Scenario
-                                            </button>
-                                          </div>
-                                        )}
-
-                                        {/* List of saved scenarios */}
-                                        {callAnalysisScenarios.length > 0 && (
-                                          <div className="mt-4 space-y-2">
-                                            {callAnalysisScenarios.map((scenario, idx) => (
-                                              <div key={scenario.id} className="flex items-center justify-between px-4 py-3 border border-border rounded-md bg-white">
-                                                <div className="flex-1">
-                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                                    Scenario #{idx + 1}
-                                                  </p>
-                                                  <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                                    {scenario.description}
-                                                  </p>
-                                                </div>
-                                                <div className="flex items-center gap-2">
-                                                  <button className="p-1.5 rounded hover:bg-muted/40 transition-colors">
-                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
-                                                  </button>
-                                                  <button className="p-1.5 rounded hover:bg-red-50 transition-colors">
-                                                    <Trash2 className="w-4 h-4 text-red-500" />
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-
-                                        {/* Empty state */}
-                                        {callAnalysisScenarios.length === 0 && (
-                                          <div className="mt-4 px-4 py-6 border border-border rounded-md text-center" style={{ backgroundColor: '#EFF6FF' }}>
-                                            <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                              No analysis scenarios configured yet. Select a template above to get started.
-                                            </p>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-
-                                    {/* End Workflow Step */}
-                                    {currentEditingStep.stepKey === "endworkflow" && (
-                                      <div className="space-y-4">
-                                        <div className="flex items-start gap-3 p-4 rounded-xl border border-blue-200 bg-blue-50">
-                                          <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-blue-600" />
-                                          <p className="text-sm text-blue-800" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            When this step runs, the workflow will immediately terminate and the contact will be marked as done. No further automation steps will execute.
-                                          </p>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            End Reason (Optional)
-                                          </label>
-                                          <select
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select reason...</option>
-                                            <option>Completed Successfully</option>
-                                            <option>Contact Unresponsive</option>
-                                            <option>Goal Achieved</option>
-                                            <option>Manually Terminated</option>
-                                            <option>Condition Not Met</option>
-                                          </select>
-                                        </div>
-                                      </div>
-                                    )}
-
-
-                                    {/* Auto Hangup Silence Step */}
-                                    {currentEditingStep.stepKey === "autohangupsilence" && (
-                                      <div>
-                                        <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                          Silence Duration (seconds)
-                                        </label>
-                                        <input
-                                          type="number"
-                                          min={1}
-                                          value={autoHangupSilenceStageDuration}
-                                          onChange={(e) => setAutoHangupSilenceStageDuration(parseInt(e.target.value) || 1)}
-                                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                          style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                        />
-                                      </div>
-                                    )}
-                                    {/* Auto Hangup Step */}
-                                    {currentEditingStep.stepKey === "callhangup" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Hangup Message
-                                          </label>
-                                          <textarea
-                                            value={callHangupMessage}
-                                            onChange={(e) => setCallHangupMessage(e.target.value)}
-                                            placeholder="e.g. Thank you for calling, have a great day! Goodbye."
-                                            rows={3}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                          <p className="text-xs mt-1.5" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>
-                                            The AI will speak this message before ending the call. Leave blank to hang up silently.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Idle Messages Step */}
-                                    {currentEditingStep.stepKey === "idlemessages" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Message</label>
-                                          <textarea value={idleMessageStageText} onChange={(e) => setIdleMessageStageText(e.target.value)} placeholder="Are you still there?" rows={2} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Message Delay (seconds)</label>
-                                          <input type="number" min={1} value={idleMessageStageDelay} onChange={(e) => setIdleMessageStageDelay(parseInt(e.target.value) || 1)} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Hangup Message</label>
-                                          <textarea value={idleHangupMessageStage} onChange={(e) => setIdleHangupMessageStage(e.target.value)} placeholder="I'll let you go now. Have a great day!" rows={2} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Idle Hangup Delay (seconds)</label>
-                                          <input type="number" min={1} value={idleHangupDelayStage} onChange={(e) => setIdleHangupDelayStage(parseInt(e.target.value) || 1)} className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors" style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }} />
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Fetch Availability Step */}
-                                    {currentEditingStep.stepKey === "fetchavailability" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Calendar User
-                                          </label>
-                                          <p className="text-xs mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            Only users with connected calendars appear here.
-                                          </p>
-                                          <select
-                                            value={fetchAvailCalendarUser}
-                                            onChange={e => setFetchAvailCalendarUser(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select calendar user...</option>
-                                            <option value="u1">John Smith — Google Calendar</option>
-                                            <option value="u2">Sarah Johnson — Outlook</option>
-                                          </select>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Date Source
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={fetchAvailDateSource}
-                                              onChange={e => setFetchAvailDateSource(e.target.value)}
-                                              placeholder="{{AppointmentDate}}"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                          <div>
-                                            <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Time Source
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={fetchAvailTimeSource}
-                                              onChange={e => setFetchAvailTimeSource(e.target.value)}
-                                              placeholder="{{AppointmentTime}}"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                        </div>
-                                        <div>
-                                          <div className="flex items-center justify-between mb-2">
-                                            <label className="block text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Voice Response
-                                            </label>
-                                            <VariablePickerButton
-                                              targetRef={fetchAvailSummaryRef}
-                                              value={fetchAvailSummary}
-                                              onChange={setFetchAvailSummary}
-                                            />
-                                          </div>
-                                          <textarea
-                                            ref={fetchAvailSummaryRef}
-                                            value={fetchAvailSummary}
-                                            onChange={e => setFetchAvailSummary(e.target.value)}
-                                            placeholder="e.g. {{calendar_user}} is/is not available on the {{appointment_date}} between {{appointment_time}}"
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                            rows={3}
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                                          <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            Sent as <code style={{ color: '#2563EB' }}>request_type=fetch_availability</code> in the backend payload.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Fetch Field Value Step */}
-                                    {currentEditingStep.stepKey === "fetchfieldvalue" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Field Source
-                                          </label>
-                                          <select
-                                            value={fetchFieldSource}
-                                            onChange={e => { setFetchFieldSource(e.target.value); setFetchFieldSelected(""); }}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select source...</option>
-                                            {FETCH_FIELD_SOURCES.map(src => (
-                                              <option key={src.value} value={src.value}>{src.label}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Field Selector
-                                          </label>
-                                          <select
-                                            value={fetchFieldSelected}
-                                            onChange={e => setFetchFieldSelected(e.target.value)}
-                                            disabled={!fetchFieldSource}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select field...</option>
-                                            {(FETCH_FIELD_SOURCES.find(s => s.value === fetchFieldSource)?.fields || []).map(f => (
-                                              <option key={f.value} value={f.value}>{f.label}</option>
-                                            ))}
-                                          </select>
-                                        </div>
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Reason
-                                          </label>
-                                          <textarea
-                                            value={fetchFieldReason}
-                                            onChange={e => setFetchFieldReason(e.target.value)}
-                                            placeholder="Why this field value is being fetched during the call..."
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500 transition-colors"
-                                            rows={3}
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          />
-                                        </div>
-                                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                                          <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            Sent as <code style={{ color: '#2563EB' }}>request_type=fetch_field</code> in the backend payload.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-                                    {/* Manage Calendar Step */}
-                                    {currentEditingStep.stepKey === "managecalendar" && (
-                                      <div className="space-y-4">
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Mode
-                                          </label>
-                                          <div className="flex gap-2">
-                                            {[
-                                              { v: "book" as const, l: "Book" },
-                                              { v: "reschedule" as const, l: "Reschedule" },
-                                              { v: "cancel" as const, l: "Cancel" }
-                                            ].map(opt => (
-                                              <button
-                                                key={opt.v}
-                                                onClick={() => setCalendarMode(opt.v)}
-                                                className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all ${calendarMode === opt.v
-                                                  ? "border-primary bg-primary/5 text-primary"
-                                                  : "border-border hover:border-muted-foreground/30 text-gray-600"
-                                                  }`}
-                                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                                              >
-                                                {opt.l}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        </div>
-                                        {(calendarMode === "reschedule" || calendarMode === "cancel") && (
-                                          <div>
-                                            <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                              Meeting ID
-                                            </label>
-                                            <input
-                                              type="text"
-                                              value={calendarMeetingId}
-                                              onChange={e => setCalendarMeetingId(e.target.value)}
-                                              placeholder="e.g. {{MeetingID}}"
-                                              className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                              style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                            />
-                                          </div>
-                                        )}
-                                        <div>
-                                          <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                            Connected Calendar
-                                          </label>
-                                          <select
-                                            value={calendarConnected}
-                                            onChange={e => setCalendarConnected(e.target.value)}
-                                            className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                            style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                          >
-                                            <option value="">Select calendar...</option>
-                                            <option value="c1">John Smith — Google Calendar</option>
-                                            <option value="c2">Sarah Johnson — Outlook</option>
-                                          </select>
-                                        </div>
-                                        {calendarMode !== "cancel" && (
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                                {calendarMode === "reschedule" ? "New Date" : "Date"}
-                                              </label>
-                                              <input
-                                                type="text"
-                                                value={calendarDate}
-                                                onChange={e => setCalendarDate(e.target.value)}
-                                                placeholder="{{AppointmentDate}}"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="block text-xs font-medium mb-1.5 uppercase tracking-wide" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
-                                                {calendarMode === "reschedule" ? "New Time" : "Time"}
-                                              </label>
-                                              <input
-                                                type="text"
-                                                value={calendarTime}
-                                                onChange={e => setCalendarTime(e.target.value)}
-                                                placeholder="{{AppointmentTime}}"
-                                                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                                                style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                              />
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        <div className="p-3 rounded-lg bg-blue-50 border border-blue-100">
-                                          <p className="text-xs text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                            Sent as <code style={{ color: '#2563EB' }}>
-                                              request_type={calendarMode === "book" ? "book_appointment" : calendarMode === "reschedule" ? "reschedule_appointment" : "cancel_appointment"}
-                                            </code> in the backend payload.
-                                          </p>
-                                        </div>
-                                      </div>
-                                    )}
-
-
-                                  </div>
-                                )}
-                              </div>
+                              {/* ───────────── CONDITIONS + PARAMETERS (shared component) ───────────── */}
+                              <StepParametersFields
+                                stepKey={currentEditingStep.stepKey ?? ""}
+                                params={captureStepParams(currentEditingStep.stepKey)}
+                                onChange={(patch) => {
+                                  Object.entries(patch).forEach(([key, value]) => {
+                                    const setter = stateSetters[key];
+                                    if (setter) setter(value);
+                                  });
+                                }}
+                                processes={processes}
+                                stepTrigger={stepTrigger}
+                              />
                             </div>
 
                             {/* Footer */}
@@ -8090,6 +4924,7 @@ export default function Process() {
                                       executionType: stepTrigger !== "incall" ? executionType : undefined,
                                       delayValue: stepTrigger !== "incall" ? delayValue : undefined,
                                       delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
+                                      params: captureStepParams(currentEditingStep.stepKey),
                                     };
                                     if (isCreatingNewStep) {
                                       // Add new step to the workflow
