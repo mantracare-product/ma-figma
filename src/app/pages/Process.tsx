@@ -432,20 +432,6 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
 };
 
 
-const WEBHOOK_ACTIONS: Record<string, string[]> = {
-  athenahealth: ["Update Patient Record", "Create Appointment Task", "Add Clinical Note", "Mark Visit Complete"],
-  epic: ["Update Patient Status", "Create Staff Task", "Sync Call Summary to Chart"],
-  salesforce: ["Update Contact", "Create Task", "Log Activity"],
-  slack: ["Send Message to Channel", "Send DM to User", "Post Alert"],
-};
-
-const API_ACTIONS: Record<string, string[]> = {
-  athenahealth: ["Fetch Patient Record", "Update Insurance Info", "Book Appointment", "Check Appointment Status"],
-  epic: ["Fetch Patient Data", "Update Contact Info", "Get Appointment Details", "Post Encounter Note"],
-  cerner: ["Fetch Patient Summary", "Update Demographics", "Log Clinical Note"],
-  hubspot: ["Create Contact", "Update Deal Stage", "Fetch Contact Info", "Log Call Activity"],
-  salesforce: ["Fetch Lead Info", "Update Opportunity", "Create Case"],
-};
 
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
@@ -770,6 +756,17 @@ export default function Process() {
   const [apiTimeout, setApiTimeout] = useState<number>(3);
   const [apiOnFailure, setApiOnFailure] = useState<string>("Continue call");
 
+  // StepParametersFields — API integration fields
+  const [apiSelectedIntegrationId, setApiSelectedIntegrationId] = useState<string>("");
+  const [apiCreateFields, setApiCreateFields] = useState<Array<{ fieldKey: string; fieldLabel: string; value: string }>>([]);
+  const [apiUpdateFields, setApiUpdateFields] = useState<Array<{ fieldKey: string; fieldLabel: string; value: string }>>([]);
+  const [apiReplaceFields, setApiReplaceFields] = useState<Array<{ existingFieldKey: string; newFieldName: string; newValue: string }>>([]);
+  const [apiDeleteField, setApiDeleteField] = useState<string>("");
+
+  // StepParametersFields — Webhook integration fields
+  const [webhookSelectedIntegrationId, setWebhookSelectedIntegrationId] = useState<string>("");
+  const [webhookParsedFields, setWebhookParsedFields] = useState<Array<{ key: string; value: string }>>([]);
+
   // Dropdown open states
   const [webhookIntOpen, setWebhookIntOpen] = useState(false);
   const [webhookActionOpen, setWebhookActionOpen] = useState(false);
@@ -903,11 +900,12 @@ export default function Process() {
     crmupdate:         ["crmName", "crmField", "crmUpdateValue", ...CONDITION_FIELDS],
     ehrupdate:         ["ehrName", "ehrField", "ehrUpdateValue", ...CONDITION_FIELDS],
     wh_trigger:        [
-      "webhookIntegration", "webhookAction", "webhookSelectedFields",
-      "webhookUpdateRows", "webhookCreateRows", "webhookReplaceRows",
+      "apiSelectedIntegrationId", "apiAction", "apiCreateFields",
+      "apiUpdateFields", "apiReplaceFields",
+      "apiDeleteField",
       ...CONDITION_FIELDS,
     ],
-    webhook_trigger:   ["webhookIntegration", "webhookPayloadMode", "webhookCreateRows", "webhookJsonBody", ...CONDITION_FIELDS],
+    webhook_trigger:   ["webhookSelectedIntegrationId", "webhookParsedFields", ...CONDITION_FIELDS],
     fetchavailability: ["fetchAvailCalendarUser", "fetchAvailDateSource", "fetchAvailTimeSource", "fetchAvailSummary", ...CONDITION_FIELDS],
     fetchfieldvalue:   ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
     managecalendar:    ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
@@ -958,6 +956,14 @@ export default function Process() {
     webhookReplaceRows: () => webhookReplaceRows,
     webhookPayloadMode: () => webhookPayloadMode,
     webhookJsonBody: () => webhookJsonBody,
+    apiSelectedIntegrationId: () => apiSelectedIntegrationId,
+    apiAction: () => apiAction,
+    apiCreateFields: () => apiCreateFields,
+    apiUpdateFields: () => apiUpdateFields,
+    apiReplaceFields: () => apiReplaceFields,
+    apiDeleteField: () => apiDeleteField,
+    webhookSelectedIntegrationId: () => webhookSelectedIntegrationId,
+    webhookParsedFields: () => webhookParsedFields,
     fetchAvailCalendarUser: () => fetchAvailCalendarUser,
     fetchAvailDateSource: () => fetchAvailDateSource,
     fetchAvailTimeSource: () => fetchAvailTimeSource,
@@ -1028,6 +1034,14 @@ export default function Process() {
     webhookReplaceRows: setWebhookReplaceRows,
     webhookPayloadMode: setWebhookPayloadMode,
     webhookJsonBody: setWebhookJsonBody,
+    apiSelectedIntegrationId: setApiSelectedIntegrationId,
+    apiAction: setApiAction,
+    apiCreateFields: setApiCreateFields,
+    apiUpdateFields: setApiUpdateFields,
+    apiReplaceFields: setApiReplaceFields,
+    apiDeleteField: setApiDeleteField,
+    webhookSelectedIntegrationId: setWebhookSelectedIntegrationId,
+    webhookParsedFields: setWebhookParsedFields,
     fetchAvailCalendarUser: setFetchAvailCalendarUser,
     fetchAvailDateSource: setFetchAvailDateSource,
     fetchAvailTimeSource: setFetchAvailTimeSource,
@@ -1137,6 +1151,14 @@ export default function Process() {
     setWebhookJsonBody("");
     setWebhookJsonError("");
     setWebhookIntegration(""); // also reset webhook_trigger selection
+    setApiSelectedIntegrationId("");
+    setApiAction("");
+    setApiCreateFields([]);
+    setApiUpdateFields([]);
+    setApiReplaceFields([]);
+    setApiDeleteField("");
+    setWebhookSelectedIntegrationId("");
+    setWebhookParsedFields([]);
 
     setWebhookIntOpen(false);
     setWebhookActionOpen(false);

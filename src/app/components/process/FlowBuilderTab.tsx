@@ -147,8 +147,7 @@ const NODE_CATEGORIES = [
     label: "Call Actions",
     icon: <Phone className="w-3.5 h-3.5" />,
     nodes: [
-      { type: "call-transfer" as NodeType, label: "Call Transfer", icon: <ArrowRight className="w-4 h-4" />, desc: "Transfer active call" },
-      { type: "call-transfer-human" as NodeType, label: "Transfer to Human", icon: <User className="w-4 h-4" />, desc: "Transfer to a phone number" },
+      { type: "call-transfer" as NodeType, label: "Transfer Call", icon: <PhoneCall className="w-4 h-4" />, desc: "Transfer the active call to a human agent or another AI agent" },
       { type: "call-hangup" as NodeType, label: "Call Hangup", icon: <PhoneOff className="w-4 h-4" />, desc: "End the active call" },
       { type: "idle-messages" as NodeType, label: "Idle Messages", icon: <MessageSquare className="w-4 h-4" />, desc: "Speak a message if the caller goes idle" },
     ],
@@ -164,14 +163,13 @@ const NODE_CATEGORIES = [
     ],
   },
   {
-    id: "crm",
-    label: "CRM / EHR",
+    id: "data",
+    label: "Data & Assignment",
     icon: <Settings2 className="w-3.5 h-3.5" />,
     nodes: [
       { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update a field value" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member" },
-      { type: "move-stage" as NodeType, label: "Move Stage", icon: <ArrowRight className="w-4 h-4" />, desc: "Move contact to another stage" },
-      { type: "move-process" as NodeType, label: "Move Process", icon: <Workflow className="w-4 h-4" />, desc: "Move contact to another process" },
+      { type: "move-process" as NodeType, label: "Process Movement", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a different process and select the target stage" },
     ],
   },
   {

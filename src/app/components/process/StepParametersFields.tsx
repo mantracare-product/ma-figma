@@ -22,20 +22,6 @@ const FORM_TEMPLATES = [
   { id: "quote-request", name: "Quote Request" },
 ];
 
-const WEBHOOK_ACTIONS: Record<string, string[]> = {
-  athenahealth: ["Update Patient Record", "Create Appointment Task", "Add Clinical Note", "Mark Visit Complete"],
-  epic: ["Update Patient Status", "Create Staff Task", "Sync Call Summary to Chart"],
-  salesforce: ["Update Contact", "Create Task", "Log Activity"],
-  slack: ["Send Message to Channel", "Send DM to User", "Post Alert"],
-};
-
-const API_ACTIONS: Record<string, string[]> = {
-  athenahealth: ["Fetch Patient Record", "Update Insurance Info", "Book Appointment", "Check Appointment Status"],
-  epic: ["Fetch Patient Data", "Update Contact Info", "Get Appointment Details", "Post Encounter Note"],
-  cerner: ["Fetch Patient Summary", "Update Demographics", "Log Clinical Note"],
-  hubspot: ["Create Contact", "Update Deal Stage", "Fetch Contact Info", "Log Call Activity"],
-  salesforce: ["Fetch Lead Info", "Update Opportunity", "Create Case"],
-};
 
 interface ProcessOption {
   id: string;
@@ -67,6 +53,46 @@ export default function StepParametersFields({
   const [intentInput, setIntentInput] = useState("");
   const [showCollectInfoDropdown, setShowCollectInfoDropdown] = useState(false);
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
+
+  const [parametersSectionExpanded, setParametersSectionExpanded] = useState(true);
+  const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
+  const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
+  const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
+  const [jsonPaste, setJsonPaste] = useState("");
+  const [jsonError, setJsonError] = useState("");
+
+  const inputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const getRefForField = (key: string) => {
+    return {
+      current: inputRefs.current[key] || null
+    };
+  };
+
+  useEffect(() => {
+    if (stepKey === "whatsapp" || stepKey === "send-whatsapp") {
+      try {
+        const stored = JSON.parse(localStorage.getItem("whatsappGlobalTemplates") || "[]");
+        setWhatsappTemplates(stored);
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (stepKey === "wh_trigger" || stepKey === "api") {
+      try {
+        const stored = JSON.parse(localStorage.getItem("customApiIntegrations") || "[]");
+        setCustomApiIntegrations(stored);
+      } catch (e) {
+        console.error(e);
+      }
+    } else if (stepKey === "webhook_trigger" || stepKey === "webhook") {
+      try {
+        const stored = JSON.parse(localStorage.getItem("customWebhookIntegrations") || "[]");
+        setCustomWebhookIntegrations(stored);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  }, [stepKey]);
 
   // Local temp states for adding Smart Analysis scenarios
   const [smartAnalysisSelectedTemplate, setSmartAnalysisSelectedTemplate] = useState("");
@@ -122,14 +148,16 @@ export default function StepParametersFields({
   const ehrField = params.ehrField ?? "";
   const ehrUpdateValue = params.ehrUpdateValue ?? "";
 
-  const webhookIntegration = params.webhookIntegration ?? "";
-  const webhookAction = params.webhookAction ?? "";
-  const webhookSelectedFields = params.webhookSelectedFields ?? [];
-  const webhookUpdateRows = params.webhookUpdateRows ?? [{ fieldKey: "", value: "" }];
-  const webhookCreateRows = params.webhookCreateRows ?? [{ fieldName: "", value: "" }];
-  const webhookReplaceRows = params.webhookReplaceRows ?? [{ existingFieldKey: "", newFieldName: "", newValue: "" }];
-  const webhookPayloadMode = params.webhookPayloadMode ?? "JSON";
-  const webhookJsonBody = params.webhookJsonBody ?? "";
+  const whatsappTemplateIdentifier = params.whatsappTemplateIdentifier ?? "";
+  const apiSelectedIntegrationId = params.apiSelectedIntegrationId ?? "";
+  const apiAction = params.apiAction ?? "";
+  const apiCreateFields = params.apiCreateFields ?? [];
+  const apiUpdateFields = params.apiUpdateFields ?? [];
+  const apiReplaceFields = params.apiReplaceFields ?? [];
+  const apiDeleteField = params.apiDeleteField ?? "";
+  const webhookSelectedIntegrationId = params.webhookSelectedIntegrationId ?? "";
+  const webhookParsedFields = params.webhookParsedFields ?? [];
+
 
   const fetchAvailCalendarUser = params.fetchAvailCalendarUser ?? "";
   const fetchAvailDateSource = params.fetchAvailDateSource ?? "";
@@ -465,8 +493,22 @@ export default function StepParametersFields({
         </div>
       )}
 
-      {/* ───────────── PARAMETERS FIELDS SWITCH ───────────── */}
-      <div className="space-y-4">
+      {/* ───────────── PARAMETERS FIELDS ACCORDION ───────────── */}
+      <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white">
+        <div
+          onClick={() => setParametersSectionExpanded(!parametersSectionExpanded)}
+          className="flex items-center justify-between px-4 py-3 cursor-pointer select-none"
+        >
+          <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+            Parameters
+          </span>
+          <ChevronDown
+            className={`w-4 h-4 text-muted-foreground transition-transform ${parametersSectionExpanded ? "rotate-180" : ""}`}
+          />
+        </div>
+
+        {parametersSectionExpanded && (
+          <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
         {(stepKey === "fieldupdate" || stepKey === "field-update") && (
           <div className="space-y-4">
             {fieldUpdateBlocks.map((block: any, index: number) => (
@@ -671,17 +713,39 @@ export default function StepParametersFields({
 
         {(stepKey === "whatsapp" || stepKey === "send-whatsapp") && (
           <div className="space-y-4">
-            {renderField(
-              "Template",
-              <select
-                value={whatsappTemplate}
-                onChange={e => onChange({ whatsappTemplate: e.target.value })}
-                className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-              >
-                <option value="">Select Template...</option>
-                <option value="app_booking">Appointment Booking Template</option>
-                <option value="survey">Follow-up Survey Template</option>
-              </select>
+            {whatsappTemplates.length === 0 ? (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-[#020817]">Template</label>
+                <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                  <span>No templates yet — create one in Chats → Template Builder</span>
+                  <Link to="/chats?tab=templates" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                    Manage Templates →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              renderField(
+                "Template",
+                <select
+                  value={whatsappTemplate}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const selectedTpl = whatsappTemplates.find(t => t.id === id);
+                    onChange({
+                      whatsappTemplate: id,
+                      whatsappTemplateIdentifier: selectedTpl ? selectedTpl.identifier : ""
+                    });
+                  }}
+                  className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                >
+                  <option value="">Select Template...</option>
+                  {whatsappTemplates.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} — {t.category}
+                    </option>
+                  ))}
+                </select>
+              )
             )}
             {renderField(
               "Connected Account",
@@ -881,50 +945,517 @@ export default function StepParametersFields({
           </div>
         )}
 
-        {(stepKey === "wh_trigger" || stepKey === "webhook_trigger" || stepKey === "webhook" || stepKey === "api") && (
+        {(stepKey === "wh_trigger" || stepKey === "api") && (
           <div className="space-y-4 border p-4 rounded-xl bg-white shadow-sm">
-            {renderField("Integration Platform",
-              <select
-                value={webhookIntegration}
-                onChange={e => onChange({ webhookIntegration: e.target.value, webhookAction: "" })}
-                className="w-full px-3 py-2.5 border rounded-md bg-white"
-              >
-                <option value="">Select integration...</option>
-                <option value="athenahealth">AthenaHealth</option>
-                <option value="epic">Epic</option>
-                <option value="salesforce">Salesforce</option>
-                <option value="slack">Slack</option>
-              </select>
+            {customApiIntegrations.length === 0 ? (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-[#020817]">Select Integration</label>
+                <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                  <span>No API integrations yet — create one in Settings → Integrations</span>
+                  <Link to="/settings?tab=integrations" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                    CRM/Data Source → Custom API
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              renderField("Select Integration",
+                <select
+                  value={apiSelectedIntegrationId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    onChange({
+                      apiSelectedIntegrationId: id,
+                      apiAction: "",
+                      apiCreateFields: [],
+                      apiUpdateFields: [],
+                      apiReplaceFields: [],
+                      apiDeleteField: ""
+                    });
+                  }}
+                  className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                >
+                  <option value="">Select integration...</option>
+                  {customApiIntegrations.map(i => (
+                    <option key={i.id} value={i.id}>{i.name}</option>
+                  ))}
+                </select>
+              )
             )}
-            {webhookIntegration && renderField("Action",
-              <select
-                value={webhookAction}
-                onChange={e => onChange({ webhookAction: e.target.value })}
-                className="w-full px-3 py-2.5 border rounded-md bg-white"
-              >
-                <option value="">Select action...</option>
-                {(WEBHOOK_ACTIONS[webhookIntegration] || []).map(act => <option key={act} value={act}>{act}</option>)}
-              </select>
+
+            {(() => {
+              const selectedApiInt = customApiIntegrations.find(i => i.id === apiSelectedIntegrationId);
+              if (!selectedApiInt) return null;
+
+              // Existing fields on the integration's schema — shared source for Update / Replace / Delete
+              const integrationFields: Array<{ key: string; label: string }> =
+                (selectedApiInt.fieldMappings || [])
+                  .filter((fm: any) => fm.key)  // drop junk rows with no key
+                  .map((fm: any) => ({
+                    key: fm.key,
+                    label: fm.label && fm.label.trim() ? fm.label : fm.key, // fallback to key when label is blank
+                  }));
+
+              const allowedMethodsList = (selectedApiInt.allowedMethods || [])
+                .map((m: string) => m.toUpperCase().trim())
+                .filter((m: string) => m !== "GET"); // Fetch removed — this step only mutates records
+
+              const methodMap: Record<string, { value: string; label: string }> = {
+                POST: { value: "create", label: "Create" },
+                PATCH: { value: "update", label: "Update" },
+                PUT: { value: "replace", label: "Replace" },
+                DELETE: { value: "delete", label: "Delete" }
+              };
+
+              return (
+                <div className="space-y-4">
+                  {renderField("Action",
+                    <select
+                      value={apiAction}
+                      onChange={e => {
+                        const act = e.target.value;
+                        onChange({
+                          apiAction: act,
+                          apiCreateFields: act === "create" ? [{ fieldKey: "", fieldLabel: "", value: "" }] : [],
+                          apiUpdateFields: act === "update" ? [{ fieldKey: "", fieldLabel: "", value: "" }] : [],
+                          apiReplaceFields: act === "replace" ? [{ existingFieldKey: "", replaceMode: "existing", newFieldName: "", newValue: "" }] : [],
+                          apiDeleteField: ""
+                        });
+                      }}
+                      className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                    >
+                      <option value="">Select action...</option>
+                      {allowedMethodsList.map((m: string) => {
+                        const mapped = methodMap[m];
+                        return mapped ? <option key={mapped.value} value={mapped.value}>{mapped.label}</option> : null;
+                      })}
+                    </select>
+                  )}
+
+
+                  {/* ───────────── CREATE — freeform key/value, unrelated to existing schema ───────────── */}
+                  {apiAction === "create" && (
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-500 italic">
+                        Define new field(s) to add to the created record. These are custom key/value pairs — they don't need to match existing integration fields.
+                      </div>
+                      {apiCreateFields.map((field: any, index: number) => (
+                        <div key={index} className="p-3 border rounded-lg space-y-3 bg-white">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-500">Field #{index + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ apiCreateFields: apiCreateFields.filter((_: any, i: number) => i !== index) })}
+                              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {renderField("Key",
+                              <input
+                                type="text"
+                                value={field.fieldKey}
+                                onChange={e => {
+                                  const updated = apiCreateFields.map((f: any, i: number) =>
+                                    i === index ? { ...f, fieldKey: e.target.value, fieldLabel: e.target.value } : f
+                                  );
+                                  onChange({ apiCreateFields: updated });
+                                }}
+                                placeholder="e.g. preferred_contact_method"
+                                className="w-full px-3 py-2 text-xs border rounded-md"
+                              />
+                            )}
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-semibold text-[#020817]">Value</label>
+                              </div>
+                              <div className="mb-1">
+                                <VariablePickerButton
+                                  targetRef={getRefForField(`create-${index}`)}
+                                  value={field.value}
+                                  onChange={newValue => {
+                                    const updated = apiCreateFields.map((f: any, i: number) => i === index ? { ...f, value: newValue } : f);
+                                    onChange({ apiCreateFields: updated });
+                                  }}
+                                  label="+ Insert Variable"
+                                />
+                              </div>
+                              <input
+                                ref={el => { inputRefs.current[`create-${index}`] = el; }}
+                                type="text"
+                                value={field.value}
+                                onChange={e => {
+                                  const updated = apiCreateFields.map((f: any, i: number) => i === index ? { ...f, value: e.target.value } : f);
+                                  onChange({ apiCreateFields: updated });
+                                }}
+                                placeholder="Enter value..."
+                                className="w-full px-3 py-2 text-xs border rounded-md"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onChange({ apiCreateFields: [...apiCreateFields, { fieldKey: "", fieldLabel: "", value: "" }] })}
+                        className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1 font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Field
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ───────────── UPDATE — pick from existing integration fields, set new value ───────────── */}
+                  {apiAction === "update" && (
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-500 italic">Choose an existing field on this integration and set its new value.</div>
+                      {integrationFields.length === 0 ? (
+                        <div className="text-xs text-amber-700 italic p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          No fields defined for this integration — add them in Settings → Integrations → Custom API
+                        </div>
+                      ) : (
+                        <>
+                      {apiUpdateFields.map((field: any, index: number) => (
+                        <div key={index} className="p-3 border rounded-lg space-y-3 bg-white">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-500">Field #{index + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => onChange({ apiUpdateFields: apiUpdateFields.filter((_: any, i: number) => i !== index) })}
+                              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove
+                            </button>
+                          </div>
+                          {renderField("Select Field",
+                            <select
+                              value={field.fieldKey}
+                              onChange={e => {
+                                const chosen = integrationFields.find(fm => fm.key === e.target.value);
+                                const updated = apiUpdateFields.map((f: any, i: number) =>
+                                  i === index ? { ...f, fieldKey: e.target.value, fieldLabel: chosen?.label ?? "" } : f
+                                );
+                                onChange({ apiUpdateFields: updated });
+                              }}
+                              className="w-full px-3 py-2 text-xs border rounded-md bg-white"
+                            >
+                              <option value="">Select field...</option>
+                              {integrationFields.map(fm => (
+                                <option key={fm.key} value={fm.key}>{fm.label}</option>
+                              ))}
+                            </select>
+                          )}
+                          <div>
+                            <div className="flex items-center justify-between mb-1.5">
+                              <label className="text-xs font-semibold text-[#020817]">Value</label>
+                            </div>
+                            <div className="mb-1">
+                              <VariablePickerButton
+                                targetRef={getRefForField(`update-${index}`)}
+                                value={field.value}
+                                onChange={newValue => {
+                                  const updated = apiUpdateFields.map((f: any, i: number) => i === index ? { ...f, value: newValue } : f);
+                                  onChange({ apiUpdateFields: updated });
+                                }}
+                                label="+ Insert Variable"
+                              />
+                            </div>
+                            <input
+                              ref={el => { inputRefs.current[`update-${index}`] = el; }}
+                              type="text"
+                              value={field.value}
+                              onChange={e => {
+                                const updated = apiUpdateFields.map((f: any, i: number) => i === index ? { ...f, value: e.target.value } : f);
+                                onChange({ apiUpdateFields: updated });
+                              }}
+                              placeholder="Enter new value..."
+                              className="w-full px-3 py-2 text-xs border rounded-md"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => onChange({ apiUpdateFields: [...apiUpdateFields, { fieldKey: "", fieldLabel: "", value: "" }] })}
+                        className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1 font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Field to Update
+                      </button>
+                      </>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ───────────── REPLACE — pick existing field, replace with existing field OR new field ───────────── */}
+                  {apiAction === "replace" && (
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-500 italic">Select an existing field, then choose what to replace it with.</div>
+                      {apiReplaceFields.map((row: any, index: number) => {
+                        const replaceMode = row.replaceMode ?? "existing"; // "existing" | "new"
+                        return (
+                          <div key={index} className="p-3 border rounded-lg space-y-3 bg-white">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-gray-500">Replacement #{index + 1}</span>
+                              <button
+                                type="button"
+                                onClick={() => onChange({ apiReplaceFields: apiReplaceFields.filter((_: any, i: number) => i !== index) })}
+                                className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Remove
+                              </button>
+                            </div>
+
+                            {renderField("Existing Field",
+                              <select
+                                value={row.existingFieldKey}
+                                onChange={e => {
+                                  const updated = apiReplaceFields.map((r: any, i: number) => i === index ? { ...r, existingFieldKey: e.target.value } : r);
+                                  onChange({ apiReplaceFields: updated });
+                                }}
+                                className="w-full px-3 py-2 text-xs border rounded-md bg-white"
+                              >
+                                <option value="">Select field...</option>
+                                {integrationFields.map(fm => (
+                                  <option key={fm.key} value={fm.key}>{fm.label}</option>
+                                ))}
+                              </select>
+                            )}
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-xs font-semibold text-gray-500">Replace with:</span>
+                              <div className="inline-flex rounded-md border border-border overflow-hidden">
+                                {[{ v: "existing", l: "Existing Field" }, { v: "new", l: "New Field" }].map(opt => (
+                                  <button
+                                    key={opt.v}
+                                    type="button"
+                                    onClick={() => {
+                                      const updated = apiReplaceFields.map((r: any, i: number) =>
+                                        i === index ? { ...r, replaceMode: opt.v, newFieldName: "", newValue: "" } : r
+                                      );
+                                      onChange({ apiReplaceFields: updated });
+                                    }}
+                                    className={`px-3 py-1.5 text-xs font-semibold ${replaceMode === opt.v ? "bg-blue-600 text-white" : "bg-white text-gray-600"}`}
+                                  >
+                                    {opt.l}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            {replaceMode === "existing" ? (
+                              renderField("Target Field",
+                                <select
+                                  value={row.newFieldName}
+                                  onChange={e => {
+                                    const updated = apiReplaceFields.map((r: any, i: number) => i === index ? { ...r, newFieldName: e.target.value } : r);
+                                    onChange({ apiReplaceFields: updated });
+                                  }}
+                                  className="w-full px-3 py-2 text-xs border rounded-md bg-white"
+                                >
+                                  <option value="">Select field...</option>
+                                  {integrationFields
+                                    .filter(fm => fm.key !== row.existingFieldKey)
+                                    .map(fm => (
+                                      <option key={fm.key} value={fm.key}>{fm.label}</option>
+                                    ))}
+                                </select>
+                              )
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2">
+                                {renderField("Key",
+                                  <input
+                                    type="text"
+                                    value={row.newFieldName}
+                                    onChange={e => {
+                                      const updated = apiReplaceFields.map((r: any, i: number) => i === index ? { ...r, newFieldName: e.target.value } : r);
+                                      onChange({ apiReplaceFields: updated });
+                                    }}
+                                    placeholder="e.g. new_field_key"
+                                    className="w-full px-3 py-2 text-xs border rounded-md"
+                                  />
+                                )}
+                                <div>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <label className="text-xs font-semibold text-[#020817]">Value</label>
+                                  </div>
+                                  <div className="mb-1">
+                                    <VariablePickerButton
+                                      targetRef={getRefForField(`replace-${index}`)}
+                                      value={row.newValue}
+                                      onChange={newValue => {
+                                        const updated = apiReplaceFields.map((r: any, i: number) => i === index ? { ...r, newValue: newValue } : r);
+                                        onChange({ apiReplaceFields: updated });
+                                      }}
+                                      label="+ Insert Variable"
+                                    />
+                                  </div>
+                                  <input
+                                    ref={el => { inputRefs.current[`replace-${index}`] = el; }}
+                                    type="text"
+                                    value={row.newValue}
+                                    onChange={e => {
+                                      const updated = apiReplaceFields.map((r: any, i: number) => i === index ? { ...r, newValue: e.target.value } : r);
+                                      onChange({ apiReplaceFields: updated });
+                                    }}
+                                    placeholder="New value..."
+                                    className="w-full px-3 py-2 text-xs border rounded-md"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => onChange({ apiReplaceFields: [...apiReplaceFields, { existingFieldKey: "", replaceMode: "existing", newFieldName: "", newValue: "" }] })}
+                        className="w-full py-2 text-xs border border-dashed border-gray-300 text-blue-600 rounded-md hover:bg-blue-50/20 flex items-center justify-center gap-1 font-semibold"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Replacement Row
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ───────────── DELETE — pick existing field to remove ───────────── */}
+                  {apiAction === "delete" && (
+                    <div className="space-y-3">
+                      <div className="text-xs text-gray-500 italic">Select the existing field to delete from the matched record.</div>
+                      {renderField("Select Field to Delete",
+                        <select
+                          value={params.apiDeleteField ?? ""}
+                          onChange={e => onChange({ apiDeleteField: e.target.value })}
+                          className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                        >
+                          <option value="">Select field...</option>
+                          {integrationFields.map(fm => (
+                            <option key={fm.key} value={fm.key}>{fm.label}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {(stepKey === "webhook_trigger" || stepKey === "webhook") && (
+          <div className="space-y-4 border p-4 rounded-xl bg-white shadow-sm">
+            {customWebhookIntegrations.length === 0 ? (
+              <div className="space-y-1.5">
+                <label className="block text-sm font-semibold text-[#020817]">Select Integration</label>
+                <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                  <span>No Webhook integrations yet — create one in Settings → Integrations</span>
+                  <Link to="/settings?tab=integrations" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                    CRM/Data Source → Custom Webhook
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              renderField("Select Integration",
+                <select
+                  value={webhookSelectedIntegrationId}
+                  onChange={e => {
+                    const id = e.target.value;
+                    const integration = customWebhookIntegrations.find(i => i.id === id);
+                    const schemaFields = integration ? (integration.fieldMappings || []).map((fm: any) => ({
+                      key: fm.key,
+                      value: ""
+                    })) : [];
+                    onChange({
+                      webhookSelectedIntegrationId: id,
+                      webhookParsedFields: schemaFields
+                    });
+                  }}
+                  className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                >
+                  <option value="">Select integration...</option>
+                  {customWebhookIntegrations.map(i => (
+                    <option key={i.id} value={i.id}>{i.name} ({i.webhookUrl})</option>
+                  ))}
+                </select>
+              )
             )}
-            {renderField("Webhook Payload Mode",
-              <select
-                value={webhookPayloadMode}
-                onChange={e => onChange({ webhookPayloadMode: e.target.value })}
-                className="w-full px-3 py-2.5 border rounded-md bg-white"
-              >
-                <option>JSON</option>
-                <option>Form URL Encoded</option>
-              </select>
-            )}
-            {renderField("JSON Body",
-              <textarea
-                value={webhookJsonBody}
-                onChange={e => onChange({ webhookJsonBody: e.target.value })}
-                placeholder='{"key": "value"}'
-                rows={4}
-                className="w-full px-3 py-2.5 border rounded-md bg-white font-mono"
-              />
-            )}
+
+            {(() => {
+              const selectedWhInt = customWebhookIntegrations.find(i => i.id === webhookSelectedIntegrationId);
+              if (!selectedWhInt) return null;
+
+              const handleParseJson = () => {
+                try {
+                  const parsed = JSON.parse(jsonPaste);
+                  if (typeof parsed !== "object" || parsed === null) {
+                    setJsonError("Must be a valid JSON object");
+                    return;
+                  }
+                  const newFields = Object.keys(parsed).map(k => ({
+                    key: k,
+                    value: typeof parsed[k] === "string" ? parsed[k] : JSON.stringify(parsed[k])
+                  }));
+                  onChange({ webhookParsedFields: newFields });
+                  setJsonError("");
+                  setJsonPaste("");
+                } catch (err: any) {
+                  setJsonError(err.message || "Invalid JSON syntax");
+                }
+              };
+
+              return (
+                <div className="space-y-4">
+                  {webhookParsedFields && webhookParsedFields.length > 0 && (
+                    <div className="space-y-3">
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wide block">Payload Parameters</span>
+                      {webhookParsedFields.map((field: any) => (
+                        <div key={field.key} className="flex flex-col gap-1.5 p-2 bg-gray-50/50 rounded-lg border">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-700 font-mono">{field.key}</span>
+                            <VariablePickerButton
+                              targetRef={getRefForField(`webhook-${field.key}`)}
+                              value={field.value}
+                              onChange={newValue => {
+                                const updated = webhookParsedFields.map((f: any) => f.key === field.key ? { ...f, value: newValue } : f);
+                                onChange({ webhookParsedFields: updated });
+                              }}
+                            />
+                          </div>
+                          <input
+                            ref={el => { inputRefs.current[`webhook-${field.key}`] = el; }}
+                            type="text"
+                            value={field.value}
+                            onChange={e => {
+                              const updated = webhookParsedFields.map((f: any) => f.key === field.key ? { ...f, value: e.target.value } : f);
+                              onChange({ webhookParsedFields: updated });
+                            }}
+                            placeholder="Enter value..."
+                            className="w-full px-3 py-1.5 border rounded-md text-xs"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-gray-50 rounded-lg border space-y-3">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide block">Parse Sample JSON Payload</span>
+                    <textarea
+                      value={jsonPaste}
+                      onChange={e => setJsonPaste(e.target.value)}
+                      placeholder='{"name": "John Doe", "email": "john@example.com"}'
+                      rows={3}
+                      className="w-full px-3 py-2.5 border rounded-md bg-white font-mono text-xs"
+                    />
+                    {jsonError && <p className="text-xs text-red-500">{jsonError}</p>}
+                    <button
+                      type="button"
+                      onClick={handleParseJson}
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-xs font-semibold"
+                    >
+                      Parse JSON & Populate Fields
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1351,6 +1882,8 @@ export default function StepParametersFields({
                 className="w-full px-3 py-2 bg-white border border-border rounded-xl text-sm"
               />
             )}
+          </div>
+        )}
           </div>
         )}
       </div>

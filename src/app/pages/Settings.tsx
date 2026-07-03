@@ -9399,7 +9399,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                                 try {
                                   const parsed = JSON.parse(sampleJson);
                                   const keys = Object.keys(parsed);
-                                  const newMappings = keys.map((key: string) => ({ key, label: "" }));
+                                  const newMappings = keys.map((key: string) => ({ key, label: key }));
                                   setIntegrationCredentials({
                                     ...integrationCredentials,
                                     fieldMappings: JSON.stringify(newMappings),
