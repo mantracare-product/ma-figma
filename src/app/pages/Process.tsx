@@ -4601,6 +4601,7 @@ export default function Process() {
                                 {[
                                   { key: "all", icon: <Sparkles className="w-4 h-4" />, name: "All" },
                                   { key: "workflow", icon: <GitBranch className="w-4 h-4" />, name: "Workflow Logic" },
+                                  { key: "callerengagement", icon: <Phone className="w-4 h-4" />, name: "Caller Engagement" },
                                   { key: "communication", icon: <MessageSquare className="w-4 h-4" />, name: "Communication" },
                                   { key: "data", icon: <Database className="w-4 h-4" />, name: "Data & Assignment" },
                                   { key: "webhook", icon: <Webhook className="w-4 h-4" />, name: "Webhook / API" },
@@ -4637,11 +4638,11 @@ export default function Process() {
                               <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
-                                    { key: "processmovement", name: "Process Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                    { key: "processmovement", name: "Process/Stage Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
-                                    { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "workflow", "incall"], popular: false },
-                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "incall"], popular: false },
-                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "incall"], popular: false },
+                                    { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
+                                    { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
+                                    { key: "idlemessages", name: "Idle Messages", desc: "Configure messages the AI speaks when the caller has not responded.", iconKey: "messagesquare", cats: ["all", "callerengagement"], popular: false },
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },

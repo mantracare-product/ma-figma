@@ -139,12 +139,13 @@ const NODE_CATEGORIES = [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
       { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run this step alongside adjacent steps" },
+      { type: "move-process" as NodeType, label: "Process/Stage Movement", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a different process and select the target stage" },
       { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate the workflow" },
     ],
   },
   {
     id: "call",
-    label: "Call Actions",
+    label: "Caller Engagement",
     icon: <Phone className="w-3.5 h-3.5" />,
     nodes: [
       { type: "call-transfer" as NodeType, label: "Transfer Call", icon: <PhoneCall className="w-4 h-4" />, desc: "Transfer the active call to a human agent or another AI agent" },
@@ -169,7 +170,6 @@ const NODE_CATEGORIES = [
     nodes: [
       { type: "field-update" as NodeType, label: "Field Update", icon: <Settings2 className="w-4 h-4" />, desc: "Update a field value" },
       { type: "assign-responsible" as NodeType, label: "Assign Responsible", icon: <User className="w-4 h-4" />, desc: "Assign a team member" },
-      { type: "move-process" as NodeType, label: "Process Movement", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a different process and select the target stage" },
     ],
   },
   {
