@@ -271,6 +271,33 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
 
 const FALLBACK_NODE_TYPE: NodeType = "wait";
 
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage"|"incall"|"postcall", excludeId?: string) => {
+  const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
+  // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
+  const parallelMemberIds = new Set<string>();
+  let i = 0;
+  while (i < laneSteps.length) {
+    if (laneSteps[i].executionType === "parallel") {
+      let j = i;
+      const run: string[] = [];
+      while (j < laneSteps.length && laneSteps[j].executionType === "parallel") {
+        run.push(laneSteps[j].id);
+        j++;
+      }
+      if (run.length >= 2) run.forEach(id => parallelMemberIds.add(id));
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  // Emit one entry per step; parallel members get a light "(Parallel)" suffix
+  return laneSteps.map(s => ({
+    id: s.id,
+    label: parallelMemberIds.has(s.id) ? `${s.name} (Parallel)` : s.name,
+    isParallelGroup: parallelMemberIds.has(s.id),
+  }));
+};
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function FlowBuilderTab({
@@ -287,6 +314,7 @@ export default function FlowBuilderTab({
   const [drawerExecType, setDrawerExecType] = useState<"wait" | "parallel">("wait");
   const [drawerDelayValue, setDrawerDelayValue] = useState<number>(0);
   const [drawerDelayUnit, setDrawerDelayUnit] = useState<string>("Minute");
+  const [drawerConnectAfterId, setDrawerConnectAfterId] = useState<string | undefined>(undefined);
   // Canvas state
   const [nodes, setNodes] = useState<FlowNode[]>([
     { id: "start", type: "start", label: "Start", x: 400, y: 80, config: {} },
@@ -816,6 +844,56 @@ export default function FlowBuilderTab({
             }
           }
         });
+
+        // 5. Generate inter-step connections based on connectAfterId
+        stepsInLane.forEach((step) => {
+          if (step.executionType === "parallel") return; // parallel steps don't connect individually
+          if (step.trigger === "incall") return; // incall steps don't connect sequentially
+
+          const isFirstStepInLane = stepsInLane[0]?.id === step.id;
+          const targetId = getStepFirstNodeId(step);
+          const predId = step.connectAfterId;
+
+          if (predId === "start" || (!predId && isFirstStepInLane)) {
+            // Connect from start to this step's first node
+            autoConnections.push({
+              id: `struct-connect-${step.id}`,
+              fromId: "start",
+              fromPort: "default",
+              toId: targetId
+            });
+          } else if (predId) {
+            // Legacy fan-in path — only fires for old saved data that stored the group-prefixed id.
+            // Nothing produces this prefix going forward, so this branch is effectively dead code.
+            if (predId.startsWith("group-")) {
+              const legacyFirstStepId = predId.replace("group-", "");
+              const matchedGroup = parallelGroups.find(g => g.firstStepId === legacyFirstStepId);
+              if (matchedGroup) {
+                matchedGroup.steps.forEach(member => {
+                  autoConnections.push({
+                    id: `struct-connect-${step.id}-${member.id}`,
+                    fromId: member.id,
+                    fromPort: "default",
+                    toId: targetId
+                  });
+                });
+              }
+            } else {
+              // Always treat predId as an individual step id — single edge
+              const predStep = workflowSteps.find(s => s.id === predId);
+              if (predStep) {
+                autoConnections.push({
+                  id: `struct-connect-${step.id}`,
+                  fromId: predStep.id,
+                  fromPort: "default",
+                  toId: targetId
+                });
+              } else {
+                console.warn(`[FlowBuilder] connectAfterId "${predId}" on step "${step.name}" doesn't resolve to any known step.`);
+              }
+            }
+          }
+        });
       });
 
       return [...normalizedManualConnections, ...initialConnections, ...autoConnections];
@@ -1009,6 +1087,30 @@ export default function FlowBuilderTab({
     if (exists) return;
     snapshot();
     setConnections((prev) => [...prev, { id: `conn-${Date.now()}`, fromId, fromPort, toId }]);
+
+    // Sync connectAfterId for manual connection
+    let targetStepId = toId;
+    if (toId.startsWith("wait-")) targetStepId = toId.replace("wait-", "");
+    else if (toId.startsWith("cond-")) targetStepId = toId.replace("cond-", "");
+    else if (toId.startsWith("parallel-")) targetStepId = toId.replace("parallel-", "");
+
+    let sourceStepId = fromId;
+    if (fromId.startsWith("wait-")) sourceStepId = fromId.replace("wait-", "");
+    else if (fromId.startsWith("cond-")) sourceStepId = fromId.replace("cond-", "");
+    else if (fromId.startsWith("parallel-")) sourceStepId = fromId.replace("parallel-", "");
+
+    if (onWorkflowStepsChange) {
+      // Store the actual sourceStepId directly (individual parallel members store their own id)
+      const targetStep = workflowSteps.find(s => s.id === targetStepId);
+      if (targetStep) {
+        const updatedSteps = workflowSteps.map(step =>
+          step.id === targetStep.id
+            ? { ...step, connectAfterId: sourceStepId }
+            : step
+        );
+        onWorkflowStepsChange(updatedSteps);
+      }
+    }
   };
 
   const deleteConnection = (id: string) => {
@@ -1209,6 +1311,7 @@ export default function FlowBuilderTab({
         setDrawerExecType((realStep?.executionType ?? "wait") as "wait" | "parallel");
         setDrawerDelayValue(realStep?.delayValue ?? 0);
         setDrawerDelayUnit(realStep?.delayUnit ?? "Minute");
+        setDrawerConnectAfterId(realStep?.connectAfterId);
         setConfigNode({ ...realNode });
       }
       return;
@@ -1218,19 +1321,30 @@ export default function FlowBuilderTab({
     setDrawerExecType((realStep?.executionType ?? "wait") as "wait" | "parallel");
     setDrawerDelayValue(realStep?.delayValue ?? 0);
     setDrawerDelayUnit(realStep?.delayUnit ?? "Minute");
+    setDrawerConnectAfterId(realStep?.connectAfterId);
     setConfigNode({ ...node });
   };
 
   const saveConfig = () => {
     if (!configNode) return;
     updateNode(configNode.id, { label: configNode.label, config: configNode.config });
-    // Sync back to WorkflowStep (trigger + executionType + delay + params)
+    // Sync back to WorkflowStep (trigger + executionType + delay + connectAfterId + params)
     if (configNode.config?.autoGenerated && configNode.config?.sourceStepId && onWorkflowStepsChange) {
       const stepId = configNode.config.sourceStepId as string;
       const { autoGenerated: _a, sourceStepId: _s, lane: _l, ...params } = configNode.config;
+      const finalConnectAfterId = drawerTrigger !== "incall" && drawerExecType === "wait" ? drawerConnectAfterId : undefined;
       const updatedSteps = workflowSteps.map(step =>
         step.id === stepId
-          ? { ...step, name: configNode.label, trigger: drawerTrigger, executionType: drawerExecType, delayValue: drawerDelayValue, delayUnit: drawerDelayUnit, params }
+          ? {
+              ...step,
+              name: configNode.label,
+              trigger: drawerTrigger,
+              executionType: drawerExecType,
+              delayValue: drawerDelayValue,
+              delayUnit: drawerDelayUnit,
+              connectAfterId: finalConnectAfterId,
+              params
+            }
           : step
       );
       onWorkflowStepsChange(updatedSteps);
@@ -1710,6 +1824,9 @@ export default function FlowBuilderTab({
         onDelayValueChange={setDrawerDelayValue}
         delayUnit={drawerDelayUnit}
         onDelayUnitChange={setDrawerDelayUnit}
+        connectAfterId={drawerConnectAfterId}
+        onConnectAfterIdChange={setDrawerConnectAfterId}
+        availablePredecessors={buildAvailablePredecessors(workflowSteps, drawerTrigger, configNode ? (configNode.config?.sourceStepId ?? configNode.id) : undefined)}
         params={configNode?.config ?? {}}
         onParamsChange={patchConfig}
         onBack={() => setConfigNode(null)}

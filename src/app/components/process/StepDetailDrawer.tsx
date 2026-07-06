@@ -22,6 +22,10 @@ export interface StepDetailDrawerProps {
   delayUnit: string;
   onDelayUnitChange: (u: string) => void;
 
+  connectAfterId: string | undefined;
+  onConnectAfterIdChange: (id: string | undefined) => void;
+  availablePredecessors: Array<{ id: string; label: string; isParallelGroup: boolean }>;
+
   params: Record<string, any>;
   onParamsChange: (patch: Record<string, any>) => void;
 
@@ -44,6 +48,9 @@ export default function StepDetailDrawer({
   onDelayValueChange,
   delayUnit,
   onDelayUnitChange,
+  connectAfterId,
+  onConnectAfterIdChange,
+  availablePredecessors,
   params,
   onParamsChange,
   onBack,
@@ -289,6 +296,34 @@ export default function StepDetailDrawer({
               </div>
             )}
           </div>
+
+          {/* Connect After dropdown */}
+          {(stepTrigger === "stage" || stepTrigger === "postcall") && executionType === "wait" && (
+            <div className="w-full">
+              <label
+                className="block text-sm font-semibold mb-2"
+                style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+              >
+                Connect After
+              </label>
+              <select
+                value={connectAfterId || "start"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onConnectAfterIdChange(val === "start" ? undefined : val);
+                }}
+                className="w-full max-w-[360px] px-3 py-2.5 text-sm bg-white border border-border rounded-lg outline-none hover:bg-gray-50 transition-colors"
+                style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+              >
+                <option value="start">Start of flow</option>
+                {availablePredecessors.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* ───────────── CONDITIONS + PARAMETERS (shared component) ───────────── */}
           <StepParametersFields

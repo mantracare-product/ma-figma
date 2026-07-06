@@ -8,6 +8,7 @@ export type WorkflowStep = {
   executionType?: "wait" | "parallel";
   delayValue?: number;
   delayUnit?: string;
+  connectAfterId?: string;
   conditions?: {
     field?: Array<{ id: string; fieldSource: string; field: string; operator: string; value: string }>;
     fieldOperators?: Array<"AND" | "OR">;

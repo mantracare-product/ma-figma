@@ -242,6 +242,7 @@ interface DraggableWorkflowStepProps {
   onDuplicate: () => void;
   onDelete: () => void;
   StepIcon: React.ComponentType<{ iconKey: string }>;
+  connectAfterLabel?: string;
 }
 
 const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
@@ -252,6 +253,7 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
   onDuplicate,
   onDelete,
   StepIcon,
+  connectAfterLabel,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
 
@@ -323,7 +325,9 @@ const DraggableWorkflowStep: React.FC<DraggableWorkflowStepProps> = ({
               }`
               : step.executionType === "parallel"
                 ? "→ Parallel"
-                : "→ Sequential"}
+                : connectAfterLabel
+                  ? `→ Sequential (${connectAfterLabel})`
+                  : "→ Sequential"}
         </p>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0">
@@ -432,7 +436,32 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "managecalendar": ["incall", "postcall"],
 };
 
-
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage"|"incall"|"postcall", excludeId?: string) => {
+  const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
+  // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
+  const parallelMemberIds = new Set<string>();
+  let i = 0;
+  while (i < laneSteps.length) {
+    if (laneSteps[i].executionType === "parallel") {
+      let j = i;
+      const run: string[] = [];
+      while (j < laneSteps.length && laneSteps[j].executionType === "parallel") {
+        run.push(laneSteps[j].id);
+        j++;
+      }
+      if (run.length >= 2) run.forEach(id => parallelMemberIds.add(id));
+      i = j;
+    } else {
+      i++;
+    }
+  }
+  // Emit one entry per step; parallel members get a light "(Parallel)" suffix
+  return laneSteps.map(s => ({
+    id: s.id,
+    label: parallelMemberIds.has(s.id) ? `${s.name} (Parallel)` : s.name,
+    isParallelGroup: parallelMemberIds.has(s.id),
+  }));
+};
 
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
@@ -821,6 +850,7 @@ export default function Process() {
   const [conditionPreview, setConditionPreview] = useState("");
 
   const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "postcall">("stage");
+  const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");
 
@@ -1103,6 +1133,7 @@ export default function Process() {
 
   // Reset function to clear all step detail state
   const resetStepDetailState = () => {
+    setConnectAfterId(undefined);
     setExecutionType("wait");
     setDelayValue(5);
     setDelayUnit("Minute");
@@ -3701,6 +3732,11 @@ export default function Process() {
                                                     toast.success("Step removed successfully");
                                                   }}
                                                   StepIcon={StepIcon}
+                                                  connectAfterLabel={(() => {
+                                                    if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
+                                                    const pred = workflowSteps.find(s => s.id === step.connectAfterId);
+                                                    return pred ? `after ${pred.name}` : undefined;
+                                                  })()}
                                                 />
                                               ))}
                                             </div>
@@ -3766,6 +3802,7 @@ export default function Process() {
                                                         resetStepDetailState();
                                                         setCurrentEditingStep(step);
                                                         setIsCreatingNewStep(false);
+                                                        setConnectAfterId(step.connectAfterId);
                                                         setStepTrigger(step.trigger ?? "stage");
                                                         setExecutionType(step.executionType ?? "wait");
                                                         setDelayValue(step.delayValue ?? 5);
@@ -3858,6 +3895,11 @@ export default function Process() {
                                                         toast.success("Step removed successfully");
                                                       }}
                                                       StepIcon={StepIcon}
+                                                      connectAfterLabel={(() => {
+                                                        if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
+                                                        const pred = workflowSteps.find(s => s.id === step.connectAfterId);
+                                                        return pred ? `after ${pred.name}` : undefined;
+                                                      })()}
                                                     />
                                                   ))}
                                                 </div>
@@ -4750,6 +4792,9 @@ export default function Process() {
                         onDelayValueChange={setDelayValue}
                         delayUnit={delayUnit}
                         onDelayUnitChange={setDelayUnit}
+                        connectAfterId={connectAfterId}
+                        onConnectAfterIdChange={setConnectAfterId}
+                        availablePredecessors={buildAvailablePredecessors(workflowSteps, stepTrigger, currentEditingStep?.id)}
                         params={captureStepParams(currentEditingStep?.stepKey)}
                         onParamsChange={(patch) => {
                           Object.entries(patch).forEach(([key, value]) => {
@@ -4775,6 +4820,7 @@ export default function Process() {
                               executionType: stepTrigger !== "incall" ? executionType : undefined,
                               delayValue: stepTrigger !== "incall" ? delayValue : undefined,
                               delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
+                              connectAfterId: stepTrigger !== "incall" && executionType === "wait" ? connectAfterId : undefined,
                               params: captureStepParams(currentEditingStep.stepKey),
                             };
                             if (isCreatingNewStep) {
