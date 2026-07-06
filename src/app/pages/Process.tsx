@@ -23,6 +23,7 @@ import FlowBuilderTab from "../components/process/FlowBuilderTab";
 import { WorkflowStep } from "../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
 import StepParametersFields from "../components/process/StepParametersFields";
+import StepDetailDrawer from "../components/process/StepDetailDrawer";
 
 interface AISettings {
   platform: string;
@@ -4735,317 +4736,69 @@ export default function Process() {
                       )}
 
                       {/* Step Detail Drawer */}
-                      {stepDetailDrawerOpen && currentEditingStep && (
-                        <>
-                          {/* Backdrop */}
-                          <div
-                            className="fixed inset-0 z-40"
-                            style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
-                            onClick={() => {
-                              if (isCreatingNewStep) {
-                                setStepDetailDrawerOpen(false);
-                                setSelectedWorkflowStepCard(null);
-                                setWorkflowStepsDrawerOpen(true);
+                      <StepDetailDrawer
+                        isOpen={stepDetailDrawerOpen && !!currentEditingStep}
+                        step={currentEditingStep}
+                        isCreatingNewStep={isCreatingNewStep}
+                        stepAllowedTriggers={STEP_ALLOWED_TRIGGERS}
+                        processes={processes}
+                        stepTrigger={stepTrigger}
+                        onStepTriggerChange={setStepTrigger}
+                        executionType={executionType}
+                        onExecutionTypeChange={setExecutionType}
+                        delayValue={delayValue}
+                        onDelayValueChange={setDelayValue}
+                        delayUnit={delayUnit}
+                        onDelayUnitChange={setDelayUnit}
+                        params={captureStepParams(currentEditingStep?.stepKey)}
+                        onParamsChange={(patch) => {
+                          Object.entries(patch).forEach(([key, value]) => {
+                            const setter = stateSetters[key];
+                            if (setter) setter(value);
+                          });
+                        }}
+                        onBack={() => {
+                          setStepDetailDrawerOpen(false);
+                          setIsCreatingNewStep(false);
+                          setSelectedWorkflowStepCard(null);
+                          setWorkflowStepsDrawerOpen(true);
+                        }}
+                        onClose={() => {
+                          setStepDetailDrawerOpen(false);
+                          setIsCreatingNewStep(false);
+                        }}
+                        onSave={() => {
+                          if (currentEditingStep) {
+                            const stepToSave: WorkflowStep = {
+                              ...currentEditingStep,
+                              trigger: stepTrigger,
+                              executionType: stepTrigger !== "incall" ? executionType : undefined,
+                              delayValue: stepTrigger !== "incall" ? delayValue : undefined,
+                              delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
+                              params: captureStepParams(currentEditingStep.stepKey),
+                            };
+                            if (isCreatingNewStep) {
+                              if (branchAddTarget === "true") {
+                                setTrueBranchSteps(prev => [...prev, stepToSave]);
+                                setBranchAddTarget(null);
+                              } else if (branchAddTarget === "false") {
+                                setFalseBranchSteps(prev => [...prev, stepToSave]);
+                                setBranchAddTarget(null);
                               } else {
-                                setStepDetailDrawerOpen(false);
-                                setIsCreatingNewStep(false);
+                                setWorkflowSteps(prev => [...prev, stepToSave]);
                               }
-                            }}
-                          />
-                          {/* Drawer panel */}
-                          <div
-                            className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                            style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
-                          >
-                            {/* Header */}
-                            <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">
-                              <div className="flex items-start justify-between">
-                                <div>
-                                  <div className="flex items-center gap-2 flex-wrap">
-                                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      {currentEditingStep.name}
-                                    </h2>
-
-                                  </div>
-                                  <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                    {currentEditingStep.description}
-                                  </p>
-                                </div>
-                                <button onClick={() => {
-                                  if (isCreatingNewStep) {
-                                    setStepDetailDrawerOpen(false);
-                                    setSelectedWorkflowStepCard(null);
-                                    setWorkflowStepsDrawerOpen(true);
-                                  } else {
-                                    setStepDetailDrawerOpen(false);
-                                    setIsCreatingNewStep(false);
-                                  }
-                                }} className="p-2 rounded hover:bg-muted/40 transition-colors ml-4 flex-shrink-0">
-                                  <X className="w-5 h-5 text-muted-foreground" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* Body */}
-                            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-                              {/* Trigger, Execution & Delay Row */}
-                              <div className="flex items-start gap-3">
-                                {/* Column 1 — Trigger */}
-                                <div className="flex-shrink-0">
-                                  <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Trigger</label>
-                                  {/* Trigger toggle + conditional info */}
-                                  {(() => {
-                                    const allowedTriggers = STEP_ALLOWED_TRIGGERS[currentEditingStep?.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
-                                    const visibleButtons = ([
-                                      { key: "stage", label: "On Entering Stage" },
-                                      { key: "incall", label: "In Call" },
-                                      { key: "postcall", label: "Post Call" },
-                                    ] as const).filter(t => allowedTriggers.includes(t.key));
-
-                                    const subtitleText = stepTrigger === "stage"
-                                      ? "Runs in sequence as part of this stage's step order, with an optional delay."
-                                      : stepTrigger === "incall"
-                                        ? "Fires the moment the AI decides to take this action mid-conversation."
-                                        : "Fires automatically once the call has ended.";
-
-                                    const isSingle = visibleButtons.length === 1;
-
-                                    return (
-                                      <>
-                                        <div className="flex items-center gap-1.5">
-                                          <div className="inline-flex items-center gap-0 p-1 rounded-lg border border-border bg-muted/20">
-                                            {visibleButtons.map((t, idx) => (
-                                              <React.Fragment key={t.key}>
-                                                {idx > 0 && (
-                                                  <div className="w-px h-5 bg-gray-300 flex-shrink-0 mx-0.5" />
-                                                )}
-                                                <button
-                                                  onClick={() => setStepTrigger(t.key)}
-                                                  className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                                                    }`}
-                                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                                >
-                                                  {t.label}
-                                                </button>
-                                              </React.Fragment>
-                                            ))}
-                                          </div>
-                                          {isSingle && (
-                                            <Tooltip text={subtitleText} placement="top">
-                                              <Info className="w-3.5 h-3.5 text-gray-400 cursor-help hover:text-gray-600 flex-shrink-0" />
-                                            </Tooltip>
-                                          )}
-                                        </div>
-                                        {!isSingle && (
-                                          <p className="text-xs mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                            {subtitleText}
-                                          </p>
-                                        )}
-                                      </>
-                                    );
-                                  })()}
-                                </div>
-
-                                {/* Column 2 — Execution */}
-                                {stepTrigger === "stage" ? (
-                                  <div className="w-[140px] flex-shrink-0">
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                    <button
-                                      onClick={() => setExecutionTimingModalOpen(true)}
-                                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                                    >
-                                      <span className="text-sm truncate" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
-                                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
-                                    </button>
-                                  </div>
-                                ) : stepTrigger === "postcall" ? (
-                                  <div className="w-[140px] flex-shrink-0">
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                    <button
-                                      onClick={() => setExecutionTimingModalOpen(true)}
-                                      className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                                    >
-                                      <span className="text-sm truncate" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>{executionType === "wait" ? "Wait" : "In Parallel"}</span>
-                                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
-                                    </button>
-                                  </div>
-                                ) : stepTrigger === "incall" ? (
-                                  <div className="w-fit flex-shrink-0">
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution</label>
-                                    <div
-                                      className="w-full px-3 py-2.5 rounded-md border border-border bg-muted/10 flex items-center gap-2"
-                                      style={{ height: '42px' }}
-                                    >
-                                      <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                                      <span className="text-xs truncate whitespace-nowrap" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Event Driven · AI Action</span>
-                                    </div>
-                                  </div>
-                                ) : null}
-
-                                {/* Column 3 — Delay */}
-                                {(stepTrigger === "stage" || stepTrigger === "postcall") && (
-                                  <div className="w-[150px] flex-shrink-0">
-                                    <label className="block text-sm font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Delay</label>
-                                    <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
-                                      <input
-                                        type="number"
-                                        value={delayValue}
-                                        onChange={e => setDelayValue(parseInt(e.target.value) || 0)}
-                                        className="w-16 px-3 py-2.5 text-sm outline-none bg-transparent border-none"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      />
-                                      <div className="w-px h-5 bg-gray-300 flex-shrink-0" />
-                                      <select
-                                        value={delayUnit}
-                                        onChange={(e) => setDelayUnit(e.target.value)}
-                                        className="px-3 py-2.5 text-sm bg-transparent border-none outline-none hover:bg-gray-50 transition-colors"
-                                        style={{ fontFamily: 'Outfit, sans-serif', color: '#020817' }}
-                                      >
-                                        {["Second", "Minute", "Hour", "Day", "Week", "Month"].map(unit => (
-                                          <option key={unit} value={unit}>{unit}</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* ───────────── CONDITIONS + PARAMETERS (shared component) ───────────── */}
-                              <StepParametersFields
-                                stepKey={currentEditingStep.stepKey ?? ""}
-                                params={captureStepParams(currentEditingStep.stepKey)}
-                                onChange={(patch) => {
-                                  Object.entries(patch).forEach(([key, value]) => {
-                                    const setter = stateSetters[key];
-                                    if (setter) setter(value);
-                                  });
-                                }}
-                                processes={processes}
-                                stepTrigger={stepTrigger}
-                              />
-                            </div>
-
-                            {/* Footer */}
-                            <div className="flex-shrink-0 border-t border-border px-6 py-4 flex justify-start gap-3">
-                              <button
-                                onClick={() => {
-                                  setStepDetailDrawerOpen(false);
-                                  setIsCreatingNewStep(false);
-                                  setSelectedWorkflowStepCard(null);
-                                  setWorkflowStepsDrawerOpen(true);
-                                }}
-                                className="px-5 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
-                              >
-                                Back
-                              </button>
-                              <button
-                                onClick={() => {
-                                  if (currentEditingStep) {
-                                    const stepToSave: WorkflowStep = {
-                                      ...currentEditingStep,
-                                      trigger: stepTrigger,
-                                      executionType: stepTrigger !== "incall" ? executionType : undefined,
-                                      delayValue: stepTrigger !== "incall" ? delayValue : undefined,
-                                      delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
-                                      params: captureStepParams(currentEditingStep.stepKey),
-                                    };
-                                    if (isCreatingNewStep) {
-                                      // Add new step to the workflow
-                                      if (branchAddTarget === "true") {
-                                        setTrueBranchSteps(prev => [...prev, stepToSave]);
-                                        setBranchAddTarget(null);
-                                      } else if (branchAddTarget === "false") {
-                                        setFalseBranchSteps(prev => [...prev, stepToSave]);
-                                        setBranchAddTarget(null);
-                                      } else {
-                                        setWorkflowSteps(prev => [...prev, stepToSave]);
-                                      }
-                                      setIsCreatingNewStep(false);
-                                      toast.success("Step added successfully");
-                                    } else {
-                                      // Update existing step in all lists
-                                      setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
-                                      setTrueBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
-                                      setFalseBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
-                                      toast.success("Step settings saved successfully");
-                                    }
-                                  }
-                                  setStepDetailDrawerOpen(false);
-                                }}
-                                className="px-5 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                              >
-                                Save Changes
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Execution Timing Modal */}
-                      {executionTimingModalOpen && (
-                        <div className="fixed inset-0 z-[60] flex items-center justify-center">
-                          {/* Backdrop */}
-                          <div
-                            className="absolute inset-0 bg-black/50"
-                            onClick={() => setExecutionTimingModalOpen(false)}
-                          />
-                          {/* Modal */}
-                          <div className="relative bg-white rounded-lg shadow-xl" style={{ width: '500px', maxWidth: '90vw' }}>
-                            {/* Header */}
-                            <div className="px-6 pt-6 pb-4 border-b border-border">
-                              <h3 className="text-lg font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Execution Timing</h3>
-                            </div>
-                            {/* Body */}
-                            <div className="px-6 py-4 space-y-3">
-                              <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
-                                <input
-                                  type="radio"
-                                  name="executionType"
-                                  checked={executionType === "wait"}
-                                  onChange={() => setExecutionType("wait")}
-                                  className="mt-0.5"
-                                />
-                                <div>
-                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Wait</p>
-                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will start only after the previous step has completed execution.</p>
-                                </div>
-                              </label>
-                              <label className="flex items-start gap-3 p-3 rounded-md border border-border cursor-pointer hover:bg-muted/20 transition-colors">
-                                <input
-                                  type="radio"
-                                  name="executionType"
-                                  checked={executionType === "parallel"}
-                                  onChange={() => setExecutionType("parallel")}
-                                  className="mt-0.5"
-                                />
-                                <div>
-                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>In Parallel</p>
-                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>This automation step will run independently alongside other active workflow steps.</p>
-                                </div>
-                              </label>
-                            </div>
-                            {/* Footer */}
-                            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
-                              <button
-                                onClick={() => setExecutionTimingModalOpen(false)}
-                                className="px-4 py-2 text-sm rounded-md border border-border hover:bg-muted/30 transition-colors"
-                                style={{ fontFamily: 'DM Sans, sans-serif', color: '#64748B' }}
-                              >
-                                Cancel
-                              </button>
-                              <button
-                                onClick={() => setExecutionTimingModalOpen(false)}
-                                className="px-4 py-2 text-sm rounded-md text-white transition-colors hover:opacity-90"
-                                style={{ backgroundColor: '#2563EB', fontFamily: 'DM Sans, sans-serif' }}
-                              >
-                                OK
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      )}
+                              setIsCreatingNewStep(false);
+                              toast.success("Step added successfully");
+                            } else {
+                              setWorkflowSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                              setTrueBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                              setFalseBranchSteps(prev => prev.map(s => s.id === currentEditingStep.id ? stepToSave : s));
+                              toast.success("Step settings saved successfully");
+                            }
+                          }
+                          setStepDetailDrawerOpen(false);
+                        }}
+                      />
 
 
                       <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
