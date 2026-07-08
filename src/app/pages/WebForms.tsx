@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { FieldDef, Form, INITIAL_FORMS } from "../../data/forms";
 import { FlowStep, IntakeFlow, INITIAL_FLOWS } from "../../data/intakeFlows";
 import ClientProfile from "./ClientProfile";
+import ShareFormDrawer from "../components/webform/ShareFormDrawer";
+import { ShareClient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -33,7 +35,7 @@ type Submission = {
   };
 };
 
-const DUMMY_SUBMISSIONS: Submission[] = [
+const DUMMY_SUBMISSIONS_SEED: Submission[] = [
   {
     id: 1, clientId: "CL-001", formId: 1, name: "Sarah Johnson", email: "sarah.j@email.com", date: "Jun 12, 2026", status: "completed",
     fields: { "Full Name": "Sarah Johnson", "Email": "sarah.j@email.com", "Phone": "+1 5551234567", "Message": "I'd like to learn more about your AI features." },
@@ -230,8 +232,8 @@ function SubmissionDrawer({ submission, formName, onClose }: {
   );
 }
 
-const SELECT_STYLE = "px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer min-w-[140px]";
-const SELECT_INLINE = { fontFamily: "Outfit, sans-serif", color: "#64748B" };
+export const SELECT_STYLE = "px-3 py-2.5 bg-white border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer min-w-[140px]";
+export const SELECT_INLINE = { fontFamily: "Outfit, sans-serif", color: "#64748B" };
 
 function SubStatusBadge({ status }: { status?: string }) {
   const map: Record<string, { bg: string; text: string; label: string }> = {
@@ -320,19 +322,24 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Source</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Date submitted</th>
               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-              <th className="px-5 py-3"></th>
+              <th className="text-right px-5 py-3 text-xs font-semibold uppercase tracking-wide"
+                  style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
             {filteredSubs.map((sub, i) => (
               <tr
                 key={sub.id}
-                className={`transition-colors hover:bg-gray-50/60 ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
+                className={`transition-colors hover:bg-gray-50/60 ${
+                  sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
+                } ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
               >
-                <td className="px-5 py-3.5 text-sm font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                <td className="px-5 py-3.5 text-sm font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>
                   {sub.name}
                 </td>
-                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
                   {sub.email}
                 </td>
                 <td className="px-5 py-3.5">
@@ -596,7 +603,7 @@ function FormDetailView({
 
 // ─── Form Detail Drawer ───────────────────────────────────────────────────────
 
-function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClose: () => void; onEdit: (f: Form) => void }) {
+function FormDetailDrawer({ form, onClose, onEdit, onShareClick }: { form: Form | null; onClose: () => void; onEdit: (f: Form) => void; onShareClick: (f: Form) => void }) {
   const [tab, setTab] = useState<"overview" | "preview">("overview");
   const [previewVals, setPreviewVals] = useState<Record<string, string>>({});
 
@@ -616,13 +623,22 @@ function FormDetailDrawer({ form, onClose, onEdit }: { form: Form | null; onClos
           <h2 className="text-base font-bold mr-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{form.name}</h2>
           <StatusBadge status={form.status} />
           <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>Last edited {form.createdAt}</span>
-          <button
-            onClick={() => onEdit(form)}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            <Edit2 className="w-3 h-3" />Edit
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => onEdit(form)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-black text-white hover:bg-black/90 transition-colors"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Edit2 className="w-3 h-3" />Edit
+            </button>
+            <button
+              onClick={() => { onShareClick(form); onClose(); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-gray-50 transition-colors"
+              style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}
+            >
+              <Share2 className="w-3 h-3" />Share
+            </button>
+          </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
             <X className="w-4 h-4 text-muted-foreground" />
           </button>
@@ -1218,6 +1234,7 @@ export default function WebForms() {
   const [drawerForm, setDrawerForm] = useState<Form | null>(null);
   const [drawerFlow, setDrawerFlow] = useState<IntakeFlow | null>(null);
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
   const [forms, setForms] = useState<Form[]>(() => {
     const saved = sessionStorage.getItem("webForms");
     return saved ? JSON.parse(saved) : INITIAL_FORMS;
@@ -1225,6 +1242,11 @@ export default function WebForms() {
   // Forms sub-tab
   const [formsSubTab, setFormsSubTab] = useState<"forms" | "flows">("forms");
   const [viewingClient, setViewingClient] = useState<{ clientId: string; formId: number; submissionDate: string } | null>(null);
+
+  const [submissions, setSubmissions] = useState<Submission[]>(() => {
+    const saved = sessionStorage.getItem("webFormSubmissions");
+    return saved ? JSON.parse(saved) : DUMMY_SUBMISSIONS_SEED;
+  });
 
   // Forms table state
   const [bannerDismissed, setBannerDismissed] = useState(false);
@@ -1294,11 +1316,55 @@ export default function WebForms() {
     sessionStorage.setItem("webForms", JSON.stringify(forms));
   }, [forms]);
 
+  useEffect(() => {
+    sessionStorage.setItem("webFormSubmissions", JSON.stringify(submissions));
+  }, [submissions]);
+
   // Reset search when switching sub-tabs
   useEffect(() => {
     if (formsSubTab === "forms") setFlowSearch("");
     if (formsSubTab === "flows") setFormSearch("");
   }, [formsSubTab]);
+
+  const handleShareSend = ({
+    formId,
+    clients,
+    channel,
+    kind,
+  }: {
+    formId: number;
+    clients: ShareClient[];
+    channel: ShareChannel;
+    kind: ShareTargetKind;
+  }) => {
+    const today = new Date().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const newRecords: Submission[] = clients.map((client, i) => ({
+      id: Date.now() + i,
+      clientId: client.id,
+      formId,
+      name: client.name,
+      email: client.email,
+      date: today,
+      status: "sent",
+      fields: {
+        "Full Name": client.name,
+        "Email": client.email,
+        "Phone": client.phone,
+      },
+    }));
+    setSubmissions((prev) => [...newRecords, ...prev]);
+    if (kind === "form") {
+      setForms((prevForms) =>
+        prevForms.map((f) =>
+          f.id === formId ? { ...f, submissions: f.submissions + clients.length } : f
+        )
+      );
+    }
+  };
 
   const stats = {
     submissions7d: 47,
@@ -1545,7 +1611,7 @@ export default function WebForms() {
         {/* Tab Content */}
         {mainTab === "submissions" && (
           <SubmissionsTab
-            submissions={DUMMY_SUBMISSIONS}
+            submissions={submissions}
             forms={forms}
             onViewSubmission={sub => setViewingClient({ clientId: sub.clientId, formId: sub.formId, submissionDate: sub.date })}
           />
@@ -1733,7 +1799,7 @@ export default function WebForms() {
                                     <button onClick={() => { setOpenDropdownId(null); handleEdit(form); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
                                       <Edit2 className="w-4 h-4 text-muted-foreground" />Edit
                                     </button>
-                                    <button onClick={() => { setOpenDropdownId(null); toast.info(`Sharing ${form.name}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                                    <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
                                       <Share2 className="w-4 h-4 text-muted-foreground" />Share
                                     </button>
                                     <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
@@ -2225,7 +2291,10 @@ export default function WebForms() {
                               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
                               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Last Updated</th>
                               <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
-                              <th className="px-5 py-3"></th>
+                              <th className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wide"
+                                  style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
+                                Actions
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2332,6 +2401,16 @@ export default function WebForms() {
                                             </button>
                                             <button
                                               onClick={() => {
+                                                setFlowDropdownId(null);
+                                                setShareTarget({ id: flow.id, name: flow.name, kind: "flow" });
+                                              }}
+                                              className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3"
+                                              style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}
+                                            >
+                                              <Share2 className="w-4 h-4 text-muted-foreground" />Share
+                                            </button>
+                                            <button
+                                              onClick={() => {
                                                 const dup: IntakeFlow = { ...flow, id: Date.now(), name: flow.name + " (Copy)", createdAt: "Jun 16, 2026" };
                                                 setFlows(prev => [...prev, dup]);
                                                 setFlowDropdownId(null);
@@ -2416,6 +2495,14 @@ export default function WebForms() {
         form={drawerForm}
         onClose={() => setDrawerForm(null)}
         onEdit={f => { setDrawerForm(null); handleEdit(f); }}
+        onShareClick={f => setShareTarget({ id: f.id, name: f.name, kind: "form", status: f.status })}
+      />
+
+      {/* Share form drawer */}
+      <ShareFormDrawer
+        target={shareTarget}
+        onClose={() => setShareTarget(null)}
+        onSend={handleShareSend}
       />
 
       {/* Intake flow detail drawer */}
