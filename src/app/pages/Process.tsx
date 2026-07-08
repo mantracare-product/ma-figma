@@ -4861,15 +4861,17 @@ export default function Process() {
                       />
 
 
-                      <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
-                        <Button variant="outline" onClick={() => {
-                          setExpandedStage(null);
-                          setViewMode("process");
-                        }}>Cancel</Button>
-                        <Button variant="primary" onClick={() => toast.success("Stage configuration saved")}>
-                          Save Changes
-                        </Button>
-                      </div>
+                      {activeTab !== "knowledgebase" && (
+                        <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
+                          <Button variant="outline" onClick={() => {
+                            setExpandedStage(null);
+                            setViewMode("process");
+                          }}>Cancel</Button>
+                          <Button variant="primary" onClick={() => toast.success("Stage configuration saved")}>
+                            Save Changes
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

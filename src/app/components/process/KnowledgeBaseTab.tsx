@@ -186,7 +186,7 @@ const KnowledgeBaseCard: React.FC<{
 };
 
 /**
- * Create/edit modal. Order: Name/ID -> Description -> Add Material -> Attached Material.
+ * Create/edit modal.
  */
 const KnowledgeBaseEditor: React.FC<{
   isOpen: boolean;
@@ -199,89 +199,44 @@ const KnowledgeBaseEditor: React.FC<{
   const [kbId, setKbId] = useState<string>(initialKb?.id ?? "");
   const [kbName, setKbName] = useState(initialKb?.name ?? "");
   const [kbDescription, setKbDescription] = useState(initialKb?.description ?? "");
-  const [sources, setSources] = useState<KnowledgeSource[]>(initialKb?.sources ?? []);
-  const [addSourceType, setAddSourceType] = useState<KnowledgeSourceType | null>(null);
+  
+  const [addSourceType, setAddSourceType] = useState<KnowledgeSourceType>(() => {
+    return initialKb?.sources?.[0]?.type ?? "text";
+  });
 
-  const [textTitle, setTextTitle] = useState("");
-  const [textContent, setTextContent] = useState("");
+  const [textContent, setTextContent] = useState(() => {
+    return initialKb?.sources?.[0]?.type === "text"
+      ? (initialKb.sources[0] as KnowledgeTextSource).content
+      : "";
+  });
 
-  const [urlValue, setUrlValue] = useState("");
-  const [urlLabel, setUrlLabel] = useState("");
+  const [urlValue, setUrlValue] = useState(() => {
+    return initialKb?.sources?.[0]?.type === "url"
+      ? (initialKb.sources[0] as KnowledgeUrlSource).url
+      : "";
+  });
+
+  const [documentSource, setDocumentSource] = useState<KnowledgeDocumentSource | null>(() => {
+    return initialKb?.sources?.[0]?.type === "document"
+      ? (initialKb.sources[0] as KnowledgeDocumentSource)
+      : null;
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const resetDrafts = () => {
-    setAddSourceType(null);
-    setTextTitle("");
-    setTextContent("");
-    setUrlValue("");
-    setUrlLabel("");
-  };
-
-  const handleAddText = () => {
-    if (!textTitle.trim() || !textContent.trim()) {
-      toast.error("Please add both a title and content for this text source");
-      return;
-    }
-    const newSource: KnowledgeTextSource = {
-      id: genId("src"),
-      type: "text",
-      title: textTitle.trim(),
-      content: textContent.trim(),
-    };
-    setSources((prev) => [...prev, newSource]);
-    resetDrafts();
-    toast.success("Text source added");
-  };
-
-  const handleAddUrl = () => {
-    const trimmed = urlValue.trim();
-    if (!trimmed) {
-      toast.error("Please enter a URL");
-      return;
-    }
-    let normalized = trimmed;
-    if (!/^https?:\/\//i.test(normalized)) {
-      normalized = `https://${normalized}`;
-    }
-    try {
-      // eslint-disable-next-line no-new
-      new URL(normalized);
-    } catch {
-      toast.error("Please enter a valid URL");
-      return;
-    }
-    const newSource: KnowledgeUrlSource = {
-      id: genId("src"),
-      type: "url",
-      url: normalized,
-      label: urlLabel.trim() || undefined,
-      scopeNote: "single-page-only",
-      status: "pending",
-    };
-    setSources((prev) => [...prev, newSource]);
-    resetDrafts();
-    toast.success("URL added");
-  };
-
   const handleFilesSelected = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const newSources: KnowledgeDocumentSource[] = Array.from(files).map((file) => ({
+    if (files.length > 1) {
+      toast.error("Only one document can be attached — please select a single file");
+    }
+    const file = files[0];
+    const newSource: KnowledgeDocumentSource = {
       id: genId("src"),
       type: "document",
       fileName: file.name,
       fileSizeLabel: formatBytes(file.size),
-    }));
-    setSources((prev) => [...prev, ...newSources]);
-    toast.success(
-      `${newSources.length} document${newSources.length > 1 ? "s" : ""} added`
-    );
-    setAddSourceType(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleRemoveSource = (id: string) => {
-    setSources((prev) => prev.filter((s) => s.id !== id));
+    };
+    setDocumentSource(newSource);
   };
 
   const handleSaveKb = () => {
@@ -309,15 +264,75 @@ const KnowledgeBaseEditor: React.FC<{
       return;
     }
 
+    let finalSource: KnowledgeSource;
+    if (addSourceType === "text") {
+      if (!textContent.trim()) {
+        toast.error("Please add content for the text source");
+        return;
+      }
+      const content = textContent.trim();
+      const derivedTitle = content.slice(0, 40) + (content.length > 40 ? "..." : "");
+      finalSource = {
+        id: initialKb?.sources?.[0]?.id ?? genId("src"),
+        type: "text",
+        title: derivedTitle,
+        content: content,
+      };
+    } else if (addSourceType === "url") {
+      const trimmedUrl = urlValue.trim();
+      if (!trimmedUrl) {
+        toast.error("Please enter a URL");
+        return;
+      }
+      let normalized = trimmedUrl;
+      if (!/^https?:\/\//i.test(normalized)) {
+        normalized = `https://${normalized}`;
+      }
+      try {
+        new URL(normalized);
+      } catch {
+        toast.error("Please enter a valid URL");
+        return;
+      }
+      finalSource = {
+        id: initialKb?.sources?.[0]?.id ?? genId("src"),
+        type: "url",
+        url: normalized,
+        scopeNote: "single-page-only",
+        status: "pending",
+      };
+    } else if (addSourceType === "document") {
+      if (!documentSource) {
+        toast.error("Please upload a document");
+        return;
+      }
+      finalSource = documentSource;
+    } else {
+      toast.error("Please select a material type and configure a source");
+      return;
+    }
+
+    const hadExisting = initialKb?.sources && initialKb.sources.length > 0;
+    const isChangingTypeOrContent = !hadExisting || 
+      initialKb?.sources?.[0]?.type !== finalSource.type ||
+      (finalSource.type === "text" && (initialKb?.sources?.[0] as KnowledgeTextSource).content !== textContent.trim()) ||
+      (finalSource.type === "url" && (initialKb?.sources?.[0] as KnowledgeUrlSource).url !== finalSource.url) ||
+      (finalSource.type === "document" && (initialKb?.sources?.[0] as KnowledgeDocumentSource).fileName !== finalSource.fileName);
+
     const kb: KnowledgeBase = {
       id: finalId,
       name: kbName.trim(),
       description: kbDescription.trim() || undefined,
-      sources,
+      sources: [finalSource],
       createdAt: initialKb?.createdAt ?? new Date().toISOString(),
     };
+
     onSave(kb);
-    toast.success(isEditing ? "Knowledge Base updated" : "Knowledge Base created");
+    if (isEditing && isChangingTypeOrContent) {
+      toast.success("Replaced existing material with new content");
+    } else {
+      toast.success(isEditing ? "Knowledge Base updated" : "Knowledge Base created");
+    }
     onClose();
   };
 
@@ -339,7 +354,6 @@ const KnowledgeBaseEditor: React.FC<{
       }
     >
       <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
-        {/* Name + ID */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <div className="flex items-center gap-2 mb-2">
@@ -349,9 +363,6 @@ const KnowledgeBaseEditor: React.FC<{
               >
                 Knowledge Base Name
               </label>
-              <Tooltip text="A name to identify this knowledge base later.">
-                <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-              </Tooltip>
             </div>
             <Input
               value={kbName}
@@ -367,9 +378,6 @@ const KnowledgeBaseEditor: React.FC<{
               >
                 Knowledge Base ID
               </label>
-              <Tooltip text="A unique ID for this knowledge base. Choose your own or we'll generate one if left blank.">
-                <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-              </Tooltip>
             </div>
             <Input
               value={kbId}
@@ -379,7 +387,6 @@ const KnowledgeBaseEditor: React.FC<{
           </div>
         </div>
 
-        {/* Description */}
         <div>
           <div className="flex items-center gap-2 mb-2">
             <label
@@ -388,9 +395,6 @@ const KnowledgeBaseEditor: React.FC<{
             >
               Description (optional)
             </label>
-            <Tooltip text="A short note on what this knowledge base covers.">
-              <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-            </Tooltip>
           </div>
           <textarea
             value={kbDescription}
@@ -401,7 +405,6 @@ const KnowledgeBaseEditor: React.FC<{
           />
         </div>
 
-        {/* Add Material — now BEFORE Attached Material */}
         <div className="rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 bg-gray-50 border-b border-gray-200">
             <span
@@ -420,7 +423,7 @@ const KnowledgeBaseEditor: React.FC<{
                   <Tooltip key={type} text={meta.tooltip} placement="top">
                     <button
                       type="button"
-                      onClick={() => setAddSourceType(active ? null : type)}
+                      onClick={() => setAddSourceType(type)}
                       className={`w-full flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all ${active
                           ? "border-blue-600 bg-blue-50 text-blue-700"
                           : "border-gray-200 bg-white text-gray-600 hover:border-blue-300"
@@ -443,19 +446,6 @@ const KnowledgeBaseEditor: React.FC<{
             {addSourceType === "text" && (
               <div className="space-y-3 pt-2">
                 <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                    Title
-                  </label>
-                  <Input
-                    value={textTitle}
-                    onChange={(e) => setTextTitle(e.target.value)}
-                    placeholder="e.g. Cancellation Policy"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-600 mb-1.5 block">
-                    Content
-                  </label>
                   <textarea
                     value={textContent}
                     onChange={(e) => setTextContent(e.target.value)}
@@ -464,178 +454,76 @@ const KnowledgeBaseEditor: React.FC<{
                     style={{ fontFamily: "Outfit, sans-serif", minHeight: "90px" }}
                   />
                 </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleAddText}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" /> Add Text
-                  </button>
-                </div>
               </div>
             )}
 
             {addSourceType === "document" && (
               <div className="pt-2">
                 <label className="text-xs font-semibold text-gray-600 mb-2 block">
-                  Upload document(s)
+                  Upload document
                 </label>
-                <div className="relative">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept=".pdf,.doc,.docx,.txt,.csv"
-                    onChange={(e) => handleFilesSelected(e.target.files)}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  />
-                  <div className="border-2 border-dashed border-blue-300 rounded-lg bg-blue-50 p-6 text-center">
-                    <Upload className="w-7 h-7 text-blue-600 mx-auto mb-2" />
-                    <p className="text-sm text-gray-700">
-                      Click or drag files here to upload
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">
-                      PDF, DOCX, TXT, or CSV
-                    </p>
+                {documentSource ? (
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div
+                        className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0"
+                        style={{ backgroundColor: "#2563EB" }}
+                      >
+                        <FileText className="w-4 h-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p
+                          className="text-sm font-semibold truncate"
+                          style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {documentSource.fileName}
+                        </p>
+                        <p className="text-xs text-gray-500">{documentSource.fileSizeLabel}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDocumentSource(null)}
+                      className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors flex-shrink-0"
+                      title="Remove document"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple={false}
+                      accept=".pdf,.doc,.docx,.txt,.csv"
+                      onChange={(e) => handleFilesSelected(e.target.files)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    />
+                    <div className="border-2 border-dashed border-blue-300 rounded-lg bg-blue-50 p-6 text-center">
+                      <Upload className="w-7 h-7 text-blue-600 mx-auto mb-2" />
+                      <p className="text-sm text-gray-700">
+                        Click or drag files here to upload
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        PDF, DOCX, TXT, or CSV
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* URL form — Label above Page URL, no banner */}
             {addSourceType === "url" && (
               <div className="space-y-3 pt-2">
-                <div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <label className="text-xs font-semibold text-gray-600">
-                      Label (optional)
-                    </label>
-                    <Tooltip text="A friendly name to identify this URL in the list.">
-                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                    </Tooltip>
-                  </div>
-                  <Input
-                    value={urlLabel}
-                    onChange={(e) => setUrlLabel(e.target.value)}
-                    placeholder="e.g. Pricing Page"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <label className="text-xs font-semibold text-gray-600">Page URL</label>
-                    <Tooltip text="AI reads only this page — won't follow links or crawl the site.">
-                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                    </Tooltip>
-                  </div>
-                  <Input
-                    value={urlValue}
-                    onChange={(e) => setUrlValue(e.target.value)}
-                    placeholder="https://example.com/faq"
-                  />
-                </div>
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleAddUrl}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-                  >
-                    <Plus className="w-4 h-4" /> Add URL
-                  </button>
-                </div>
+                <Input
+                  value={urlValue}
+                  onChange={(e) => setUrlValue(e.target.value)}
+                  placeholder="https://example.com/faq"
+                />
               </div>
             )}
           </div>
-        </div>
-
-        {/* Attached Material — now AFTER Add Material */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <label
-                className="text-sm font-medium"
-                style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-              >
-                Attached Material
-              </label>
-              <Tooltip text="Everything the AI can use for this knowledge base.">
-                <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-              </Tooltip>
-            </div>
-            <span className="text-xs text-gray-400">
-              {sources.length} item{sources.length !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          {sources.length === 0 ? (
-            <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg">
-              <p className="text-sm text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                No material attached yet. Add text, a document, or a URL above.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {sources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 bg-white"
-                >
-                  <div
-                    className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0"
-                    style={{ backgroundColor: "#2563EB" }}
-                  >
-                    {SOURCE_TYPE_META[source.type].icon}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    {source.type === "text" && (
-                      <>
-                        <p
-                          className="text-sm font-semibold truncate"
-                          style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {source.title}
-                        </p>
-                        <p
-                          className="text-xs text-gray-500 truncate"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        >
-                          {source.content.slice(0, 90)}
-                          {source.content.length > 90 ? "…" : ""}
-                        </p>
-                      </>
-                    )}
-                    {source.type === "document" && (
-                      <>
-                        <p
-                          className="text-sm font-semibold truncate"
-                          style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {source.fileName}
-                        </p>
-                        <p className="text-xs text-gray-500">{source.fileSizeLabel}</p>
-                      </>
-                    )}
-                    {source.type === "url" && (
-                      <>
-                        <p
-                          className="text-sm font-semibold truncate"
-                          style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {source.label || source.url}
-                        </p>
-                        <p className="text-xs text-blue-600 truncate">{source.url}</p>
-                      </>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleRemoveSource(source.id)}
-                    className="p-1.5 rounded hover:bg-red-50 transition-colors flex-shrink-0"
-                    title="Remove"
-                  >
-                    <Trash2 className="w-4 h-4 text-red-500" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </Modal>
@@ -723,32 +611,35 @@ const KnowledgeBaseTab: React.FC<KnowledgeBaseTabProps> = ({
     <div className="space-y-6">
       <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-gray-50 to-white p-6">
         <div className="flex items-start justify-between gap-4 flex-wrap">
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
             <div
               className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
               style={{ backgroundColor: "#EFF6FF" }}
             >
               <Database className="w-5 h-5" style={{ color: "#2563EB" }} />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
                 <h3
                   className="text-lg font-bold"
                   style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
                 >
                   Knowledge Base
                 </h3>
-                <Tooltip text="Reference material the AI can use for this stage only.">
-                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
-                </Tooltip>
+                <button
+                  onClick={() => setShowHowItWorks(true)}
+                  className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 transition-colors flex-shrink-0"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  How it works
+                </button>
               </div>
-              <button
-                onClick={() => setShowHowItWorks(true)}
-                className="text-sm font-semibold text-blue-600 hover:text-blue-700 hover:underline underline-offset-2 mt-1 transition-colors"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
+              <p
+                className="text-xs text-gray-500 mt-1"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                How it works
-              </button>
+                Give the AI reference material to use only in this stage.
+              </p>
             </div>
           </div>
           <Tooltip text="Create a new Knowledge Base">
@@ -788,7 +679,7 @@ const KnowledgeBaseTab: React.FC<KnowledgeBaseTabProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {knowledgeBases.map((kb) => (
             <KnowledgeBaseCard
               key={kb.id}
@@ -801,6 +692,7 @@ const KnowledgeBaseTab: React.FC<KnowledgeBaseTabProps> = ({
       )}
 
       <KnowledgeBaseEditor
+        key={editorOpen ? (editingKb?.id ?? "new") : "closed"}
         isOpen={editorOpen}
         onClose={() => setEditorOpen(false)}
         initialKb={editingKb}
