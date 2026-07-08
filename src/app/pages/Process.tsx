@@ -24,6 +24,7 @@ import { WorkflowStep } from "../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
 import StepParametersFields from "../components/process/StepParametersFields";
 import StepDetailDrawer from "../components/process/StepDetailDrawer";
+import KnowledgeBaseTab, { KnowledgeBase } from "../components/process/KnowledgeBaseTab";
 
 interface AISettings {
   platform: string;
@@ -436,7 +437,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage"|"incall"|"postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "postcall", excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -646,6 +647,7 @@ export default function Process() {
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
+  const [stageKnowledgeBases, setStageKnowledgeBases] = useState<Record<string, KnowledgeBase[]>>({});
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
   const [selectedWorkflowStepCard, setSelectedWorkflowStepCard] = useState<string | null>(null);
@@ -914,43 +916,43 @@ export default function Process() {
   ];
 
   const STEP_PARAM_FIELDS: Record<string, string[]> = {
-    fieldupdate:       ["fieldUpdateBlocks", ...CONDITION_FIELDS],
-    assignhuman:       ["assignedUser", ...CONDITION_FIELDS],
-    callaction:        [
+    fieldupdate: ["fieldUpdateBlocks", ...CONDITION_FIELDS],
+    assignhuman: ["assignedUser", ...CONDITION_FIELDS],
+    callaction: [
       "callActionTransferType", "callActionCountryCode", "callActionPhoneNumber",
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
       ...CONDITION_FIELDS,
     ],
-    whatsapp:          ["whatsappTemplate", "whatsappTemplateIdentifier", ...CONDITION_FIELDS],
-    sms:               ["smsMessage", "smsConnectedAccount", ...CONDITION_FIELDS],
-    email:             [
+    whatsapp: ["whatsappTemplate", "whatsappTemplateIdentifier", ...CONDITION_FIELDS],
+    sms: ["smsMessage", "smsConnectedAccount", ...CONDITION_FIELDS],
+    email: [
       "emailConnectedAccount", "showCustomEmail", "emailSubject",
       "emailRichBody", "emailHtmlBody", "htmlBodyViewMode",
       ...CONDITION_FIELDS,
     ],
-    crmupdate:         ["crmName", "crmField", "crmUpdateValue", ...CONDITION_FIELDS],
-    ehrupdate:         ["ehrName", "ehrField", "ehrUpdateValue", ...CONDITION_FIELDS],
-    wh_trigger:        [
+    crmupdate: ["crmName", "crmField", "crmUpdateValue", ...CONDITION_FIELDS],
+    ehrupdate: ["ehrName", "ehrField", "ehrUpdateValue", ...CONDITION_FIELDS],
+    wh_trigger: [
       "apiSelectedIntegrationId", "apiAction", "apiCreateFields",
       "apiUpdateFields", "apiReplaceFields",
       "apiDeleteField",
       ...CONDITION_FIELDS,
     ],
-    webhook_trigger:   ["webhookSelectedIntegrationId", "webhookParsedFields", ...CONDITION_FIELDS],
+    webhook_trigger: ["webhookSelectedIntegrationId", "webhookParsedFields", ...CONDITION_FIELDS],
     fetchavailability: ["fetchAvailCalendarUser", "fetchAvailDateSource", "fetchAvailTimeSource", "fetchAvailSummary", ...CONDITION_FIELDS],
-    fetchfieldvalue:   ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
-    managecalendar:    ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
-    processmovement:   ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
-    stagemovement:     ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
-    greetingphrase:    ["greetingPhrase", ...CONDITION_FIELDS],
-    bypasstohuman:     ["bypassStepNumbers", ...CONDITION_FIELDS],
-    liveintaketicket:  ["ticketEntries", ...CONDITION_FIELDS],
-    collectinformation:["collectInfoSelectedForm", ...CONDITION_FIELDS],
-    scheduleappointment:["appointmentBookingMethod", ...CONDITION_FIELDS],
+    fetchfieldvalue: ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
+    managecalendar: ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
+    processmovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    stagemovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    greetingphrase: ["greetingPhrase", ...CONDITION_FIELDS],
+    bypasstohuman: ["bypassStepNumbers", ...CONDITION_FIELDS],
+    liveintaketicket: ["ticketEntries", ...CONDITION_FIELDS],
+    collectinformation: ["collectInfoSelectedForm", ...CONDITION_FIELDS],
+    scheduleappointment: ["appointmentBookingMethod", ...CONDITION_FIELDS],
     smartcallanalysis: ["callAnalysisScenarios", ...CONDITION_FIELDS],
     autohangupsilence: ["autoHangupSilenceStageDuration", ...CONDITION_FIELDS],
-    callhangup:        ["callHangupMessage", ...CONDITION_FIELDS],
-    idlemessages:      ["idleMessageStageText", "idleMessageStageDelay", "idleHangupMessageStage", "idleHangupDelayStage", ...CONDITION_FIELDS],
+    callhangup: ["callHangupMessage", ...CONDITION_FIELDS],
+    idlemessages: ["idleMessageStageText", "idleMessageStageDelay", "idleHangupMessageStage", "idleHangupDelayStage", ...CONDITION_FIELDS],
   };
 
   const stateGetters: Record<string, () => any> = {
@@ -3007,6 +3009,7 @@ export default function Process() {
                         {[
                           { id: "basic", label: "Basic" },
                           { id: "advanced", label: "Advance" },
+                          { id: "knowledgebase", label: "Knowledge Base" },
                           { id: "automation", label: "Automation" },
                           { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
@@ -4578,6 +4581,17 @@ export default function Process() {
                             )}
                           </div>
                         </div>
+                      )}
+
+                      {activeTab === "knowledgebase" && (
+                        <KnowledgeBaseTab
+                          processName={selectedProcessData?.name ?? "Current Process"}
+                          stageName={stage.name}
+                          knowledgeBases={stageKnowledgeBases[stage.id] ?? []}
+                          onKnowledgeBasesChange={(kbs) =>
+                            setStageKnowledgeBases((prev) => ({ ...prev, [stage.id]: kbs }))
+                          }
+                        />
                       )}
 
                       {/* Flow Builder Tab */}

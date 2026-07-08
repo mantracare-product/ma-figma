@@ -27,7 +27,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { useSidebar } from "../../context/SidebarContext";
-import logo from "@/imports/ma_logo-1.png";
+import logo from "../../../imports/ma_logo-1.png";
 import ProfileDrawer from "../profile/ProfileDrawer";
 
 interface SidebarProps {
@@ -80,9 +80,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       )}
 
       <aside
-        className={`fixed lg:sticky top-0 h-screen z-50 transition-all duration-200 ease-in-out ${
-          collapsed ? "w-20" : "w-64"
-        } ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
+        className={`fixed lg:sticky top-0 h-screen z-50 transition-all duration-200 ease-in-out ${collapsed ? "w-20" : "w-64"
+          } ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
         style={{
           backgroundColor: "var(--sidebar-bg)",
           borderRight: "1px solid var(--sidebar-border)",
@@ -98,9 +97,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <img
                 src={logo}
                 alt=""
-                className={`transition-all duration-200 ${
-                  collapsed ? "h-8 w-auto object-contain" : "h-8 w-auto"
-                }`}
+                className={`transition-all duration-200 ${collapsed ? "h-8 w-auto object-contain" : "h-8 w-auto"
+                  }`}
                 style={{ maxWidth: collapsed ? '40px' : '180px' }}
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
@@ -112,9 +110,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           {/* Floating Collapse Button */}
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className={`hidden lg:flex absolute top-16 ${
-              collapsed ? "-right-3" : "-right-3"
-            } w-6 h-6 items-center justify-center rounded-full shadow-[0px_2px_6px_rgba(0,0,0,0.08)] hover:shadow-[0px_4px_12px_rgba(0,0,0,0.12)] transition-all duration-200 z-10`}
+            className={`hidden lg:flex absolute top-16 ${collapsed ? "-right-3" : "-right-3"
+              } w-6 h-6 items-center justify-center rounded-full shadow-[0px_2px_6px_rgba(0,0,0,0.08)] hover:shadow-[0px_4px_12px_rgba(0,0,0,0.12)] transition-all duration-200 z-10`}
             style={{
               backgroundColor: "var(--sidebar-bg)",
               border: "1px solid var(--sidebar-border)",
@@ -143,9 +140,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     key={link.path}
                     to={link.path}
                     onClick={onClose}
-                    className={`flex items-center ${
-                      collapsed ? "justify-center" : "gap-3"
-                    } px-3 py-2.5 rounded-xl transition-all duration-200`}
+                    className={`flex items-center ${collapsed ? "justify-center" : "gap-3"
+                      } px-3 py-2.5 rounded-xl transition-all duration-200`}
                     style={{
                       backgroundColor: active ? "var(--sidebar-item-active-bg)" : "transparent",
                       color: active ? "var(--sidebar-item-active-text)" : "var(--sidebar-text)",
@@ -221,9 +217,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                     key={link.path}
                     to={link.path}
                     onClick={onClose}
-                    className={`flex items-center ${
-                      collapsed ? "justify-center" : "gap-3"
-                    } px-3 py-2.5 rounded-xl transition-all duration-200`}
+                    className={`flex items-center ${collapsed ? "justify-center" : "gap-3"
+                      } px-3 py-2.5 rounded-xl transition-all duration-200`}
                     style={{
                       backgroundColor: active ? "var(--sidebar-item-active-bg)" : "transparent",
                       color: active ? "var(--sidebar-item-active-text)" : "var(--sidebar-text)",
@@ -316,9 +311,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
               {showProfileMenu && (
                 <div
-                  className={`absolute ${
-                    collapsed ? "left-full ml-2 bottom-0" : "left-0 bottom-full mb-2"
-                  } w-48 rounded-xl shadow-lg py-2 z-50`}
+                  className={`absolute ${collapsed ? "left-full ml-2 bottom-0" : "left-0 bottom-full mb-2"
+                    } w-48 rounded-xl shadow-lg py-2 z-50`}
                   style={{
                     backgroundColor: "var(--bg-dropdown)",
                     border: "1px solid var(--border-default)",
