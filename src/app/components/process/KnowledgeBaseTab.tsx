@@ -192,10 +192,11 @@ const KnowledgeBaseEditor: React.FC<{
   isOpen: boolean;
   onClose: () => void;
   initialKb: KnowledgeBase | null;
+  knowledgeBases: KnowledgeBase[];
   onSave: (kb: KnowledgeBase) => void;
-}> = ({ isOpen, onClose, initialKb, onSave }) => {
+}> = ({ isOpen, onClose, initialKb, knowledgeBases, onSave }) => {
   const isEditing = !!initialKb;
-  const [kbId] = useState<string>(() => initialKb?.id ?? genId("kb"));
+  const [kbId, setKbId] = useState<string>(initialKb?.id ?? "");
   const [kbName, setKbName] = useState(initialKb?.name ?? "");
   const [kbDescription, setKbDescription] = useState(initialKb?.description ?? "");
   const [sources, setSources] = useState<KnowledgeSource[]>(initialKb?.sources ?? []);
@@ -288,8 +289,28 @@ const KnowledgeBaseEditor: React.FC<{
       toast.error("Please give this Knowledge Base a name");
       return;
     }
+    const trimmedId = kbId.trim();
+    let finalId = trimmedId;
+    if (finalId) {
+      finalId = finalId
+        .toLowerCase()
+        .replace(/\s+/g, "_")
+        .replace(/[^a-z0-9_-]/g, "");
+    }
+    if (!finalId) {
+      finalId = genId("kb");
+    }
+
+    const isDuplicate = knowledgeBases.some(
+      (kb) => kb.id === finalId && kb.id !== initialKb?.id
+    );
+    if (isDuplicate) {
+      toast.error("This Knowledge Base ID is already in use");
+      return;
+    }
+
     const kb: KnowledgeBase = {
-      id: kbId,
+      id: finalId,
       name: kbName.trim(),
       description: kbDescription.trim() || undefined,
       sources,
@@ -346,14 +367,14 @@ const KnowledgeBaseEditor: React.FC<{
               >
                 Knowledge Base ID
               </label>
-              <Tooltip text="Auto-generated unique identifier for this knowledge base.">
+              <Tooltip text="A unique ID for this knowledge base. Choose your own or we'll generate one if left blank.">
                 <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
               </Tooltip>
             </div>
-            <input
-              readOnly
+            <Input
               value={kbId}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm font-mono text-gray-500"
+              onChange={(e) => setKbId(e.target.value)}
+              placeholder="e.g. kb_insurance_faqs"
             />
           </div>
         </div>
@@ -783,6 +804,7 @@ const KnowledgeBaseTab: React.FC<KnowledgeBaseTabProps> = ({
         isOpen={editorOpen}
         onClose={() => setEditorOpen(false)}
         initialKb={editingKb}
+        knowledgeBases={knowledgeBases}
         onSave={handleSaveKb}
       />
 
