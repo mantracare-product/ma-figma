@@ -3,6 +3,8 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
 import { toast } from "sonner";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 import {
   Calendar as CalendarIcon,
   Plus,
@@ -138,6 +140,7 @@ export default function Appointments() {
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [showProviderDropdown, setShowProviderDropdown] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [filterDate, setFilterDate] = useState<string>("This Week");
   const [filterStatus, setFilterStatus] = useState<string>("All");
   const [appointmentFormData, setAppointmentFormData] = useState({
@@ -575,9 +578,10 @@ export default function Appointments() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
       <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Appointments" subtitle="Manage and schedule appointments">
+        <PageHeader title="Appointments" subtitle="See who's booked, confirm pending requests, and schedule new visits">
           {/* DEV ONLY: Role toggle for testing admin vs provider booking flow */}
           <div className="flex items-center gap-3">
+            <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
             <span style={{ fontSize: '11px', color: '#9CA3AF', fontStyle: 'italic', fontFamily: 'Outfit, sans-serif' }}>
               Dev only — view as:
             </span>
@@ -744,7 +748,10 @@ export default function Appointments() {
                   style={{ width: '320px', top: '100%' }}
                 >
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2">Date Range</label>
+                    <div className="flex items-center gap-1 mb-2">
+                      <label className="block text-xs font-semibold text-slate-700">Date Range</label>
+                      <InfoTooltip text="Only show appointments that fall in this date range." />
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       {["Today", "This Week", "This Month", "Custom"].map((opt) => (
                         <button
@@ -863,67 +870,70 @@ export default function Appointments() {
 
                   <div className="flex items-center gap-3">
                     {/* View Mode Tabs */}
-                    <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-                      <button
-                        onClick={() => setCalendarViewMode("day")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Day
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("week")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Week
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("month")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Month
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("schedule")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Schedule
-                      </button>
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
+                        <button
+                          onClick={() => setCalendarViewMode("day")}
+                          style={{
+                            width: '64px',
+                            height: '32px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
+                            backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
+                            border: 'none',
+                            fontFamily: 'Outfit, sans-serif',
+                          }}
+                        >
+                          Day
+                        </button>
+                        <button
+                          onClick={() => setCalendarViewMode("week")}
+                          style={{
+                            width: '64px',
+                            height: '32px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
+                            backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
+                            border: 'none',
+                            fontFamily: 'Outfit, sans-serif',
+                          }}
+                        >
+                          Week
+                        </button>
+                        <button
+                          onClick={() => setCalendarViewMode("month")}
+                          style={{
+                            width: '64px',
+                            height: '32px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
+                            backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
+                            border: 'none',
+                            fontFamily: 'Outfit, sans-serif',
+                          }}
+                        >
+                          Month
+                        </button>
+                        <button
+                          onClick={() => setCalendarViewMode("schedule")}
+                          style={{
+                            width: '64px',
+                            height: '32px',
+                            fontSize: '12px',
+                            fontWeight: 500,
+                            color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
+                            backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
+                            border: 'none',
+                            fontFamily: 'Outfit, sans-serif',
+                          }}
+                        >
+                          Schedule
+                        </button>
+                      </div>
+                      <InfoTooltip text="Choose how far ahead you want to see your schedule." />
                     </div>
 
                     {/* Navigation */}
@@ -2734,9 +2744,12 @@ export default function Appointments() {
 
             {/* Session Type Toggle */}
             <div>
-              <h3 className="text-base font-bold mb-4" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                Session type:
-              </h3>
+              <div className="flex items-center mb-4">
+                <h3 className="text-base font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
+                  Session type:
+                </h3>
+                <InfoTooltip text="Determines whether the client gets a video link or an in-office reminder." />
+              </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setSessionType("video")}
@@ -3029,6 +3042,19 @@ export default function Appointments() {
           )}
         </div>
       </Modal>
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Appointments Works"
+        summary="Appointments shows every upcoming, completed, and cancelled visit across your team. Switch between list and calendar views, and book new appointments in a few clicks."
+        bullets={[
+          "View appointments by provider or across the whole org",
+          "Filter by status (Upcoming / Done / Pending)",
+          "Book a new appointment via a guided 4-step flow",
+          "Reschedule or cancel directly from a card",
+        ]}
+      />
     </div>
   );
 }

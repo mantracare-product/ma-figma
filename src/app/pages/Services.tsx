@@ -17,6 +17,8 @@ import {
   Check,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 
 interface Service {
   id: number;
@@ -74,6 +76,7 @@ export default function Services() {
   ]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -162,6 +165,7 @@ export default function Services() {
       price: service.price,
       category: service.category,
       isActive: service.isActive,
+      selectedEmployee: null,
     });
     setShowEditModal(true);
   };
@@ -191,7 +195,9 @@ export default function Services() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
       <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Services" subtitle="Manage your services and offerings" />
+        <PageHeader title="Services" subtitle="Define what you offer, how long it takes, and who's qualified to deliver it">
+          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Services Works" />
+        </PageHeader>
 
         {/* Stats Capsules */}
         <div className="flex items-center gap-3">
@@ -235,6 +241,7 @@ export default function Services() {
             <DollarSign className="w-4 h-4" style={{ color: '#3B82F6' }} />
             <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>${services.reduce((acc, s) => acc + s.price, 0)}</span>
             <span style={{ fontSize: '12px', color: '#64748B' }}>Revenue Potential</span>
+            <InfoTooltip text="Sum of all active service prices — a rough estimate, not actual revenue." />
           </div>
 
           <div
@@ -249,6 +256,7 @@ export default function Services() {
             <Users className="w-4 h-4" style={{ color: '#8B5CF6' }} />
             <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{new Set(services.flatMap((s) => s.assignedEmployees || [])).size}</span>
             <span style={{ fontSize: '12px', color: '#64748B' }}>Assigned Employees</span>
+            <InfoTooltip text="Number of team members who can be booked for this service." />
           </div>
         </div>
 
@@ -655,6 +663,19 @@ export default function Services() {
           </div>
         </div>
       </Modal>
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Services Works"
+        summary="Services are the offerings your team delivers. Define each service's name, duration, price, and category, then assign the staff members who provide it."
+        bullets={[
+          "Create and categorise services (e.g. Consultation, Dental, Therapy)",
+          "Set duration and price for each service",
+          "Assign one or more team members per service",
+          "Toggle services active/inactive without deleting them",
+        ]}
+      />
     </div>
   );
 }

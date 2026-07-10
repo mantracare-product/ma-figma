@@ -46,6 +46,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import {
@@ -710,6 +712,7 @@ export default function Chats() {
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [viewingCampaign, setViewingCampaign] = useState<Campaign | null>(null);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
@@ -880,18 +883,33 @@ export default function Chats() {
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
       <div className="py-6 px-[150px] space-y-6">
-        <PageHeader title="Chats" subtitle="Manage conversations, templates, campaigns & chatbot automation" />
+        <PageHeader title="Chats" subtitle="Message clients over WhatsApp and SMS, and set up automated chat campaigns">
+          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Chats Works" />
+        </PageHeader>
 
         {/* Tab Bar */}
         <div className="flex justify-between items-center bg-white p-2 border border-gray-200 rounded-xl shadow-sm">
           <div className="bg-gray-100 p-1 rounded-xl flex gap-1">
-            {TAB_ORDER.map(tab => (
-              <button key={tab} onClick={() => handleTabChange(tab)}
-                className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors capitalize ${activeTab === tab ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {tab === "chatbot" ? "Chatbot" : tab === "campaigns" ? "Campaigns" : tab === "templates" ? "Template Builder" : "Chats"}
-              </button>
-            ))}
+            {TAB_ORDER.map(tab => {
+              const label = tab === "chatbot" ? "Chatbot" : tab === "campaigns" ? "Campaigns" : tab === "templates" ? "Template Builder" : "Chats";
+              const tooltipText = tab === "chats"
+                ? "Real-time inbox to chat with patients over SMS or WhatsApp."
+                : tab === "campaigns"
+                ? "Send a message to many clients at once, on a schedule."
+                : tab === "templates"
+                ? "Build pre-approved message templates for WhatsApp."
+                : "Configure the automated assistant to reply to common queries.";
+              return (
+                <div key={tab} className="flex items-center gap-1">
+                  <button onClick={() => handleTabChange(tab)}
+                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors capitalize ${activeTab === tab ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
+                    style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    {label}
+                  </button>
+                  <InfoTooltip text={tooltipText} />
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -1957,6 +1975,19 @@ export default function Chats() {
           </div>
         </>
       )}
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Chats Works"
+        summary="Chats is your messaging hub. Respond to inbound WhatsApp and SMS messages, build reusable templates, run broadcast campaigns, and automate replies with the chatbot."
+        bullets={[
+          "Reply to WhatsApp and SMS conversations from one inbox",
+          "Build message templates with variables for personalisation",
+          "Create broadcast campaigns to reach multiple contacts",
+          "Set up chatbot flows with keyword triggers and escalation rules",
+        ]}
+      />
     </div>
   );
 }

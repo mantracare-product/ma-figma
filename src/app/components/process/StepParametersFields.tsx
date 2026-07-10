@@ -6,6 +6,7 @@ import {
   ChevronRight, X, Copy, Pencil
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -195,7 +196,7 @@ export default function StepParametersFields({
   const idleHangupDelayStage = params.idleHangupDelayStage ?? 60;
 
   // Render method helper
-  const renderField = (label: string, element: React.ReactNode) => (
+  const renderField = (label: React.ReactNode, element: React.ReactNode) => (
     <div className="space-y-1.5">
       <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
         {label}
@@ -218,6 +219,7 @@ export default function StepParametersFields({
                 Conditions
               </span>
               <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>— optional</span>
+              <InfoTooltip text="Add rules here to make this step run only in specific situations, like a certain field value or something the caller said." />
             </div>
             <div className="flex items-center gap-3">
               <ChevronDown
@@ -260,6 +262,7 @@ export default function StepParametersFields({
                         <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
                           Field Conditions
                         </span>
+                        <InfoTooltip text="Check the value of a specific field, like status or stage, before running this step." />
                         {fieldConditions.length > 0 && (
                           <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
                             {fieldConditions.length}
@@ -362,6 +365,7 @@ export default function StepParametersFields({
                         <span className="text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
                           Intent Conditions
                         </span>
+                        <InfoTooltip text="Run this step only when the caller says something matching one of these intents, like asking for billing." />
                         {intentConditions.length > 0 && (
                           <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-semibold">
                             {intentConditions.length}
@@ -581,6 +585,9 @@ export default function StepParametersFields({
                     }}
                     className="w-full px-3 py-2 text-xs border rounded-md"
                   />
+                  <p className="col-span-2 -mt-1 text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Static Value: type the exact text to set. Variable / Formula: reference data from earlier in the call.
+                  </p>
                 </div>
               </div>
             ))}
@@ -612,7 +619,10 @@ export default function StepParametersFields({
         {(stepKey === "callaction" || stepKey === "call-transfer" || stepKey === "call-transfer-human" || stepKey === "call-transfer-ai") && (
           <div className="space-y-4">
             {renderField(
-              "Transfer Type",
+              <span className="inline-flex items-center gap-1.5">
+                Transfer Type
+                <InfoTooltip text="Human sends the call to a real phone number. AI Agent hands it to another automated agent in your account." />
+              </span>,
               <div className="flex gap-3">
                 {[{ v: "human", l: "Human" }, { v: "agent", l: "AI Agent" }].map((opt) => (
                   <label key={opt.v} className={`flex-1 flex items-center gap-2.5 px-4 py-3 rounded-xl border-2 cursor-pointer transition-all ${callActionTransferType === opt.v ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground/40"}`}>
@@ -1219,6 +1229,7 @@ export default function StepParametersFields({
 
                             <div className="flex items-center gap-2 pt-1">
                               <span className="text-xs font-semibold text-gray-500">Replace with:</span>
+                              <InfoTooltip text="Existing Field copies data into another field already on this integration. New Field creates a brand-new key/value pair." />
                               <div className="inline-flex rounded-md border border-border overflow-hidden">
                                 {[{ v: "existing", l: "Existing Field" }, { v: "new", l: "New Field" }].map(opt => (
                                   <button
@@ -1430,7 +1441,10 @@ export default function StepParametersFields({
                   )}
 
                   <div className="p-3 bg-gray-50 rounded-lg border space-y-3">
-                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide block">Parse Sample JSON Payload</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Parse Sample JSON Payload</span>
+                      <InfoTooltip text="Paste an example JSON response from this webhook and Claude will turn each key into an editable field below — saves you from typing field names by hand." />
+                    </div>
                     <textarea
                       value={jsonPaste}
                       onChange={e => setJsonPaste(e.target.value)}
@@ -1698,7 +1712,11 @@ export default function StepParametersFields({
 
         {stepKey === "smartcallanalysis" && (
           <div className="space-y-4">
-            {renderField("Configure Scenario",
+            {renderField(
+              <span className="inline-flex items-center gap-1.5">
+                Configure Scenario
+                <InfoTooltip text="Define one thing you want the AI to listen for and record during the call, e.g. 'Did the caller mention a competitor?'" />
+              </span>,
               <div className="space-y-2">
                 <input
                   type="text"

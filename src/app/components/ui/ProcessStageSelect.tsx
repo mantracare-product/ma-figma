@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 export const availableProcesses = [
   "Patient Intake",
@@ -90,9 +91,12 @@ export default function ProcessStageSelect({
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <label className={labelClass} style={{ fontFamily: "Outfit, sans-serif" }}>
-          {processLabel}
-        </label>
+        <div className="flex items-center gap-1 mb-1.5">
+          <label className={theme === "crm" ? "text-sm font-semibold text-foreground" : "text-xs font-medium text-gray-500"} style={{ fontFamily: "Outfit, sans-serif" }}>
+            {processLabel}
+          </label>
+          {theme === "standard" && <InfoTooltip text="New clients from this form start here in your workflow." />}
+        </div>
         <select
           value={selectedProcess}
           onChange={(e) => {
@@ -112,9 +116,12 @@ export default function ProcessStageSelect({
       </div>
 
       <div>
-        <label className={labelClass} style={{ fontFamily: "Outfit, sans-serif" }}>
-          {stageLabel}
-        </label>
+        <div className="flex items-center gap-1 mb-1.5">
+          <label className={theme === "crm" ? "text-sm font-semibold text-foreground" : "text-xs font-medium text-gray-500"} style={{ fontFamily: "Outfit, sans-serif" }}>
+            {stageLabel}
+          </label>
+          {theme === "standard" && <InfoTooltip text="New clients from this form start here in your workflow." />}
+        </div>
         <select
           value={selectedStage}
           onChange={(e) => onStageChange(e.target.value)}

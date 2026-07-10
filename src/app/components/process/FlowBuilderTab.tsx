@@ -13,6 +13,8 @@ import StepParametersFields from "./StepParametersFields";
 import StepDetailDrawer from "./StepDetailDrawer";
 import { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { toast } from "sonner";
+import { HowItWorksModal, HowItWorksButton } from "../help/HowItWorksModal";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 interface ParallelGroup {
   id: string;
@@ -375,6 +377,7 @@ export default function FlowBuilderTab({
   const [configNode, setConfigNode] = useState<FlowNode | null>(null);
   const [showVariableModal, setShowVariableModal] = useState(false);
   const [activeVarSetter, setActiveVarSetter] = useState<((v: string) => void) | null>(null);
+  const [showFlowBuilderHelp, setShowFlowBuilderHelp] = useState(false);
 
   const canvasRef = useRef<HTMLDivElement>(null);
   const NODE_W = 200;
@@ -1378,6 +1381,10 @@ export default function FlowBuilderTab({
       <div className="w-60 bg-card border-r border-border flex flex-col flex-shrink-0 overflow-hidden">
         {/* Search */}
         <div className="p-3 border-b border-border">
+          <div className="flex items-center gap-1.5 mb-2">
+            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Add a Step</span>
+            <InfoTooltip text="Click any node below to add it to the canvas. Logic nodes (Condition, Wait, Parallel) attach to whichever step you have selected on the canvas — select a step first." />
+          </div>
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -1486,6 +1493,7 @@ export default function FlowBuilderTab({
               <Hand className="w-4 h-4" />
             </button>
             <div className="w-px h-4 bg-border mx-1" />
+            <HowItWorksButton label="How Flow Builder Works" onClick={() => setShowFlowBuilderHelp(true)} />
             <Button variant="primary" size="sm" onClick={() => {}} className="h-7 text-xs">
               <Save className="w-3 h-3 mr-1" />
               Save
@@ -1839,6 +1847,21 @@ export default function FlowBuilderTab({
         isOpen={showVariableModal}
         onClose={() => { setShowVariableModal(false); setActiveVarSetter(null); }}
         onInsert={handleInsertVar}
+      />
+
+      {/* How It Works — Flow Builder */}
+      <HowItWorksModal
+        isOpen={showFlowBuilderHelp}
+        onClose={() => setShowFlowBuilderHelp(false)}
+        title="How Flow Builder Works"
+        summary="Flow Builder is a visual map of every automation step in this stage — On Stage Entry, In Call, and Post Call — laid out as connected nodes so you can see and edit the order at a glance."
+        bullets={[
+          "Each lane (On Stage Entry / In Call / Post Call) shows steps in the order they run",
+          "Drag a node's bottom port to another node's top port to change what runs next",
+          "Select a step, then add a Condition, Wait, or Parallel Branch from the left panel to modify it",
+          "Double-click any node to open its full configuration",
+          "Nodes generated from your Automation tab steps sync both ways — edit here or there",
+        ]}
       />
     </div>
   );

@@ -2,9 +2,10 @@ import { useState, useEffect } from "react";
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, Legend, ResponsiveContainer } from "recharts";
 import { Phone, CheckCircle, XCircle, Clock, TrendingUp, Calendar, Filter, Play, Activity, PieChart as PieChartIcon, BarChart3, Sparkles } from "lucide-react";
 import { Button } from "../components/ui/Button";
-import { Modal } from "../components/ui/Modal";
 import PageHeader from "../components/layout/PageHeader";
 import { useHowItWorks } from "../context/HowItWorksContext";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 
 const performanceData = [
   { id: 1, date: "Mon", calls: 45, completed: 38, failed: 7 },
@@ -95,17 +96,11 @@ export default function Overview() {
         {/* Enhanced Header with Filters */}
         <PageHeader
           title="Overview"
-          subtitle="Track key metrics for your company / industry"
+          subtitle="Your at-a-glance summary — call volume, success rate, and trends for the last 7 days"
         >
               <div className="flex items-center gap-4 relative">
                 {/* How MantraAssist Works Link */}
-                <button
-                  onClick={openModal}
-                  className="flex items-center gap-1.5 text-primary hover:text-primary/80 transition-all font-medium text-sm group hover:scale-105"
-                >
-                  <Play className="w-3.5 h-3.5" />
-                  <span className="group-hover:underline">How MantraAssist Works</span>
-                </button>
+                <HowItWorksButton onClick={openModal} label="How MantraAssist Works" />
 
                 {/* Filters */}
                 <div className="relative">
@@ -291,7 +286,10 @@ export default function Overview() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Total Calls</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Total Calls</p>
+                  <InfoTooltip text="Total Calls: all calls placed or received in the selected date range." />
+                </div>
                 <p className="text-3xl font-bold text-foreground mt-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>340</p>
                 <p className="text-sm text-secondary mt-2 flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   <TrendingUp className="w-4 h-4" />
@@ -308,7 +306,10 @@ export default function Overview() {
             <div className="absolute inset-0 bg-gradient-to-br from-secondary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Completed</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Completed</p>
+                  <InfoTooltip text="Completed: all calls that finished successfully in the selected date range." />
+                </div>
                 <p className="text-3xl font-bold text-foreground mt-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>285</p>
                 <p className="text-sm text-secondary mt-2 flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   <TrendingUp className="w-4 h-4" />
@@ -325,7 +326,10 @@ export default function Overview() {
             <div className="absolute inset-0 bg-gradient-to-br from-destructive/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Failed</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Failed</p>
+                  <InfoTooltip text="Failed: all calls that failed to connect or complete in the selected date range." />
+                </div>
                 <p className="text-3xl font-bold text-foreground mt-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>35</p>
                 <p className="text-sm text-destructive mt-2 flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                   10.3% failure rate
@@ -341,7 +345,10 @@ export default function Overview() {
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Avg Duration</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Avg Duration</p>
+                  <InfoTooltip text="Avg Duration: the average length of all completed calls in the selected date range." />
+                </div>
                 <p className="text-3xl font-bold text-foreground mt-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>4:32</p>
                 <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>minutes</p>
               </div>
@@ -480,7 +487,10 @@ export default function Overview() {
               <div>
                 <div className="flex items-center gap-2 mb-1">
                   <BarChart3 className="w-5 h-5 text-primary" />
-                  <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Conversion Funnel</h2>
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Conversion Funnel</h2>
+                    <InfoTooltip text="Shows how many clients moved from first contact through to a completed outcome." />
+                  </div>
                 </div>
                 <p className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Client journey from initial contact to follow-up</p>
               </div>
@@ -603,50 +613,37 @@ export default function Overview() {
         </div>
 
         {/* How MantraAssist Works Modal */}
-        <Modal
-        isOpen={shouldShowModal}
-        onClose={closeModal}
-        title="How MantraAssist Works"
-      >
-        <div className="space-y-6">
-          {/* Video Player */}
-          <div className="relative w-full" style={{ paddingTop: '56.25%' }}>
-            <iframe
-              className="absolute top-0 left-0 w-full h-full rounded-lg"
-              src="https://www.youtube.com/embed/dQw4w9WgXcQ"
-              title="How MantraAssist Works"
-              frameBorder="0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
-
-          {/* Description */}
-          <div className="text-center">
-            <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-              Learn how to use MantraAssist to manage calls, clients, and workflows efficiently.
-            </p>
-          </div>
-
-          {/* Action Buttons */}
-          <div className="flex gap-3 pt-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={seeLater}
-            >
-              See later
-            </Button>
-            <Button
-              variant="primary"
-              className="flex-1"
-              onClick={dontShowAgain}
-            >
-              Don't show again
-            </Button>
-          </div>
-        </div>
-      </Modal>
+        <HowItWorksModal
+          isOpen={shouldShowModal}
+          onClose={closeModal}
+          title="How MantraAssist Works"
+          videoUrl="https://www.youtube.com/embed/dQw4w9WgXcQ"
+          summary="MantraAssist is your AI-powered receptionist dashboard, helping you track call performance, monitor client journeys, and optimize your operations."
+          bullets={[
+            "Track calls and outcomes in the KPI dashboard",
+            "Follow client conversion stages through the funnel",
+            "Read AI Insights for actionable suggestions",
+            "Assign services and team members to handle patient booking",
+          ]}
+          extraFooterButtons={
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={seeLater}
+              >
+                See later
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={dontShowAgain}
+              >
+                Don't show again
+              </Button>
+            </>
+          }
+        />
       </div>
     </div>
   );

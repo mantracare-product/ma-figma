@@ -20,6 +20,8 @@ import {
   CheckCircle2,
 } from "lucide-react";
 
+import { InfoTooltip } from "../help/InfoTooltip";
+
 interface FormSettingsProps {
   formTitle: string;
   formDescription: string;
@@ -227,9 +229,12 @@ export default function FormSettings({
               <div className="pt-4 border-t border-gray-200 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="block text-sm font-semibold mb-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
-                      Create Submitter as Client Profile
-                    </label>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <label className="text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                        Create Submitter as Client Profile
+                      </label>
+                      <InfoTooltip text="When on, every submission creates a new client record and enrolls them in the process/stage below." />
+                    </div>
                     <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
                       Automatically create a new client record in the CRM if the submitter's email or phone doesn't match an existing client.
                     </p>

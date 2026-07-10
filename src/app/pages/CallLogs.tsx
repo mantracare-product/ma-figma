@@ -14,6 +14,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 
 interface CallLog {
   id: string;
@@ -346,6 +348,7 @@ export default function CallLogs() {
   // Client filter state
   const [activeClientFilter, setActiveClientFilter] = useState<string>("");
   const [activeClientId, setActiveClientId] = useState<string>("");
+  const [showHelp, setShowHelp] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -846,8 +849,10 @@ export default function CallLogs() {
       <div className="py-6 px-[150px] space-y-8">
         <PageHeader
           title="Calls"
-          subtitle="View and analyze call history"
-        />
+          subtitle="Review recordings, read transcripts, and spot trends across every call your team makes."
+        >
+          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Calls Works" />
+        </PageHeader>
 
         {/* Active Client Filter Banner */}
         {activeClientFilter && (
@@ -1008,9 +1013,12 @@ export default function CallLogs() {
                           {/* Stage Group - Multi-select */}
                           {visibleFields.stageGroup && (
                             <div className="relative">
-                              <label className="block text-xs font-medium mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Stage group
-                              </label>
+                              <div className="flex items-center gap-1 mb-2">
+                                <label className="block text-xs font-medium text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Stage group
+                                </label>
+                                <InfoTooltip text="Filter to calls currently sitting in this pipeline stage." />
+                              </div>
                               <div
                                 onClick={() => setShowStageDropdown(!showStageDropdown)}
                                 className="w-full px-3 py-2 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer bg-white min-h-[38px] flex items-center flex-wrap gap-1"
@@ -1295,6 +1303,7 @@ export default function CallLogs() {
                 {selectedProcessFilter ? selectedProcessFilter : "Process"}
                 <ChevronDown className="w-4 h-4" />
               </button>
+              <InfoTooltip text="Only show calls that belong to this workflow." />
 
               {/* Processes Dropdown Menu */}
               {showProcessesDropdown && (
@@ -2429,9 +2438,12 @@ export default function CallLogs() {
                               <Volume2 className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Call Quality
-                              </p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Call Quality
+                                </p>
+                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
+                              </div>
                               <p className="text-2xl font-bold text-blue-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                 9.5
                               </p>
@@ -2451,9 +2463,12 @@ export default function CallLogs() {
                               <GitBranch className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Flow Score
-                              </p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Flow Score
+                                </p>
+                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
+                              </div>
                               <p className="text-2xl font-bold text-purple-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                 9.2
                               </p>
@@ -2473,9 +2488,12 @@ export default function CallLogs() {
                               <Users className="w-5 h-5 text-white" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Engagement
-                              </p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  Engagement
+                                </p>
+                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
+                              </div>
                               <p className="text-2xl font-bold text-green-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                 8.8
                               </p>
@@ -2587,9 +2605,12 @@ export default function CallLogs() {
                         <div className="grid grid-cols-3 gap-4">
                           {/* Dead Air */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Dead Air
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Dead Air
+                              </p>
+                              <InfoTooltip text="Percentage of the call where neither party was speaking." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               14.69%
                             </p>
@@ -2597,9 +2618,12 @@ export default function CallLogs() {
 
                           {/* Display Patience and Courtesy */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Display Patience and Courtesy
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Display Patience and Courtesy
+                              </p>
+                              <InfoTooltip text="AI evaluation of assistant's polite behavior." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               100%
                             </p>
@@ -2607,9 +2631,12 @@ export default function CallLogs() {
 
                           {/* Empathy */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Empathy
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Empathy
+                              </p>
+                              <InfoTooltip text="AI evaluation of empathetic phrases and tone." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               58.22%
                             </p>
@@ -2617,9 +2644,12 @@ export default function CallLogs() {
 
                           {/* Hold Time Violation */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Hold Time Violation
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Hold Time Violation
+                              </p>
+                              <InfoTooltip text="Checks if the caller was left on hold for too long." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               28.33%
                             </p>
@@ -2627,9 +2657,12 @@ export default function CallLogs() {
 
                           {/* Negative Customer Sentiment */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Negative Customer Sentiment
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Negative Customer Sentiment
+                              </p>
+                              <InfoTooltip text="Percentage of caller responses with negative tone or sentiment." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               19.52%
                             </p>
@@ -2637,9 +2670,12 @@ export default function CallLogs() {
 
                           {/* Supervisor Escalation */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Supervisor Escalation
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Supervisor Escalation
+                              </p>
+                              <InfoTooltip text="Probability that the caller requested a supervisor." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               2.87%
                             </p>
@@ -2655,9 +2691,12 @@ export default function CallLogs() {
                         <div className="grid grid-cols-3 gap-4">
                           {/* Proper Call Hold */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Proper Call Hold
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Proper Call Hold
+                              </p>
+                              <InfoTooltip text="Adherence to standard hold procedure." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               67.89%
                             </p>
@@ -2665,9 +2704,12 @@ export default function CallLogs() {
 
                           {/* Proper Call Opening */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Proper Call Opening
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Proper Call Opening
+                              </p>
+                              <InfoTooltip text="Adherence to standard greeting procedure." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               67.33%
                             </p>
@@ -2683,9 +2725,12 @@ export default function CallLogs() {
                         <div className="grid grid-cols-3 gap-4">
                           {/* Customer Verification */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Customer Verification
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Customer Verification
+                              </p>
+                              <InfoTooltip text="Verification of caller identity where required." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               79.31%
                             </p>
@@ -2693,9 +2738,12 @@ export default function CallLogs() {
 
                           {/* Recorded Line Message */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Recorded Line Message
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Recorded Line Message
+                              </p>
+                              <InfoTooltip text="Verification that compliance recording disclaimer was spoken." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               7.38%
                             </p>
@@ -2703,9 +2751,12 @@ export default function CallLogs() {
 
                           {/* Redaction */}
                           <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Redaction
-                            </p>
+                            <div className="flex items-center gap-1 mb-2">
+                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Redaction
+                              </p>
+                              <InfoTooltip text="Redaction percentage of sensitive information from transcripts." />
+                            </div>
                             <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                               59.99%
                             </p>
@@ -2783,6 +2834,18 @@ export default function CallLogs() {
         )}
       </Drawer>
 
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Calls Works"
+        summary="The Calls page logs every inbound and outbound call. Listen to recordings, read AI-generated transcripts, and track performance at a glance."
+        bullets={[
+          "Filter by date range, status, or client name",
+          "Play recordings and read full transcripts inline",
+          "Download transcripts for your records",
+          "See call scores and AI sentiment analysis",
+        ]}
+      />
     </div>
   );
 }

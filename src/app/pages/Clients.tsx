@@ -16,6 +16,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
 
@@ -177,6 +179,7 @@ export default function Clients() {
   }, null, 2);
 
   const [showFilterPanel, setShowFilterPanel] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -1287,8 +1290,10 @@ export default function Clients() {
         <div className="py-6 px-[150px] space-y-8">
           <PageHeader
             title="Clients"
-            subtitle="Manage your clients"
-          />
+            subtitle="Add, search, and manage every contact — then link them to processes and appointments."
+          >
+            <HowItWorksButton onClick={() => setShowHelp(true)} label="How Clients Works" />
+          </PageHeader>
 
           {/* Action Bar */}
           <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm" style={{ borderBottomLeftRadius: showFilterPanel ? 0 : '0.75rem', borderBottomRightRadius: showFilterPanel ? 0 : '0.75rem' }}>
@@ -1493,9 +1498,12 @@ export default function Clients() {
 
                                 {/* Responsible person — multi-select dropdown with avatars */}
                                 <div className="relative">
-                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    Responsible person
-                                  </label>
+                                  <div className="flex items-center gap-1 mb-2">
+                                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Responsible person
+                                    </label>
+                                    <InfoTooltip text="Show clients assigned to this team member." />
+                                  </div>
                                   <div
                                     onClick={() => setFilterDropdowns(prev => ({ ...prev, responsible: !prev.responsible }))}
                                     className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
@@ -1662,9 +1670,12 @@ export default function Clients() {
                               <div className="grid grid-cols-2 gap-4">
                                 {/* Processes — multi-select dropdown */}
                                 <div className="relative">
-                                  <label className="block text-xs font-semibold uppercase tracking-wider mb-2 text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                    Processes
-                                  </label>
+                                  <div className="flex items-center gap-1 mb-2">
+                                    <label className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                      Processes
+                                    </label>
+                                    <InfoTooltip text="Show clients enrolled in one or more of these workflows." />
+                                  </div>
                                   <div
                                     onClick={() => setFilterDropdowns(prev => ({ ...prev, processes: !prev.processes }))}
                                     className="w-full px-4 py-2.5 border border-border rounded-lg text-sm cursor-pointer bg-white min-h-[42px] flex items-center flex-wrap gap-1.5"
@@ -2728,14 +2739,17 @@ export default function Clients() {
                         </Button>
                       </Tooltip>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleEnterBulkEdit}
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                        Edit
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleEnterBulkEdit}
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                          Edit
+                        </Button>
+                        <InfoTooltip text="Edit name, email, or phone for every selected client at once." />
+                      </div>
                     </>
                   ) : (
                     <>
@@ -3517,17 +3531,26 @@ export default function Clients() {
             }
           >
             <div className="space-y-4">
-              <div className="flex gap-2 mb-5 bg-muted/30 p-1 rounded-lg w-fit">
-                {(["csv", "api", "webhook"] as const).map((method) => (
-                  <button
-                    key={method}
-                    onClick={() => setImportMethod(method)}
-                    className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                      }`}
-                  >
-                    {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2 mb-5 bg-muted/30 p-1 rounded-lg w-fit">
+                {(["csv", "api", "webhook"] as const).map((method) => {
+                  const tooltipText = method === "csv"
+                    ? "Import clients by uploading a standard CSV file."
+                    : method === "api"
+                    ? "Fetch and import clients directly from your connected external API."
+                    : "Get a URL you can call from an external system to create clients automatically.";
+                  return (
+                    <div key={method} className="flex items-center gap-0.5 px-1">
+                      <button
+                        onClick={() => setImportMethod(method)}
+                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                          }`}
+                      >
+                        {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
+                      </button>
+                      <InfoTooltip text={tooltipText} />
+                    </div>
+                  );
+                })}
               </div>
 
               {importMethod === "csv" && (
@@ -4671,6 +4694,19 @@ export default function Clients() {
         </div>
       </div>
       <Outlet />
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Clients Works"
+        summary="Clients is your contact database. Store details, track communication history, and move contacts through processes — all from one place."
+        bullets={[
+          "Add clients manually or import via CSV",
+          "Assign contacts to processes and stages",
+          "Filter and search across all fields",
+          "Click any client to open their full profile",
+        ]}
+      />
     </DndProvider>
   );
 }

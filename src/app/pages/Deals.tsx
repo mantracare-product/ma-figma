@@ -15,6 +15,8 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
 
@@ -543,6 +545,7 @@ export default function Deals() {
 
   // Selection state
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+  const [showHelp, setShowHelp] = useState(false);
 
   // Bulk action modals
   const [showTriggerCallsModal, setShowTriggerCallsModal] = useState(false);
@@ -1061,8 +1064,10 @@ export default function Deals() {
       <div className="py-6 px-[150px] space-y-8">
         <PageHeader
           title="Process"
-          subtitle="View and manage process pipeline"
-        />
+          subtitle="See where every client stands, move them through stages, and close deals faster."
+        >
+          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Process Works" />
+        </PageHeader>
 
         {/* Active Client Filter Banner */}
         {activeClientFilter && (
@@ -1830,7 +1835,14 @@ export default function Deals() {
                     </th>
                     {visibleColumns.client && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Client</th>}
                     {visibleColumns.process && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Process</th>}
-                    {visibleColumns.currentStage && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Stage</th>}
+                    {visibleColumns.currentStage && (
+                      <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>
+                        <div className="flex items-center justify-center gap-1">
+                          Stage
+                          <InfoTooltip text="Each block is one stage. Click a block to move this client to that stage." />
+                        </div>
+                      </th>
+                    )}
                     {visibleColumns.status && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>}
                     {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Created</th>}
                     {visibleColumns.activity && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Activity</th>}
@@ -4509,6 +4521,18 @@ export default function Deals() {
         );
       })()}
 
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Process Works"
+        summary="Process is your pipeline view. Track every client's journey from first contact to closed deal, across whichever processes your team runs."
+        bullets={[
+          "Switch between table and Kanban views",
+          "Drag clients between stages in Kanban view",
+          "Filter by process, stage, status, or responsible person",
+          "Bulk-trigger calls or move multiple clients at once",
+        ]}
+      />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { X, ChevronRight, Info } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import StepParametersFields from "./StepParametersFields";
 import type { WorkflowStep } from "../../types/workflow";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 export interface StepDetailDrawerProps {
   isOpen: boolean;
@@ -195,12 +196,15 @@ export default function StepDetailDrawer({
             {/* Column 2 — Execution */}
             {stepTrigger === "stage" ? (
               <div className="w-[140px] flex-shrink-0">
-                <label
-                  className="block text-sm font-semibold mb-2"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Execution
-                </label>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label
+                    className="text-sm font-semibold"
+                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Execution
+                  </label>
+                  <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
+                </div>
                 <button
                   onClick={() => setExecutionTimingModalOpen(true)}
                   className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
@@ -216,12 +220,15 @@ export default function StepDetailDrawer({
               </div>
             ) : stepTrigger === "postcall" ? (
               <div className="w-[140px] flex-shrink-0">
-                <label
-                  className="block text-sm font-semibold mb-2"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Execution
-                </label>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label
+                    className="text-sm font-semibold"
+                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Execution
+                  </label>
+                  <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
+                </div>
                 <button
                   onClick={() => setExecutionTimingModalOpen(true)}
                   className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
@@ -261,12 +268,15 @@ export default function StepDetailDrawer({
             {/* Column 3 — Delay */}
             {(stepTrigger === "stage" || stepTrigger === "postcall") && (
               <div className="w-[150px] flex-shrink-0">
-                <label
-                  className="block text-sm font-semibold mb-2"
-                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                >
-                  Delay
-                </label>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label
+                    className="text-sm font-semibold"
+                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Delay
+                  </label>
+                  <InfoTooltip text="Time to wait after the previous step finishes before this one runs." />
+                </div>
                 <div className="flex items-center border border-border rounded-lg bg-white overflow-hidden">
                   <input
                     type="number"
@@ -300,12 +310,15 @@ export default function StepDetailDrawer({
           {/* Connect After dropdown */}
           {(stepTrigger === "stage" || stepTrigger === "postcall") && executionType === "wait" && (
             <div className="w-full">
-              <label
-                className="block text-sm font-semibold mb-2"
-                style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-              >
-                Connect After
-              </label>
+              <div className="flex items-center gap-1.5 mb-2">
+                <label
+                  className="text-sm font-semibold"
+                  style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Connect After
+                </label>
+                <InfoTooltip text="Choose which step must finish before this one starts. Leave as 'Start of flow' to run it first." />
+              </div>
               <select
                 value={connectAfterId || "start"}
                 onChange={(e) => {

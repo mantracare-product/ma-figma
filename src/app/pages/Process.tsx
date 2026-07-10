@@ -17,6 +17,8 @@ import { toast } from "sonner";
 import { useAIProviders } from "../context/AIProviderContext";
 import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
@@ -1474,6 +1476,7 @@ export default function Process() {
   const [showAddStageModal, setShowAddStageModal] = useState(false);
   const [showProcessHowItWorksModal, setShowProcessHowItWorksModal] = useState(false);
   const [showStageHowItWorksModal, setShowStageHowItWorksModal] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [showDeleteStageModal, setShowDeleteStageModal] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
   const [showEditStageModal, setShowEditStageModal] = useState(false);
@@ -1964,7 +1967,10 @@ export default function Process() {
       <div className="py-8 px-[150px] space-y-6">
         <PageHeader
           title="Process Settings"
-          subtitle="Configure your call processes and stages"
+          subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
+          actions={
+            <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+          }
         />
 
         <div className="flex gap-6 min-h-[calc(100vh-200px)]">
@@ -2161,14 +2167,7 @@ export default function Process() {
                       )}
                     </div>
                     <div className="flex items-center gap-3 flex-shrink-0">
-                      <Tooltip text="How Process Works">
-                        <button
-                          onClick={() => setShowProcessHowItWorksModal(true)}
-                          className="w-10 h-10 flex items-center justify-center rounded-xl border-2 border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all"
-                        >
-                          <Info className="w-5 h-5 text-gray-600" />
-                        </button>
-                      </Tooltip>
+                      <HowItWorksButton label="How Process Works" onClick={() => setShowProcessHowItWorksModal(true)} />
                       <Tooltip text="Temporary Disable">
                         <label className="relative inline-flex items-center cursor-pointer">
                           <input
@@ -2289,9 +2288,14 @@ export default function Process() {
 
                                 <div>
                                   <div className="flex items-center justify-between mb-3">
-                                    <label className="text-sm font-semibold text-gray-700">
-                                      Voice Speed
-                                    </label>
+                                    <div className="flex items-center gap-1.5">
+                                      <label className="text-sm font-semibold text-gray-700">
+                                        Voice Speed
+                                      </label>
+                                      <Tooltip text="Controls how fast the AI speaks during calls.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                      </Tooltip>
+                                    </div>
                                     <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
                                       {selectedProcessData.aiSettings.voiceSpeed}x
                                     </span>
@@ -2314,7 +2318,12 @@ export default function Process() {
                                 {/* Voice / Tone / Style — 3-column grid */}
                                 <div className="grid grid-cols-3 gap-3">
                                   <div>
-                                    <label className="block text-sm font-semibold mb-2 text-gray-700">Voice</label>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
+                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                      </Tooltip>
+                                    </div>
                                     <select
                                       value={selectedProcessData.aiSettings.voice || "Ava"}
                                       onChange={(e) => handleUpdateProcessAI("voice", e.target.value)}
@@ -2433,7 +2442,12 @@ export default function Process() {
                                   {extensionEntries.map((entry) => (
                                     <div key={entry.id} className="flex items-center gap-2">
                                       <div className="flex-1">
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">AI's Extension:</label>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <label className="text-xs font-semibold text-gray-500">AI's Extension:</label>
+                                          <Tooltip text="The extension digits a caller can dial (or ask the AI to dial) to reach this stage.">
+                                            <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                                          </Tooltip>
+                                        </div>
                                         <input
                                           type="text"
                                           placeholder="234"
@@ -2443,7 +2457,12 @@ export default function Process() {
                                         />
                                       </div>
                                       <div className="flex-1">
-                                        <label className="block text-xs font-semibold text-gray-500 mb-1">Route to:</label>
+                                        <div className="flex items-center gap-1 mb-1">
+                                          <label className="text-xs font-semibold text-gray-500">Route to:</label>
+                                          <Tooltip text="The phone number this extension transfers the caller to.">
+                                            <Info className="w-3 h-3 text-gray-400 cursor-help" />
+                                          </Tooltip>
+                                        </div>
                                         <div className="flex gap-1">
                                           <select
                                             value={entry.countryCode}
@@ -2530,9 +2549,14 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <Clock className="w-5 h-5 text-primary" />
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Call Duration
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Call Duration
+                                  </span>
+                                  <Tooltip text="Set the maximum call length and when the AI should start wrapping up the conversation.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <ChevronDown
                                 className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callDurationExpanded ? 'rotate-180' : ''}`}
@@ -2613,9 +2637,14 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <RefreshCw className="w-5 h-5 text-primary" />
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Retry Rules
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Retry Rules
+                                  </span>
+                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
@@ -2722,9 +2751,14 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <Calendar className="w-5 h-5 text-primary" />
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Skip Day Rules
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Skip Day Rules
+                                  </span>
+                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
@@ -2860,9 +2894,14 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <Voicemail className="w-5 h-5 text-primary" />
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Detect Voicemail
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Detect Voicemail
+                                  </span>
+                                  <Tooltip text="This allows AI to detect if the caller is on leave voice mail and disconnect the call.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
@@ -2958,15 +2997,7 @@ export default function Process() {
                               <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
                             </label>
                           </Tooltip>
-                          <Tooltip text="How Stage Works">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setShowStageHowItWorksModal(true)}
-                            >
-                              <Info className="w-4 h-4" />
-                            </Button>
-                          </Tooltip>
+                          <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
                           <Tooltip text="Delete Stage">
                             <Button
                               variant="outline"
@@ -3016,9 +3047,12 @@ export default function Process() {
                             <div className={stageType === "AI Receives Calls" || stageType === "AI Makes Calls" || stageType === "Transfer to Human" ? "grid grid-cols-2 gap-4" : ""}>
                               {/* Type Dropdown */}
                               <div className="flex flex-col">
-                                <label className="block text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Call Actions
-                                </label>
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Call Actions
+                                  </label>
+                                  <InfoTooltip text="Controls whether this stage answers inbound calls, places outbound calls, or hands off to a person." />
+                                </div>
                                 <Select value={stageType} onValueChange={setStageType}>
                                   <SelectTrigger className="h-full">
                                     <SelectValue />
@@ -3125,9 +3159,12 @@ export default function Process() {
                                 className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
                               >
                                 <div className="flex flex-col items-start gap-1">
-                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    When to move to this stage
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      When to move to this stage
+                                    </span>
+                                    <InfoTooltip text="Describe the trigger condition in plain English — the AI uses this to decide when to move a contact here." />
+                                  </div>
                                   <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
                                     Define the conditions or criteria for moving to this stage.
                                   </span>
@@ -3171,27 +3208,30 @@ export default function Process() {
                                 {callerPitchExpanded && (
                                   <div className="p-6 border-t border-border">
                                     {/* Mode Toggle */}
-                                    <div className="flex gap-2 mb-6 bg-muted/30 p-1 rounded-lg w-fit">
-                                      <button
-                                        onClick={() => setCallerPitchMode("single")}
-                                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "single"
-                                          ? "bg-primary text-white"
-                                          : "text-gray-600 hover:text-gray-900"
-                                          }`}
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        Single Prompt
-                                      </button>
-                                      <button
-                                        onClick={() => setCallerPitchMode("comprehensive")}
-                                        className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "comprehensive"
-                                          ? "bg-primary text-white"
-                                          : "text-gray-600 hover:text-gray-900"
-                                          }`}
-                                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                                      >
-                                        Comprehensive
-                                      </button>
+                                    <div className="flex items-center gap-3 mb-6">
+                                      <div className="flex gap-2 bg-muted/30 p-1 rounded-lg w-fit">
+                                        <button
+                                          onClick={() => setCallerPitchMode("single")}
+                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "single"
+                                            ? "bg-primary text-white"
+                                            : "text-gray-600 hover:text-gray-900"
+                                            }`}
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          Single Prompt
+                                        </button>
+                                        <button
+                                          onClick={() => setCallerPitchMode("comprehensive")}
+                                          className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${callerPitchMode === "comprehensive"
+                                            ? "bg-primary text-white"
+                                            : "text-gray-600 hover:text-gray-900"
+                                            }`}
+                                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                                        >
+                                          Comprehensive
+                                        </button>
+                                      </div>
+                                      <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
                                     </div>
 
                                     {/* Single Prompt Mode */}
@@ -3678,9 +3718,12 @@ export default function Process() {
                                       {/* On Stage Entry List */}
                                       {stageSteps.length > 0 && (
                                         <div className="space-y-2">
-                                          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                            On Stage Entry
-                                          </p>
+                                          <div className="flex items-center gap-1.5">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              On Stage Entry
+                                            </p>
+                                            <InfoTooltip text="These steps run automatically the moment a client enters this stage, before any call starts." />
+                                          </div>
                                           <DndProvider backend={HTML5Backend}>
                                             <div className="space-y-2">
                                               {stageSteps.map((step, idx) => (
@@ -3729,9 +3772,12 @@ export default function Process() {
                                       {inCallSteps.length > 0 && (
                                         <div className="relative">
                                           <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                              In Call
-                                            </p>
+                                            <div className="flex items-center gap-1.5">
+                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                                In Call
+                                              </p>
+                                              <InfoTooltip text="These steps run live during the conversation, based on what the caller says." />
+                                            </div>
                                             <div className="space-y-2">
                                               {inCallSteps.map((step) => (
                                                 <div
@@ -3841,9 +3887,12 @@ export default function Process() {
                                         return (
                                           <div className="relative">
                                             <div className={`space-y-2 ${isBlockedCallType ? "opacity-40 pointer-events-none select-none" : ""}`}>
-                                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                                Post Call
-                                              </p>
+                                              <div className="flex items-center gap-1.5">
+                                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                                  Post Call
+                                                </p>
+                                                <InfoTooltip text="These steps run after the call ends — send a follow-up text, update a field, or move the client to the next stage." />
+                                              </div>
                                               <DndProvider backend={HTML5Backend}>
                                                 <div className="space-y-2">
                                                   {postCallSteps.map((step, idx) => (
@@ -3981,7 +4030,12 @@ export default function Process() {
                                 {/* Voice Speed Slider */}
                                 <div>
                                   <div className="flex items-center justify-between mb-3">
-                                    <label className="text-sm font-semibold text-gray-700">Voice Speed</label>
+                                    <div className="flex items-center gap-1.5">
+                                      <label className="text-sm font-semibold text-gray-700">Voice Speed</label>
+                                      <Tooltip text="Controls how fast the AI speaks during calls.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                      </Tooltip>
+                                    </div>
                                     <span className="px-3 py-1 bg-blue-100 text-blue-700 text-sm font-bold rounded-lg">
                                       {stageVoiceSpeed}x
                                     </span>
@@ -4004,7 +4058,12 @@ export default function Process() {
                                 {/* Voice / Tone / Style — 3-column grid */}
                                 <div className="grid grid-cols-3 gap-3">
                                   <div>
-                                    <label className="block text-sm font-semibold mb-2 text-gray-700">Voice</label>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <label className="text-sm font-semibold text-gray-700">Voice</label>
+                                      <Tooltip text="Choose the voice your AI receptionist uses on calls.">
+                                        <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                      </Tooltip>
+                                    </div>
                                     <select
                                       value={stageVoice}
                                       onChange={(e) => setStageVoice(e.target.value)}
@@ -4105,9 +4164,14 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <Clock className="w-5 h-5 text-primary" />
-                                <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Call Duration
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Call Duration
+                                  </span>
+                                  <Tooltip text="Set the maximum call length and when the AI should start wrapping up the conversation.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <ChevronDown
                                 className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${callDurationExpanded ? 'rotate-180' : ''
@@ -4208,12 +4272,17 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <RefreshCw className="w-5 h-5 text-primary" />
-                                <span
-                                  className="text-sm font-medium"
-                                  style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                >
-                                  Retry Rules
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="text-sm font-medium"
+                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    Retry Rules
+                                  </span>
+                                  <Tooltip text="Automatically retry the call if it fails, based on the rules below.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
@@ -4237,12 +4306,17 @@ export default function Process() {
                               <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
                                 {/* Enable Toggle Row */}
                                 <div className="flex items-center justify-between">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    Enable Retry Rules
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="text-sm font-medium"
+                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Enable Retry Rules
+                                    </span>
+                                    <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <label className="relative inline-flex items-center cursor-pointer">
                                     <input
                                       type="checkbox"
@@ -4259,12 +4333,17 @@ export default function Process() {
 
                                 {/* Retry Attempts */}
                                 <div>
-                                  <label
-                                    className="block text-sm font-medium mb-2"
-                                    style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Retry Attempts
-                                  </label>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <label
+                                      className="text-sm font-medium"
+                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      Retry Attempts
+                                    </label>
+                                    <Tooltip text="Number of call retry attempts to make before failing permanently.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <input
                                     type="number"
                                     min={1}
@@ -4278,12 +4357,17 @@ export default function Process() {
 
                                 {/* Delay Between Retries */}
                                 <div>
-                                  <label
-                                    className="block text-sm font-medium mb-2"
-                                    style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Delay Between Retries (minutes)
-                                  </label>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <label
+                                      className="text-sm font-medium"
+                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      Delay Between Retries (minutes)
+                                    </label>
+                                    <Tooltip text="Time to wait between each retry attempt.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <input
                                     type="number"
                                     min={1}
@@ -4296,12 +4380,17 @@ export default function Process() {
 
                                 {/* Fallback Stage */}
                                 <div>
-                                  <label
-                                    className="block text-sm font-medium mb-2"
-                                    style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Fallback Stage
-                                  </label>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <label
+                                      className="text-sm font-medium"
+                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      Fallback Stage
+                                    </label>
+                                    <Tooltip text="Workflow stage to transition call task to if all retry attempts fail.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <select
                                     value={retryFallbackStage}
                                     onChange={(e) => setRetryFallbackStage(e.target.value)}
@@ -4329,12 +4418,17 @@ export default function Process() {
                             >
                               <div className="flex items-center gap-3">
                                 <Calendar className="w-5 h-5 text-primary" />
-                                <span
-                                  className="text-sm font-medium"
-                                  style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
-                                >
-                                  Skip Day Rules
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className="text-sm font-medium"
+                                    style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    Skip Day Rules
+                                  </span>
+                                  <Tooltip text="Avoid placing outbound calls on selected days or dates.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
                               </div>
                               <div className="flex items-center gap-2">
                                 <span
@@ -4358,12 +4452,17 @@ export default function Process() {
                               <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
                                 {/* Enable Toggle Row */}
                                 <div className="flex items-center justify-between">
-                                  <span
-                                    className="text-sm font-medium"
-                                    style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
-                                  >
-                                    Enable Skip Day Rules
-                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="text-sm font-medium"
+                                      style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}
+                                    >
+                                      Enable Skip Day Rules
+                                    </span>
+                                    <Tooltip text="Avoid making automated outbound calls on selected days/dates.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <label className="relative inline-flex items-center cursor-pointer">
                                     <input
                                       type="checkbox"
@@ -4382,12 +4481,17 @@ export default function Process() {
 
                                 {/* Weekly Off Days */}
                                 <div>
-                                  <label
-                                    className="block text-sm font-medium mb-3"
-                                    style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Weekly Off Days
-                                  </label>
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <label
+                                      className="text-sm font-medium"
+                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      Weekly Off Days
+                                    </label>
+                                    <Tooltip text="Days of the week to skip automated calling.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <div className="flex items-center gap-2 flex-wrap">
                                     {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => {
                                       const isActive = weeklyOffDays.includes(day);
@@ -4415,12 +4519,17 @@ export default function Process() {
 
                                 {/* Custom Off Dates */}
                                 <div>
-                                  <label
-                                    className="block text-sm font-medium mb-2"
-                                    style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
-                                  >
-                                    Custom Off Dates
-                                  </label>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <label
+                                      className="text-sm font-medium"
+                                      style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}
+                                    >
+                                      Custom Off Dates
+                                    </label>
+                                    <Tooltip text="Specific calendar dates on which no calls will be placed.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
                                   <div className="flex items-center gap-2">
                                     <input
                                       type="date"
@@ -5257,80 +5366,50 @@ export default function Process() {
           </div>
         </Modal>
 
-        {/* How Process Works Modal */}
-        <Modal
+        {/* How Process Works Modal — shared component */}
+        <HowItWorksModal
           isOpen={showProcessHowItWorksModal}
           onClose={() => setShowProcessHowItWorksModal(false)}
           title="How Process Works"
-        >
-          <div className="space-y-4">
-            <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
-              <div className="text-center">
-                <Play className="w-16 h-16 mx-auto mb-3 text-muted-foreground" />
-                <p className="text-muted-foreground">Video tutorial placeholder</p>
-                <p className="text-sm text-muted-foreground mt-1">Embedded video would appear here</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold">Process Overview</h4>
-              <p className="text-sm text-muted-foreground">
-                A process represents a complete workflow that consists of multiple stages.
-                Configure AI settings at the process level to apply them across all stages,
-                or customize settings for individual stages as needed.
-              </p>
-            </div>
-          </div>
-        </Modal>
+          summary="A Process is a full workflow made of stages — like Initial Contact → Insurance Verify → Schedule Appointment. Configure AI behavior once at the process level, or override it per stage."
+          bullets={[
+            "Create stages for each step in your workflow",
+            "Set AI voice, model, tone, and style at the process level",
+            "Override any setting for individual stages",
+            "Add automations to run on entry, during calls, or after calls",
+          ]}
+        />
 
-        {/* How Stage Works Modal */}
-        <Modal
+        {/* How Stage Works Modal — shared component */}
+        <HowItWorksModal
           isOpen={showStageHowItWorksModal}
           onClose={() => setShowStageHowItWorksModal(false)}
           title="How Stage Works"
-        >
-          <div className="space-y-4">
-            <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
-              <div className="text-center">
-                <Play className="w-16 h-16 mx-auto mb-3" style={{ color: '#64748B' }} />
-                <p style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Video tutorial placeholder</p>
-                <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Embedded video would appear here</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stage Overview</h4>
-              <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                Stages represent individual steps in your workflow. Each stage can have its own
-                configuration, webhooks, and retry rules. AI settings can inherit from the process
-                or be customized per stage.
-              </p>
-            </div>
-          </div>
-        </Modal>
+          summary="A Stage is one step in a process. It defines what the AI says, when a call moves here, and what automations fire when it does."
+          bullets={[
+            "Set the call type: AI Receives, AI Makes, Transfer to Human, or No Call Activity",
+            "Write the Caller Pitch — what the AI says when initiating an outbound call",
+            "Define when a client should move to this stage",
+            "Add automations on stage entry, in-call, or post-call",
+          ]}
+        />
 
-        {/* How to Receive Call Modal */}
-        <Modal
-          isOpen={showHowToReceiveCallModal}
-          onClose={() => setShowHowToReceiveCallModal(false)}
-          title="How to Receive Call"
-        >
-          <div className="space-y-4">
-            <div className="aspect-video bg-muted rounded-xl flex items-center justify-center">
-              <div className="text-center">
-                <Play className="w-16 h-16 mx-auto mb-3" style={{ color: '#64748B' }} />
-                <p style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Video tutorial placeholder</p>
-                <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Embedded video would appear here</p>
-              </div>
-            </div>
-            <div className="space-y-2">
-              <h4 className="font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Receiving Inbound Calls</h4>
-              <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                Learn how to connect phone numbers to this stage so that inbound callers are automatically
-                routed to your AI Receptionist. This tutorial covers number assignment, routing rules,
-                and what the caller experience looks like end-to-end.
-              </p>
-            </div>
-          </div>
-        </Modal>
+        {/* Page-level How It Works Modal */}
+        <HowItWorksModal
+          isOpen={showHelp}
+          onClose={() => setShowHelp(false)}
+          title="How Process Settings Works"
+          summary="Process Settings is where you design the full behaviour of your AI receptionist — from how it greets callers to which actions fire after a call ends."
+          bullets={[
+            "Create processes (workflows) and add stages to each one",
+            "Set AI voice, model, and tone globally or per stage",
+            "Configure call type, pitch, and inbound phone numbers per stage",
+            "Automate follow-ups, field updates, and handoffs in the Automation tab",
+            "Use the Flow Builder to visualise and edit your automation steps visually",
+          ]}
+        />
+
+        {/* How to Receive Call — inline guide link in stage modal */}
         <Modal
           isOpen={showEditStageModal}
           onClose={() => {

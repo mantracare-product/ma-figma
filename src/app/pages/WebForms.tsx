@@ -15,6 +15,8 @@ import ShareFormDrawer from "../components/webform/ShareFormDrawer";
 import { ShareClient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
 import { useClientFields } from "../context/ClientFieldsContext";
 import { appendClientSubmission } from "../../data/submissionsStore";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
+import { InfoTooltip } from "../components/help/InfoTooltip";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -136,9 +138,12 @@ function StatusBadge({ status }: { status: "live" | "draft" }) {
     );
   }
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-      Draft
-    </span>
+    <div className="inline-flex items-center gap-1">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+        Draft
+      </span>
+      <InfoTooltip text="Draft forms don't accept public submissions yet." />
+    </div>
   );
 }
 
@@ -1279,6 +1284,7 @@ export default function WebForms() {
     sessionStorage.setItem("clients", JSON.stringify(clients));
   }, [clients]);
 
+  const [showHelp, setShowHelp] = useState(false);
   const [mainTab, setMainTab] = useState<"submissions" | "forms">("forms");
   const [drawerForm, setDrawerForm] = useState<Form | null>(null);
   const [drawerFlow, setDrawerFlow] = useState<IntakeFlow | null>(null);
@@ -1761,18 +1767,21 @@ export default function WebForms() {
               Web Forms
             </h1>
             <p className="text-base" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-              Embeddable forms that route into your AI brain. Each submission becomes a contact and triggers any matching sequence.
+              Collect leads from your website and turn every submission into a client automatically
             </p>
           </div>
-          <Button
-            variant="primary"
-            onClick={() => navigate("/web-forms/new")}
-            className="flex items-center gap-2 bg-black hover:bg-black/90 text-white px-4 py-2.5 rounded-lg text-sm font-semibold shrink-0 mt-1"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            <Plus className="w-4 h-4" />
-            New form
-          </Button>
+          <div className="flex items-center gap-3 shrink-0 mt-1">
+            <HowItWorksButton onClick={() => setShowHelp(true)} label="How Web Forms Works" />
+            <Button
+              variant="primary"
+              onClick={() => navigate("/web-forms/new")}
+              className="flex items-center gap-2 bg-black hover:bg-black/90 text-white px-4 py-2.5 rounded-lg text-sm font-semibold"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Plus className="w-4 h-4" />
+              New form
+            </Button>
+          </div>
         </div>
 
         {/* Stats Cards — thin capsule style */}
@@ -2924,6 +2933,19 @@ export default function WebForms() {
 
         </div>
       )}
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Web Forms Works"
+        summary="Web Forms are embeddable forms you can drop on any page. Every submission can automatically create a client and enroll them in a process."
+        bullets={[
+          "Start from a template or build a form from scratch",
+          "Turn on 'Auto-create client' to skip manual data entry",
+          "Track submissions and which ones became clients",
+          "Test a form end-to-end before publishing (via the test harness)",
+        ]}
+      />
     </div>
   );
 }

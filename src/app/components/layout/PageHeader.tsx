@@ -5,9 +5,10 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   children?: ReactNode;
+  actions?: ReactNode;
 }
 
-export default function PageHeader({ title, subtitle, children }: PageHeaderProps) {
+export default function PageHeader({ title, subtitle, children, actions }: PageHeaderProps) {
   return (
     <div className="flex items-start justify-between mb-6">
       <div>
@@ -15,6 +16,7 @@ export default function PageHeader({ title, subtitle, children }: PageHeaderProp
         {subtitle && <p className="text-muted-foreground mt-1">{subtitle}</p>}
       </div>
       <div className="flex items-center gap-3">
+        {actions}
         {children}
         <OrganizationSwitcher />
       </div>
