@@ -3533,6 +3533,10 @@ export default function Deals() {
 
           {importMethod === "api" && (
             <>
+              <p className="text-sm text-muted-foreground">
+                Connect to an external API to pull {entityLabel} directly into your account.
+              </p>
+
               {customApiIntegrations.length === 0 ? (
                 <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
                   <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -3605,6 +3609,9 @@ export default function Deals() {
 
           {importMethod === "webhook" && (
             <div className="space-y-5">
+              <p className="text-sm text-muted-foreground">
+                Use a webhook URL to automatically create single {entityLabel} whenever an external system sends data to it.
+              </p>
 
               {/* Unified URL container */}
               <div>

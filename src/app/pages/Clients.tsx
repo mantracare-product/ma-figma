@@ -676,10 +676,10 @@ export default function Clients() {
             ) : (
               <span
                 className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${client.status === "Active"
-                    ? "bg-success-bg text-success"
-                    : client.status === "Pending"
-                      ? "bg-warning-bg text-warning"
-                      : "bg-muted text-muted-foreground"
+                  ? "bg-success-bg text-success"
+                  : client.status === "Pending"
+                    ? "bg-warning-bg text-warning"
+                    : "bg-muted text-muted-foreground"
                   }`}
               >
                 {client.status}
@@ -1416,8 +1416,8 @@ export default function Clients() {
                             <div className="space-y-1.5">
                               <button
                                 className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 0 && searchQuery === ''
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted text-foreground'
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'hover:bg-muted text-foreground'
                                   }`}
                                 style={{ fontFamily: 'Outfit, sans-serif' }}
                                 onClick={() => {
@@ -1436,8 +1436,8 @@ export default function Clients() {
                               </button>
                               <button
                                 className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Active'
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted text-foreground'
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'hover:bg-muted text-foreground'
                                   }`}
                                 style={{ fontFamily: 'Outfit, sans-serif' }}
                                 onClick={() => {
@@ -1455,8 +1455,8 @@ export default function Clients() {
                               </button>
                               <button
                                 className={`w-full text-left px-4 py-3 text-sm rounded-lg transition-colors font-medium ${activeFilters.length === 1 && activeFilters[0]?.field === 'status' && activeFilters[0]?.values.length === 1 && activeFilters[0]?.values[0] === 'Inactive'
-                                    ? 'bg-primary/10 text-primary'
-                                    : 'hover:bg-muted text-foreground'
+                                  ? 'bg-primary/10 text-primary'
+                                  : 'hover:bg-muted text-foreground'
                                   }`}
                                 style={{ fontFamily: 'Outfit, sans-serif' }}
                                 onClick={() => {
@@ -2870,8 +2870,8 @@ export default function Clients() {
                     <tr
                       key={client.id}
                       className={`transition-colors ${selectedRows.has(client.id)
-                          ? "bg-[#E8F0FE]"
-                          : "hover:bg-[#F1F5F9]"
+                        ? "bg-[#E8F0FE]"
+                        : "hover:bg-[#F1F5F9]"
                         }`}
                     >
                       {/* Checkbox column */}
@@ -3536,8 +3536,8 @@ export default function Clients() {
                   const tooltipText = method === "csv"
                     ? "Import clients by uploading a standard CSV file."
                     : method === "api"
-                    ? "Fetch and import clients directly from your connected external API."
-                    : "Get a URL you can call from an external system to create clients automatically.";
+                      ? "Fetch and import clients directly from your connected external API."
+                      : "Get a URL you can call from an external system to create clients automatically.";
                   return (
                     <div key={method} className="flex items-center gap-0.5 px-1">
                       <button
@@ -3580,8 +3580,8 @@ export default function Clients() {
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
                       className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
-                          ? "border-primary bg-primary/5"
-                          : "border-border bg-input-background"
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-input-background"
                         }`}
                     >
                       <input
@@ -3624,6 +3624,10 @@ export default function Clients() {
 
               {importMethod === "api" && (
                 <>
+                  <p className="text-sm text-muted-foreground">
+                    Connect to an external API to pull {entityLabel} directly into your account.
+                  </p>
+
                   {customApiIntegrations.length === 0 ? (
                     <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
                       <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
@@ -3696,6 +3700,9 @@ export default function Clients() {
 
               {importMethod === "webhook" && (
                 <div className="space-y-5">
+                  <p className="text-sm text-muted-foreground">
+                    Use a webhook URL to automatically create a single {entityLabel} whenever an external system sends data to it.
+                  </p>
 
                   {/* Unified URL container */}
                   <div>
@@ -3974,10 +3981,10 @@ export default function Clients() {
                                       onClick={() => !isPast && setScheduledDate(dateString)}
                                       disabled={isPast}
                                       className={`aspect-square flex items-center justify-center text-[13px] transition-colors ${isSelected || isToday
-                                          ? "bg-blue-600 text-white rounded-full font-semibold"
-                                          : isPast
-                                            ? "text-gray-300 cursor-not-allowed"
-                                            : "text-gray-700 hover:bg-blue-100 rounded-full"
+                                        ? "bg-blue-600 text-white rounded-full font-semibold"
+                                        : isPast
+                                          ? "text-gray-300 cursor-not-allowed"
+                                          : "text-gray-700 hover:bg-blue-100 rounded-full"
                                         }`}
                                     >
                                       {day}
