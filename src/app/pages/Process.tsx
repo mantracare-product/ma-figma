@@ -525,7 +525,7 @@ export default function Process() {
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
   const [activeTab, setActiveTab] = useState<string>("basic");
   const [expandedProcesses, setExpandedProcesses] = useState<string[]>(["1"]); // Expand Patient Intake by default
-  const [selectedAIModel, setSelectedAIModel] = useState("Smartest");
+  const [selectedAIModel, setSelectedAIModel] = useState("Gemini 2.5 Flash");
   const [aiModelExpanded, setAiModelExpanded] = useState(false);
   const [stageVoiceSpeed, setStageVoiceSpeed] = useState<number>(1.0);
   const [stageVoice, setStageVoice] = useState<string>("Ava");
@@ -2281,19 +2281,9 @@ export default function Process() {
                                     onChange={(e) => handleUpdateProcessAI("platform", e.target.value)}
                                     className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
                                   >
-                                    {activeProviders.length > 0 ? (
-                                      activeProviders.map((provider) => (
-                                        <option key={provider.id} value={`${provider.name} - ${provider.selectedModel}`}>
-                                          {provider.name} - {provider.selectedModel}
-                                        </option>
-                                      ))
-                                    ) : (
-                                      <>
-                                        <option>OpenAI</option>
-                                        <option>Google Gemini</option>
-                                        <option>Claude</option>
-                                      </>
-                                    )}
+                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
+                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
+                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
                                   </select>
                                 </div>
 
@@ -2375,7 +2365,6 @@ export default function Process() {
                                       <option value="Balanced">Balanced</option>
                                       <option value="Concise">Concise</option>
                                       <option value="Detailed">Detailed</option>
-                                      <option value="Humorous">Humorous</option>
                                     </select>
                                   </div>
                                 </div>
@@ -2910,17 +2899,6 @@ export default function Process() {
 
                           {/* Save & Apply Options */}
                           <div className="mt-6 pt-4 border-t border-gray-200 flex flex-col gap-4">
-                            <label className="flex items-center gap-3 cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={applyAdvancedSettingsToAllStages}
-                                onChange={(e) => setApplyAdvancedSettingsToAllStages(e.target.checked)}
-                                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                              />
-                              <span className="text-sm font-medium text-gray-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Apply changes to all stages
-                              </span>
-                            </label>
                             <div className="flex justify-end gap-3">
                               <button
                                 type="button"
@@ -2934,7 +2912,7 @@ export default function Process() {
                                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-sm transition-colors"
                                 style={{ fontFamily: 'DM Sans, sans-serif' }}
                               >
-                                Save Advanced Settings
+                                Apply to All Stages
                               </button>
                             </div>
                           </div>
@@ -3994,9 +3972,9 @@ export default function Process() {
                                     className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
                                     style={{ fontFamily: 'Outfit, sans-serif' }}
                                   >
-                                    <option value="Smartest">Smartest: Deep reasoning for complex conversations</option>
-                                    <option value="Balanced">Balanced: Swift and Intelligent</option>
-                                    <option value="Express">Express: Lightweight and Fast</option>
+                                    <option value="Gemini 2.5 Flash">Gemini 2.5 Flash</option>
+                                    <option value="GPT-4o Mini">GPT-4o Mini</option>
+                                    <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
                                   </select>
                                 </div>
 
@@ -4077,7 +4055,6 @@ export default function Process() {
                                       <option value="Balanced">Balanced</option>
                                       <option value="Concise">Concise</option>
                                       <option value="Detailed">Detailed</option>
-                                      <option value="Humorous">Humorous</option>
                                     </select>
                                   </div>
                                 </div>
