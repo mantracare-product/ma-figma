@@ -53,6 +53,7 @@ interface Client {
   companyName?: string;
   jobPosition?: string;
   numberOfEmployees?: string;
+  location?: string;
 }
 
 interface Deal {

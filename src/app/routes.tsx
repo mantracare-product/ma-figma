@@ -57,12 +57,8 @@ export const router = createBrowserRouter([
           { path: "web-forms", Component: WebForms },
           { path: "web-forms/new", Component: NewFormTemplate },
           { path: "web-forms/builder", Component: FormBuilder },
-          ...(import.meta.env.DEV
-            ? [
-                { path: "web-forms/test", Component: WebFormsTest },
-                { path: "web-forms/test/:formId", Component: WebFormsTest },
-              ]
-            : []),
+          { path: "web-forms/test", Component: WebFormsTest },
+          { path: "web-forms/test/:formId", Component: WebFormsTest },
           { path: "organizations", Component: Organizations },
           { path: "users", Component: UserManagement },
           { path: "payments", Component: Payments },

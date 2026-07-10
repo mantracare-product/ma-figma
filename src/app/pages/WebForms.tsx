@@ -2013,11 +2013,9 @@ export default function WebForms() {
                                     <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
                                       <Share2 className="w-4 h-4 text-muted-foreground" />Share
                                     </button>
-                                    {import.meta.env.DEV && (
-                                      <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
-                                        <FlaskConical className="w-4 h-4" style={{ color: "#3B82F6" }} />Test
-                                      </button>
-                                    )}
+                                    <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
+                                      <FlaskConical className="w-4 h-4" style={{ color: "#3B82F6" }} />Test
+                                    </button>
                                     <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
                                       <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
                                     </button>

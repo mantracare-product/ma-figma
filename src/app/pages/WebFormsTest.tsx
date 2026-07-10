@@ -1,7 +1,7 @@
 /**
- * WebFormsTest — DEV-ONLY test harness for the Web Forms submission pipeline.
+ * WebFormsTest — internal test harness for the Web Forms submission pipeline.
  * Accessible at /web-forms/test  and  /web-forms/test/:formId
- * Gated by import.meta.env.DEV in routes.tsx — never shipped in production.
+ * Available in all builds (this project is a prototype — not gated by environment).
  */
 
 import React, { useState, useEffect } from "react";
@@ -29,6 +29,7 @@ interface Client {
   stage: string;
   lastContact: string;
   status: string;
+  location?: string;
 }
 
 interface SubmitResult {
@@ -474,12 +475,12 @@ export default function WebFormsTest() {
                 Form Test Harness
               </h1>
               <p className="text-xs mt-0.5" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                DEV ONLY — tests submission &amp; client auto-creation pipeline
+                Tests submission &amp; client auto-creation pipeline
               </p>
             </div>
           </div>
           <div className="ml-auto">
-            <Badge label="Development Mode" color="blue" />
+            <Badge label="Internal Tool" color="blue" />
           </div>
         </div>
       </div>
