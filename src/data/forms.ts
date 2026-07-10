@@ -1,8 +1,11 @@
 export type FieldDef = {
   label: string;
-  type: "text" | "email" | "tel" | "textarea" | "number" | "url" | "select";
+  type: "text" | "email" | "tel" | "textarea" | "number" | "url" | "select" | "radio" | "date" | "time" | "toggle";
   placeholder?: string;
   required?: boolean;
+  options?: { label: string; value: string }[];
+  sourceType?: "system" | "custom";
+  sourceFieldKey?: string;
 };
 
 export type Form = {
@@ -17,6 +20,10 @@ export type Form = {
   enabled: boolean;
   description: string;
   createdAt: string;
+  lastUpdated?: string;
+  autoCreateClient?: boolean;
+  autoCreateProcessId?: string;
+  autoCreateStageId?: string;
 };
 
 export const INITIAL_FORMS: Form[] = [

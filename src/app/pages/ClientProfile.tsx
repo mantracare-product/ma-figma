@@ -15,12 +15,13 @@ import {
 } from "../components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { Form, INITIAL_FORMS } from "../../data/forms";
-import { CLIENT_FORM_SUBMISSIONS } from "../../data/clientFormSubmissions";
+import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
+import { useClientFields } from "../context/ClientFieldsContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Client {
+export interface Client {
   id: string;
   name: string;
   email: string;
@@ -40,7 +41,7 @@ interface Client {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
-const initialClients: Client[] = [
+export const initialClients: Client[] = [
   { id: "CL-001", name: "Sarah Johnson", email: "sarah.j@email.com", phone: "5551234567", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake", "Follow-up Calls"], stage: "Insurance Verification", responsible: "John Smith", lastContact: "2024-04-10", status: "Active", companyName: "TechCorp Inc.", jobPosition: "Senior Manager", numberOfEmployees: "101-250" },
   { id: "CL-002", name: "Michael Chen", email: "mchen@email.com", phone: "5552345678", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Patient Intake"], stage: "Initial Contact", responsible: "Sarah Johnson", lastContact: "2024-04-09", status: "Active", companyName: "Innovate Solutions", jobPosition: "Product Manager", numberOfEmployees: "51-100" },
   { id: "CL-003", name: "Emily Davis", email: "emily.d@email.com", phone: "5553456789", country: "US", countryCode: "+1", countryFlag: "🇺🇸", processes: ["Follow-up Calls", "Billing Support"], stage: "Billing Inquiry", responsible: "Michael Chen", lastContact: "2024-04-11", status: "Active", companyName: "Healthcare Plus", jobPosition: "Director of Operations", numberOfEmployees: "251-500" },
@@ -241,12 +242,52 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const navigate = useNavigate();
   const location = useLocation();
 
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  // Clients list — backed by sessionStorage so WebForms can read updated client data
+  const [clients, setClients] = useState<Client[]>(() => {
+    try {
+      const saved = sessionStorage.getItem("clients");
+      return saved ? JSON.parse(saved) : initialClients;
+    } catch {
+      return initialClients;
+    }
+  });
   const client = clients.find((c) => c.id === id) ?? null;
+
+  // Persist any client mutations back to sessionStorage
+  useEffect(() => {
+    sessionStorage.setItem("clients", JSON.stringify(clients));
+  }, [clients]);
+
+  // Custom field definitions from shared context (same ones Settings.tsx manages)
+  const { customFieldsClients: customFieldDefinitions, addCustomField } = useClientFields();
 
   const handleClose = () => {
     if (onCloseOverride) onCloseOverride();
     else navigate("/clients");
+  };
+
+  const handleSaveChanges = () => {
+    if (!client) return;
+    const updatedClient: Client = {
+      ...client,
+      name: clientName,
+      email: clientEmail,
+      phone: clientPhone,
+      companyName: clientCompany,
+      jobPosition: clientRole,
+      status: clientStatus,
+      processes: selectedProcesses,
+    };
+
+    customFields.forEach((field) => {
+      const def = customFieldDefinitions.find((d) => d.label === field.name);
+      if (def) {
+        (updatedClient as any)[def.key] = field.value || "—";
+      }
+    });
+
+    setClients((prev) => prev.map((c) => (c.id === client.id ? updatedClient : c)));
+    toast.success("Changes saved successfully");
   };
 
   // All state variables verbatim from Clients.tsx drawer
@@ -276,6 +317,38 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [fieldNameError, setFieldNameError] = useState(false);
   const [fieldTypeError, setFieldTypeError] = useState(false);
   const [customFields, setCustomFields] = useState<Array<{ name: string; value: string; type?: string }>>([]);
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [clientCompany, setClientCompany] = useState("");
+  const [clientRole, setClientRole] = useState("");
+  const [clientStatus, setClientStatus] = useState("");
+
+  // Sync client profile values and custom field values
+  useEffect(() => {
+    if (client) {
+      setClientName(client.name || "");
+      setClientEmail(client.email || "");
+      setClientPhone(client.phone || "");
+      setClientCompany(client.companyName || "");
+      setClientRole(client.jobPosition || "");
+      setClientStatus(client.status || "");
+
+      const relevantDefinitions = customFieldDefinitions.filter((def) => {
+        const hasValue = (client as any)[def.key] !== undefined && (client as any)[def.key] !== "" && (client as any)[def.key] !== "—";
+        const showAlways = def.showAlways !== false;
+        return showAlways || hasValue;
+      });
+
+      const mapped = relevantDefinitions.map((def) => ({
+        name: def.label,
+        value: (client as any)[def.key] || "—",
+        type: def.type,
+      }));
+      setCustomFields(mapped);
+    }
+  }, [id, client, customFieldDefinitions]);
+
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>([]);
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
   const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
@@ -490,8 +563,21 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const selectedDrawerProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
 
-  const clientSubmissions = CLIENT_FORM_SUBMISSIONS.filter(s => s.clientId === client.id);
-  const groupedSubmissions = INITIAL_FORMS.map(form => {
+  const allSubmissions = loadClientSubmissions();
+
+  // Load forms dynamically from sessionStorage (falls back to static seed) so
+  // forms created/edited in the Form Builder are visible here too.
+  const allForms: Form[] = (() => {
+    try {
+      const saved = sessionStorage.getItem("webForms");
+      return saved ? JSON.parse(saved) : INITIAL_FORMS;
+    } catch {
+      return INITIAL_FORMS;
+    }
+  })();
+
+  const clientSubmissions = allSubmissions.filter(s => s.clientId === client.id);
+  const groupedSubmissions = allForms.map(form => {
     const subs = clientSubmissions.filter(s => s.formId === form.id);
     return { form, subs };
   }).filter(group => group.subs.length > 0);
@@ -501,7 +587,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     form: Form | undefined;
     done: boolean;
     completedOn?: string;
-    submission?: (typeof CLIENT_FORM_SUBMISSIONS)[number];
+    submission?: ReturnType<typeof loadClientSubmissions>[number];
   };
 
   type ClientFlowProgress = {
@@ -514,7 +600,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const clientFlowProgress: ClientFlowProgress[] = INITIAL_FLOWS.map(flow => {
     const steps: FlowStepProgress[] = flow.steps.map(step => {
-      const form = INITIAL_FORMS.find(f => f.id === step.formId);
+      const form = allForms.find(f => f.id === step.formId);
       const subsForStep = clientSubmissions.filter(s => s.formId === step.formId);
       const sorted = subsForStep
         .slice()
@@ -540,7 +626,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setFormsTabMode("forms");
       setExpandedFormGroupId(state.formId);
 
-      const matchingSub = CLIENT_FORM_SUBMISSIONS.find(
+      const matchingSub = allSubmissions.find(
         s => s.clientId === id && s.formId === state.formId && (!state.submissionDate || s.submittedAt === state.submissionDate)
       );
       if (matchingSub) {
@@ -673,7 +759,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="text"
-                      defaultValue={client.name}
+                      value={clientName}
+                      onChange={(e) => setClientName(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -687,7 +774,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       STATUS
                     </label>
                     <select
-                      defaultValue={client.status}
+                      value={clientStatus}
+                      onChange={(e) => setClientStatus(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -778,7 +866,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="email"
-                      defaultValue={client.email}
+                      value={clientEmail}
+                      onChange={(e) => setClientEmail(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -793,7 +882,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="tel"
-                      defaultValue={client.phone}
+                      value={clientPhone}
+                      onChange={(e) => setClientPhone(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -808,11 +898,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="text"
-                      defaultValue="New York, NY"
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      value="New York, NY"
+                      disabled
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all opacity-70 cursor-not-allowed"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
                     />
                   </div>
 
@@ -823,7 +912,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="text"
-                      defaultValue={client.companyName || ""}
+                      value={clientCompany}
+                      onChange={(e) => setClientCompany(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -838,7 +928,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     </label>
                     <input
                       type="text"
-                      defaultValue={client.jobPosition || ""}
+                      value={clientRole}
+                      onChange={(e) => setClientRole(e.target.value)}
                       className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                       style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                       onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -854,7 +945,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       </label>
                       <input
                         type="text"
-                        defaultValue={field.value}
+                        value={field.value === "—" ? "" : field.value}
+                        onChange={(e) => {
+                          const updated = [...customFields];
+                          updated[index].value = e.target.value;
+                          setCustomFields(updated);
+                        }}
                         className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
                         style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
                         onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
@@ -894,7 +990,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 {/* Save / Discard Buttons */}
                 <div className="flex gap-3 pt-6 mt-6">
                   <button
-                    onClick={() => toast.success("Changes saved successfully")}
+                    onClick={handleSaveChanges}
                     className="flex-1 py-3 text-white font-bold rounded transition-colors hover:opacity-90"
                     style={{ backgroundColor: "#4F8EF7", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
                   >
@@ -1015,7 +1111,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           onClick={() => {
                             if (!newFieldName.trim()) { setFieldNameError(true); return; }
                             if (!newFieldType) { setFieldTypeError(true); return; }
+                            // Add to local display
                             setCustomFields([...customFields, { name: newFieldName, value: "", type: newFieldType }]);
+                            // Persist definition globally via context
+                            const key = newFieldName.toLowerCase().replace(/\s+/g, "_");
+                            addCustomField({ label: newFieldName, key, type: newFieldType.toUpperCase(), required: false });
                             setShowCreateField(false);
                             setNewFieldName(""); setNewFieldType(""); setSelectedFieldType(null);
                             setFieldNameError(false); setFieldTypeError(false);
@@ -1817,7 +1917,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     {/* Expanded Inline Panel */}
                                     {isExpanded && (
                                       <div className="mt-3 space-y-3 pt-3 border-t border-border">
-                                        {Object.entries(submission.fields).map(([label, value]) => (
+                                        {Object.entries(submission.fields).map(([label, value]: [string, string]) => (
                                           <div key={label} className="bg-gray-50 rounded-xl p-4">
                                             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                                               {label}
@@ -1930,7 +2030,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
                                         {isStepExpanded && submission && (
                                           <div className="mt-3 space-y-3 pt-3 border-t border-border">
-                                            {Object.entries(submission.fields).map(([label, value]) => (
+                                            {Object.entries(submission.fields).map(([label, value]: [string, string]) => (
                                               <div key={label} className="bg-white rounded-xl p-4 border border-border/60">
                                                 <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                                                   {label}

@@ -6,6 +6,7 @@ import { HowItWorksProvider } from "./context/HowItWorksContext";
 import { OrganizationProvider } from "./context/OrganizationContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SidebarProvider } from "./context/SidebarContext";
+import { ClientFieldsProvider } from "./context/ClientFieldsContext";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -18,8 +19,10 @@ export default function App() {
             <OrganizationProvider>
               <HowItWorksProvider>
                 <AIProviderProvider>
-                  <RouterProvider router={router} />
-                  <Toaster position="bottom-right" />
+                  <ClientFieldsProvider>
+                    <RouterProvider router={router} />
+                    <Toaster position="bottom-right" />
+                  </ClientFieldsProvider>
                 </AIProviderProvider>
               </HowItWorksProvider>
             </OrganizationProvider>

@@ -8,6 +8,7 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
+import { useClientFields } from "../context/ClientFieldsContext";
 import {
   Save,
   Plus,
@@ -145,6 +146,7 @@ interface CustomField {
   key: string;
   type: string;
   required: boolean;
+  showAlways?: boolean;
 }
 
 interface PhoneNumber {
@@ -1181,12 +1183,8 @@ export default function Settings() {
     }
   }, [location.state, navigate]);
 
-  // Custom Fields State - separate for each tab
-  const [customFieldsClients, setCustomFieldsClients] = useState<CustomField[]>([
-    { id: 1, label: "Patient ID", key: "patient_id", type: "TEXT", required: true },
-    { id: 2, label: "Insurance Provider", key: "insurance_provider", type: "DROPDOWN", required: false },
-    { id: 3, label: "Appointment Date", key: "appointment_date", type: "DATE", required: true },
-  ]);
+  // Custom Fields State — clients tab comes from shared context; others are local
+  const { customFieldsClients, setCustomFieldsClients } = useClientFields();
   const [customFieldsCallLogs, setCustomFieldsCallLogs] = useState<CustomField[]>([]);
   const [customFieldsProcesses, setCustomFieldsProcesses] = useState<CustomField[]>([]);
   const [customFieldsForms, setCustomFieldsForms] = useState<CustomField[]>([]);
@@ -11441,6 +11439,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                         key: key,
                         type: newFieldData.type.toUpperCase(),
                         required: newFieldData.required,
+                        showAlways: true,
                       };
                       setCurrentFields([...currentFields, newField]);
                       setShowAddFieldModal(false);

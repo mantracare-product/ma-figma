@@ -11,6 +11,7 @@ import Process from "./pages/Process";
 import WebForms from "./pages/WebForms";
 import NewFormTemplate from "./pages/NewFormTemplate";
 import FormBuilder from "./pages/FormBuilder";
+import WebFormsTest from "./pages/WebFormsTest";
 import Organizations from "./pages/Organizations";
 import UserManagement from "./pages/UserManagement";
 import Payments from "./pages/Payments";
@@ -56,6 +57,12 @@ export const router = createBrowserRouter([
           { path: "web-forms", Component: WebForms },
           { path: "web-forms/new", Component: NewFormTemplate },
           { path: "web-forms/builder", Component: FormBuilder },
+          ...(import.meta.env.DEV
+            ? [
+                { path: "web-forms/test", Component: WebFormsTest },
+                { path: "web-forms/test/:formId", Component: WebFormsTest },
+              ]
+            : []),
           { path: "organizations", Component: Organizations },
           { path: "users", Component: UserManagement },
           { path: "payments", Component: Payments },

@@ -17,6 +17,7 @@ import {
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
 import { StageProgressBar } from "../components/StageProgressBar";
+import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
 
 interface Client {
   id: string;
@@ -129,7 +130,18 @@ const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ columnKey
 
 export default function Clients() {
   const navigate = useNavigate();
-  const [clients, setClients] = useState<Client[]>(initialClients);
+  const [clients, setClients] = useState<Client[]>(() => {
+    const saved = sessionStorage.getItem("clients");
+    return saved ? JSON.parse(saved) : initialClients;
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("clients", JSON.stringify(clients));
+  }, [clients]);
+
+  const [modalProcess, setModalProcess] = useState("");
+  const [modalStage, setModalStage] = useState("");
+
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -360,69 +372,7 @@ export default function Clients() {
     "Insurance Verification": ["Initial Contact", "Document Check", "Verification", "Approval"],
   };
 
-  const availableProcesses = [
-    "Patient Intake",
-    "Follow-up Calls",
-    "Billing Support",
-    "Appointment Scheduling",
-    "Insurance Verification"
-  ];
-
-  // Stages for StageProgressBar component
-  const getStagesForProcess = (processName: string) => {
-    const stageMapping: { [key: string]: Array<{ id: string; label: string; fullLabel?: string; category: string }> } = {
-      "Patient Intake": [
-        { id: "1", label: "Initial Contact", fullLabel: "Patient Intake: Initial Contact", category: "Patient Intake" },
-        { id: "2", label: "Insurance Verification", fullLabel: "Patient Intake: Insurance Verification", category: "Patient Intake" },
-        { id: "3", label: "Appointment Scheduled", fullLabel: "Patient Intake: Appointment Scheduled", category: "Patient Intake" },
-        { id: "4", label: "Completed", fullLabel: "Patient Intake: Completed", category: "Patient Intake" },
-      ],
-      "Follow-up Calls": [
-        { id: "1", label: "Initial Contact", fullLabel: "Follow-up Calls: Initial Contact", category: "Follow-up Calls" },
-        { id: "2", label: "Post-Visit Check", fullLabel: "Follow-up Calls: Post-Visit Check", category: "Follow-up Calls" },
-        { id: "3", label: "Medication Reminder", fullLabel: "Follow-up Calls: Medication Reminder", category: "Follow-up Calls" },
-        { id: "4", label: "Completed", fullLabel: "Follow-up Calls: Completed", category: "Follow-up Calls" },
-      ],
-      "Billing Support": [
-        { id: "1", label: "Initial Contact", fullLabel: "Billing Support: Initial Contact", category: "Billing Support" },
-        { id: "2", label: "Billing Inquiry", fullLabel: "Billing Support: Billing Inquiry", category: "Billing Support" },
-        { id: "3", label: "Issue Resolution", fullLabel: "Billing Support: Issue Resolution", category: "Billing Support" },
-        { id: "4", label: "Payment Reminder", fullLabel: "Billing Support: Payment Reminder", category: "Billing Support" },
-      ],
-      "Appointment Scheduling": [
-        { id: "1", label: "Initial Contact", fullLabel: "Appointment Scheduling: Initial Contact", category: "Appointment Scheduling" },
-        { id: "2", label: "Slot Selection", fullLabel: "Appointment Scheduling: Slot Selection", category: "Appointment Scheduling" },
-        { id: "3", label: "Confirmation", fullLabel: "Appointment Scheduling: Confirmation", category: "Appointment Scheduling" },
-        { id: "4", label: "Completed", fullLabel: "Appointment Scheduling: Completed", category: "Appointment Scheduling" },
-      ],
-      "Insurance Verification": [
-        { id: "1", label: "Initial Contact", fullLabel: "Insurance Verification: Initial Contact", category: "Insurance Verification" },
-        { id: "2", label: "Document Check", fullLabel: "Insurance Verification: Document Check", category: "Insurance Verification" },
-        { id: "3", label: "Verification", fullLabel: "Insurance Verification: Verification", category: "Insurance Verification" },
-        { id: "4", label: "Approval", fullLabel: "Insurance Verification: Approval", category: "Insurance Verification" },
-      ],
-    };
-    return stageMapping[processName] || stageMapping["Patient Intake"];
-  };
-
-  // Combined stages for Add New Client modal and process editing
-  const combinedStages = [
-    "Patient Intake: Initial Contact",
-    "Patient Intake: Insurance Verify",
-    "Patient Intake: Schedule Appointment",
-    "Follow-up Calls: Post-Visit Check",
-    "Follow-up Calls: Medication Reminder",
-    "Billing Support: Initial Contact",
-    "Billing Support: Billing Inquiry",
-    "Billing Support: Issue Resolution",
-    "Billing Support: Payment Reminder",
-    "Appointment Scheduling: Initial Contact",
-    "Appointment Scheduling: Slot Selection",
-    "Appointment Scheduling: Confirmation",
-    "Insurance Verification: Initial Contact",
-    "Insurance Verification: Document Check",
-    "Insurance Verification: Verification",
-  ];
+  // Shared process/stage helpers imported from ProcessStageSelect
 
   // Team members / Employees list
   const teamMembers = [
@@ -3285,32 +3235,26 @@ export default function Clients() {
                   )}
 
                   {/* Dropdown to add stages */}
-                  <div className="relative">
-                    <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                    </svg>
-                    <select
-                      value=""
-                      onChange={(e) => {
-                        if (e.target.value && !newClient.stage.includes(e.target.value)) {
-                          setNewClient({
-                            ...newClient,
-                            stage: [...newClient.stage, e.target.value],
-                          });
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <ProcessStageSelect
+                      selectedProcess={modalProcess}
+                      selectedStage={modalStage}
+                      onProcessChange={setModalProcess}
+                      onStageChange={(stage) => {
+                        setModalStage(stage);
+                        if (modalProcess && stage) {
+                          const fullLabel = `${modalProcess}: ${stage}`;
+                          if (!newClient.stage.includes(fullLabel)) {
+                            setNewClient({
+                              ...newClient,
+                              stage: [...newClient.stage, fullLabel],
+                            });
+                          }
+                          setModalStage("");
                         }
                       }}
-                      className="w-full pl-11 pr-4 py-3 bg-input-background border-2 border-input rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      <option value="">Select stage to add...</option>
-                      {combinedStages
-                        .filter((stage) => !newClient.stage.includes(stage))
-                        .map((stage) => (
-                          <option key={stage} value={stage}>
-                            {stage}
-                          </option>
-                        ))}
-                    </select>
+                      theme="crm"
+                    />
                   </div>
                 </div>
               </div>

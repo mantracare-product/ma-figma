@@ -27,7 +27,15 @@ interface FormSettingsProps {
   onDescriptionChange: (description: string) => void;
   onPreview: () => void;
   onPublish: () => void;
+  autoCreateClient: boolean;
+  onAutoCreateClientChange: (val: boolean) => void;
+  autoCreateProcessId: string;
+  onAutoCreateProcessIdChange: (val: string) => void;
+  autoCreateStageId: string;
+  onAutoCreateStageIdChange: (val: string) => void;
 }
+
+import ProcessStageSelect from "../ui/ProcessStageSelect";
 
 export default function FormSettings({
   formTitle,
@@ -36,6 +44,12 @@ export default function FormSettings({
   onDescriptionChange,
   onPreview,
   onPublish,
+  autoCreateClient,
+  onAutoCreateClientChange,
+  autoCreateProcessId,
+  onAutoCreateProcessIdChange,
+  autoCreateStageId,
+  onAutoCreateStageIdChange,
 }: FormSettingsProps) {
   const [activeTab, setActiveTab] = useState<string>("general");
   const [autosaveEnabled, setAutosaveEnabled] = useState(true);
@@ -208,6 +222,44 @@ export default function FormSettings({
                   <option>Europe/London (GMT)</option>
                   <option>Asia/Tokyo (JST)</option>
                 </select>
+              </div>
+
+              <div className="pt-4 border-t border-gray-200 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>
+                      Create Submitter as Client Profile
+                    </label>
+                    <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Automatically create a new client record in the CRM if the submitter's email or phone doesn't match an existing client.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onAutoCreateClientChange(!autoCreateClient)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ${
+                      autoCreateClient ? "bg-primary" : "bg-gray-200"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        autoCreateClient ? "translate-x-6" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {autoCreateClient && (
+                  <div className="p-4 bg-gray-50 rounded-xl border border-gray-200">
+                    <ProcessStageSelect
+                      selectedProcess={autoCreateProcessId}
+                      selectedStage={autoCreateStageId}
+                      onProcessChange={onAutoCreateProcessIdChange}
+                      onStageChange={onAutoCreateStageIdChange}
+                      theme="standard"
+                    />
+                  </div>
+                )}
               </div>
               </div>
             </div>

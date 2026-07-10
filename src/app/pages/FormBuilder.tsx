@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { createPortal } from "react-dom";
-import { Plus, FileText, Sliders, X, Trash2, GripVertical, Settings as SettingsIcon, Minus, ChevronDown, Upload, Eye, EyeOff, Star, Calendar, Clock, MapPin, Code, Minus as MinusIcon, Palette, Copy, Zap } from "lucide-react";
+import { Plus, FileText, Sliders, X, Trash2, GripVertical, Settings as SettingsIcon, Minus, ChevronDown, Upload, Eye, EyeOff, Star, Calendar, Clock, MapPin, Code, Minus as MinusIcon, Palette, Copy, Zap, User, Mail, Phone, Tag, Hash, Link, ToggleLeft } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
 import FieldRenderer from "../components/form-builder/FieldRenderer";
 import FormSettings from "../components/form-builder/FormSettings";
+import { useClientFields } from "../context/ClientFieldsContext";
+import type { CustomField } from "../context/ClientFieldsContext";
+import { INITIAL_FORMS } from "../../data/forms";
 
 interface FieldOption {
   id: number;
@@ -27,6 +30,8 @@ interface FormField {
   options?: FieldOption[];
   allowOther?: boolean;
   defaultValue?: string;
+  sourceType?: "system" | "custom";
+  sourceFieldKey?: string;
 }
 
 interface Template {
@@ -252,6 +257,7 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
 export default function FormBuilder() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { systemFields, customFieldsClients, addCustomField } = useClientFields();
   const template = location.state?.template as Template | undefined;
   const existingForm = location.state?.form as {
     id: number;
@@ -260,8 +266,14 @@ export default function FormBuilder() {
     fields?: FormField[];
     submitButtonText?: string;
     status?: string;
+    autoCreateClient?: boolean;
+    autoCreateProcessId?: string;
+    autoCreateStageId?: string;
   } | undefined;
   const returnTo = location.state?.returnTo as { tab: string; flowId: number } | undefined;
+
+  // Stable formId for new or existing forms
+  const [formId] = useState(() => existingForm?.id ?? Date.now());
 
   const sidebarInputRef = useRef<HTMLInputElement>(null);
   const sidebarSelectRef = useRef<HTMLInputElement>(null);
@@ -291,6 +303,124 @@ export default function FormBuilder() {
     advanced: false,
     integrations: false,
   });
+
+  // Auto-create client state
+  const [autoCreateClient, setAutoCreateClient] = useState(existingForm?.autoCreateClient ?? false);
+  const [autoCreateProcessId, setAutoCreateProcessId] = useState(existingForm?.autoCreateProcessId ?? "");
+  const [autoCreateStageId, setAutoCreateStageId] = useState(existingForm?.autoCreateStageId ?? "");
+
+  // Inline custom field creation state
+  const [showInlineCreateField, setShowInlineCreateField] = useState(false);
+  const [inlineFieldLabel, setInlineFieldLabel] = useState("");
+  const [inlineFieldType, setInlineFieldType] = useState("TEXT");
+  const [inlineFieldRequired, setInlineFieldRequired] = useState(false);
+
+  // Collapsible sidebar sections
+  const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>({
+    system: true,
+    custom: true,
+    other: false,
+  });
+
+  const toggleSidebarSection = (section: string) => {
+    setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }));
+  };
+
+  // Smart type inference for system/custom fields
+  const inferFieldFromSystem = (sysKey: string): Partial<FormField> => {
+    if (sysKey === "email") return { type: "email", validation: "email" };
+    if (sysKey === "phone") return { type: "tel", validation: "phone" };
+    if (sysKey === "status" || sysKey === "processes") {
+      const sf = systemFields.find(f => f.key === sysKey);
+      return {
+        type: "select",
+        options: sf?.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) ?? [],
+      };
+    }
+    return { type: "text" };
+  };
+
+  const inferFieldFromCustom = (cf: CustomField): Partial<FormField> => {
+    const t = cf.type.toUpperCase();
+    if (t === "DATE") return { type: "date" };
+    if (t === "DATE_TIME" || t === "DATETIME") return { type: "time" };
+    if (t === "DROPDOWN" || t === "LIST") return { type: "select", options: [{ id: 1, label: "Option 1", value: "option_1" }, { id: 2, label: "Option 2", value: "option_2" }] };
+    if (t === "YES_NO" || t === "YESNO") return { type: "radio", options: [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] };
+    if (t === "NUMBER" || t === "MONEY") return { type: "number" };
+    if (t === "LINK" || t === "WHATSAPP_LINK") return { type: "url" };
+    return { type: "text" };
+  };
+
+  const handleAddSystemField = (key: string) => {
+    const sf = systemFields.find(f => f.key === key);
+    if (!sf) return;
+    const inferred = inferFieldFromSystem(key);
+    const newField: FormField = {
+      id: Date.now(),
+      name: sf.label,
+      type: inferred.type ?? "text",
+      placeholder: sf.placeholder,
+      required: false,
+      essential: ["name", "email", "phone"].includes(key),
+      label: sf.label,
+      helpText: "",
+      validation: inferred.validation ?? "",
+      options: inferred.options,
+      allowOther: false,
+      defaultValue: "",
+      sourceType: "system",
+      sourceFieldKey: key,
+    };
+    setFormFields(prev => [...prev, newField]);
+    setSelectedField(newField);
+    setShowFieldSettings(true);
+    toast.success(`${sf.label} field added`);
+  };
+
+  const handleAddCustomField = (cf: CustomField) => {
+    const inferred = inferFieldFromCustom(cf);
+    const newField: FormField = {
+      id: Date.now(),
+      name: cf.label,
+      type: inferred.type ?? "text",
+      placeholder: `Enter ${cf.label.toLowerCase()}`,
+      required: cf.required,
+      essential: false,
+      label: cf.label,
+      helpText: "",
+      validation: "",
+      options: inferred.options,
+      allowOther: false,
+      defaultValue: "",
+      sourceType: "custom",
+      sourceFieldKey: cf.key,
+    };
+    setFormFields(prev => [...prev, newField]);
+    setSelectedField(newField);
+    setShowFieldSettings(true);
+    toast.success(`${cf.label} field added`);
+  };
+
+  const handleInlineCreateField = () => {
+    if (!inlineFieldLabel.trim()) {
+      toast.error("Please enter a field name");
+      return;
+    }
+    const newCf = addCustomField({
+      label: inlineFieldLabel.trim(),
+      key: inlineFieldLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+      type: inlineFieldType,
+      required: inlineFieldRequired,
+      showAlways: false,
+      sourceFormId: formId,
+    });
+    setInlineFieldLabel("");
+    setInlineFieldType("TEXT");
+    setInlineFieldRequired(false);
+    setShowInlineCreateField(false);
+    handleAddCustomField(newCf);
+    toast.success(`Custom field "${newCf.label}" created and added`);
+  };
 
   useEffect(() => {
     if (template) {
@@ -326,7 +456,13 @@ export default function FormBuilder() {
         options: f.options,
         allowOther: f.allowOther || false,
         defaultValue: f.defaultValue || "",
+        sourceType: f.sourceType,
+        sourceFieldKey: f.sourceFieldKey,
       })));
+      // Restore autoCreateClient settings if editing
+      if (existingForm.autoCreateClient !== undefined) setAutoCreateClient(existingForm.autoCreateClient);
+      if (existingForm.autoCreateProcessId) setAutoCreateProcessId(existingForm.autoCreateProcessId);
+      if (existingForm.autoCreateStageId) setAutoCreateStageId(existingForm.autoCreateStageId);
     } else {
       setFormTitle("Untitled Form");
       setFormDescription("");
@@ -352,6 +488,39 @@ export default function FormBuilder() {
   };
 
   const handleSaveDraft = () => {
+    // Persist form data back to webForms sessionStorage
+    const saved = sessionStorage.getItem("webForms");
+    const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
+    const updatedForm = {
+      id: formId,
+      name: formTitle,
+      description: formDescription,
+      fields: formFields.map(f => ({
+        label: f.label || f.name,
+        type: f.type,
+        placeholder: f.placeholder,
+        required: f.required,
+        options: f.options?.map(o => ({ label: o.label, value: o.value })),
+        sourceType: f.sourceType,
+        sourceFieldKey: f.sourceFieldKey,
+      })),
+      status: "draft" as const,
+      formType: "standard" as const,
+      createdBy: "Admin User",
+      fieldCount: formFields.length,
+      submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
+      enabled: false,
+      createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      lastUpdated: new Date().toISOString(),
+      autoCreateClient,
+      autoCreateProcessId,
+      autoCreateStageId,
+    };
+    if (existingForm?.id) {
+      sessionStorage.setItem("webForms", JSON.stringify(forms.map((f: any) => f.id === formId ? updatedForm : f)));
+    } else {
+      sessionStorage.setItem("webForms", JSON.stringify([updatedForm, ...forms]));
+    }
     toast.success("Form saved as draft");
     if (returnTo) {
       navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
@@ -361,6 +530,44 @@ export default function FormBuilder() {
   };
 
   const handlePublishForm = () => {
+    // Validate autoCreateClient configuration
+    if (autoCreateClient && (!autoCreateProcessId || !autoCreateStageId)) {
+      toast.error("Please select a Process and Initial Stage before publishing.");
+      return;
+    }
+    // Persist form data back to webForms sessionStorage
+    const saved = sessionStorage.getItem("webForms");
+    const forms = saved ? JSON.parse(saved) : INITIAL_FORMS;
+    const updatedForm = {
+      id: formId,
+      name: formTitle,
+      description: formDescription,
+      fields: formFields.map(f => ({
+        label: f.label || f.name,
+        type: f.type,
+        placeholder: f.placeholder,
+        required: f.required,
+        options: f.options?.map(o => ({ label: o.label, value: o.value })),
+        sourceType: f.sourceType,
+        sourceFieldKey: f.sourceFieldKey,
+      })),
+      status: "live" as const,
+      formType: "standard" as const,
+      createdBy: "Admin User",
+      fieldCount: formFields.length,
+      submissions: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.submissions ?? 0) : 0,
+      enabled: true,
+      createdAt: existingForm?.id ? (forms.find((f: any) => f.id === existingForm.id)?.createdAt ?? new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })) : new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+      lastUpdated: new Date().toISOString(),
+      autoCreateClient,
+      autoCreateProcessId,
+      autoCreateStageId,
+    };
+    if (existingForm?.id) {
+      sessionStorage.setItem("webForms", JSON.stringify(forms.map((f: any) => f.id === formId ? updatedForm : f)));
+    } else {
+      sessionStorage.setItem("webForms", JSON.stringify([updatedForm, ...forms]));
+    }
     toast.success("Form published successfully!");
     if (returnTo) {
       navigate("/web-forms", { state: { returnToTab: returnTo.tab, returnToFlowId: returnTo.flowId } });
@@ -639,6 +846,12 @@ export default function FormBuilder() {
                 onDescriptionChange={setFormDescription}
                 onPreview={() => toast.info("Preview functionality coming soon")}
                 onPublish={handlePublishForm}
+                autoCreateClient={autoCreateClient}
+                onAutoCreateClientChange={setAutoCreateClient}
+                autoCreateProcessId={autoCreateProcessId}
+                onAutoCreateProcessIdChange={setAutoCreateProcessId}
+                autoCreateStageId={autoCreateStageId}
+                onAutoCreateStageIdChange={setAutoCreateStageId}
               />
             )}
 
@@ -752,11 +965,48 @@ export default function FormBuilder() {
                       <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                         Button Text
                       </p>
-                      <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                  <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
                         {submitButtonText}
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Client Auto-Creation Settings */}
+                <div className="bg-gray-50 rounded-xl p-6 space-y-4">
+                  <h3 className="text-sm font-semibold flex items-center gap-2" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                    <Zap className="w-4 h-4 text-purple-600" />
+                    Client Auto-Creation Setting
+                  </h3>
+                  <div>
+                    <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                      Status
+                    </p>
+                    <p className="text-sm font-semibold flex items-center gap-1.5" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                      <span className={`w-2 h-2 rounded-full ${autoCreateClient ? "bg-green-500" : "bg-gray-400"}`} />
+                      {autoCreateClient ? "Enabled — Submissions will automatically create/link client profiles" : "Disabled — Submissions will not create client profiles"}
+                    </p>
+                  </div>
+                  {autoCreateClient && (
+                    <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200/50">
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                          Assign to Process
+                        </p>
+                        <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                          {autoCreateProcessId || "None"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                          Initial Stage
+                        </p>
+                        <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                          {autoCreateStageId || "None"}
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Share Your Form */}
@@ -1910,412 +2160,256 @@ export default function FormBuilder() {
                   </div>
                 </div>
               ) : (
-                /* Field Categories */
-                <div>
-                  {/* Standard Fields */}
+                /* Field Categories — System, Custom, Other */
+                <div className="divide-y divide-gray-100">
+                  {/* ─── System Fields ─── */}
                   <div className="p-4">
-                    <div className="flex items-center justify-between mb-4">
+                    <button
+                      onClick={() => toggleSidebarSection("system")}
+                      className="w-full flex items-center justify-between mb-3"
+                    >
                       <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
                         <div className="w-1 h-4 bg-primary rounded-full"></div>
-                        Standard Fields
+                        System Fields
                       </h4>
-                      <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("text", "Single Line Text")}
-                        onClick={() => handleAddField("text", "Single Line Text")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Single Line Text
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("textarea", "Paragraph Text")}
-                        onClick={() => handleAddField("textarea", "Paragraph Text")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                          <svg className="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Paragraph Text
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("select", "Dropdown")}
-                        onClick={() => handleAddField("select", "Dropdown")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                          <ChevronDown className="w-4 h-4 text-green-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Dropdown
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("multiselect", "Multi Select")}
-                        onClick={() => handleAddField("multiselect", "Multi Select")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                          <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Multi Select
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("checkbox", "Checkboxes")}
-                        onClick={() => handleAddField("checkbox", "Checkboxes")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-teal-50 flex items-center justify-center group-hover:bg-teal-100 transition-colors">
-                          <svg className="w-4 h-4 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Checkboxes
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("radio", "Radio Buttons")}
-                        onClick={() => handleAddField("radio", "Radio Buttons")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
-                          <svg className="w-4 h-4 text-pink-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Radio Buttons
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("number", "Number")}
-                        onClick={() => handleAddField("number", "Number")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                          <span className="text-base font-bold text-orange-600">123</span>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Number
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("hidden", "Hidden Field")}
-                        onClick={() => handleAddField("hidden", "Hidden Field")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center group-hover:bg-gray-100 transition-colors">
-                          <EyeOff className="w-4 h-4 text-gray-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Hidden Field
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("html", "HTML Block")}
-                        onClick={() => handleAddField("html", "HTML Block")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
-                          <Code className="w-4 h-4 text-yellow-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          HTML Block
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("divider", "Section Divider")}
-                        onClick={() => handleAddField("divider", "Section Divider")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center group-hover:bg-slate-100 transition-colors">
-                          <MinusIcon className="w-4 h-4 text-slate-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Section Divider
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("pagebreak", "Page Break")}
-                        onClick={() => handleAddField("pagebreak", "Page Break")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
-                          <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Page Break
-                        </span>
-                      </button>
-                    </div>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.system ? "rotate-180" : ""}`} />
+                    </button>
+                    {sidebarSections.system && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {systemFields.map((sf) => {
+                          const IconMap: Record<string, React.FC<{ className?: string }>> = {
+                            name: User, email: Mail, phone: Phone,
+                            status: Tag, location: MapPin, company: FileText,
+                            role: Hash, processes: Zap, language: Code, country: MapPin,
+                          };
+                          const Icon = IconMap[sf.key] ?? Tag;
+                          const colorMap: Record<string, string> = {
+                            name: "bg-blue-50 text-blue-600", email: "bg-sky-50 text-sky-600",
+                            phone: "bg-emerald-50 text-emerald-600", status: "bg-amber-50 text-amber-600",
+                            location: "bg-rose-50 text-rose-600", company: "bg-indigo-50 text-indigo-600",
+                            role: "bg-violet-50 text-violet-600", processes: "bg-purple-50 text-purple-600",
+                            language: "bg-teal-50 text-teal-600", country: "bg-cyan-50 text-cyan-600",
+                          };
+                          const colors = colorMap[sf.key] ?? "bg-gray-50 text-gray-600";
+                          const isAlreadyAdded = formFields.some(f => f.sourceType === "system" && f.sourceFieldKey === sf.key);
+                          return (
+                            <button
+                              key={sf.key}
+                              onClick={() => handleAddSystemField(sf.key)}
+                              disabled={isAlreadyAdded}
+                              className={`group flex items-center gap-2.5 p-2.5 bg-white border rounded-lg transition-all duration-200 text-left ${
+                                isAlreadyAdded
+                                  ? "border-primary/30 bg-primary/5 opacity-60 cursor-not-allowed"
+                                  : "border-gray-200 hover:border-primary hover:shadow-sm cursor-pointer"
+                              }`}
+                            >
+                              <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${colors}`}>
+                                <Icon className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-xs font-medium block truncate" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                                  {sf.label}
+                                </span>
+                                <span className="text-[10px] text-gray-400" style={{ fontFamily: 'monospace' }}>
+                                  {sf.inputType}
+                                </span>
+                              </div>
+                                  {isAlreadyAdded && (
+                                <span className="ml-auto text-[9px] text-primary font-semibold">✓</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Advanced Fields */}
+                  {/* Custom Fields Category */}
                   <div className="p-4 border-t border-border">
-                    <div className="flex items-center justify-between mb-4">
+                    <button
+                      onClick={() => toggleSidebarSection("custom")}
+                      className="w-full flex items-center justify-between mb-3 text-left"
+                    >
                       <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
                         <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
-                        Advanced Fields
+                        Custom Fields
                       </h4>
-                      <svg className="w-4 h-4 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.custom ? "rotate-180" : ""}`} />
+                    </button>
 
-                    <div className="grid grid-cols-3 gap-2.5">
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("name", "Name")}
-                        onClick={() => handleAddField("name", "Name")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-indigo-50 flex items-center justify-center group-hover:bg-indigo-100 transition-colors">
-                          <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Name
-                        </span>
-                      </button>
+                    {sidebarSections.custom && (
+                      <div className="space-y-2">
+                        {customFieldsClients.length === 0 ? (
+                          <p className="text-xs text-gray-400 py-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            No custom fields created yet.
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-2 gap-2">
+                            {customFieldsClients.map((cf) => {
+                              const isAdded = formFields.some(f => f.sourceType === "custom" && f.sourceFieldKey === cf.key);
+                              return (
+                                <button
+                                  key={cf.key}
+                                  onClick={() => handleAddCustomField(cf)}
+                                  disabled={isAdded}
+                                  className={`group flex items-center gap-2 p-2 bg-white border rounded-lg transition-all duration-200 text-left ${
+                                    isAdded
+                                      ? "border-purple-200 bg-purple-50/50 opacity-60 cursor-not-allowed"
+                                      : "border-gray-200 hover:border-purple-400 hover:shadow-sm cursor-pointer"
+                                  }`}
+                                >
+                                  <div className="w-7 h-7 rounded bg-purple-50 flex items-center justify-center flex-shrink-0 text-purple-600">
+                                    <Tag className="w-3.5 h-3.5" />
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <span className="text-xs font-medium block truncate" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                                      {cf.label}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 block" style={{ fontFamily: 'monospace' }}>
+                                      {cf.type}
+                                    </span>
+                                  </div>
+                                  {isAdded && (
+                                    <span className="text-[10px] text-purple-600 font-bold">✓</span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("date", "Date")}
-                        onClick={() => handleAddField("date", "Date")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-cyan-50 flex items-center justify-center group-hover:bg-cyan-100 transition-colors">
-                          <Calendar className="w-4 h-4 text-cyan-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Date
-                        </span>
-                      </button>
+                        {/* Inline Custom Field Creator Affordance */}
+                        {showInlineCreateField ? (
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5 mt-2">
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Field Name
+                              </label>
+                              <input
+                                type="text"
+                                value={inlineFieldLabel}
+                                onChange={(e) => setInlineFieldLabel(e.target.value)}
+                                placeholder="e.g. Patient ID"
+                                className="w-full px-2.5 py-1.5 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              />
+                            </div>
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("time", "Time")}
-                        onClick={() => handleAddField("time", "Time")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center group-hover:bg-amber-100 transition-colors">
-                          <Clock className="w-4 h-4 text-amber-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Time
-                        </span>
-                      </button>
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Field Type
+                              </label>
+                              <select
+                                value={inlineFieldType}
+                                onChange={(e) => setInlineFieldType(e.target.value)}
+                                className="w-full px-2 py-1.5 border border-border rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              >
+                                <option value="TEXT">Single Line Text</option>
+                                <option value="DROPDOWN">Dropdown List</option>
+                                <option value="DATE">Date Picker</option>
+                                <option value="NUMBER">Number Only</option>
+                                <option value="YES_NO">Yes / No Radio</option>
+                                <option value="LINK">Website Link</option>
+                              </select>
+                            </div>
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("tel", "Phone")}
-                        onClick={() => handleAddField("tel", "Phone")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-100 transition-colors">
-                          <svg className="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Phone
-                        </span>
-                      </button>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-600 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Required Field
+                              </span>
+                              <button
+                                onClick={() => setInlineFieldRequired(!inlineFieldRequired)}
+                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${inlineFieldRequired ? "bg-primary" : "bg-gray-200"}`}
+                              >
+                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${inlineFieldRequired ? "translate-x-3.5" : "translate-x-0.5"}`} />
+                              </button>
+                            </div>
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("address", "Address")}
-                        onClick={() => handleAddField("address", "Address")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-rose-50 flex items-center justify-center group-hover:bg-rose-100 transition-colors">
-                          <MapPin className="w-4 h-4 text-rose-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Address
-                        </span>
-                      </button>
+                            <div className="flex gap-2 pt-1">
+                              <Button
+                                size="sm"
+                                variant="primary"
+                                onClick={handleInlineCreateField}
+                                className="flex-1 text-xs py-1 h-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold"
+                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                Add Field
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setShowInlineCreateField(false);
+                                  setInlineFieldLabel("");
+                                  setInlineFieldRequired(false);
+                                }}
+                                className="text-xs py-1 h-auto border border-border hover:bg-gray-100"
+                                style={{ fontFamily: 'DM Sans, sans-serif' }}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setShowInlineCreateField(true)}
+                            className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors"
+                            style={{ fontFamily: 'Outfit, sans-serif' }}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Create Custom Field
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("url", "Website")}
-                        onClick={() => handleAddField("url", "Website")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-violet-50 flex items-center justify-center group-hover:bg-violet-100 transition-colors">
-                          <svg className="w-4 h-4 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Website
-                        </span>
-                      </button>
+                  {/* Other Fields Category (generic / non-linkable attributes) */}
+                  <div className="p-4 border-t border-border">
+                    <button
+                      onClick={() => toggleSidebarSection("other")}
+                      className="w-full flex items-center justify-between mb-3 text-left"
+                    >
+                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                        <div className="w-1 h-4 bg-gray-400 rounded-full"></div>
+                        Other Fields
+                      </h4>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.other ? "rotate-180" : ""}`} />
+                    </button>
 
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("email", "Email")}
-                        onClick={() => handleAddField("email", "Email")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-sky-50 flex items-center justify-center group-hover:bg-sky-100 transition-colors">
-                          <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Email
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("file", "File Upload")}
-                        onClick={() => handleAddField("file", "File Upload")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-lime-50 flex items-center justify-center group-hover:bg-lime-100 transition-colors">
-                          <Upload className="w-4 h-4 text-lime-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          File Upload
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("captcha", "CAPTCHA")}
-                        onClick={() => handleAddField("captcha", "CAPTCHA")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-red-50 flex items-center justify-center group-hover:bg-red-100 transition-colors">
-                          <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          CAPTCHA
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("password", "Password")}
-                        onClick={() => handleAddField("password", "Password")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center group-hover:bg-purple-100 transition-colors">
-                          <EyeOff className="w-4 h-4 text-purple-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Password
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("signature", "Signature")}
-                        onClick={() => handleAddField("signature", "Signature")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center group-hover:bg-orange-100 transition-colors">
-                          <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Signature
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("rating", "Rating")}
-                        onClick={() => handleAddField("rating", "Rating")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-yellow-50 flex items-center justify-center group-hover:bg-yellow-100 transition-colors">
-                          <Star className="w-4 h-4 text-yellow-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Rating
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("toggle", "Toggle Switch")}
-                        onClick={() => handleAddField("toggle", "Toggle Switch")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-green-50 flex items-center justify-center group-hover:bg-green-100 transition-colors">
-                          <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
-                          </svg>
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Toggle Switch
-                        </span>
-                      </button>
-
-                      <button
-                        draggable
-                        onDragStart={() => handleDragStart("color", "Color Picker")}
-                        onClick={() => handleAddField("color", "Color Picker")}
-                        className="group flex flex-col items-center gap-2 p-3.5 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-md hover:scale-105 transition-all duration-200 cursor-grab active:cursor-grabbing"
-                      >
-                        <div className="w-8 h-8 rounded-lg bg-pink-50 flex items-center justify-center group-hover:bg-pink-100 transition-colors">
-                          <Palette className="w-4 h-4 text-pink-600" />
-                        </div>
-                        <span className="text-xs font-medium text-center leading-tight" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                          Color Picker
-                        </span>
-                      </button>
-                    </div>
+                    {sidebarSections.other && (
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { type: "signature", label: "Signature", icon: Palette },
+                          { type: "captcha", label: "CAPTCHA", icon: ShieldCheck },
+                          { type: "password", label: "Password", icon: EyeOff },
+                          { type: "rating", label: "Rating", icon: Star },
+                          { type: "color", label: "Color Picker", icon: Palette },
+                          { type: "pagebreak", label: "Page Break", icon: Layout },
+                          { type: "html", label: "HTML Block", icon: Code },
+                          { type: "divider", label: "Divider", icon: MinusIcon },
+                          { type: "file", label: "File Upload", icon: Upload },
+                        ].map((item) => {
+                          return (
+                            <button
+                              key={item.type}
+                              draggable
+                              onDragStart={() => handleDragStart(item.type, item.label)}
+                              onClick={() => handleAddField(item.type, item.label)}
+                              className="group flex flex-col items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-sm hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing"
+                            >
+                              <div className="w-7 h-7 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-gray-100 transition-colors">
+                                <item.icon className="w-3.5 h-3.5" />
+                              </div>
+                              <span className="text-[10px] font-medium text-center leading-tight truncate w-full" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                                {item.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

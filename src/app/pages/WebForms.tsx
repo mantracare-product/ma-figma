@@ -4,19 +4,21 @@ import {
   Search, Plus, Eye, MoreVertical, Copy, FileText, X,
   Edit2, Share2, Trash2, ArrowLeft, ChevronRight, Type,
   Mail, Phone, AlignLeft, Hash, Link2, Info, GripVertical,
-  ChevronUp, ChevronDown, Pencil
+  ChevronUp, ChevronDown, Pencil, FlaskConical
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
 import { FieldDef, Form, INITIAL_FORMS } from "../../data/forms";
 import { FlowStep, IntakeFlow, INITIAL_FLOWS } from "../../data/intakeFlows";
-import ClientProfile from "./ClientProfile";
+import ClientProfile, { Client, initialClients } from "./ClientProfile";
 import ShareFormDrawer from "../components/webform/ShareFormDrawer";
 import { ShareClient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
+import { useClientFields } from "../context/ClientFieldsContext";
+import { appendClientSubmission } from "../../data/submissionsStore";
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
-type Submission = {
+export type Submission = {
   id: number;
   clientId: string;
   formId: number;
@@ -87,6 +89,13 @@ const DUMMY_SUBMISSIONS_SEED: Submission[] = [
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatFormDate(dStr: string | undefined) {
+  if (!dStr) return "";
+  const t = Date.parse(dStr);
+  if (isNaN(t)) return dStr;
+  return new Date(t).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 function fieldTypeLabel(type: FieldDef["type"]) {
   const map: Record<string, string> = {
@@ -336,9 +345,18 @@ function SubmissionsTab({ submissions, forms, onViewSubmission }: {
                   sub.status === "sent" ? "bg-gray-50/60 grayscale-[30%]" : ""
                 } ${i < filteredSubs.length - 1 ? "border-b border-border" : ""}`}
               >
-                <td className="px-5 py-3.5 text-sm font-medium" style={{ fontFamily: "DM Sans, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>
-                  {sub.name}
+                <td className="px-5 py-3.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium" style={{ color: sub.status === "sent" ? "#94A3B8" : "#020817" }}>{sub.name}</span>
+                    {!sub.clientId && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-xs font-medium text-amber-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <svg className="w-2.5 h-2.5" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="6" cy="6" r="5"/><path d="M6 4v3M6 8.5v.5"/></svg>
+                        No client linked
+                      </span>
+                    )}
+                  </div>
                 </td>
+
                 <td className="px-5 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: sub.status === "sent" ? "#94A3B8" : "#64748B" }}>
                   {sub.email}
                 </td>
@@ -443,7 +461,7 @@ function FormDetailView({
           </h2>
           <StatusBadge status={form.status} />
           <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-            Last edited {form.createdAt}
+            Last edited {formatFormDate(form.lastUpdated || form.createdAt)}
           </span>
         </div>
         <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
@@ -603,9 +621,10 @@ function FormDetailView({
 
 // ─── Form Detail Drawer ───────────────────────────────────────────────────────
 
-function FormDetailDrawer({ form, onClose, onEdit, onShareClick }: { form: Form | null; onClose: () => void; onEdit: (f: Form) => void; onShareClick: (f: Form) => void }) {
+function FormDetailDrawer({ form, onClose, onEdit, onShareClick, onSubmit }: { form: Form | null; onClose: () => void; onEdit: (f: Form) => void; onShareClick: (f: Form) => void; onSubmit?: (form: Form, vals: Record<string, string>) => void }) {
   const [tab, setTab] = useState<"overview" | "preview">("overview");
   const [previewVals, setPreviewVals] = useState<Record<string, string>>({});
+  const [submitted, setSubmitted] = useState(false);
 
   if (!form) return null;
 
@@ -622,7 +641,7 @@ function FormDetailDrawer({ form, onClose, onEdit, onShareClick }: { form: Form 
         <div className="flex items-center gap-3 px-6 py-4 border-b border-border flex-wrap">
           <h2 className="text-base font-bold mr-1" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{form.name}</h2>
           <StatusBadge status={form.status} />
-          <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>Last edited {form.createdAt}</span>
+          <span className="text-xs ml-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>Last edited {formatFormDate(form.lastUpdated || form.createdAt)}</span>
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={() => onEdit(form)}
@@ -832,13 +851,33 @@ function FormDetailDrawer({ form, onClose, onEdit, onShareClick }: { form: Form 
                   );
                 })}
               </div>
-              <button
-                disabled
-                className="w-full py-2.5 rounded-lg bg-gray-100 text-sm font-semibold text-muted-foreground cursor-not-allowed"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                Submit (preview only)
-              </button>
+              {submitted ? (
+                <div className="w-full py-4 rounded-xl bg-green-50 border border-green-200 text-center">
+                  <p className="text-sm font-semibold text-green-700" style={{ fontFamily: "DM Sans, sans-serif" }}>✓ Submitted!</p>
+                  <p className="text-xs text-green-600 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {form.autoCreateClient ? "Client record created/updated." : "Submission recorded."}
+                  </p>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (onSubmit) {
+                      const labelledVals: Record<string, string> = {};
+                      form.fields.forEach(f => {
+                        const key = `submit-${f.label}`;
+                        labelledVals[key] = previewVals[`drawer-${f.label}`] ?? "";
+                      });
+                      onSubmit(form, labelledVals);
+                    }
+                    setSubmitted(true);
+                    setTimeout(() => { setSubmitted(false); setPreviewVals({}); }, 3000);
+                  }}
+                  className="w-full py-2.5 rounded-lg bg-black text-white text-sm font-semibold hover:bg-black/90 transition-colors"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {form.autoCreateClient ? "Submit & Create Client" : "Submit Form"}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -1230,6 +1269,16 @@ function IntakeFlowDrawer({
 export default function WebForms() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [clients, setClients] = useState<Client[]>(() => {
+    const saved = sessionStorage.getItem("clients");
+    return saved ? JSON.parse(saved) : initialClients;
+  });
+  const { customFieldsClients } = useClientFields();
+
+  useEffect(() => {
+    sessionStorage.setItem("clients", JSON.stringify(clients));
+  }, [clients]);
+
   const [mainTab, setMainTab] = useState<"submissions" | "forms">("forms");
   const [drawerForm, setDrawerForm] = useState<Form | null>(null);
   const [drawerFlow, setDrawerFlow] = useState<IntakeFlow | null>(null);
@@ -1357,6 +1406,24 @@ export default function WebForms() {
       },
     }));
     setSubmissions((prev) => [...newRecords, ...prev]);
+
+    // Cross-write into the shared clientFormSubmissions store so the client's
+    // Forms tab shows sent-form entries immediately.
+    clients.forEach((client) => {
+      appendClientSubmission({
+        clientId: client.id,
+        formId,
+        sentAt: new Date().toISOString().split("T")[0],
+        submittedAt: today,
+        status: "pending",
+        fields: {
+          "Full Name": client.name,
+          "Email": client.email,
+          "Phone": client.phone,
+        },
+      });
+    });
+
     if (kind === "form") {
       setForms((prevForms) =>
         prevForms.map((f) =>
@@ -1374,6 +1441,134 @@ export default function WebForms() {
     submissionUsage: { current: 135, limit: 300, status: "On track" },
   };
 
+  /**
+   * handlePreviewSubmit — called when a real (non-preview-only) form submission fires.
+   * 1. Collects submitted field values
+   * 2. If form.autoCreateClient is true:
+   *    a. Tries to find an existing client by email or phone
+   *    b. Creates a new Client record if no match is found
+   * 3. Appends a Submission record with the resolved clientId
+   */
+  const handlePreviewSubmit = (form: Form, fieldValues: Record<string, string>) => {
+    const today = new Date().toLocaleDateString("en-US", {
+      month: "short", day: "numeric", year: "numeric",
+    });
+
+    // Resolve the submitter's key fields from form field mappings
+    const getVal = (key: string) => {
+      const field = form.fields.find(f => f.sourceFieldKey === key);
+      return field ? fieldValues[`submit-${field.label}`] ?? "" : "";
+    };
+
+    const submittedEmail = getVal("email") || Object.values(fieldValues).find(v => v.includes("@")) || "";
+    const submittedName = getVal("name") || "";
+    const submittedPhone = getVal("phone") || "";
+
+    let resolvedClientId = "";
+
+    if (form.autoCreateClient) {
+      // Try to find matching client by email
+      const existing = clients.find(c =>
+        (submittedEmail && c.email.toLowerCase() === submittedEmail.toLowerCase()) ||
+        (submittedPhone && c.phone === submittedPhone.replace(/\D/g, ""))
+      );
+
+      if (existing) {
+        resolvedClientId = existing.id;
+      } else {
+        // Auto-create a new Client
+        const newId = `CL-${String(Date.now()).slice(-6)}`;
+
+        // Precedence rule: a form field bound to the "processes" system key
+        // (sourceFieldKey === "processes") takes precedence over the form's
+        // autoCreateProcessId default. Fallback to /process/i label match.
+        const processField = form.fields.find(
+          f => f.sourceFieldKey === "processes" || /process/i.test(f.label)
+        );
+        const submittedProcess = processField
+          ? (fieldValues[`submit-${processField.label}`] ?? "").trim()
+          : "";
+        const processName = submittedProcess || form.autoCreateProcessId || "";
+        const stageName = form.autoCreateStageId || "Initial Contact";
+
+        // Resolve country from submitted field if available
+        const countryField = form.fields.find(
+          f => f.sourceFieldKey === "country" || /^country$/i.test(f.label)
+        );
+        const resolvedCountry = countryField
+          ? (fieldValues[`submit-${countryField.label}`] || "US")
+          : "US";
+
+        const newClient: Client = {
+          id: newId,
+          name: submittedName || submittedEmail || "New Contact",
+          email: submittedEmail,
+          phone: submittedPhone.replace(/\D/g, ""),
+          country: resolvedCountry,
+          countryCode: "+1",
+          countryFlag: "🇺🇸",
+          processes: processName ? [processName] : [],
+          stage: processName ? `${processName}: ${stageName}` : stageName,
+          lastContact: new Date().toISOString().split("T")[0],
+          status: "Active",
+        };
+
+        // Map all submitted system and custom field values via sourceFieldKey
+        // onto the persisted client record (company, role, patient_id, etc.)
+        form.fields.forEach(f => {
+          const val = fieldValues[`submit-${f.label}`];
+          if (!val || !f.sourceFieldKey) return;
+          const key = f.sourceFieldKey;
+          if (["email", "phone", "processes", "country", "name"].includes(key)) return;
+          if (key === "company") { (newClient as any).companyName = val; return; }
+          if (key === "role") { (newClient as any).jobPosition = val; return; }
+          (newClient as any)[key] = val;
+        });
+
+        setClients(prev => [newClient, ...prev]);
+        resolvedClientId = newId;
+        toast.success(`New client created: ${newClient.name}`);
+      }
+    }
+
+    // Build the clean fields map (strip the "submit-" prefix used internally)
+    const cleanFields: Record<string, string> = {};
+    for (const [rawKey, val] of Object.entries(fieldValues)) {
+      const label = rawKey.startsWith("submit-") ? rawKey.slice(7) : rawKey;
+      cleanFields[label] = val;
+    }
+
+    // Build submission record for the WebForms submissions table
+    const newSub: Submission = {
+      id: Date.now(),
+      clientId: resolvedClientId,
+      formId: form.id,
+      name: submittedName || submittedEmail || "Anonymous",
+      email: submittedEmail,
+      date: today,
+      status: "completed",
+      fields: cleanFields,
+    };
+
+    setSubmissions(prev => [newSub, ...prev]);
+    setForms(prev => prev.map(f => f.id === form.id ? { ...f, submissions: f.submissions + 1 } : f));
+
+    // Cross-write into the shared clientFormSubmissions store so the client's
+    // Forms tab reflects this submission immediately.
+    if (resolvedClientId) {
+      appendClientSubmission({
+        clientId: resolvedClientId,
+        formId: form.id,
+        sentAt: new Date().toISOString().split("T")[0],
+        submittedAt: today,
+        status: "completed",
+        fields: cleanFields,
+      });
+    }
+
+    toast.success("Form submitted successfully!");
+  };
+
 
   // Forms table filtered+sorted
   const displayForms = forms
@@ -1382,15 +1577,30 @@ export default function WebForms() {
       (typeFilter === "all" || f.formType === typeFilter)
     )
     .sort((a, b) => {
-      let aVal: string | number;
-      let bVal: string | number;
-      if (sortCol === "name") { aVal = a.name.toLowerCase(); bVal = b.name.toLowerCase(); }
-      else if (sortCol === "submissions") { aVal = a.submissions; bVal = b.submissions; }
-      else { aVal = a.createdAt; bVal = b.createdAt; }
+      let aVal: any;
+      let bVal: any;
+      if (sortCol === "name") {
+        aVal = a.name.toLowerCase();
+        bVal = b.name.toLowerCase();
+      } else if (sortCol === "submissions") {
+        aVal = a.submissions;
+        bVal = b.submissions;
+      } else {
+        const parseDate = (dStr: string | undefined) => {
+          if (!dStr) return 0;
+          const t = Date.parse(dStr);
+          return isNaN(t) ? 0 : t;
+        };
+        aVal = parseDate(a.lastUpdated || a.createdAt);
+        bVal = parseDate(b.lastUpdated || b.createdAt);
+      }
       if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
       if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
       return 0;
     });
+
+  // Temporary console check to verify sorted forms order
+  console.log("displayForms order:", displayForms.map(f => `${f.name}: ${f.lastUpdated || f.createdAt}`));
 
   const handleSortCol = (col: "name" | "submissions" | "lastUpdated") => {
     if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
@@ -1502,7 +1712,8 @@ export default function WebForms() {
         submissions: 0,
         enabled: true,
         description: "",
-        createdAt: "Jun 16, 2026",
+        createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        lastUpdated: new Date().toISOString(),
       };
       setForms(prev => [...prev, newForm]);
       const updated = { ...activeFlow, steps: [...activeFlow.steps, { formId: newForm.id, required: addRequired }] };
@@ -1769,7 +1980,7 @@ export default function WebForms() {
                           </td>
                           {/* Last Updated */}
                           <td className="px-4 py-3.5 text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
-                            {form.createdAt}
+                            {formatFormDate(form.lastUpdated || form.createdAt)}
                           </td>
                           {/* Enabled toggle */}
                           <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
@@ -1802,6 +2013,11 @@ export default function WebForms() {
                                     <button onClick={() => { setOpenDropdownId(null); setShareTarget({ id: form.id, name: form.name, kind: "form", status: form.status }); }} className="w-full px-4 py-2 text-left text-sm hover:bg-muted/20 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
                                       <Share2 className="w-4 h-4 text-muted-foreground" />Share
                                     </button>
+                                    {import.meta.env.DEV && (
+                                      <button onClick={() => { setOpenDropdownId(null); navigate(`/web-forms/test/${form.id}`); }} className="w-full px-4 py-2 text-left text-sm hover:bg-blue-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#3B82F6" }}>
+                                        <FlaskConical className="w-4 h-4" style={{ color: "#3B82F6" }} />Test
+                                      </button>
+                                    )}
                                     <button onClick={() => handleDelete(form.id)} className="w-full px-4 py-2 text-left text-sm hover:bg-red-50 flex items-center gap-3" style={{ fontFamily: "Outfit, sans-serif", color: "#EF4444" }}>
                                       <Trash2 className="w-4 h-4" style={{ color: "#EF4444" }} />Delete
                                     </button>
@@ -2496,7 +2712,9 @@ export default function WebForms() {
         onClose={() => setDrawerForm(null)}
         onEdit={f => { setDrawerForm(null); handleEdit(f); }}
         onShareClick={f => setShareTarget({ id: f.id, name: f.name, kind: "form", status: f.status })}
+        onSubmit={handlePreviewSubmit}
       />
+
 
       {/* Share form drawer */}
       <ShareFormDrawer
