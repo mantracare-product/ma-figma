@@ -675,6 +675,7 @@ export default function Services() {
           "Assign one or more team members per service",
           "Toggle services active/inactive without deleting them",
         ]}
+        guideUrl="/guide/services"
       />
     </div>
   );

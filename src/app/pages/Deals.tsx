@@ -4539,6 +4539,7 @@ export default function Deals() {
           "Filter by process, stage, status, or responsible person",
           "Bulk-trigger calls or move multiple clients at once",
         ]}
+        guideUrl="/guide/deals"
       />
     </div>
   );

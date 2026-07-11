@@ -1476,6 +1476,7 @@ export default function Process() {
   const [showAddStageModal, setShowAddStageModal] = useState(false);
   const [showProcessHowItWorksModal, setShowProcessHowItWorksModal] = useState(false);
   const [showStageHowItWorksModal, setShowStageHowItWorksModal] = useState(false);
+  const [showAutomationHowItWorksModal, setShowAutomationHowItWorksModal] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showDeleteStageModal, setShowDeleteStageModal] = useState(false);
   const [stageToDelete, setStageToDelete] = useState<Stage | null>(null);
@@ -3231,7 +3232,11 @@ export default function Process() {
                                           Comprehensive
                                         </button>
                                       </div>
-                                      <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
+                                      {callerPitchMode === "single" ? (
+                                        <InfoTooltip text="Single Prompt lets you write the entire outbound script as one open text box, with a Generate with AI shortcut — the fastest option for a simple stage." />
+                                      ) : (
+                                        <InfoTooltip text="Comprehensive mode lets you set a separate greeting, objective, business info, and languages instead of one combined script." />
+                                      )}
                                     </div>
 
                                     {/* Single Prompt Mode */}
@@ -3665,7 +3670,15 @@ export default function Process() {
                                   Configure the automated steps that run for this stage.
                                 </span>
                               </div>
-                              <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${workflowStepsExpanded ? "rotate-180" : ""}`} />
+                              <div className="flex items-center gap-2">
+                                <span onClick={(e) => e.stopPropagation()}>
+                                  <HowItWorksButton
+                                    label="How Automations Works"
+                                    onClick={() => setShowAutomationHowItWorksModal(true)}
+                                  />
+                                </span>
+                                <ChevronDown className={`w-5 h-5 text-muted-foreground transition-transform ${workflowStepsExpanded ? "rotate-180" : ""}`} />
+                              </div>
                             </button>
 
                             {workflowStepsExpanded && (
@@ -5378,6 +5391,7 @@ export default function Process() {
             "Override any setting for individual stages",
             "Add automations to run on entry, during calls, or after calls",
           ]}
+          guideUrl="/guide/process-settings#process-level-advanced-settings"
         />
 
         {/* How Stage Works Modal — shared component */}
@@ -5392,6 +5406,23 @@ export default function Process() {
             "Define when a client should move to this stage",
             "Add automations on stage entry, in-call, or post-call",
           ]}
+          guideUrl="/guide/process-settings#stage-level-configuration"
+        />
+
+        {/* How Automations Works Modal */}
+        <HowItWorksModal
+          isOpen={showAutomationHowItWorksModal}
+          onClose={() => setShowAutomationHowItWorksModal(false)}
+          title="How Automations Works"
+          summary="Automations are the actions this stage takes automatically — on entry, live during the call, or after it ends — with control over timing, order, and the conditions that gate them."
+          bullets={[
+            "Every step belongs to one of three lanes: On Stage Entry, In Call, or Post Call",
+            "Steps run Wait (in sequence) or In Parallel (at the same time), with an optional Delay",
+            "Add Field Conditions (any stage) or Intent Conditions (In Call only) to gate when a step fires",
+            "Choose from Workflow Logic, Caller Engagement, Communication, Data & Assignment, or Webhook/API automations",
+            "Every step you add here also appears as a node in the Flow Builder tab",
+          ]}
+          guideUrl="/guide/process-settings#automation-triggers-on-stage-entry-in-call-post-call"
         />
 
         {/* Page-level How It Works Modal */}
@@ -5407,6 +5438,7 @@ export default function Process() {
             "Automate follow-ups, field updates, and handoffs in the Automation tab",
             "Use the Flow Builder to visualise and edit your automation steps visually",
           ]}
+          guideUrl="/guide/process-settings"
         />
 
         {/* How to Receive Call — inline guide link in stage modal */}

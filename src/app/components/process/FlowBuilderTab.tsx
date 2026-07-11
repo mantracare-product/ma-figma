@@ -1862,6 +1862,7 @@ export default function FlowBuilderTab({
           "Double-click any node to open its full configuration",
           "Nodes generated from your Automation tab steps sync both ways — edit here or there",
         ]}
+        guideUrl="/guide/process-settings#flow-builder-canvas"
       />
     </div>
   );

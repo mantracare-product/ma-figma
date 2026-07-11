@@ -4713,6 +4713,7 @@ export default function Clients() {
           "Filter and search across all fields",
           "Click any client to open their full profile",
         ]}
+        guideUrl="/guide/clients"
       />
     </DndProvider>
   );

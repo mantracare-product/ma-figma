@@ -1987,6 +1987,7 @@ export default function Chats() {
           "Create broadcast campaigns to reach multiple contacts",
           "Set up chatbot flows with keyword triggers and escalation rules",
         ]}
+        guideUrl="/guide/chats"
       />
     </div>
   );

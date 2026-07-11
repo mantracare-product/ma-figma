@@ -625,6 +625,7 @@ export default function Overview() {
             "Read AI Insights for actionable suggestions",
             "Assign services and team members to handle patient booking",
           ]}
+          guideUrl="/guide/dashboard"
           extraFooterButtons={
             <>
               <Button

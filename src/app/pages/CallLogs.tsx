@@ -2845,6 +2845,7 @@ export default function CallLogs() {
           "Download transcripts for your records",
           "See call scores and AI sentiment analysis",
         ]}
+        guideUrl="/guide/call-logs"
       />
     </div>
   );

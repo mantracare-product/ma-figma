@@ -25,6 +25,7 @@ import Login from "./pages/auth/Login";
 import Signup from "./pages/auth/Signup";
 import Chats from "./pages/Chats";
 import NotFound from "./pages/NotFound";
+import GuidePageRoute from "./pages/GuidePageRoute";
 
 export const router = createBrowserRouter([
   {
@@ -69,6 +70,8 @@ export const router = createBrowserRouter([
           { path: "appointments", Component: Appointments },
           { path: "chats", Component: Chats },
           { path: "profile", Component: Profile },
+          { path: "guide", Component: GuidePageRoute },
+          { path: "guide/:slug", Component: GuidePageRoute },
         ],
       },
     ],

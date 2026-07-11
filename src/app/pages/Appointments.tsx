@@ -3054,6 +3054,7 @@ export default function Appointments() {
           "Book a new appointment via a guided 4-step flow",
           "Reschedule or cancel directly from a card",
         ]}
+        guideUrl="/guide/appointments"
       />
     </div>
   );

@@ -2945,6 +2945,7 @@ export default function WebForms() {
           "Track submissions and which ones became clients",
           "Test a form end-to-end before publishing (via the test harness)",
         ]}
+        guideUrl="/guide/web-forms"
       />
     </div>
   );
