@@ -18,10 +18,26 @@ export interface FieldDefinition {
   validation?: string;
   options?: FieldOption[];    // for select/dropdown types
   required?: boolean;
-  showAlways?: boolean;       // system fields + "always visible" custom fields
+  showAlways?: boolean;       // legacy — kept for backward compat, do not write for new fields
+  /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
+  visibleToRecordIds?: string[];
   sourceFormId?: number;      // if created via a WebForm field, provenance
   createdAt: number;
 }
+
+/**
+ * Resolve the effective auto-display visibility of a field.
+ * - If visibleToRecordIds has one or more IDs, visibility is "specific".
+ * - Otherwise, it is "all" (auto-shows on every record).
+ */
+export function resolveVisibility(f: FieldDefinition): "none" | "all" | "specific" {
+  if (f.visibleToRecordIds && f.visibleToRecordIds.length > 0) {
+    return "specific";
+  }
+  return "all";
+}
+
+
 
 export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefinition, "id" | "source" | "createdAt">[]> = {
   client: [

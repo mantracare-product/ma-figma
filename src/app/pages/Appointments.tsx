@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
-import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
 interface Appointment {
@@ -504,13 +504,23 @@ export default function Appointments() {
       notes: appointment.notes || "",
     });
 
-    // Populate custom field values from the appointment object
+    // Populate custom field values from the appointment object and auto-surface visible keys
     const values: Record<string, string> = {};
     const autoKeys: string[] = [];
     appointmentCustomFields.forEach(f => {
+      const vis = resolveVisibility(f);
       const val = (appointment as any)[f.key];
-      if (val !== undefined && val !== null && val !== "") {
+      const hasValue = val !== undefined && val !== null && val !== "";
+      
+      if (hasValue) {
         values[f.key] = String(val);
+      }
+
+      if (vis === "all") {
+        autoKeys.push(f.key);
+      } else if (vis === "specific" && f.visibleToRecordIds?.includes(String(appointment.id))) {
+        autoKeys.push(f.key);
+      } else if (hasValue) {
         autoKeys.push(f.key);
       }
     });

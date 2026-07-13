@@ -19,7 +19,7 @@ import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorks
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
-import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
 interface CallLog {
@@ -271,12 +271,14 @@ export default function Deals() {
       const savedKeySet = new Set(savedKeys);
       const autoKeys: string[] = [];
       allProcessFields.forEach(f => {
-        if (!savedKeySet.has(f.key) && !defaultKeys.includes(f.key)) {
-          const val = (selectedLogForView as any)[f.key];
-          if (val !== undefined && val !== null && val !== "") {
-            autoKeys.push(f.key);
-          }
+        if (savedKeySet.has(f.key) || defaultKeys.includes(f.key)) return;
+        const vis = resolveVisibility(f);
+        if (vis === "all") { autoKeys.push(f.key); return; }
+        if (vis === "specific" && f.visibleToRecordIds?.includes((selectedLogForView as any).id)) {
+          autoKeys.push(f.key); return;
         }
+        const val = (selectedLogForView as any)[f.key];
+        if (val !== undefined && val !== null && val !== "") autoKeys.push(f.key);
       });
       setDrawerVisibleFields([...savedKeys, ...autoKeys]);
     }

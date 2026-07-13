@@ -17,7 +17,7 @@ import { toast } from "sonner";
 import { Form, INITIAL_FORMS } from "../../data/forms";
 import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
-import { useFieldRegistry, FieldDefinition } from "../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
@@ -338,18 +338,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
       const allClientFields = getAllFields("client");
 
-      // Merge: explicitly selected keys  +  any custom field key that already has a
-      // non-empty value on the client record (e.g. written there by a form submission).
-      // This ensures submitted values are immediately visible without a manual Select step.
+      // Merge: explicitly selected keys  +  any custom field key that should be
+      // auto-included based on visibility setting or a stored non-empty value.
       const savedKeys: string[] = (client as any).visibleFieldKeys || [];
       const savedKeySet = new Set(savedKeys);
       const autoKeys: string[] = [];
       allClientFields.forEach(f => {
-        if (!HARDCODED_KEYS.has(f.key) && !savedKeySet.has(f.key)) {
-          const val = (client as any)[f.key];
-          if (val !== undefined && val !== null && val !== "") {
-            autoKeys.push(f.key);
-          }
+        if (HARDCODED_KEYS.has(f.key) || savedKeySet.has(f.key)) return;
+
+        const vis = resolveVisibility(f);
+        // "all" → always auto-include for every client record
+        if (vis === "all") { autoKeys.push(f.key); return; }
+        // "specific" → auto-include only if this client's id is in the list
+        if (vis === "specific" && f.visibleToRecordIds?.includes(client.id)) {
+          autoKeys.push(f.key); return;
+        }
+        // "none" but field has a stored value (e.g. from a form submission) → still surface it
+        const val = (client as any)[f.key];
+        if (val !== undefined && val !== null && val !== "") {
+          autoKeys.push(f.key);
         }
       });
       const mergedKeys = [...savedKeys, ...autoKeys];
