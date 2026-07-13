@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
+import VariablePickerButton from "../components/process/VariablePickerButton";
 import {
   MessageCircle,
   MessageSquare,
@@ -138,32 +139,6 @@ interface EscalationRule {
 
 const LANGUAGES = ["English", "Hindi", "Spanish", "French", "German", "Mandarin", "Arabic", "Portuguese", "Russian", "Japanese"];
 
-const FETCH_FIELD_SOURCES = [
-  {
-    value: "system", label: "System Fields", fields: [
-      { value: "contact_name", label: "Contact Name" },
-      { value: "contact_email", label: "Contact Email" },
-      { value: "contact_phone", label: "Contact Phone" },
-      { value: "country", label: "Country" },
-      { value: "language", label: "Language" },
-    ]
-  },
-  {
-    value: "call-log", label: "Call Log Fields", fields: [
-      { value: "call_status", label: "Call Status" },
-      { value: "call_duration", label: "Call Duration" },
-      { value: "call_sentiment", label: "Sentiment" },
-      { value: "call_summary", label: "Call Summary" },
-    ]
-  },
-  {
-    value: "appointment", label: "Appointment Fields", fields: [
-      { value: "appointment_date", label: "Appointment Date" },
-      { value: "appointment_time", label: "Appointment Time" },
-      { value: "appointment_status", label: "Appointment Status" },
-    ]
-  },
-];
 
 const AVAILABLE_EMPLOYEES = [
   { id: "1", name: "Sarah Johnson" },
@@ -376,96 +351,6 @@ const CollapsibleSidebarSection: React.FC<CollapsibleSidebarSectionProps> = ({
         </span>
       </button>
       {isOpen && <div className="mt-3 space-y-2">{children}</div>}
-    </div>
-  );
-};
-
-// ─── Variable Picker ──────────────────────────────────────────────────────────
-
-interface VariablePickerButtonProps {
-  targetRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
-  value: string;
-  onChange: (newValue: string) => void;
-  label?: string;
-}
-
-const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({ targetRef, value, onChange, label = "Insert Variable" }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownPanelRef = useRef<HTMLDivElement>(null);
-
-  const handleSelectField = (fieldValue: string) => {
-    const textarea = targetRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart ?? 0;
-    const end = textarea.selectionEnd ?? 0;
-    const insertText = `{{${fieldValue}}}`;
-    const newValue = (value || "").slice(0, start) + insertText + (value || "").slice(end);
-    onChange(newValue);
-    setIsOpen(false);
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + insertText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
-
-  const openDropdown = () => {
-    if (!buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
-    setIsOpen(true);
-  };
-
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleScroll = (e: Event) => {
-      if (dropdownPanelRef.current?.contains(e.target as Node)) return;
-      setIsOpen(false);
-    };
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', () => setIsOpen(false));
-    return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', () => setIsOpen(false));
-    };
-  }, [isOpen]);
-
-  return (
-    <div className="relative inline-block">
-      <button ref={buttonRef} type="button" onClick={() => isOpen ? setIsOpen(false) : openDropdown()}
-        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-        {label}
-      </button>
-      {isOpen && dropdownPos && createPortal(
-        <>
-          <div className="fixed inset-0 cursor-default" style={{ zIndex: 9998 }} onClick={() => setIsOpen(false)} />
-          <div ref={dropdownPanelRef} className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden flex flex-col"
-            style={{ position: 'fixed', top: dropdownPos.top, right: dropdownPos.right, width: '256px', maxHeight: '256px', zIndex: 9999 }}>
-            <div className="p-2 border-b border-gray-100 bg-gray-50/50">
-              <span className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>Insert Field Variable</span>
-            </div>
-            <div className="overflow-y-auto flex-1 py-1">
-              {FETCH_FIELD_SOURCES.map(group => (
-                <div key={group.value}>
-                  <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50" style={{ fontFamily: 'Outfit, sans-serif' }}>{group.label}</div>
-                  <div className="py-0.5">
-                    {group.fields.map(field => (
-                      <button key={field.value} type="button" onClick={() => handleSelectField(field.value)}
-                        className="w-full text-left px-4 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                        <span>{field.label}</span>
-                        <span className="text-[9px] text-gray-400 font-mono">{`{{${field.value}}}`}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>,
-        document.body
-      )}
     </div>
   );
 };

@@ -17,14 +17,10 @@ import { toast } from "sonner";
 import { Form, INITIAL_FORMS } from "../../data/forms";
 import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
-import { useClientFields, CANONICAL_SYSTEM_FIELDS } from "../context/ClientFieldsContext";
+import { useFieldRegistry, FieldDefinition } from "../context/FieldRegistryContext";
+import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
-const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location"]);
-
-const selectFieldsAboutClient = [
-  "Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process",
-  ...CANONICAL_SYSTEM_FIELDS.filter(f => !HARDCODED_KEYS.has(f.key)).map(f => f.label)
-];
+const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -267,12 +263,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   }, [clients]);
 
   // Custom field definitions from shared context (same ones Settings.tsx manages)
-  const { customFieldsClients: customFieldDefinitions, addCustomField } = useClientFields();
+  const { getAllFields, addCustomField } = useFieldRegistry();
 
   const handleClose = () => {
     if (onCloseOverride) onCloseOverride();
     else navigate("/clients");
   };
+
+  const [clientName, setClientName] = useState("");
+  const [clientEmail, setClientEmail] = useState("");
+  const [clientPhone, setClientPhone] = useState("");
+  const [clientCompany, setClientCompany] = useState("");
+  const [clientRole, setClientRole] = useState("");
+  const [clientStatus, setClientStatus] = useState("");
+  const [clientLocation, setClientLocation] = useState("");
+  const [clientCountry, setClientCountry] = useState("");
+  const [visibleFieldKeys, setVisibleFieldKeys] = useState<string[]>([]);
+  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
+  const [fieldManagerMode, setFieldManagerMode] = useState<"select" | "create">("select");
+  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
 
   const handleSaveChanges = () => {
     if (!client) return;
@@ -286,18 +295,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       status: clientStatus,
       processes: selectedProcesses,
       location: clientLocation,
+      country: clientCountry,
     };
 
-    customFields.forEach((field) => {
-      const def = customFieldDefinitions.find((d) => d.label === field.name);
-      if (def) {
-        (updatedClient as any)[def.key] = field.value || "—";
-      } else {
-        const sysDef = CANONICAL_SYSTEM_FIELDS.find((d) => d.label === field.name);
-        if (sysDef) {
-          (updatedClient as any)[sysDef.key] = field.value || "—";
-        }
-      }
+    (updatedClient as any).visibleFieldKeys = visibleFieldKeys;
+
+    // Save all dynamic fields
+    Object.keys(dynamicFieldValues).forEach((key) => {
+      (updatedClient as any)[key] = dynamicFieldValues[key];
     });
 
     setClients((prev) => prev.map((c) => (c.id === client.id ? updatedClient : c)));
@@ -305,7 +310,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   };
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments">("overview");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
   const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
@@ -318,26 +323,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [drawerProcessStages, setDrawerProcessStages] = useState<Record<string, string>>({});
   const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   const [showFieldPicker, setShowFieldPicker] = useState(false);
-  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
-  const [showCreateField, setShowCreateField] = useState(false);
-  const [newFieldName, setNewFieldName] = useState("");
-  const [newFieldType, setNewFieldType] = useState("");
-  const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
-  const [fieldRequired, setFieldRequired] = useState(false);
-  const [fieldMultiple, setFieldMultiple] = useState(false);
-  const [fieldShowAlways, setFieldShowAlways] = useState(true);
-  const [fieldTooltip, setFieldTooltip] = useState(false);
-  const [fieldVisibleToSelected, setFieldVisibleToSelected] = useState(false);
-  const [fieldNameError, setFieldNameError] = useState(false);
-  const [fieldTypeError, setFieldTypeError] = useState(false);
-  const [customFields, setCustomFields] = useState<Array<{ name: string; value: string; type?: string }>>([]);
-  const [clientName, setClientName] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
-  const [clientCompany, setClientCompany] = useState("");
-  const [clientRole, setClientRole] = useState("");
-  const [clientStatus, setClientStatus] = useState("");
-  const [clientLocation, setClientLocation] = useState("");
 
   // Sync client profile values and custom field values
   useEffect(() => {
@@ -349,46 +334,24 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setClientRole(client.jobPosition || "");
       setClientStatus(client.status || "");
       setClientLocation(client.location || "");
+      setClientCountry((client as any).country || "");
 
-      const relevantDefinitions = customFieldDefinitions.filter((def) => {
-        const hasValue = (client as any)[def.key] !== undefined && (client as any)[def.key] !== "" && (client as any)[def.key] !== "—";
-        const showAlways = def.showAlways !== false;
-        return showAlways || hasValue;
-      });
+      const keys: string[] = (client as any).visibleFieldKeys || [];
+      setVisibleFieldKeys(keys);
 
-      const mappedCustom = relevantDefinitions.map((def) => ({
-        name: def.label,
-        value: (client as any)[def.key] || "—",
-        type: def.type,
-      }));
-
-      const systemMapped: typeof mappedCustom = [];
-      CANONICAL_SYSTEM_FIELDS.forEach((field) => {
-        if (!HARDCODED_KEYS.has(field.key)) {
-          const val = (client as any)[field.key];
-          const hasValue = val !== undefined && val !== "" && val !== "—";
-          if (hasValue) {
-            systemMapped.push({
-              name: field.label,
-              value: val,
-              type: field.inputType,
-            });
-          }
+      const allClientFields = getAllFields("client");
+      const values: Record<string, string> = {};
+      allClientFields.forEach(f => {
+        if (!HARDCODED_KEYS.has(f.key)) {
+          values[f.key] = (client as any)[f.key] || "";
         }
       });
-
-      const seenNames = new Set(mappedCustom.map(f => f.name.toLowerCase()));
-      const merged = [
-        ...mappedCustom,
-        ...systemMapped.filter(f => !seenNames.has(f.name.toLowerCase()))
-      ];
-
-      setCustomFields(merged);
+      setDynamicFieldValues(values);
     }
-  }, [id, client, customFieldDefinitions]);
+  }, [id, client]);
 
-  const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>([]);
-  const [fieldSearchQuery, setFieldSearchQuery] = useState("");
+  // appointments tab
+  const [appointments, setAppointments] = useState<any[]>([]);
   const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -760,6 +723,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "processes" as const, label: "Processes" },
                 { id: "activity" as const, label: "Activity" },
                 { id: "forms" as const, label: "Forms" },
+                { id: "appointments" as const, label: "Appointments" },
                 { id: "notes" as const, label: "Notes" },
               ] as const
             ).map((tab) => (
@@ -978,49 +942,72 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     />
                   </div>
 
-                  {/* Custom fields */}
-                  {customFields.map((field, index) => (
-                    <div key={index} className="flex flex-col gap-1.5">
-                      <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                        {field.name.toUpperCase()}
-                      </label>
-                      <input
-                        type="text"
-                        value={field.value === "—" ? "" : field.value}
-                        onChange={(e) => {
-                          const updated = [...customFields];
-                          updated[index].value = e.target.value;
-                          setCustomFields(updated);
-                        }}
-                        className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                        style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                        onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                        onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                      />
-                    </div>
-                  ))}
+                  {/* COUNTRY */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
+                      COUNTRY
+                    </label>
+                    <input
+                      type="text"
+                      value={clientCountry}
+                      onChange={(e) => setClientCountry(e.target.value)}
+                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                    />
+                  </div>
+
+                  {/* Dynamic Fields */}
+                  {visibleFieldKeys
+                    .filter(k => !HARDCODED_KEYS.has(k))
+                    .map((k) => {
+                      const f = getAllFields("client").find(field => field.key === k);
+                      if (!f) return null;
+                      return (
+                        <div key={k} className="flex flex-col gap-1.5">
+                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
+                            {f.label.toUpperCase()}
+                          </label>
+                          <input
+                            type={f.inputType === "email" ? "email" : f.inputType === "tel" ? "tel" : "text"}
+                            value={dynamicFieldValues[k] || ""}
+                            onChange={(e) => {
+                              setDynamicFieldValues(prev => ({
+                                ...prev,
+                                [k]: e.target.value
+                              }));
+                            }}
+                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
+                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
+                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
+                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
+                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
+                          />
+                        </div>
+                      );
+                    })}
                 </div>
 
                 {/* Field action links */}
                 <div className="pt-6 mt-6 border-t border-border">
                   <div className="flex items-center gap-4">
                     <button
-                      onClick={() => setShowSelectFieldModal(true)}
-                      className="text-sm font-medium transition-colors"
+                      onClick={() => {
+                        setFieldManagerMode("select");
+                        setFieldManagerOpen(true);
+                      }}
+                      className="text-sm font-medium transition-colors cursor-pointer"
                       style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
                     >
                       Select field
                     </button>
                     <button
                       onClick={() => {
-                        setShowCreateField(true);
-                        setNewFieldName("");
-                        setNewFieldType("");
-                        setSelectedFieldType(null);
-                        setFieldNameError(false);
-                        setFieldTypeError(false);
+                        setFieldManagerMode("create");
+                        setFieldManagerOpen(true);
                       }}
-                      className="text-sm font-medium transition-colors"
+                      className="text-sm font-medium transition-colors cursor-pointer"
                       style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
                     >
                       Create field
@@ -1046,137 +1033,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   </button>
                 </div>
 
-                {/* Create Field Popup Overlay */}
-                {showCreateField && (
-                  <>
-                    <div
-                      className="absolute inset-0 z-40"
-                      style={{ backgroundColor: "rgba(0,0,0,0.4)" }}
-                      onClick={() => setShowCreateField(false)}
-                    />
-                    <div
-                      className="absolute left-6 right-6 top-1/2 -translate-y-1/2 bg-white rounded-xl shadow-2xl z-50 p-6"
-                      style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.18)" }}
-                    >
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold" style={{ color: "#1F2937", fontFamily: "DM Sans, sans-serif" }}>
-                          Create Custom Field
-                        </h3>
-                        <button onClick={() => setShowCreateField(false)} className="hover:bg-gray-100 p-1 rounded transition-colors">
-                          <X className="w-5 h-5" style={{ color: "#6B7280" }} />
-                        </button>
-                      </div>
 
-                      <div>
-                        <label className="block text-sm font-medium mb-2" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                          Field Name
-                        </label>
-                        <input
-                          type="text"
-                          value={newFieldName}
-                          onChange={(e) => { setNewFieldName(e.target.value); setFieldNameError(false); }}
-                          placeholder="e.g. Insurance ID"
-                          className="w-full px-3 py-2 bg-white border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-                          style={{ borderColor: fieldNameError ? "#DC2626" : "#E5E7EB", height: "40px", fontFamily: "Outfit, sans-serif" }}
-                        />
-                        {fieldNameError && <p className="text-xs mt-1" style={{ color: "#DC2626", fontFamily: "Outfit, sans-serif" }}>Field name is required</p>}
-                      </div>
-
-                      <div className="mt-3">
-                        <label className="block text-sm font-medium mb-2" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                          Field Type
-                        </label>
-                        <select
-                          value={selectedFieldType || ""}
-                          onChange={(e) => { setSelectedFieldType(e.target.value); setNewFieldType(e.target.value); setFieldTypeError(false); }}
-                          className="w-full px-3 py-2 bg-white border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-teal-500 transition-all"
-                          style={{ borderColor: fieldTypeError ? "#DC2626" : "#E5E7EB", height: "40px", fontFamily: "Outfit, sans-serif" }}
-                        >
-                          <option value="">Select field type</option>
-                          <option value="String">String</option>
-                          <option value="List">List</option>
-                          <option value="Date/Time">Date/Time</option>
-                          <option value="Date">Date</option>
-                          <option value="Book a Resource">Book a Resource</option>
-                          <option value="Address">Address</option>
-                          <option value="Link">Link</option>
-                          <option value="File">File</option>
-                          <option value="Money">Money</option>
-                          <option value="Yes/No">Yes/No</option>
-                          <option value="Number">Number</option>
-                          <option value="WhatsApp Link">WhatsApp Link</option>
-                        </select>
-                        {fieldTypeError && <p className="text-xs mt-1" style={{ color: "#DC2626", fontFamily: "Outfit, sans-serif" }}>Please select a field type</p>}
-                      </div>
-
-                      <div className="mb-3 mt-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={fieldMultiple} onChange={(e) => setFieldMultiple(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
-                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Multiple</span>
-                        </label>
-                      </div>
-
-                      <div className="mb-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={fieldShowAlways} onChange={(e) => setFieldShowAlways(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
-                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Show always</span>
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-xs cursor-help" style={{ backgroundColor: "#E5E7EB", color: "#6B7280" }} title="Field will always appear in the profile regardless of stage">i</span>
-                        </label>
-                      </div>
-
-                      <div className="mb-3">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={fieldTooltip} onChange={(e) => setFieldTooltip(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
-                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Enable field tooltip</span>
-                        </label>
-                      </div>
-
-                      <div className="mb-4">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input type="checkbox" checked={fieldVisibleToSelected} onChange={(e) => setFieldVisibleToSelected(e.target.checked)} className="w-4 h-4 rounded border-gray-300" style={{ accentColor: "#4F8EF7" }} />
-                          <span style={{ fontSize: "14px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Make this field visible to selected users only</span>
-                        </label>
-                      </div>
-
-                      <div className="my-4 border-t" style={{ borderColor: "#E5E7EB" }} />
-
-                      <div className="flex items-center gap-3 pt-2">
-                        <button
-                          onClick={() => { setShowCreateField(false); setNewFieldName(""); setNewFieldType(""); setSelectedFieldType(null); setFieldNameError(false); setFieldTypeError(false); }}
-                          className="flex-1 px-4 py-2.5 border rounded-md text-sm font-medium transition-colors hover:bg-gray-50"
-                          style={{ borderColor: "#E5E7EB", color: "#6B7280", fontFamily: "Outfit, sans-serif" }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!newFieldName.trim()) { setFieldNameError(true); return; }
-                            if (!newFieldType) { setFieldTypeError(true); return; }
-                            // Add to local display
-                            setCustomFields([...customFields, { name: newFieldName, value: "", type: newFieldType }]);
-                            // Persist definition globally via context
-                            const key = newFieldName.toLowerCase().replace(/\s+/g, "_");
-                            addCustomField({ label: newFieldName, key, type: newFieldType.toUpperCase(), required: false });
-                            setShowCreateField(false);
-                            setNewFieldName(""); setNewFieldType(""); setSelectedFieldType(null);
-                            setFieldNameError(false); setFieldTypeError(false);
-                            toast.success("Field created successfully");
-                          }}
-                          disabled={!newFieldName.trim() || !newFieldType}
-                          className="flex-1 px-4 py-2.5 text-white rounded-md text-sm font-bold transition-colors"
-                          style={{
-                            backgroundColor: !newFieldName.trim() || !newFieldType ? "#9CA3AF" : "#4F8EF7",
-                            fontFamily: "Outfit, sans-serif",
-                            cursor: !newFieldName.trim() || !newFieldType ? "not-allowed" : "pointer",
-                            opacity: !newFieldName.trim() || !newFieldType ? 0.6 : 1,
-                          }}
-                        >
-                          Create Field
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
             </div>
           )}
@@ -2115,108 +1972,78 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
           )}
 
-          {/* ── Select Fields Modal ── */}
-          {showSelectFieldModal && (
-            <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4">
-              <div
-                className="bg-white rounded-lg shadow-xl border"
-                style={{ borderColor: "#E5E7EB", borderRadius: "8px", width: "calc(100% - 64px)", maxWidth: "600px", maxHeight: "420px", overflow: "hidden", display: "flex", flexDirection: "column" }}
-              >
-                <div className="p-4 border-b" style={{ borderColor: "#E5E7EB" }}>
-                  <h3 className="text-base font-bold mb-3" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>Select fields</h3>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "#9CA3AF" }} />
-                    <input
-                      type="text"
-                      value={fieldSearchQuery}
-                      onChange={(e) => setFieldSearchQuery(e.target.value)}
-                      placeholder="Find field..."
-                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm"
-                      style={{ borderColor: "#E5E7EB", fontFamily: "Outfit, sans-serif" }}
-                    />
+          {/* ── Appointments Tab ── */}
+          {activeProfileTab === "appointments" && (() => {
+            const stored = sessionStorage.getItem("appointments_v1");
+            const all: any[] = stored ? JSON.parse(stored) : [];
+            const clientAppts = all.filter((a: any) =>
+              (client?.email && a.clientEmail === client.email) ||
+              (client?.phone && a.clientPhone === client.phone) ||
+              (client?.name && a.clientName === client.name)
+            );
+            return (
+              <div className="space-y-4">
+                {clientAppts.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <Calendar className="w-12 h-12 mb-4" style={{ color: "#D1D5DB" }} />
+                    <p className="text-sm font-medium" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>No appointments yet</p>
+                    <p className="text-xs mt-1" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>Appointments booked through web forms will appear here.</p>
                   </div>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  <div>
-                    <h4 className="text-sm font-bold mb-2" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>About Client</h4>
-                    <div className="grid grid-cols-3 gap-2">
-                      {selectFieldsAboutClient.map((field) => (
-                        <label key={field} className="flex items-center gap-2 p-2 hover:bg-muted/30 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={selectedFieldsForModal.includes(field)}
-                            onChange={(e) => {
-                              if (e.target.checked) setSelectedFieldsForModal([...selectedFieldsForModal, field]);
-                              else setSelectedFieldsForModal(selectedFieldsForModal.filter((f) => f !== field));
+                ) : (
+                  clientAppts.map((appt: any, idx: number) => (
+                    <div key={appt.id || idx} className="flex items-start gap-4 p-4 rounded-xl border" style={{ borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" }}>
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#EEF2FF" }}>
+                        <CalendarClock className="w-5 h-5" style={{ color: "#4F8EF7" }} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
+                            {appt.service || "Appointment"}
+                          </p>
+                          <span
+                            className="text-xs px-2 py-0.5 rounded-full font-medium"
+                            style={{
+                              backgroundColor: appt.status === "confirmed" ? "#D1FAE5" : appt.status === "cancelled" ? "#FEE2E2" : "#FEF3C7",
+                              color: appt.status === "confirmed" ? "#065F46" : appt.status === "cancelled" ? "#991B1B" : "#92400E",
+                              fontFamily: "Outfit, sans-serif",
                             }}
-                            className="w-4 h-4"
-                          />
-                          <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>{field}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                  {customFields.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-bold mb-2" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>More</h4>
-                      <div className="grid grid-cols-3 gap-2">
-                        {customFields.map((field, index) => (
-                          <label key={index} className="flex items-center gap-2 p-2 hover:bg-muted/30 rounded cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedFieldsForModal.includes(field.name)}
-                              onChange={(e) => {
-                                if (e.target.checked) setSelectedFieldsForModal([...selectedFieldsForModal, field.name]);
-                                else setSelectedFieldsForModal(selectedFieldsForModal.filter((f) => f !== field.name));
-                              }}
-                              className="w-4 h-4"
-                            />
-                            <span className="text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>{field.name}</span>
-                          </label>
-                        ))}
+                          >
+                            {appt.status || "Pending"}
+                          </span>
+                        </div>
+                        <p className="text-xs mt-1" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+                          {[appt.date, appt.time].filter(Boolean).join(" · ")}
+                        </p>
+                        {appt.notes && (
+                          <p className="text-xs mt-1 italic" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>{appt.notes}</p>
+                        )}
                       </div>
                     </div>
-                  )}
-                </div>
-                <div className="p-4 border-t flex items-center justify-between" style={{ borderColor: "#E5E7EB" }}>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedFieldsForModal.length === selectFieldsAboutClient.length + customFields.length}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedFieldsForModal([...selectFieldsAboutClient, ...customFields.map((f) => f.name)]);
-                        } else {
-                          setSelectedFieldsForModal([]);
-                        }
-                      }}
-                      className="w-4 h-4"
-                    />
-                    <span className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>select all</span>
-                  </label>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => { setShowSelectFieldModal(false); setSelectedFieldsForModal([]); }} className="text-sm px-4" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                      CANCEL
-                    </button>
-                    <button
-                      onClick={() => {
-                        const newFields = selectedFieldsForModal
-                          .filter((fieldName) => !customFields.some((f) => f.name === fieldName))
-                          .map((fieldName) => ({ name: fieldName, value: "—" }));
-                        setCustomFields([...customFields, ...newFields]);
-                        setShowSelectFieldModal(false);
-                        setSelectedFieldsForModal([]);
-                        toast.success("Fields added to overview");
-                      }}
-                      className="px-6 py-2 text-xs font-bold uppercase tracking-wide text-white rounded transition-colors"
-                      style={{ backgroundColor: "#4F8EF7", height: "36px", width: "80px", borderRadius: "6px", fontFamily: "Outfit, sans-serif" }}
-                    >
-                      SELECT
-                    </button>
-                  </div>
-                </div>
+                  ))
+                )}
               </div>
-            </div>
+            );
+          })()}
+
+          {/* ── Select/Create Field Modals ── */}
+          {fieldManagerOpen && fieldManagerMode === "select" && (
+            <SelectFieldsModal
+              initiallySelected={visibleFieldKeys}
+              onClose={() => setFieldManagerOpen(false)}
+              onApply={(keys) => {
+                setVisibleFieldKeys(keys);
+              }}
+            />
+          )}
+
+          {fieldManagerOpen && fieldManagerMode === "create" && (
+            <CreateFieldModal
+              lockModule="client"
+              onClose={() => setFieldManagerOpen(false)}
+              onCreated={(field) => {
+                setVisibleFieldKeys(prev => [...prev, field.key]);
+              }}
+            />
           )}
         </div>
       </div>

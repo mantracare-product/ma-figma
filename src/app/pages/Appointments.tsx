@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
+import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
 interface Appointment {
   id: number;
@@ -74,57 +76,63 @@ export default function Appointments() {
     { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
   ];
 
-  const [appointments, setAppointments] = useState<Appointment[]>([
-    {
-      id: 1,
-      clientName: "James Wilson",
-      clientEmail: "james.w@example.com",
-      clientPhone: "+1 (555) 123-4567",
-      employeeId: 1,
-      serviceId: 1,
-      date: "2026-05-12",
-      time: "09:00",
-      duration: 60,
-      status: "pending-accept",
-      notes: "First-time patient",
-    },
-    {
-      id: 2,
-      clientName: "Emma Brown",
-      clientEmail: "emma.b@example.com",
-      clientPhone: "+1 (555) 234-5678",
-      employeeId: 2,
-      serviceId: 2,
-      date: "2026-05-12",
-      time: "10:30",
-      duration: 30,
-      status: "scheduled",
-    },
-    {
-      id: 3,
-      clientName: "Oliver Davis",
-      clientEmail: "oliver.d@example.com",
-      clientPhone: "+1 (555) 345-6789",
-      employeeId: 1,
-      serviceId: 4,
-      date: "2026-05-13",
-      time: "14:00",
-      duration: 20,
-      status: "scheduled",
-    },
-    {
-      id: 4,
-      clientName: "Sophia Martinez",
-      clientEmail: "sophia.m@example.com",
-      clientPhone: "+1 (555) 456-7890",
-      employeeId: 5,
-      serviceId: 3,
-      date: "2026-05-14",
-      time: "11:00",
-      duration: 45,
-      status: "scheduled",
-    },
-  ]);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => {
+    const saved = sessionStorage.getItem("appointments_v1");
+    if (saved) {
+      try { return JSON.parse(saved); } catch {}
+    }
+    return [
+      {
+        id: 1,
+        clientName: "James Wilson",
+        clientEmail: "james.w@example.com",
+        clientPhone: "+1 (555) 123-4567",
+        employeeId: 1,
+        serviceId: 1,
+        date: "2026-05-12",
+        time: "09:00",
+        duration: 60,
+        status: "pending-accept",
+        notes: "First-time patient",
+      },
+      {
+        id: 2,
+        clientName: "Emma Brown",
+        clientEmail: "emma.b@example.com",
+        clientPhone: "+1 (555) 234-5678",
+        employeeId: 2,
+        serviceId: 2,
+        date: "2026-05-12",
+        time: "10:30",
+        duration: 30,
+        status: "scheduled",
+      },
+      {
+        id: 3,
+        clientName: "Oliver Davis",
+        clientEmail: "oliver.d@example.com",
+        clientPhone: "+1 (555) 345-6789",
+        employeeId: 1,
+        serviceId: 4,
+        date: "2026-05-13",
+        time: "14:00",
+        duration: 20,
+        status: "scheduled",
+      },
+      {
+        id: 4,
+        clientName: "Sophia Martinez",
+        clientEmail: "sophia.m@example.com",
+        clientPhone: "+1 (555) 456-7890",
+        employeeId: 5,
+        serviceId: 3,
+        date: "2026-05-14",
+        time: "11:00",
+        duration: 45,
+        status: "scheduled",
+      },
+    ];
+  });
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"calendar" | "list">("list");
@@ -158,6 +166,29 @@ export default function Appointments() {
   const currentProviderUser: Employee = employees[0];
   const effectiveEmployeeFilter = devUserRole === "provider" ? currentProviderUser.id : selectedEmployee;
   const currentCalendarViewMode = calendarViewMode;
+
+  // Field registry for appointment module
+  const { getAllFields } = useFieldRegistry();
+  const appointmentCustomFields = getAllFields("appointment").filter(f => f.source === "custom");
+
+  // Custom field values for the currently-edited appointment
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+
+  // Modal state for appointment field picker/creator
+  const [apptSelectFieldsOpen, setApptSelectFieldsOpen] = useState(false);
+  const [apptCreateFieldOpen, setApptCreateFieldOpen] = useState(false);
+  const [apptVisibleFieldKeys, setApptVisibleFieldKeys] = useState<string[]>(() => {
+    const saved = sessionStorage.getItem("appointments_visibleFields");
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+  }, [appointments]);
+
+  useEffect(() => {
+    sessionStorage.setItem("appointments_visibleFields", JSON.stringify(apptVisibleFieldKeys));
+  }, [apptVisibleFieldKeys]);
 
 
   // Booking workflow state
@@ -440,6 +471,7 @@ export default function Appointments() {
             employeeId: Number(appointmentFormData.employeeId),
             serviceId: Number(appointmentFormData.serviceId),
             duration: service?.duration || a.duration,
+            ...customFieldValues,
           }
           : a
       )
@@ -471,6 +503,16 @@ export default function Appointments() {
       time: appointment.time,
       notes: appointment.notes || "",
     });
+
+    // Populate custom field values from the appointment object
+    const values: Record<string, string> = {};
+    appointmentCustomFields.forEach(f => {
+      if ((appointment as any)[f.key] !== undefined) {
+        values[f.key] = String((appointment as any)[f.key]);
+      }
+    });
+    setCustomFieldValues(values);
+
     setShowEditModal(true);
   };
 
@@ -485,6 +527,7 @@ export default function Appointments() {
       time: "",
       notes: "",
     });
+    setCustomFieldValues({});
     setSelectedAppointment(null);
   };
 
@@ -3040,8 +3083,92 @@ export default function Appointments() {
               </div>
             </div>
           )}
+          {/* Custom Appointment Fields Section */}
+          {(apptVisibleFieldKeys.length > 0 || appointmentCustomFields.length > 0) && (
+            <div className="border-t border-gray-100 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-sm font-semibold text-gray-700">Custom Fields</h4>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setApptSelectFieldsOpen(true)}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Select Fields
+                  </button>
+                  <span className="text-gray-300">|</span>
+                  <button
+                    type="button"
+                    onClick={() => setApptCreateFieldOpen(true)}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    + Create Field
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {getAllFields("appointment")
+                  .filter(f => f.source === "custom" && apptVisibleFieldKeys.includes(f.key))
+                  .map(f => (
+                    <div key={f.key}>
+                      <label className="block text-sm font-medium mb-1.5">{f.label}{f.required && " *"}</label>
+                      <input
+                        type="text"
+                        value={customFieldValues[f.key] || ""}
+                        onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                        placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
+                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                      />
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          )}
+
+          {/* Inline field add trigger if no custom fields yet */}
+          {appointmentCustomFields.length === 0 && (
+            <div className="border-t border-gray-100 pt-4 flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setApptSelectFieldsOpen(true)}
+                className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
+              >
+                Select Fields
+              </button>
+              <span className="text-gray-300">·</span>
+              <button
+                type="button"
+                onClick={() => setApptCreateFieldOpen(true)}
+                className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
+              >
+                + Create Custom Field
+              </button>
+            </div>
+          )}
         </div>
       </Modal>
+
+      {/* Appointment Select Fields Modal */}
+      {apptSelectFieldsOpen && (
+        <SelectFieldsModal
+          initiallySelected={apptVisibleFieldKeys}
+          onlyModules={["appointment"]}
+          onClose={() => setApptSelectFieldsOpen(false)}
+          onApply={keys => setApptVisibleFieldKeys(keys)}
+        />
+      )}
+
+      {/* Appointment Create Field Modal */}
+      {apptCreateFieldOpen && (
+        <CreateFieldModal
+          lockModule="appointment"
+          onClose={() => setApptCreateFieldOpen(false)}
+          onCreated={field => {
+            setApptVisibleFieldKeys(prev => [...prev, field.key]);
+          }}
+        />
+      )}
 
       <HowItWorksModal
         isOpen={showHelp}

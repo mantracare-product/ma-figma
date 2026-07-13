@@ -20,6 +20,7 @@ import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorks
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
+import { useFieldRegistry } from "../context/FieldRegistryContext";
 
 interface Client {
   id: string;
@@ -133,6 +134,25 @@ const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ columnKey
 
 export default function Clients() {
   const navigate = useNavigate();
+  const { getAllFields } = useFieldRegistry();
+
+  const clientInfoFieldsList = Array.from(new Set([
+    ...getAllFields("client")
+      .filter(f => !["processes", "responsible"].includes(f.key))
+      .map(f => f.label),
+    "Company Size"
+  ]));
+
+  const allFilterFields = [
+    ...clientInfoFieldsList,
+    'Process', 'Responsible', 'Created On',
+    'Last Contact: Today', 'Last Contact: Yesterday', 'Last Contact: Last 7 days', 'Last Contact: Last 30 days',
+    'Last Call: Last 24 hours', 'Last Call: Last 7 days',
+    'No activity in 7 days', 'No activity in 30 days',
+    'Created: Today', 'Created: This week', 'Created: This month',
+    'Overdue follow-up'
+  ];
+
   const [clients, setClients] = useState<Client[]>(() => {
     const saved = sessionStorage.getItem("clients");
     return saved ? JSON.parse(saved) : initialClients;
@@ -262,8 +282,6 @@ export default function Clients() {
 
   // Field Picker and Create Field states
   const [showFieldPicker, setShowFieldPicker] = useState(false);
-  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
-  const [showCreateField, setShowCreateField] = useState(false);
   const [newFieldName, setNewFieldName] = useState("");
   const [newFieldType, setNewFieldType] = useState("");
   const [selectedFieldType, setSelectedFieldType] = useState<string | null>(null);
@@ -274,7 +292,6 @@ export default function Clients() {
   const [fieldVisibleToSelected, setFieldVisibleToSelected] = useState(false);
   const [fieldNameError, setFieldNameError] = useState(false);
   const [fieldTypeError, setFieldTypeError] = useState(false);
-  const [customFields, setCustomFields] = useState<Array<{ name: string; value: string; type?: string }>>([]);
 
   // Select field modal states
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>([]);
@@ -4513,7 +4530,7 @@ export default function Clients() {
                       CLIENT INFO
                     </h3>
                     <div className="grid grid-cols-3 gap-2">
-                      {['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size']
+                      {clientInfoFieldsList
                         .filter(field => field.toLowerCase().includes(fieldSearchQuery.toLowerCase()))
                         .map((field) => (
                           <label
@@ -4625,11 +4642,10 @@ export default function Clients() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={availableFilterFields.length > 0 && availableFilterFields.length === 23}
+                      checked={availableFilterFields.length > 0 && availableFilterFields.length === allFilterFields.length}
                       onChange={(e) => {
                         if (e.target.checked) {
-                          const allFields = ['Name', 'Email', 'Phone', 'Status', 'Location', 'Company', 'Role', 'Company Size', 'Process', 'Responsible', 'Created On', 'Last Contact: Today', 'Last Contact: Yesterday', 'Last Contact: Last 7 days', 'Last Contact: Last 30 days', 'Last Call: Last 24 hours', 'Last Call: Last 7 days', 'No activity in 7 days', 'No activity in 30 days', 'Created: Today', 'Created: This week', 'Created: This month', 'Overdue follow-up'];
-                          setAvailableFilterFields(allFields);
+                          setAvailableFilterFields(allFilterFields);
                         } else {
                           setAvailableFilterFields([]);
                         }

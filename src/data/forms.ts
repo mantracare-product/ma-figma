@@ -4,6 +4,7 @@ export type FieldDef = {
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: string }[];
+  module?: string;
   sourceType?: "system" | "custom";
   sourceFieldKey?: string;
 };

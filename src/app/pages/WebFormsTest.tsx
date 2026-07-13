@@ -450,6 +450,49 @@ export default function WebFormsTest() {
         }
       }
 
+      // Check if any fields belong to the "appointment" module and create appointment
+      const hasAppointmentField = fields.some((f) => f.module === "appointment");
+      if (hasAppointmentField) {
+        const appt: any = {
+          id: Date.now() + Math.floor(Math.random() * 1000),
+          clientName: submittedName || "Anonymous",
+          clientEmail: submittedEmail,
+          clientPhone: submittedPhone,
+          date: "",
+          time: "",
+          status: "pending-accept",
+          notes: "Submitted via form",
+          service: selectedForm.name,
+          employeeId: 1,
+          serviceId: 1,
+          duration: 60,
+        };
+
+        fields.forEach((f) => {
+          const val = fieldValues[f.label];
+          if (!val || f.module !== "appointment") return;
+          if (f.sourceFieldKey === "appointment_date") appt.date = val;
+          else if (f.sourceFieldKey === "appointment_time") appt.time = val;
+          else if (f.sourceFieldKey === "status") appt.status = val;
+          else if (f.sourceFieldKey === "provider") {
+            appt.notes = (appt.notes || "") + `\nProvider: ${val}`;
+          } else {
+            // Store custom/other fields on the appointment
+            if (f.sourceFieldKey) {
+              appt[f.sourceFieldKey] = val;
+            }
+          }
+        });
+
+        // Clean up notes
+        appt.notes = appt.notes.trim();
+
+        const existingApptsRaw = sessionStorage.getItem("appointments_v1");
+        const existingAppts = existingApptsRaw ? JSON.parse(existingApptsRaw) : [];
+        sessionStorage.setItem("appointments_v1", JSON.stringify([appt, ...existingAppts]));
+        toast.success("Appointment scheduled successfully ✓");
+      }
+
       setResult({ success: true, submissionId, fieldData, clientCreated, clientMatched });
       toast.success("Form submitted successfully!");
       setSubmitting(false);

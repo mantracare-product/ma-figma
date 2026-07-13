@@ -1,92 +1,135 @@
-﻿import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
+import { useFieldRegistry, FieldModule, SYSTEM_SEEDS, getLiveTeamMembers } from "../../context/FieldRegistryContext";
 
-// ─── Field source constants ──────────────────────────────────────────────────
+const MODULE_LABELS: Record<string, string> = {
+  client: "Client Fields",
+  process: "Process Fields",
+  appointment: "Appointment Fields",
+  call: "Call Fields",
+  service: "Service Fields",
+  organization: "Organization Fields",
+};
 
-export const FETCH_FIELD_SOURCES = [
-  {
-    value: "system", label: "System Fields", fields: [
-      { value: "contact_name", label: "Contact Name" },
-      { value: "contact_email", label: "Contact Email" },
-      { value: "contact_phone", label: "Contact Phone" },
-      { value: "country", label: "Country" },
-      { value: "language", label: "Language" },
-    ]
-  },
-  {
-    value: "call-log", label: "Call Log Fields", fields: [
-      { value: "call_status", label: "Call Status" },
-      { value: "call_duration", label: "Call Duration" },
-      { value: "call_sentiment", label: "Sentiment" },
-      { value: "call_intent", label: "Intent" },
-      { value: "call_summary", label: "Call Summary" },
-      { value: "call_transcription", label: "Call Transcription" },
-    ]
-  },
-  {
-    value: "stage", label: "Stage Fields", fields: [
-      { value: "stage_name", label: "Stage Name" },
-      { value: "stage_entered_at", label: "Stage Entered At" },
-    ]
-  },
-  {
-    value: "process", label: "Process Fields", fields: [
-      { value: "process_name", label: "Process Name" },
-      { value: "process_status", label: "Process Status" },
-    ]
-  },
-  {
-    value: "appointment", label: "Appointment Fields", fields: [
-      { value: "appointment_date", label: "Appointment Date" },
-      { value: "appointment_time", label: "Appointment Time" },
-      { value: "appointment_status", label: "Appointment Status" },
-      { value: "appointment_with", label: "Appointment With" },
-    ]
-  },
-  {
-    value: "org", label: "Organization Fields", fields: [
-      { value: "org_name", label: "Organization Name" },
-      { value: "org_domain", label: "Organization Domain" },
-    ]
-  },
-  {
-    value: "custom", label: "Custom Fields", fields: [
-      { value: "custom_field_1", label: "Custom Field 1" },
-      { value: "custom_field_2", label: "Custom Field 2" },
-    ]
-  },
-];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization"];
 
-export const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
-  FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
-);
+// Live field sources helper for backwards compatibility Proxy
+export function getLiveFieldSources() {
+  let customFields: Record<string, any> = {};
+  try {
+    const saved = sessionStorage.getItem("fieldRegistry_v1");
+    if (saved) {
+      customFields = JSON.parse(saved);
+      // Normalize deal to process
+      if (customFields.deal && !customFields.process) {
+        customFields.process = customFields.deal;
+      }
+    }
+  } catch {}
 
-// ─── Component ───────────────────────────────────────────────────────────────
+  const teamOptions = getLiveTeamMembers();
+
+  return ALL_MODULES.map(module => {
+    const sysSeeds = SYSTEM_SEEDS[module] || [];
+    const custFields = customFields[module] || [];
+
+    const fields = [
+      ...sysSeeds.map((f: any) => {
+        const isTeamSelect = f.key === "responsible" || f.key === "provider";
+        return {
+          value: f.key,
+          label: f.label,
+          options: isTeamSelect ? teamOptions : f.options
+        };
+      }),
+      ...custFields.map((f: any) => ({
+        value: f.key,
+        label: f.label,
+        options: f.options
+      }))
+    ];
+
+    return {
+      value: module,
+      label: MODULE_LABELS[module] || module,
+      fields
+    };
+  });
+}
+
+// Backwards compatibility dummy exports, reactively proxying to the live field registry
+export const FETCH_FIELD_SOURCES = new Proxy([] as any, {
+  get(target, prop, receiver) {
+    const liveArray = getLiveFieldSources();
+    return Reflect.get(liveArray, prop, receiver);
+  },
+  getOwnPropertyDescriptor(target, prop) {
+    const liveArray = getLiveFieldSources();
+    return Reflect.getOwnPropertyDescriptor(liveArray, prop);
+  },
+  ownKeys(target) {
+    const liveArray = getLiveFieldSources();
+    return Reflect.ownKeys(liveArray);
+  }
+});
+
+export const FIELDS_BY_SOURCE_MAP: Record<string, any> = {};
 
 export interface VariablePickerButtonProps {
-  targetRef: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
+  targetRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
   value: string;
   onChange: (newValue: string) => void;
   label?: string;
+  moduleFilter?: FieldModule[];
+  onBeforeOpen?: () => void;
+  mode?: "insert" | "replace";
 }
 
 const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
   targetRef,
   value,
   onChange,
-  label = "Insert Variable"
+  label = "Insert Variable",
+  moduleFilter,
+  onBeforeOpen,
+  mode = "insert",
 }) => {
+  const { getAllFields } = useFieldRegistry();
   const [isOpen, setIsOpen] = useState(false);
   const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownPanelRef = useRef<HTMLDivElement>(null);
 
+  const rawModules = moduleFilter || ALL_MODULES;
+  const modulesToUse = rawModules.map(m => (m === "deal" ? "process" : m)) as Exclude<FieldModule, "deal">[];
+
+  // Filter and deduplicate modules
+  const uniqueModules = Array.from(new Set(modulesToUse));
+
+  const variableGroups = uniqueModules.map(module => ({
+    value: module,
+    label: MODULE_LABELS[module] || module,
+    fields: getAllFields(module).map(f => ({ value: f.key, label: f.label })),
+  })).filter(g => g.fields.length > 0);
+
   const handleSelectField = (fieldValue: string) => {
-    const textarea = targetRef.current;
-    if (!textarea) return;
+    const insertText = `{{${fieldValue}}}`;
+    if (mode === "replace") {
+      onChange(insertText);
+      setIsOpen(false);
+      return;
+    }
+
+    const textarea = targetRef?.current;
+    if (!textarea) {
+      // Fallback: simple append
+      onChange((value || "") + insertText);
+      setIsOpen(false);
+      return;
+    }
+
     const start = textarea.selectionStart ?? 0;
     const end = textarea.selectionEnd ?? 0;
-    const insertText = `{{${fieldValue}}}`;
     const currentVal = value || "";
     const newValue = currentVal.slice(0, start) + insertText + currentVal.slice(end);
     onChange(newValue);
@@ -99,6 +142,9 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
   };
 
   const openDropdown = () => {
+    if (onBeforeOpen) {
+      onBeforeOpen();
+    }
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
@@ -147,7 +193,7 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
               </span>
             </div>
             <div className="overflow-y-auto flex-1 py-1 max-h-[220px]">
-              {FETCH_FIELD_SOURCES.map(group => (
+              {variableGroups.map(group => (
                 <div key={group.value}>
                   <div className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50 first:border-t-0" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {group.label}

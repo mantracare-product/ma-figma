@@ -19,6 +19,8 @@ import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorks
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
+import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 
 interface CallLog {
   id: string;
@@ -249,18 +251,24 @@ export default function Deals() {
   const [drawerStageIdx, setDrawerStageIdx] = useState(1);
 
   // Process Viewer Select/Create field (FIX 4)
-  const [showDrawerSelectFields, setShowDrawerSelectFields] = useState(false);
-  const [showDrawerCreateField, setShowDrawerCreateField] = useState(false);
-  const [drawerNewFieldName, setDrawerNewFieldName] = useState("");
-  const [drawerNewFieldType, setDrawerNewFieldType] = useState("");
+  const { getAllFields } = useFieldRegistry();
+  const [fieldManagerMode, setFieldManagerMode] = useState<"select" | "create">("select");
+  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
   const [drawerVisibleFields, setDrawerVisibleFields] = useState<string[]>([
-    "Client Name", "Responsible", "Deal Type", "Source", "Start Date", "End Date",
-    "Email ID", "Country Code", "Country", "Time Slot", "Comment",
+    "client_name", "responsible", "deal_type", "source", "start_date", "end_date",
+    "email_id", "country_code", "country", "time_slot", "comment"
   ]);
-  const drawerAllFields = [
-    "Client Name", "Responsible", "Deal Type", "Source", "Start Date", "End Date",
-    "Email ID", "Country Code", "Country", "Time Slot", "Comment", "Status", "Process",
-  ];
+
+  useEffect(() => {
+    if (selectedLogForView) {
+      setEditedValues({});
+      const keys: string[] = (selectedLogForView as any).visibleFieldKeys || [
+        "client_name", "responsible", "deal_type", "source", "start_date", "end_date",
+        "email_id", "country_code", "country", "time_slot", "comment"
+      ];
+      setDrawerVisibleFields(keys);
+    }
+  }, [selectedLogForView]);
 
   // History advanced filter (FIX 6)
   const [showHistoryFilterPopup, setShowHistoryFilterPopup] = useState(false);
@@ -3745,19 +3753,40 @@ export default function Deals() {
           if (historyQuickFilter === "Created by me" && h.createdBy === "System") return false;
           return true;
         });
-        const fields = [
-          { label: "Client Name", value: log.client, type: "text", isClickable: true },
-          { label: "Responsible", value: client?.responsible || "Unassigned", type: "dropdown", isAvatar: true },
-          { label: "Deal Type", value: "Organic", type: "dropdown" },
-          { label: "Source", value: client?.email?.split("@")[1] || "—", type: "text" },
-          { label: "Start Date", value: new Date(log.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }), type: "date" },
-          { label: "End Date", value: "—", type: "date" },
-          { label: "Email ID", value: client?.email || "—", type: "text" },
-          { label: "Country Code", value: client?.countryCode || "—", type: "dropdown" },
-          { label: "Country", value: client?.country || "—", type: "dropdown" },
-          { label: "Time Slot", value: "8AM – 8PM", type: "dropdown" },
-          { label: "Comment", value: "", type: "text" },
-        ];
+        const allDealFields = getAllFields("deal");
+        const fields = allDealFields
+          .filter(f => drawerVisibleFields.includes(f.key))
+          .map(f => {
+            let val = "";
+            if (editedValues[f.key] !== undefined) {
+              val = editedValues[f.key];
+            } else if ((log as any)[f.key] !== undefined) {
+              val = (log as any)[f.key];
+            } else {
+              if (f.key === "client_name") val = log.client;
+              else if (f.key === "responsible") val = client?.responsible || "Unassigned";
+              else if (f.key === "deal_type") val = "Organic";
+              else if (f.key === "source") val = client?.email?.split("@")[1] || "—";
+              else if (f.key === "start_date") val = log.date ? new Date(log.date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "—";
+              else if (f.key === "end_date") val = "—";
+              else if (f.key === "email_id") val = client?.email || "—";
+              else if (f.key === "country_code") val = client?.countryCode || "—";
+              else if (f.key === "country") val = client?.country || "—";
+              else if (f.key === "time_slot") val = "8AM – 8PM";
+              else if (f.key === "comment") val = "";
+              else if (f.key === "status") val = log.status || "—";
+              else if (f.key === "process") val = log.process || "—";
+              else val = "—";
+            }
+            return {
+              key: f.key,
+              label: f.label,
+              value: val,
+              type: f.inputType === "select" ? "dropdown" : f.inputType,
+              isClickable: f.key === "client_name",
+              isAvatar: f.key === "responsible"
+            };
+          });
         return (
           <>
             {/* Backdrop */}
@@ -3878,12 +3907,29 @@ export default function Deals() {
                   {viewDrawerTab === "general" && (
                     <div>
                       {fields.map((f, i) => {
-                        const currentValue = editedValues[f.label] !== undefined ? editedValues[f.label] : f.value;
-                        const isEditing = editingField === f.label;
+                        const currentValue = f.value;
+                        const isEditing = editingField === f.key;
+
+                        const handleFieldSave = (val: string) => {
+                          setEditingField(null);
+                          setEditedValues(prev => ({ ...prev, [f.key]: val }));
+                          setCallLogs(prevLogs => prevLogs.map(l => {
+                            if (l.id === log.id) {
+                              const updated = {
+                                ...l,
+                                [f.key]: val,
+                                visibleFieldKeys: drawerVisibleFields
+                              };
+                              return updated;
+                            }
+                            return l;
+                          }));
+                          toast.success("Saved ✓", { duration: 2000 });
+                        };
 
                         return (
                           <div
-                            key={f.label}
+                            key={f.key}
                             className="flex items-center px-6"
                             style={{
                               height: '44px',
@@ -3894,15 +3940,15 @@ export default function Deals() {
                             <div style={{ width: '35%', fontSize: '13px', color: '#757575', fontFamily: 'Outfit, sans-serif' }}>{f.label}</div>
                             <div style={{ width: '65%', fontSize: '14px', color: '#212121', fontFamily: 'DM Sans, sans-serif' }}>
                               {/* Client Name */}
-                              {f.isClickable && f.label === "Client Name" ? (
+                              {f.key === "client_name" ? (
                                 <span
-                                  className="text-blue-600 text-left"
+                                  className="text-blue-600 text-left font-medium"
                                   style={{ fontFamily: 'DM Sans, sans-serif' }}
                                 >
                                   {currentValue}
                                 </span>
-                              ) : /* Responsible - Avatar + Dual Function (Profile + Dropdown) */
-                                f.isAvatar && f.label === "Responsible" ? (
+                              ) : /* Responsible */
+                                f.key === "responsible" ? (
                                   <div className="flex items-center gap-2 relative">
                                     <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
                                       {(currentValue as string).charAt(0)}
@@ -3931,21 +3977,12 @@ export default function Deals() {
                                       <>
                                         <div className="fixed inset-0 z-40" onClick={() => setShowResponsibleDropdownInDrawer(false)} />
                                         <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-2 w-56">
-                                          <div className="px-3 py-1.5 mb-1">
-                                            <input
-                                              type="text"
-                                              placeholder="Search..."
-                                              className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-                                              onClick={(e) => e.stopPropagation()}
-                                            />
-                                          </div>
                                           {["John Smith", "Emily Davis", "Michael Chen", "Sarah Johnson", "Robert Wilson"].map((person) => (
                                             <button
                                               key={person}
                                               onClick={() => {
-                                                setEditedValues({ ...editedValues, "Responsible": person });
+                                                handleFieldSave(person);
                                                 setShowResponsibleDropdownInDrawer(false);
-                                                toast.success("Responsible updated ✓");
                                               }}
                                               className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2"
                                             >
@@ -3962,107 +3999,105 @@ export default function Deals() {
                                       </>
                                     )}
                                   </div>
-                                ) : /* Text Fields - Inline Editable */
-                                  f.type === "text" ? (
-                                    isEditing ? (
-                                      <input
-                                        type="text"
-                                        value={currentValue}
-                                        onChange={(e) => setEditedValues({ ...editedValues, [f.label]: e.target.value })}
-                                        onBlur={() => {
-                                          setEditingField(null);
-                                          toast.success("Saved ✓", { duration: 2000 });
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter') {
-                                            setEditingField(null);
-                                            toast.success("Saved ✓", { duration: 2000 });
-                                          }
-                                        }}
-                                        autoFocus
-                                        className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                        style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                      />
-                                    ) : (
-                                      <div
-                                        onClick={() => setEditingField(f.label)}
-                                        className="cursor-pointer hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                                      >
-                                        {currentValue || '—'}
-                                      </div>
-                                    )
-                                  ) : /* Dropdown Fields */
-                                    f.type === "dropdown" ? (
-                                      <select
-                                        value={currentValue}
-                                        onChange={(e) => {
-                                          setEditedValues({ ...editedValues, [f.label]: e.target.value });
-                                          toast.success("Saved ✓", { duration: 2000 });
-                                        }}
-                                        className="w-full px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                        style={{ fontFamily: 'DM Sans, sans-serif', backgroundColor: 'white' }}
-                                      >
-                                        {f.label === "Deal Type" && (
-                                          <>
-                                            <option>Organic</option>
-                                            <option>Paid</option>
-                                            <option>Referral</option>
-                                            <option>Web</option>
-                                          </>
-                                        )}
-                                        {f.label === "Country Code" && (
-                                          <>
-                                            <option>+1</option>
-                                            <option>+44</option>
-                                            <option>+91</option>
-                                            <option>+971</option>
-                                          </>
-                                        )}
-                                        {f.label === "Country" && (
-                                          <>
-                                            <option>US</option>
-                                            <option>GB</option>
-                                            <option>IN</option>
-                                            <option>AE</option>
-                                          </>
-                                        )}
-                                        {f.label === "Time Slot" && (
-                                          <>
-                                            <option>8AM – 8PM</option>
-                                            <option>9AM – 5PM</option>
-                                            <option>10AM – 6PM</option>
-                                            <option>24/7</option>
-                                          </>
-                                        )}
-                                      </select>
-                                    ) : /* Date Fields */
-                                      f.type === "date" ? (
-                                        <input
-                                          type="date"
-                                          value={currentValue ? (() => { const d = new Date(currentValue); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() : ''}
-                                          onChange={(e) => {
-                                            const d = new Date(e.target.value);
-                                            const formatted = e.target.value && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : '';
-                                            setEditedValues({ ...editedValues, [f.label]: formatted });
-                                            toast.success("Saved ✓", { duration: 2000 });
-                                          }}
-                                          className="px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                          style={{ fontFamily: 'DM Sans, sans-serif' }}
-                                        />
-                                      ) : (
-                                        currentValue || '—'
-                                      )}
+                                ) : /* Select Fields */
+                                f.type === "dropdown" ? (
+                                  <select
+                                    value={currentValue}
+                                    onChange={(e) => handleFieldSave(e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                    style={{ fontFamily: 'DM Sans, sans-serif', backgroundColor: 'white' }}
+                                  >
+                                    {f.key === "deal_type" && (
+                                      <>
+                                        <option>Organic</option>
+                                        <option>Paid</option>
+                                        <option>Referral</option>
+                                        <option>Web</option>
+                                      </>
+                                    )}
+                                    {f.key === "country_code" && (
+                                      <>
+                                        <option>+1</option>
+                                        <option>+44</option>
+                                        <option>+91</option>
+                                        <option>+971</option>
+                                      </>
+                                    )}
+                                    {f.key === "country" && (
+                                      <>
+                                        <option>US</option>
+                                        <option>GB</option>
+                                        <option>IN</option>
+                                        <option>AE</option>
+                                      </>
+                                    )}
+                                    {f.key === "time_slot" && (
+                                      <>
+                                        <option>8AM – 8PM</option>
+                                        <option>9AM – 5PM</option>
+                                        <option>10AM – 6PM</option>
+                                        <option>24/7</option>
+                                      </>
+                                    )}
+                                    {f.key !== "deal_type" && f.key !== "country_code" && f.key !== "country" && f.key !== "time_slot" && (
+                                      <>
+                                        <option value="">Select option</option>
+                                        <option value="Option 1">Option 1</option>
+                                        <option value="Option 2">Option 2</option>
+                                      </>
+                                    )}
+                                  </select>
+                                ) : /* Date fields */
+                                f.type === "date" ? (
+                                  <input
+                                    type="date"
+                                    value={currentValue ? (() => { const d = new Date(currentValue); return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]; })() : ''}
+                                    onChange={(e) => {
+                                      const d = new Date(e.target.value);
+                                      const formatted = e.target.value && !isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : '';
+                                      handleFieldSave(formatted);
+                                    }}
+                                    className="px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                  />
+                                ) : /* Text Fields (inline editable) */
+                                isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={currentValue}
+                                    onChange={(e) => setEditedValues({ ...editedValues, [f.key]: e.target.value })}
+                                    onBlur={(e) => handleFieldSave(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        handleFieldSave(e.currentTarget.value);
+                                      }
+                                    }}
+                                    autoFocus
+                                    className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                  />
+                                ) : (
+                                  <div
+                                    onClick={() => setEditingField(f.key)}
+                                    className="cursor-pointer hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                                  >
+                                    {currentValue || '—'}
+                                  </div>
+                                )}
                             </div>
                           </div>
                         );
                       })}
 
-                      {/* FIX 2 — Select Fields + Create Field grouped together */}
+                      {/* Select Fields + Create Field grouped together */}
                       <div style={{ borderTop: '1px solid #F0F0F0' }}>
                         <div className="flex items-center px-6" style={{ height: '44px', gap: '8px' }}>
                           <button
-                            onClick={() => setShowDrawerSelectFields(true)}
-                            className="flex items-center gap-2 transition-colors group"
+                            onClick={() => {
+                              setFieldManagerMode("select");
+                              setFieldManagerOpen(true);
+                            }}
+                            className="flex items-center gap-2 transition-colors cursor-pointer group"
                             style={{ color: '#9E9E9E', fontSize: '13px', fontFamily: 'Outfit, sans-serif' }}
                             onMouseEnter={e => (e.currentTarget.style.color = '#1E88E5')}
                             onMouseLeave={e => (e.currentTarget.style.color = '#9E9E9E')}
@@ -4070,8 +4105,11 @@ export default function Deals() {
                             <SettingsIcon className="w-3.5 h-3.5" /> Select fields
                           </button>
                           <button
-                            onClick={() => { setShowDrawerCreateField(true); setDrawerNewFieldName(""); setDrawerNewFieldType(""); }}
-                            className="flex items-center gap-2 transition-colors"
+                            onClick={() => {
+                              setFieldManagerMode("create");
+                              setFieldManagerOpen(true);
+                            }}
+                            className="flex items-center gap-2 transition-colors cursor-pointer"
                             style={{ color: '#9E9E9E', fontSize: '13px', fontFamily: 'Outfit, sans-serif' }}
                             onMouseEnter={e => (e.currentTarget.style.color = '#1E88E5')}
                             onMouseLeave={e => (e.currentTarget.style.color = '#9E9E9E')}
@@ -4081,98 +4119,46 @@ export default function Deals() {
                         </div>
                       </div>
 
-                      {/* Select Fields Popover (FIX 4) */}
-                      {showDrawerSelectFields && (
-                        <>
-                          <div className="fixed inset-0" style={{ zIndex: 600 }} onClick={() => setShowDrawerSelectFields(false)} />
-                          <div className="fixed bg-white rounded-xl shadow-2xl" style={{ zIndex: 601, width: '420px', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-                            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                              <h3 className="font-bold text-sm" style={{ color: '#212121', fontFamily: 'DM Sans, sans-serif' }}>Select fields</h3>
-                              <button onClick={() => setShowDrawerSelectFields(false)}><X className="w-4 h-4 text-gray-400" /></button>
-                            </div>
-                            <div className="p-4">
-                              <div className="relative mb-3">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                                <input type="text" placeholder="Find field..." className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-400" style={{ fontFamily: 'Outfit, sans-serif' }} />
-                              </div>
-                              <p className="text-xs font-semibold mb-2" style={{ color: '#9E9E9E', fontFamily: 'Outfit, sans-serif' }}>About Deal</p>
-                              <div className="grid grid-cols-3 gap-1 mb-4">
-                                {drawerAllFields.map(field => (
-                                  <label key={field} className="flex items-center gap-1.5 p-1.5 hover:bg-blue-50 rounded cursor-pointer">
-                                    <input type="checkbox" checked={drawerVisibleFields.includes(field)} onChange={e => setDrawerVisibleFields(prev => e.target.checked ? [...prev, field] : prev.filter(f => f !== field))} className="w-3.5 h-3.5" style={{ accentColor: '#1E88E5' }} />
-                                    <span className="text-xs" style={{ fontFamily: 'Outfit, sans-serif', color: '#424242' }}>{field}</span>
-                                  </label>
-                                ))}
-                              </div>
-                              <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-                                <label className="flex items-center gap-1.5 cursor-pointer">
-                                  <input type="checkbox" checked={drawerVisibleFields.length === drawerAllFields.length} onChange={e => setDrawerVisibleFields(e.target.checked ? [...drawerAllFields] : [])} className="w-3.5 h-3.5" style={{ accentColor: '#1E88E5' }} />
-                                  <span className="text-xs" style={{ fontFamily: 'Outfit, sans-serif', color: '#757575' }}>select all</span>
-                                </label>
-                                <div className="flex gap-2">
-                                  <button onClick={() => setShowDrawerSelectFields(false)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium" style={{ fontFamily: 'Outfit, sans-serif', color: '#757575' }}>CANCEL</button>
-                                  <button onClick={() => { setShowDrawerSelectFields(false); toast.success('Fields updated ✓'); }} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white" style={{ backgroundColor: '#1E88E5', fontFamily: 'Outfit, sans-serif' }}>SELECT</button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </>
+                      {fieldManagerOpen && fieldManagerMode === "select" && (
+                        <SelectFieldsModal
+                          onlyModules={["process", "client"]}
+                          initiallySelected={drawerVisibleFields}
+                          onClose={() => setFieldManagerOpen(false)}
+                          onApply={(keys) => {
+                            setDrawerVisibleFields(keys);
+                            setCallLogs(prevLogs => prevLogs.map(l => {
+                              if (l.id === log.id) {
+                                return {
+                                  ...l,
+                                  visibleFieldKeys: keys
+                                };
+                              }
+                              return l;
+                            }));
+                          }}
+                        />
                       )}
 
-                      {/* Create Field Modal (FIX 4) */}
-                      {showDrawerCreateField && (
-                        <>
-                          <div className="fixed inset-0 bg-black/40" style={{ zIndex: 9999 }} onClick={() => setShowDrawerCreateField(false)} />
-                          <div className="fixed bg-white rounded-xl" style={{ zIndex: 10000, width: '480px', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', boxShadow: '0 8px 32px rgba(0,0,0,0.2)' }}>
-                            <div className="flex items-center justify-between p-6 pb-4">
-                              <h3 className="text-lg font-bold" style={{ color: '#1F2937', fontFamily: 'DM Sans, sans-serif' }}>Create Custom Field</h3>
-                              <button onClick={() => setShowDrawerCreateField(false)} className="hover:bg-gray-100 p-1 rounded"><X className="w-5 h-5 text-gray-400" /></button>
-                            </div>
-                            <div className="px-6 pb-6 space-y-4">
-                              <div>
-                                <label className="block text-sm font-medium mb-1.5" style={{ color: '#1F2937', fontFamily: 'Outfit, sans-serif' }}>Field Name</label>
-                                <input type="text" value={drawerNewFieldName} onChange={e => setDrawerNewFieldName(e.target.value)} placeholder="e.g. Insurance ID" className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-400" style={{ borderColor: '#E5E7EB', fontFamily: 'Outfit, sans-serif' }} />
-                              </div>
-                              <div>
-                                <label className="block text-sm font-medium mb-1.5" style={{ color: '#1F2937', fontFamily: 'Outfit, sans-serif' }}>Field Type</label>
-                                <select value={drawerNewFieldType} onChange={e => setDrawerNewFieldType(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-400" style={{ borderColor: '#E5E7EB', fontFamily: 'Outfit, sans-serif' }}>
-                                  <option value="">Select field type</option>
-                                  {["String", "List", "Date/Time", "Date", "Book a Resource", "Address", "Link", "File", "Money", "Yes/No", "Number", "WhatsApp Link"].map(t => <option key={t}>{t}</option>)}
-                                </select>
-                              </div>
-                              {[
-                                { state: false, label: "Multiple" },
-                              ].map(({ label }) => (
-                                <label key={label} className="flex items-center gap-2 cursor-pointer">
-                                  <input type="checkbox" className="w-4 h-4" style={{ accentColor: '#1E88E5' }} />
-                                  <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}>{label}</span>
-                                </label>
-                              ))}
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" defaultChecked className="w-4 h-4" style={{ accentColor: '#1E88E5' }} />
-                                <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}>Show always</span>
-                                <span className="inline-flex items-center justify-center w-4 h-4 rounded-full text-xs cursor-help" style={{ backgroundColor: '#E5E7EB', color: '#6B7280' }} title="This field will always be visible regardless of field selection">i</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-4 h-4" style={{ accentColor: '#1E88E5' }} />
-                                <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}>Enable field tooltip</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input type="checkbox" className="w-4 h-4" style={{ accentColor: '#1E88E5' }} />
-                                <span className="text-sm" style={{ fontFamily: 'Outfit, sans-serif', color: '#1F2937' }}>Make this field visible to selected users only</span>
-                              </label>
-                              <div className="flex gap-3 pt-2 border-t border-gray-100">
-                                <button onClick={() => setShowDrawerCreateField(false)} className="flex-1 py-2.5 border border-gray-300 rounded-lg text-sm font-medium" style={{ color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>Cancel</button>
-                                <button
-                                  disabled={!drawerNewFieldName.trim() || !drawerNewFieldType}
-                                  onClick={() => { setShowDrawerCreateField(false); toast.success('Field created successfully'); }}
-                                  className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white transition-opacity"
-                                  style={{ backgroundColor: '#1E88E5', opacity: !drawerNewFieldName.trim() || !drawerNewFieldType ? 0.5 : 1, fontFamily: 'Outfit, sans-serif', cursor: !drawerNewFieldName.trim() || !drawerNewFieldType ? 'not-allowed' : 'pointer' }}
-                                >Create Field</button>
-                              </div>
-                            </div>
-                          </div>
-                        </>
+                      {fieldManagerOpen && fieldManagerMode === "create" && (
+                        <CreateFieldModal
+                          lockModule="process"
+                          onClose={() => setFieldManagerOpen(false)}
+                          onCreated={(newField) => {
+                            setDrawerVisibleFields(prev => {
+                              const keys = [...prev, newField.key];
+                              setCallLogs(prevLogs => prevLogs.map(l => {
+                                if (l.id === log.id) {
+                                  return {
+                                    ...l,
+                                    visibleFieldKeys: keys
+                                  };
+                                }
+                                return l;
+                              }));
+                              return keys;
+                            });
+                          }}
+                        />
                       )}
                     </div>
                   )}

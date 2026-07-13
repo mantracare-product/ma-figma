@@ -8,7 +8,7 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
-import { useClientFields } from "../context/ClientFieldsContext";
+import { useFieldRegistry, FieldDefinition, FieldModule } from "../context/FieldRegistryContext";
 import {
   Save,
   Plus,
@@ -1183,15 +1183,68 @@ export default function Settings() {
     }
   }, [location.state, navigate]);
 
-  // Custom Fields State — clients tab comes from shared context; others are local
-  const { customFieldsClients, setCustomFieldsClients } = useClientFields();
-  const [customFieldsCallLogs, setCustomFieldsCallLogs] = useState<CustomField[]>([]);
-  const [customFieldsProcesses, setCustomFieldsProcesses] = useState<CustomField[]>([]);
-  const [customFieldsForms, setCustomFieldsForms] = useState<CustomField[]>([]);
-  const [customFieldsTeam, setCustomFieldsTeam] = useState<CustomField[]>([]);
+  // Restore users from sessionStorage on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem("settings_allUsers");
+    if (saved) {
+      try {
+        setAllUsers(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
+  // Save users to sessionStorage on change
+  useEffect(() => {
+    sessionStorage.setItem("settings_allUsers", JSON.stringify(allUsers));
+  }, [allUsers]);
+
+  // Custom Fields Context
+  const { getCustomFields, addCustomField, updateCustomField, deleteCustomField } = useFieldRegistry();
+
+  const tabToModule: Record<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team", FieldModule> = {
+    "clients": "client",
+    "call-logs": "call",
+    "processes": "process",
+    "appointments": "appointment",
+    "forms": "appointment",
+    "team": "organization",
+  };
+
+  const FIELD_TYPE_MAP: Record<string, any> = {
+    "String": "text",
+    "List": "select",
+    "Date/Time": "date_time",
+    "Date": "date",
+    "Book a Resource": "text",
+    "Address": "textarea",
+    "Link": "link",
+    "File": "text",
+    "Money": "money",
+    "Yes/No": "yes_no",
+    "Number": "number",
+    "WhatsApp Link": "whatsapp_link",
+  };
+
+  const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
+    "text": "String",
+    "select": "List",
+    "date_time": "Date/Time",
+    "date": "Date",
+    "textarea": "Address",
+    "link": "Link",
+    "money": "Money",
+    "yes_no": "Yes/No",
+    "number": "Number",
+    "whatsapp_link": "WhatsApp Link",
+  };
 
   // Custom Fields Tab State
-  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "forms" | "team">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team">("clients");
+
+  const currentModule = tabToModule[customFieldsTab || "clients"];
+  const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
+  const [editingFieldData, setEditingFieldData] = useState({ label: "", type: "String" });
+
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
   const [newFieldData, setNewFieldData] = useState({
     label: "",
@@ -5958,6 +6011,15 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     Processes
                   </button>
                   <button
+                    onClick={() => setCustomFieldsTab("appointments")}
+                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "appointments"
+                      ? "bg-white shadow-sm text-[#111827]"
+                      : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    Appointments
+                  </button>
+                  <button
                     onClick={() => setCustomFieldsTab("forms")}
                     className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "forms"
                       ? "bg-white shadow-sm text-[#111827]"
@@ -5989,11 +6051,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     </thead>
                     <tbody>
                       {(() => {
-                        const currentFields = customFieldsTab === "clients" ? customFieldsClients
-                          : customFieldsTab === "call-logs" ? customFieldsCallLogs
-                            : customFieldsTab === "processes" ? customFieldsProcesses
-                              : customFieldsTab === "forms" ? customFieldsForms
-                                : customFieldsTeam;
+                        const currentFields = getCustomFields(currentModule);
 
                         return currentFields.length === 0 ? (
                           <tr>
@@ -6015,19 +6073,32 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                               <td className="px-6 py-4 text-sm font-semibold text-[#111827]">{field.label}</td>
                               <td className="px-6 py-4">
                                 <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                  {field.type}
+                                  {FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase()}
                                 </span>
                               </td>
                               <td className="px-6 py-4">
                                 <div className="flex items-center justify-end gap-3">
                                   <button
-                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    onClick={() => {
+                                      setEditingFieldId(field.id);
+                                      setEditingFieldData({
+                                        label: field.label,
+                                        type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String"
+                                      });
+                                    }}
+                                    className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
                                     title="Edit field"
                                   >
                                     <Edit className="w-4 h-4" />
                                   </button>
                                   <button
-                                    className="text-muted-foreground hover:text-destructive transition-colors"
+                                    onClick={() => {
+                                      if (confirm(`Are you sure you want to delete custom field "${field.label}"?`)) {
+                                        deleteCustomField(currentModule, field.id);
+                                        toast.success("Field deleted successfully");
+                                      }
+                                    }}
+                                    className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
                                     title="Delete field"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -11419,29 +11490,17 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                         return;
                       }
                       const key = newFieldData.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                      const inputType = FIELD_TYPE_MAP[newFieldData.type] || "text";
 
-                      // Get current fields array and setter based on active tab
-                      const currentFields = customFieldsTab === "clients" ? customFieldsClients
-                        : customFieldsTab === "call-logs" ? customFieldsCallLogs
-                          : customFieldsTab === "processes" ? customFieldsProcesses
-                            : customFieldsTab === "forms" ? customFieldsForms
-                              : customFieldsTeam;
-
-                      const setCurrentFields = customFieldsTab === "clients" ? setCustomFieldsClients
-                        : customFieldsTab === "call-logs" ? setCustomFieldsCallLogs
-                          : customFieldsTab === "processes" ? setCustomFieldsProcesses
-                            : customFieldsTab === "forms" ? setCustomFieldsForms
-                              : setCustomFieldsTeam;
-
-                      const newField: CustomField = {
-                        id: currentFields.length + 1,
+                      addCustomField(currentModule, {
                         label: newFieldData.label,
                         key: key,
-                        type: newFieldData.type.toUpperCase(),
+                        module: currentModule,
+                        inputType: inputType,
                         required: newFieldData.required,
-                        showAlways: true,
-                      };
-                      setCurrentFields([...currentFields, newField]);
+                        placeholder: `Enter ${newFieldData.label.toLowerCase()}`
+                      });
+
                       setShowAddFieldModal(false);
                       setNewFieldData({ label: "", key: "", type: "String", required: false, multiple: false, showAlways: true, enableTooltip: false, visibleToSelected: false });
                       toast.success("Custom field created successfully");
@@ -11449,6 +11508,79 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     className="text-sm bg-blue-600 hover:bg-blue-700"
                   >
                     Create Field
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Custom Field Modal */}
+        {editingFieldId !== null && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Edit Custom Field</h3>
+                <button
+                  onClick={() => setEditingFieldId(null)}
+                  className="text-gray-400 hover:text-gray-600 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Name</label>
+                  <input
+                    type="text"
+                    value={editingFieldData.label}
+                    onChange={(e) => setEditingFieldData({ ...editingFieldData, label: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Type</label>
+                  <select
+                    value={editingFieldData.type}
+                    onChange={(e) => setEditingFieldData({ ...editingFieldData, type: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white appearance-none bg-no-repeat bg-right pr-10"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
+                      backgroundPosition: 'right 0.5rem center',
+                      backgroundSize: '1.5em 1.5em',
+                    }}
+                  >
+                    <option value="String">String</option>
+                    <option value="List">List</option>
+                    <option value="Date/Time">Date/Time</option>
+                    <option value="Date">Date</option>
+                    <option value="Book a Resource">Book a Resource</option>
+                    <option value="Address">Address</option>
+                    <option value="Link">Link</option>
+                    <option value="File">File</option>
+                    <option value="Money">Money</option>
+                    <option value="Yes/No">Yes/No</option>
+                    <option value="Number">Number</option>
+                    <option value="WhatsApp Link">WhatsApp Link</option>
+                  </select>
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
+                  <Button variant="outline" onClick={() => setEditingFieldId(null)}>Cancel</Button>
+                  <Button
+                    variant="primary"
+                    disabled={!editingFieldData.label}
+                    onClick={() => {
+                      const inputType = FIELD_TYPE_MAP[editingFieldData.type] || "text";
+                      updateCustomField(currentModule, editingFieldId, {
+                        label: editingFieldData.label,
+                        inputType: inputType
+                      });
+                      setEditingFieldId(null);
+                      toast.success("Field updated successfully");
+                    }}
+                    className="text-sm bg-blue-600 hover:bg-blue-700"
+                  >
+                    Save Changes
                   </Button>
                 </div>
               </div>

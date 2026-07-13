@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import React, { type ReactNode } from "react";
+import { useFieldRegistry } from "./FieldRegistryContext";
 
 export interface CustomField {
   id: number;
@@ -48,83 +49,62 @@ export const CANONICAL_SYSTEM_FIELDS: SystemField[] = [
   { key: "country", label: "Country", inputType: "text", placeholder: "e.g. United States" },
 ];
 
-const INITIAL_CUSTOM_FIELDS: CustomField[] = [];
-
-interface ClientFieldsContextValue {
-  systemFields: SystemField[];
-  customFieldsClients: CustomField[];
-  setCustomFieldsClients: React.Dispatch<React.SetStateAction<CustomField[]>>;
-  addCustomField: (field: Omit<CustomField, "id">) => CustomField;
+export function ClientFieldsProvider({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }
 
-const ClientFieldsContext = createContext<ClientFieldsContextValue | null>(null);
+export function useClientFields() {
+  const { getSystemFields, getCustomFields, addCustomField } = useFieldRegistry();
 
-/** Keys that were hardcoded in the old INITIAL_CUSTOM_FIELDS seed. */
-const STALE_SEED_KEYS = new Set(["patient_id", "insurance_provider", "appointment_date"]);
+  const clientSys = getSystemFields("client");
+  const clientCust = getCustomFields("client");
 
-export function ClientFieldsProvider({ children }: { children: ReactNode }) {
-  // ── One-time migration ────────────────────────────────────────────────────
-  // If the _v2 flag is absent this session, strip any stale hardcoded seed
-  // entries (identified by key + no sourceFormId) from the stored array so
-  // they don't bleed through from older sessions. Runs synchronously here so
-  // the useState initializer below always sees the cleaned value.
-  if (!sessionStorage.getItem("clientCustomFields_v2")) {
-    const raw = sessionStorage.getItem("clientCustomFields");
-    if (raw) {
-      try {
-        const parsed: CustomField[] = JSON.parse(raw);
-        // Keep only entries that are NOT the stale seed:
-        //   a field is "stale seed" if its key is one of the old hardcoded keys
-        //   AND it has no sourceFormId (i.e. wasn't created via FormBuilder/field picker).
-        const cleaned = parsed.filter(
-          (f) => !(STALE_SEED_KEYS.has(f.key) && f.sourceFormId === undefined)
-        );
-        sessionStorage.setItem("clientCustomFields", JSON.stringify(cleaned));
-      } catch {
-        // Corrupted value — just remove it and let the empty default take over.
-        sessionStorage.removeItem("clientCustomFields");
-      }
-    }
-    sessionStorage.setItem("clientCustomFields_v2", "true");
-  }
-  // ─────────────────────────────────────────────────────────────────────────
+  // Map to shim structure
+  const systemFields: SystemField[] = clientSys.map(f => ({
+    key: f.key,
+    label: f.label,
+    inputType: (f.inputType === "email" || f.inputType === "tel" || f.inputType === "select" || f.inputType === "textarea") ? f.inputType : "text",
+    placeholder: f.placeholder || "",
+    validation: f.validation,
+    options: f.options,
+  }));
 
-  const [customFieldsClients, setCustomFieldsClients] = useState<CustomField[]>(() => {
-    const saved = sessionStorage.getItem("clientCustomFields");
-    return saved ? JSON.parse(saved) : INITIAL_CUSTOM_FIELDS;
-  });
+  const customFieldsClients: CustomField[] = clientCust.map(f => ({
+    id: f.id,
+    label: f.label,
+    key: f.key,
+    type: f.inputType.toUpperCase(),
+    required: f.required || false,
+    showAlways: f.showAlways,
+    sourceFormId: f.sourceFormId,
+  }));
 
-  useEffect(() => {
-    sessionStorage.setItem("clientCustomFields", JSON.stringify(customFieldsClients));
-  }, [customFieldsClients]);
-
-  const addCustomField = (fieldData: Omit<CustomField, "id">): CustomField => {
-    const newField: CustomField = {
-      ...fieldData,
-      id: Date.now(),
+  const addCustomFieldShim = (fieldData: Omit<CustomField, "id">): CustomField => {
+    const created = addCustomField("client", {
+      key: fieldData.key,
+      label: fieldData.label,
+      module: "client" as const,
+      inputType: (fieldData.type.toLowerCase()) as any,
+      required: fieldData.required,
+      showAlways: fieldData.showAlways,
+      sourceFormId: fieldData.sourceFormId,
+      options: [],
+    });
+    return {
+      id: created.id,
+      label: created.label,
+      key: created.key,
+      type: created.inputType.toUpperCase(),
+      required: created.required || false,
+      showAlways: created.showAlways,
+      sourceFormId: created.sourceFormId,
     };
-    setCustomFieldsClients((prev) => [...prev, newField]);
-    return newField;
   };
 
-  return (
-    <ClientFieldsContext.Provider
-      value={{
-        systemFields: CANONICAL_SYSTEM_FIELDS,
-        customFieldsClients,
-        setCustomFieldsClients,
-        addCustomField,
-      }}
-    >
-      {children}
-    </ClientFieldsContext.Provider>
-  );
-}
-
-export function useClientFields(): ClientFieldsContextValue {
-  const ctx = useContext(ClientFieldsContext);
-  if (!ctx) {
-    throw new Error("useClientFields must be used within a ClientFieldsProvider");
-  }
-  return ctx;
+  return {
+    systemFields,
+    customFieldsClients,
+    setCustomFieldsClients: () => {}, // no-op since it's driven by add/delete in registry
+    addCustomField: addCustomFieldShim,
+  };
 }

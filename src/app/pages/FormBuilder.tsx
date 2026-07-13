@@ -1,13 +1,46 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router";
 import { createPortal } from "react-dom";
-import { Plus, FileText, Sliders, X, Trash2, GripVertical, Settings as SettingsIcon, Minus, ChevronDown, Upload, Eye, EyeOff, Star, Calendar, Clock, MapPin, Code, Minus as MinusIcon, Palette, Copy, Zap, User, Mail, Phone, Tag, Hash, Link, ToggleLeft } from "lucide-react";
+import {
+  Plus,
+  FileText,
+  Sliders,
+  X,
+  Trash2,
+  GripVertical,
+  Settings as SettingsIcon,
+  Minus,
+  ChevronDown,
+  Upload,
+  Star,
+  Calendar,
+  Clock,
+  MapPin,
+  Code,
+  Minus as MinusIcon,
+  Palette,
+  Copy,
+  Zap,
+  User,
+  Mail,
+  Phone,
+  Tag,
+  Hash,
+  Link,
+  ToggleLeft,
+  ShieldCheck,
+  EyeOff,
+  Layout,
+} from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
 import FieldRenderer from "../components/form-builder/FieldRenderer";
 import FormSettings from "../components/form-builder/FormSettings";
 import { useClientFields } from "../context/ClientFieldsContext";
 import type { CustomField } from "../context/ClientFieldsContext";
+import { useFieldRegistry, FieldModule, FieldInputType } from "../context/FieldRegistryContext";
+import VariablePickerButton from "../components/process/VariablePickerButton";
+import { CreateFieldModal } from "../components/help/FieldManager";
 import { INITIAL_FORMS } from "../../data/forms";
 
 interface FieldOption {
@@ -30,6 +63,7 @@ interface FormField {
   options?: FieldOption[];
   allowOther?: boolean;
   defaultValue?: string;
+  module?: FieldModule;
   sourceType?: "system" | "custom";
   sourceFieldKey?: string;
 }
@@ -43,221 +77,12 @@ interface Template {
   stats: string;
 }
 
-const FETCH_FIELD_SOURCES = [
-  {
-    value: "system", label: "System Fields", fields: [
-      { value: "contact_name", label: "Contact Name" },
-      { value: "contact_email", label: "Contact Email" },
-      { value: "contact_phone", label: "Contact Phone" },
-      { value: "country", label: "Country" },
-      { value: "language", label: "Language" },
-    ]
-  },
-  {
-    value: "call-log", label: "Call Log Fields", fields: [
-      { value: "call_status", label: "Call Status" },
-      { value: "call_duration", label: "Call Duration" },
-      { value: "call_sentiment", label: "Sentiment" },
-      { value: "call_intent", label: "Intent" },
-      { value: "call_summary", label: "Call Summary" },
-      { value: "call_transcription", label: "Call Transcription" },
-    ]
-  },
-  {
-    value: "stage", label: "Stage Fields", fields: [
-      { value: "stage_name", label: "Stage Name" },
-      { value: "stage_entered_at", label: "Stage Entered At" },
-    ]
-  },
-  {
-    value: "process", label: "Process Fields", fields: [
-      { value: "process_name", label: "Process Name" },
-      { value: "process_status", label: "Process Status" },
-    ]
-  },
-  {
-    value: "appointment", label: "Appointment Fields", fields: [
-      { value: "appointment_date", label: "Appointment Date" },
-      { value: "appointment_time", label: "Appointment Time" },
-      { value: "appointment_status", label: "Appointment Status" },
-      { value: "appointment_with", label: "Appointment With" },
-    ]
-  },
-  {
-    value: "org", label: "Organization Fields", fields: [
-      { value: "org_name", label: "Organization Name" },
-      { value: "org_domain", label: "Organization Domain" },
-    ]
-  },
-  {
-    value: "custom", label: "Custom Fields", fields: [
-      { value: "custom_field_1", label: "Custom Field 1" },
-      { value: "custom_field_2", label: "Custom Field 2" },
-    ]
-  },
-];
-
-const FIELDS_BY_SOURCE_MAP = Object.fromEntries(
-  FETCH_FIELD_SOURCES.map(src => [src.value, src.fields])
-);
-
-interface VariablePickerButtonProps {
-  targetRef?: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>;
-  value: string;
-  onChange: (newValue: string) => void;
-  label?: string;
-  onBeforeOpen?: () => void;
-  mode?: "insert" | "replace";
-}
-
-const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
-  targetRef,
-  value,
-  onChange,
-  label = "Insert Variable",
-  onBeforeOpen,
-  mode = "insert"
-}) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [dropdownPos, setDropdownPos] = useState<{ top: number; right: number } | null>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
-  const dropdownPanelRef = useRef<HTMLDivElement>(null);
-
-  const handleSelectField = (fieldValue: string) => {
-    const insertText = `{{${fieldValue}}}`;
-    if (mode === "replace") {
-      onChange(insertText);
-      setIsOpen(false);
-      return;
-    }
-    const textarea = targetRef?.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart ?? 0;
-    const end = textarea.selectionEnd ?? 0;
-    const currentVal = value || "";
-
-    const newValue = currentVal.slice(0, start) + insertText + currentVal.slice(end);
-    onChange(newValue);
-    setIsOpen(false);
-
-    setTimeout(() => {
-      textarea.focus();
-      const newCursorPos = start + insertText.length;
-      textarea.setSelectionRange(newCursorPos, newCursorPos);
-    }, 0);
-  };
-
-  const openDropdown = () => {
-    if (onBeforeOpen) {
-      onBeforeOpen();
-    }
-    if (!buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
-    setDropdownPos({
-      top: rect.bottom + 4,
-      right: window.innerWidth - rect.right,
-    });
-    setIsOpen(true);
-  };
-
-  const closeDropdown = () => {
-    setIsOpen(false);
-    setDropdownPos(null);
-  };
-
-  // Close on ancestor scroll/resize, but NOT when the user scrolls inside the dropdown list itself
-  useEffect(() => {
-    if (!isOpen) return;
-    const handleScroll = (e: Event) => {
-      if (dropdownPanelRef.current && dropdownPanelRef.current.contains(e.target as Node)) return;
-      closeDropdown();
-    };
-    const handleResize = () => closeDropdown();
-    window.addEventListener('scroll', handleScroll, true);
-    window.addEventListener('resize', handleResize);
-    return () => {
-      window.removeEventListener('scroll', handleScroll, true);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, [isOpen]);
-
-  return (
-    <div className="relative inline-block">
-      <button
-        ref={buttonRef}
-        type="button"
-        onClick={() => (isOpen ? closeDropdown() : openDropdown())}
-        className="text-xs font-medium text-blue-600 hover:text-blue-700 transition-colors"
-        style={{ fontFamily: 'DM Sans, sans-serif' }}
-      >
-        {label}
-      </button>
-
-      {isOpen && dropdownPos && createPortal(
-        <>
-          <div
-            className="fixed inset-0 cursor-default"
-            style={{ zIndex: 9998 }}
-            onClick={closeDropdown}
-          />
-          <div
-            ref={dropdownPanelRef}
-            className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden flex flex-col"
-            style={{
-              position: 'fixed',
-              top: dropdownPos.top,
-              right: dropdownPos.right,
-              width: '256px',
-              maxHeight: '256px',
-              zIndex: 9999,
-            }}
-          >
-            <div className="p-2 border-b border-gray-100 bg-gray-50/50">
-              <span className="text-[10px] font-semibold text-gray-400 tracking-wider uppercase" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                Insert Field Variable
-              </span>
-            </div>
-            <div className="overflow-y-auto flex-1 py-1 max-h-[220px]">
-              {FETCH_FIELD_SOURCES.map(group => (
-                <div key={group.value}>
-                  <div
-                    className="px-3 py-1.5 text-[10px] font-semibold text-gray-500 bg-gray-50/30 border-y border-gray-100/50 first:border-t-0"
-                    style={{ fontFamily: 'Outfit, sans-serif' }}
-                  >
-                    {group.label}
-                  </div>
-                  <div className="py-0.5">
-                    {group.fields.map(field => (
-                      <button
-                        key={field.value}
-                        type="button"
-                        onClick={() => handleSelectField(field.value)}
-                        className="w-full text-left px-4 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex items-center justify-between"
-                        style={{ fontFamily: 'Outfit, sans-serif' }}
-                      >
-                        <span>{field.label}</span>
-                        <span className="text-[9px] text-gray-400 font-mono">
-                          {`{{${field.value}}}`}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>,
-        document.body
-      )}
-    </div>
-  );
-};
-
 export default function FormBuilder() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { systemFields, customFieldsClients, addCustomField } = useClientFields();
+  const { getAllFields, addCustomField } = useFieldRegistry();
+  const { customFieldsClients } = useClientFields();
+  const systemFields = getAllFields("client").filter(f => f.source === "system");
   const template = location.state?.template as Template | undefined;
   const existingForm = location.state?.form as {
     id: number;
@@ -315,12 +140,24 @@ export default function FormBuilder() {
   const [inlineFieldType, setInlineFieldType] = useState("TEXT");
   const [inlineFieldRequired, setInlineFieldRequired] = useState(false);
 
-  // Collapsible sidebar sections
-  const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>({
-    system: true,
-    custom: true,
-    other: false,
+  // Collapsible sidebar sections - one per module + form-elements
+  const MODULE_LIST: { key: Exclude<FieldModule, "deal">; label: string; color: string }[] = [
+    { key: "client",       label: "Client",       color: "bg-blue-50 text-blue-600" },
+    { key: "process",      label: "Process",      color: "bg-indigo-50 text-indigo-600" },
+    { key: "appointment",  label: "Appointment",  color: "bg-emerald-50 text-emerald-600" },
+    { key: "call",         label: "Call",         color: "bg-amber-50 text-amber-600" },
+    { key: "service",      label: "Service",      color: "bg-rose-50 text-rose-600" },
+    { key: "organization", label: "Organization", color: "bg-purple-50 text-purple-600" },
+  ];
+
+  const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>(() => {
+    const init: Record<string, boolean> = { formElements: false };
+    MODULE_LIST.forEach(m => { init[m.key] = m.key === "client"; });
+    return init;
   });
+
+  // State for CreateFieldModal (unified; replaces inline panel + inline flow)
+  const [showCreateFieldModal, setShowCreateFieldModal] = useState(false);
 
   const toggleSidebarSection = (section: string) => {
     setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -349,6 +186,47 @@ export default function FormBuilder() {
     if (t === "NUMBER" || t === "MONEY") return { type: "number" };
     if (t === "LINK" || t === "WHATSAPP_LINK") return { type: "url" };
     return { type: "text" };
+  };
+
+  const handleAddRegistryField = (fieldKey: string, module: FieldModule, source: "system" | "custom") => {
+    const fields = getAllFields(module);
+    const sf = fields.find(f => f.key === fieldKey);
+    if (!sf) return;
+    const isAlreadyAdded = formFields.some(f => f.sourceFieldKey === fieldKey && f.module === module);
+    if (isAlreadyAdded) {
+      toast.info(`"${sf.label}" is already in the form`);
+      return;
+    }
+    const newField: FormField = {
+      id: Date.now(),
+      name: sf.label,
+      type: sf.inputType === "email" ? "email" :
+            sf.inputType === "tel" ? "tel" :
+            sf.inputType === "select" ? "select" :
+            sf.inputType === "date" ? "date" :
+            sf.inputType === "date_time" ? "time" :
+            sf.inputType === "number" || sf.inputType === "money" ? "number" :
+            sf.inputType === "textarea" ? "textarea" :
+            sf.inputType === "link" || sf.inputType === "whatsapp_link" ? "url" :
+            sf.inputType === "yes_no" ? "radio" :
+            "text",
+      placeholder: sf.placeholder || `Enter ${sf.label.toLowerCase()}`,
+      required: sf.required || false,
+      essential: ["name", "email", "phone"].includes(fieldKey) && module === "client",
+      label: sf.label,
+      helpText: "",
+      validation: sf.validation || "",
+      options: sf.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) || (sf.inputType === "yes_no" ? [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] : undefined),
+      allowOther: false,
+      defaultValue: "",
+      sourceType: source,
+      sourceFieldKey: fieldKey,
+      module,
+    };
+    setFormFields(prev => [...prev, newField]);
+    setSelectedField(newField);
+    setShowFieldSettings(true);
+    toast.success(`${sf.label} field added`);
   };
 
   const handleAddSystemField = (key: string) => {
@@ -406,14 +284,24 @@ export default function FormBuilder() {
       toast.error("Please enter a field name");
       return;
     }
-    const newCf = addCustomField({
+    const created = addCustomField("client", {
       label: inlineFieldLabel.trim(),
       key: inlineFieldLabel.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
-      type: inlineFieldType,
+      inputType: (inlineFieldType.toLowerCase() === "dropdown" ? "select" : inlineFieldType.toLowerCase()) as FieldInputType,
       required: inlineFieldRequired,
       showAlways: false,
       sourceFormId: formId,
+      module: "client",
     });
+    const newCf: CustomField = {
+      id: created.id,
+      label: created.label,
+      key: created.key,
+      type: created.inputType.toUpperCase(),
+      required: created.required || false,
+      showAlways: created.showAlways,
+      sourceFormId: created.sourceFormId,
+    };
     setInlineFieldLabel("");
     setInlineFieldType("TEXT");
     setInlineFieldRequired(false);
@@ -456,6 +344,7 @@ export default function FormBuilder() {
         options: f.options,
         allowOther: f.allowOther || false,
         defaultValue: f.defaultValue || "",
+        module: f.module,
         sourceType: f.sourceType,
         sourceFieldKey: f.sourceFieldKey,
       })));
@@ -501,6 +390,7 @@ export default function FormBuilder() {
         placeholder: f.placeholder,
         required: f.required,
         options: f.options?.map(o => ({ label: o.label, value: o.value })),
+        module: f.module,
         sourceType: f.sourceType,
         sourceFieldKey: f.sourceFieldKey,
       })),
@@ -548,6 +438,7 @@ export default function FormBuilder() {
         placeholder: f.placeholder,
         required: f.required,
         options: f.options?.map(o => ({ label: o.label, value: o.value })),
+        module: f.module,
         sourceType: f.sourceType,
         sourceFieldKey: f.sourceFieldKey,
       })),
@@ -708,8 +599,8 @@ export default function FormBuilder() {
           <button
             onClick={() => setCurrentTab("build")}
             className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "build"
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
+              ? "text-primary"
+              : "text-muted-foreground hover:text-foreground"
               }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
@@ -721,8 +612,8 @@ export default function FormBuilder() {
           <button
             onClick={() => setCurrentTab("design")}
             className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "design"
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
+              ? "text-primary"
+              : "text-muted-foreground hover:text-foreground"
               }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
@@ -734,8 +625,8 @@ export default function FormBuilder() {
           <button
             onClick={() => setCurrentTab("live")}
             className={`pb-3 px-1 text-sm font-medium transition-colors relative ${currentTab === "live"
-                ? "text-primary"
-                : "text-muted-foreground hover:text-foreground"
+              ? "text-primary"
+              : "text-muted-foreground hover:text-foreground"
               }`}
             style={{ fontFamily: 'Outfit, sans-serif' }}
           >
@@ -798,7 +689,7 @@ export default function FormBuilder() {
                     </div>
                   ) : (
                     formFields.map((field) => (
-                       <FieldRenderer
+                      <FieldRenderer
                         key={field.id}
                         field={field}
                         isSelected={selectedField?.id === field.id}
@@ -965,7 +856,7 @@ export default function FormBuilder() {
                       <p className="text-xs font-medium mb-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
                         Button Text
                       </p>
-                  <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
+                      <p className="text-sm font-semibold" style={{ fontFamily: 'DM Sans, sans-serif', color: '#020817' }}>
                         {submitButtonText}
                       </p>
                     </div>
@@ -2135,15 +2026,86 @@ export default function FormBuilder() {
                         <ChevronDown className={`w-4 h-4 text-gray-500 transition-transform ${expandedSections.integrations ? 'rotate-180' : ''}`} />
                       </button>
                       {expandedSections.integrations && (
-                        <div className="p-3 border-t border-gray-200">
-                          <div className="text-center py-4">
-                            <p className="text-xs text-gray-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Connect this field to external services
-                            </p>
-                            <button className="text-xs text-primary hover:text-primary/80 font-medium">
-                              Configure Webhooks
-                            </button>
+                        <div className="p-3 border-t border-gray-200 space-y-3">
+                          <div>
+                            <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              Link to Registry Field
+                            </label>
+                            <select
+                              value={selectedField.sourceFieldKey ? `${selectedField.module || "client"}:${selectedField.sourceFieldKey}` : ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (!val) {
+                                  handleUpdateField({
+                                    ...selectedField,
+                                    module: undefined,
+                                    sourceType: undefined,
+                                    sourceFieldKey: undefined,
+                                  });
+                                } else if (val === "__create_client__" || val === "__create_appointment__") {
+                                  const targetMod = val === "__create_client__" ? "client" : "appointment";
+                                  const name = prompt(`Enter new custom field name for ${targetMod === "client" ? "Client" : "Appointment"}:`);
+                                  if (name && name.trim()) {
+                                    const key = name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+                                    const added = addCustomField(targetMod, {
+                                      key,
+                                      label: name.trim(),
+                                      module: targetMod,
+                                      inputType: "text",
+                                      required: false,
+                                      showAlways: true,
+                                      placeholder: `Enter ${name.toLowerCase()}`,
+                                    });
+                                    handleUpdateField({
+                                      ...selectedField,
+                                      module: targetMod,
+                                      sourceType: "custom",
+                                      sourceFieldKey: added.key,
+                                      label: added.label,
+                                    });
+                                    toast.success(`Created & linked: ${added.label}`);
+                                  }
+                                } else {
+                                  const [m, k] = val.split(":");
+                                  const allM = getAllFields(m as FieldModule);
+                                  const f = allM.find(field => field.key === k);
+                                  if (f) {
+                                    handleUpdateField({
+                                      ...selectedField,
+                                      module: m as FieldModule,
+                                      sourceType: f.source,
+                                      sourceFieldKey: f.key,
+                                      label: f.label,
+                                    });
+                                    toast.success(`Mapped to ${f.label}`);
+                                  }
+                                }
+                              }}
+                              className="w-full px-2.5 py-1.5 border border-border rounded text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 cursor-pointer font-medium"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              <option value="">No linkage</option>
+                              <optgroup label="Client Fields">
+                                {getAllFields("client").map(f => (
+                                  <option key={f.key} value={`client:${f.key}`}>{f.label} ({f.source})</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Appointment Fields">
+                                {getAllFields("appointment").map(f => (
+                                  <option key={f.key} value={`appointment:${f.key}`}>{f.label} ({f.source})</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="Create New Field">
+                                <option value="__create_client__">+ Create Client field inline...</option>
+                                <option value="__create_appointment__">+ Create Appointment field inline...</option>
+                              </optgroup>
+                            </select>
                           </div>
+                          {selectedField.sourceFieldKey && (
+                            <div className="p-2 bg-blue-50/50 rounded-lg border border-blue-100/70 text-[10px] text-blue-700 font-mono">
+                              Mapped: {selectedField.module || "client"}.{selectedField.sourceFieldKey} ({selectedField.sourceType})
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
@@ -2160,257 +2122,152 @@ export default function FormBuilder() {
                   </div>
                 </div>
               ) : (
-                /* Field Categories — System, Custom, Other */
+                /* Field Categories — Module-Grouped */
                 <div className="divide-y divide-gray-100">
-                  {/* ─── System Fields ─── */}
-                  <div className="p-4">
-                    <button
-                      onClick={() => toggleSidebarSection("system")}
-                      className="w-full flex items-center justify-between mb-3"
-                    >
-                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        <div className="w-1 h-4 bg-primary rounded-full"></div>
-                        System Fields
-                      </h4>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.system ? "rotate-180" : ""}`} />
-                    </button>
-                    {sidebarSections.system && (
-                      <div className="grid grid-cols-2 gap-2">
-                        {systemFields.map((sf) => {
-                          const IconMap: Record<string, React.FC<{ className?: string }>> = {
-                            name: User, email: Mail, phone: Phone,
-                            status: Tag, location: MapPin, company: FileText,
-                            role: Hash, processes: Zap, language: Code, country: MapPin,
-                          };
-                          const Icon = IconMap[sf.key] ?? Tag;
-                          const colorMap: Record<string, string> = {
-                            name: "bg-blue-50 text-blue-600", email: "bg-sky-50 text-sky-600",
-                            phone: "bg-emerald-50 text-emerald-600", status: "bg-amber-50 text-amber-600",
-                            location: "bg-rose-50 text-rose-600", company: "bg-indigo-50 text-indigo-600",
-                            role: "bg-violet-50 text-violet-600", processes: "bg-purple-50 text-purple-600",
-                            language: "bg-teal-50 text-teal-600", country: "bg-cyan-50 text-cyan-600",
-                          };
-                          const colors = colorMap[sf.key] ?? "bg-gray-50 text-gray-600";
-                          const isAlreadyAdded = formFields.some(f => f.sourceType === "system" && f.sourceFieldKey === sf.key);
-                          return (
-                            <button
-                              key={sf.key}
-                              onClick={() => handleAddSystemField(sf.key)}
-                              disabled={isAlreadyAdded}
-                              className={`group flex items-center gap-2.5 p-2.5 bg-white border rounded-lg transition-all duration-200 text-left ${
-                                isAlreadyAdded
-                                  ? "border-primary/30 bg-primary/5 opacity-60 cursor-not-allowed"
-                                  : "border-gray-200 hover:border-primary hover:shadow-sm cursor-pointer"
-                              }`}
-                            >
-                              <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${colors}`}>
-                                <Icon className="w-3.5 h-3.5" />
-                              </div>
-                              <div className="min-w-0">
-                                <span className="text-xs font-medium block truncate" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                                  {sf.label}
-                                </span>
-                                <span className="text-[10px] text-gray-400" style={{ fontFamily: 'monospace' }}>
-                                  {sf.inputType}
-                                </span>
-                              </div>
-                                  {isAlreadyAdded && (
-                                <span className="ml-auto text-[9px] text-primary font-semibold">✓</span>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Custom Fields Category */}
-                  <div className="p-4 border-t border-border">
-                    <button
-                      onClick={() => toggleSidebarSection("custom")}
-                      className="w-full flex items-center justify-between mb-3 text-left"
-                    >
-                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        <div className="w-1 h-4 bg-purple-500 rounded-full"></div>
-                        Custom Fields
-                      </h4>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.custom ? "rotate-180" : ""}`} />
-                    </button>
+                  {/* ── Per-module sections ── */}
+                  {MODULE_LIST.map(mod => {
+                    const allModFields = getAllFields(mod.key);
+                    const sysFields = allModFields.filter(f => f.source === "system");
+                    const custFields = allModFields.filter(f => f.source === "custom");
+                    const isOpen = sidebarSections[mod.key];
+                    return (
+                      <div key={mod.key} className="p-3">
+                        <button
+                          onClick={() => toggleSidebarSection(mod.key)}
+                          className="w-full flex items-center justify-between mb-2"
+                        >
+                          <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                            <div className={`w-1 h-3.5 rounded-full ${mod.color.split(' ')[0]}`} />
+                            {mod.label} Fields
+                          </h4>
+                          <span className="text-[10px] text-gray-400 font-semibold">{allModFields.length}</span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`} />
+                        </button>
 
-                    {sidebarSections.custom && (
-                      <div className="space-y-2">
-                        {customFieldsClients.length === 0 ? (
-                          <p className="text-xs text-gray-400 py-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            No custom fields created yet.
-                          </p>
-                        ) : (
-                          <div className="grid grid-cols-2 gap-2">
-                            {customFieldsClients.map((cf) => {
-                              const isAdded = formFields.some(f => f.sourceType === "custom" && f.sourceFieldKey === cf.key);
-                              return (
-                                <button
-                                  key={cf.key}
-                                  onClick={() => handleAddCustomField(cf)}
-                                  disabled={isAdded}
-                                  className={`group flex items-center gap-2 p-2 bg-white border rounded-lg transition-all duration-200 text-left ${
-                                    isAdded
-                                      ? "border-purple-200 bg-purple-50/50 opacity-60 cursor-not-allowed"
-                                      : "border-gray-200 hover:border-purple-400 hover:shadow-sm cursor-pointer"
-                                  }`}
-                                >
-                                  <div className="w-7 h-7 rounded bg-purple-50 flex items-center justify-center flex-shrink-0 text-purple-600">
-                                    <Tag className="w-3.5 h-3.5" />
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <span className="text-xs font-medium block truncate" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                                      {cf.label}
-                                    </span>
-                                    <span className="text-[9px] text-gray-400 block" style={{ fontFamily: 'monospace' }}>
-                                      {cf.type}
-                                    </span>
-                                  </div>
-                                  {isAdded && (
-                                    <span className="text-[10px] text-purple-600 font-bold">✓</span>
-                                  )}
-                                </button>
-                              );
-                            })}
+                        {isOpen && (
+                          <div className="space-y-1">
+                            {sysFields.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">System</p>
+                                <div className="grid grid-cols-2 gap-1.5 mb-2">
+                                  {sysFields.map(sf => {
+                                    const isAdded = formFields.some(f => f.sourceFieldKey === sf.key && f.module === mod.key);
+                                    return (
+                                      <button
+                                        key={sf.key}
+                                        onClick={() => handleAddRegistryField(sf.key, mod.key, "system")}
+                                        disabled={isAdded}
+                                        className={`flex items-center gap-2 p-2 bg-white border rounded-lg text-left text-xs transition-all ${
+                                          isAdded
+                                            ? "border-primary/30 bg-primary/5 opacity-60 cursor-not-allowed"
+                                            : "border-gray-200 hover:border-primary hover:shadow-sm cursor-pointer"
+                                        }`}
+                                      >
+                                        <span className="font-medium truncate flex-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>{sf.label}</span>
+                                        {isAdded && <span className="text-[9px] text-primary font-bold">✓</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+
+                            {custFields.length > 0 && (
+                              <>
+                                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom</p>
+                                <div className="grid grid-cols-2 gap-1.5">
+                                  {custFields.map(cf => {
+                                    const isAdded = formFields.some(f => f.sourceFieldKey === cf.key && f.module === mod.key);
+                                    return (
+                                      <button
+                                        key={cf.key}
+                                        onClick={() => handleAddRegistryField(cf.key, mod.key, "custom")}
+                                        disabled={isAdded}
+                                        className={`flex items-center gap-2 p-2 bg-white border rounded-lg text-left text-xs transition-all ${
+                                          isAdded
+                                            ? "border-purple-200 bg-purple-50/50 opacity-60 cursor-not-allowed"
+                                            : "border-gray-200 hover:border-purple-400 hover:shadow-sm cursor-pointer"
+                                        }`}
+                                      >
+                                        <Tag className="w-3 h-3 text-purple-500 flex-shrink-0" />
+                                        <span className="font-medium truncate flex-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>{cf.label}</span>
+                                        {isAdded && <span className="text-[9px] text-purple-600 font-bold">✓</span>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </>
+                            )}
+
+                            {custFields.length === 0 && (
+                              <p className="text-[10px] text-gray-400 py-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                No custom {mod.label.toLowerCase()} fields yet.
+                              </p>
+                            )}
                           </div>
                         )}
-
-                        {/* Inline Custom Field Creator Affordance */}
-                        {showInlineCreateField ? (
-                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2.5 mt-2">
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Field Name
-                              </label>
-                              <input
-                                type="text"
-                                value={inlineFieldLabel}
-                                onChange={(e) => setInlineFieldLabel(e.target.value)}
-                                placeholder="e.g. Patient ID"
-                                className="w-full px-2.5 py-1.5 border border-border rounded text-xs focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                              />
-                            </div>
-
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Field Type
-                              </label>
-                              <select
-                                value={inlineFieldType}
-                                onChange={(e) => setInlineFieldType(e.target.value)}
-                                className="w-full px-2 py-1.5 border border-border rounded text-xs bg-white focus:outline-none focus:ring-2 focus:ring-primary/20"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                              >
-                                <option value="TEXT">Single Line Text</option>
-                                <option value="DROPDOWN">Dropdown List</option>
-                                <option value="DATE">Date Picker</option>
-                                <option value="NUMBER">Number Only</option>
-                                <option value="YES_NO">Yes / No Radio</option>
-                                <option value="LINK">Website Link</option>
-                              </select>
-                            </div>
-
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-gray-600 font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Required Field
-                              </span>
-                              <button
-                                onClick={() => setInlineFieldRequired(!inlineFieldRequired)}
-                                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${inlineFieldRequired ? "bg-primary" : "bg-gray-200"}`}
-                              >
-                                <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${inlineFieldRequired ? "translate-x-3.5" : "translate-x-0.5"}`} />
-                              </button>
-                            </div>
-
-                            <div className="flex gap-2 pt-1">
-                              <Button
-                                size="sm"
-                                variant="primary"
-                                onClick={handleInlineCreateField}
-                                className="flex-1 text-xs py-1 h-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold"
-                                style={{ fontFamily: 'DM Sans, sans-serif' }}
-                              >
-                                Add Field
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => {
-                                  setShowInlineCreateField(false);
-                                  setInlineFieldLabel("");
-                                  setInlineFieldRequired(false);
-                                }}
-                                className="text-xs py-1 h-auto border border-border hover:bg-gray-100"
-                                style={{ fontFamily: 'DM Sans, sans-serif' }}
-                              >
-                                Cancel
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setShowInlineCreateField(true)}
-                            className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors"
-                            style={{ fontFamily: 'Outfit, sans-serif' }}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Create Custom Field
-                          </button>
-                        )}
                       </div>
-                    )}
+                    );
+                  })}
+
+                  {/* ── Create Custom Field (unified, asks for module) ── */}
+                  <div className="p-3 border-t border-border">
+                    <button
+                      onClick={() => setShowCreateFieldModal(true)}
+                      className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors"
+                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Create Custom Field
+                    </button>
                   </div>
 
-                  {/* Other Fields Category (generic / non-linkable attributes) */}
-                  <div className="p-4 border-t border-border">
+                  {/* ── Form Elements (generic, formerly OTHER FIELDS) ── */}
+                  <div className="p-3 border-t border-border">
                     <button
-                      onClick={() => toggleSidebarSection("other")}
-                      className="w-full flex items-center justify-between mb-3 text-left"
+                      onClick={() => toggleSidebarSection("formElements")}
+                      className="w-full flex items-center justify-between mb-2 text-left"
                     >
-                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-2" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        <div className="w-1 h-4 bg-gray-400 rounded-full"></div>
-                        Other Fields
+                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
+                        <div className="w-1 h-3.5 bg-gray-400 rounded-full" />
+                        Form Elements
                       </h4>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.other ? "rotate-180" : ""}`} />
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.formElements ? "rotate-180" : ""}`} />
                     </button>
 
-                    {sidebarSections.other && (
+                    {sidebarSections.formElements && (
                       <div className="grid grid-cols-3 gap-2">
                         {[
-                          { type: "signature", label: "Signature", icon: Palette },
-                          { type: "captcha", label: "CAPTCHA", icon: ShieldCheck },
-                          { type: "password", label: "Password", icon: EyeOff },
-                          { type: "rating", label: "Rating", icon: Star },
-                          { type: "color", label: "Color Picker", icon: Palette },
-                          { type: "pagebreak", label: "Page Break", icon: Layout },
-                          { type: "html", label: "HTML Block", icon: Code },
-                          { type: "divider", label: "Divider", icon: MinusIcon },
-                          { type: "file", label: "File Upload", icon: Upload },
-                        ].map((item) => {
-                          return (
-                            <button
-                              key={item.type}
-                              draggable
-                              onDragStart={() => handleDragStart(item.type, item.label)}
-                              onClick={() => handleAddField(item.type, item.label)}
-                              className="group flex flex-col items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-sm hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing"
-                            >
-                              <div className="w-7 h-7 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-gray-100 transition-colors">
-                                <item.icon className="w-3.5 h-3.5" />
-                              </div>
-                              <span className="text-[10px] font-medium text-center leading-tight truncate w-full" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
-                                {item.label}
-                              </span>
-                            </button>
-                          );
-                        })}
+                          { type: "signature", label: "Signature",   icon: Palette },
+                          { type: "captcha",   label: "CAPTCHA",     icon: ShieldCheck },
+                          { type: "password",  label: "Password",    icon: EyeOff },
+                          { type: "rating",    label: "Rating",      icon: Star },
+                          { type: "color",     label: "Color Picker", icon: Palette },
+                          { type: "pagebreak", label: "Page Break",  icon: Layout },
+                          { type: "html",      label: "HTML Block",  icon: Code },
+                          { type: "divider",   label: "Divider",     icon: MinusIcon },
+                          { type: "file",      label: "File Upload", icon: Upload },
+                        ].map((item) => (
+                          <button
+                            key={item.type}
+                            draggable
+                            onDragStart={() => handleDragStart(item.type, item.label)}
+                            onClick={() => handleAddField(item.type, item.label)}
+                            className="group flex flex-col items-center gap-1.5 p-2 bg-white border border-gray-200 rounded-lg hover:border-primary hover:shadow-sm hover:scale-[1.02] transition-all cursor-grab active:cursor-grabbing"
+                          >
+                            <div className="w-7 h-7 rounded bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-gray-100 transition-colors">
+                              <item.icon className="w-3.5 h-3.5" />
+                            </div>
+                            <span className="text-[10px] font-medium text-center leading-tight truncate w-full" style={{ fontFamily: 'Outfit, sans-serif', color: '#64748B' }}>
+                              {item.label}
+                            </span>
+                          </button>
+                        ))}
                       </div>
                     )}
                   </div>
+
                 </div>
               )}
             </div>
@@ -2470,6 +2327,17 @@ export default function FormBuilder() {
           </div>
         </div>
       </div>
+      {/* Unified Create Custom Field Modal (no lockModule — asks for module) */}
+      {showCreateFieldModal && (
+        <CreateFieldModal
+          sourceFormId={formId}
+          onClose={() => setShowCreateFieldModal(false)}
+          onCreated={(field) => {
+            // Auto-add the created field to the form
+            handleAddRegistryField(field.key, field.module as FieldModule, "custom");
+          }}
+        />
+      )}
     </div>
   );
 }

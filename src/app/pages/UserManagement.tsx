@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, CreditCard, LayoutDashboard, Users, Phone, GitBranch, Hash, Receipt, Webhook, Settings, Shield, Trash2, Edit, AlertCircle } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -62,7 +62,14 @@ const initialUsers: User[] = [
 
 export default function UserManagement() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState<User[]>(initialUsers);
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = sessionStorage.getItem("userManagement_users");
+    return saved ? JSON.parse(saved) : initialUsers;
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("userManagement_users", JSON.stringify(users));
+  }, [users]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showPermissionsModal, setShowPermissionsModal] = useState(false);
