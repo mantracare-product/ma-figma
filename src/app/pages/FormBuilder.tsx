@@ -11,6 +11,7 @@ import {
   Settings as SettingsIcon,
   Minus,
   ChevronDown,
+  ChevronRight,
   Upload,
   Star,
   Calendar,
@@ -22,6 +23,13 @@ import {
   Copy,
   Zap,
   User,
+  Users,
+  Workflow,
+  CalendarCheck,
+  PhoneCall,
+  Wrench,
+  Building2,
+  LayoutGrid,
   Mail,
   Phone,
   Tag,
@@ -141,13 +149,13 @@ export default function FormBuilder() {
   const [inlineFieldRequired, setInlineFieldRequired] = useState(false);
 
   // Collapsible sidebar sections - one per module + form-elements
-  const MODULE_LIST: { key: Exclude<FieldModule, "deal">; label: string; color: string }[] = [
-    { key: "client",       label: "Client",       color: "bg-blue-50 text-blue-600" },
-    { key: "process",      label: "Process",      color: "bg-indigo-50 text-indigo-600" },
-    { key: "appointment",  label: "Appointment",  color: "bg-emerald-50 text-emerald-600" },
-    { key: "call",         label: "Call",         color: "bg-amber-50 text-amber-600" },
-    { key: "service",      label: "Service",      color: "bg-rose-50 text-rose-600" },
-    { key: "organization", label: "Organization", color: "bg-purple-50 text-purple-600" },
+  const MODULE_LIST: { key: Exclude<FieldModule, "deal">; label: string; color: string; icon: React.ElementType<{ className?: string }> }[] = [
+    { key: "client",       label: "Client",       color: "bg-blue-50 text-blue-600",    icon: Users },
+    { key: "process",      label: "Process",      color: "bg-indigo-50 text-indigo-600", icon: Workflow },
+    { key: "appointment",  label: "Appointment",  color: "bg-emerald-50 text-emerald-600", icon: CalendarCheck },
+    { key: "call",         label: "Call",         color: "bg-amber-50 text-amber-600",  icon: PhoneCall },
+    { key: "service",      label: "Service",      color: "bg-rose-50 text-rose-600",    icon: Wrench },
+    { key: "organization", label: "Organization", color: "bg-purple-50 text-purple-600", icon: Building2 },
   ];
 
   const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>(() => {
@@ -2122,8 +2130,8 @@ export default function FormBuilder() {
                   </div>
                 </div>
               ) : (
-                /* Field Categories — Module-Grouped */
-                <div className="divide-y divide-gray-100">
+                 /* Field Categories — Module-Grouped */
+                <div className="divide-y divide-gray-100/80">
 
                   {/* ── Per-module sections ── */}
                   {MODULE_LIST.map(mod => {
@@ -2131,22 +2139,34 @@ export default function FormBuilder() {
                     const sysFields = allModFields.filter(f => f.source === "system");
                     const custFields = allModFields.filter(f => f.source === "custom");
                     const isOpen = sidebarSections[mod.key];
+                    const ModIcon = mod.icon;
+                    // Derive accent color class from the color token
+                    const [bgClass, textClass] = mod.color.split(" ");
                     return (
-                      <div key={mod.key} className="p-3">
+                      <div key={mod.key}>
                         <button
                           onClick={() => toggleSidebarSection(mod.key)}
-                          className="w-full flex items-center justify-between mb-2"
+                          className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${
+                            isOpen
+                              ? `${bgClass}/60 border-l-2 border-current`
+                              : "hover:bg-gray-50"
+                          }`}
                         >
-                          <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                            <div className={`w-1 h-3.5 rounded-full ${mod.color.split(' ')[0]}`} />
+                          <span className={`flex items-center gap-2 text-xs font-medium ${
+                            isOpen ? textClass : "text-[#475569]"
+                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            <ModIcon className={`w-3.5 h-3.5 flex-shrink-0 ${
+                              isOpen ? "" : "text-gray-400"
+                            }`} />
                             {mod.label} Fields
-                          </h4>
-                          <span className="text-[10px] text-gray-400 font-semibold">{allModFields.length}</span>
-                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ml-1 ${isOpen ? "rotate-180" : ""}`} />
+                          </span>
+                          <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${
+                            isOpen ? `${textClass} rotate-180` : "text-gray-300"
+                          }`} />
                         </button>
 
                         {isOpen && (
-                          <div className="space-y-1">
+                          <div className="px-3 pt-2 pb-3 space-y-1">
                             {sysFields.length > 0 && (
                               <>
                                 <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">System</p>
@@ -2211,8 +2231,8 @@ export default function FormBuilder() {
                     );
                   })}
 
-                  {/* ── Create Custom Field (unified, asks for module) ── */}
-                  <div className="p-3 border-t border-border">
+                  {/* ── Create Custom Field ── */}
+                  <div className="px-3 py-3">
                     <button
                       onClick={() => setShowCreateFieldModal(true)}
                       className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors"
@@ -2223,31 +2243,41 @@ export default function FormBuilder() {
                     </button>
                   </div>
 
-                  {/* ── Form Elements (generic, formerly OTHER FIELDS) ── */}
-                  <div className="p-3 border-t border-border">
+                  {/* ── Form Elements ── */}
+                  <div className="border-t border-gray-100/80">
                     <button
                       onClick={() => toggleSidebarSection("formElements")}
-                      className="w-full flex items-center justify-between mb-2 text-left"
+                      className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${
+                        sidebarSections.formElements
+                          ? "bg-gray-50/80 border-l-2 border-gray-400"
+                          : "hover:bg-gray-50"
+                      }`}
                     >
-                      <h4 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>
-                        <div className="w-1 h-3.5 bg-gray-400 rounded-full" />
+                      <span className={`flex items-center gap-2 text-xs font-medium ${
+                        sidebarSections.formElements ? "text-[#374151]" : "text-[#475569]"
+                      }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        <LayoutGrid className={`w-3.5 h-3.5 flex-shrink-0 ${
+                          sidebarSections.formElements ? "text-gray-500" : "text-gray-400"
+                        }`} />
                         Form Elements
-                      </h4>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${sidebarSections.formElements ? "rotate-180" : ""}`} />
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${
+                        sidebarSections.formElements ? "text-gray-500 rotate-180" : "text-gray-300"
+                      }`} />
                     </button>
 
                     {sidebarSections.formElements && (
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="px-3 pt-2 pb-3 grid grid-cols-3 gap-2">
                         {[
-                          { type: "signature", label: "Signature",   icon: Palette },
-                          { type: "captcha",   label: "CAPTCHA",     icon: ShieldCheck },
-                          { type: "password",  label: "Password",    icon: EyeOff },
-                          { type: "rating",    label: "Rating",      icon: Star },
+                          { type: "signature", label: "Signature",    icon: Palette },
+                          { type: "captcha",   label: "CAPTCHA",      icon: ShieldCheck },
+                          { type: "password",  label: "Password",     icon: EyeOff },
+                          { type: "rating",    label: "Rating",       icon: Star },
                           { type: "color",     label: "Color Picker", icon: Palette },
-                          { type: "pagebreak", label: "Page Break",  icon: Layout },
-                          { type: "html",      label: "HTML Block",  icon: Code },
-                          { type: "divider",   label: "Divider",     icon: MinusIcon },
-                          { type: "file",      label: "File Upload", icon: Upload },
+                          { type: "pagebreak", label: "Page Break",   icon: Layout },
+                          { type: "html",      label: "HTML Block",   icon: Code },
+                          { type: "divider",   label: "Divider",      icon: MinusIcon },
+                          { type: "file",      label: "File Upload",  icon: Upload },
                         ].map((item) => (
                           <button
                             key={item.type}

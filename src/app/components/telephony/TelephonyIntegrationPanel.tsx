@@ -1,33 +1,43 @@
 import React, { useState } from "react";
 import {
   Server, Plus, Trash2, Eye, EyeOff, Play, ChevronLeft,
-  PhoneIncoming, PhoneOutgoing
+  PhoneIncoming, PhoneOutgoing, HelpCircle
 } from "lucide-react";
 import { toast } from "sonner";
+import { Tooltip } from "../ui/Tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 // ─── Data Model ───────────────────────────────────────────────────────────────
 
 export interface SipTrunk {
   id: string;
   provider: string;
-  label: string;
+  callDirection: "inbound" | "outbound";
+  label: string;                 // "Trunk Name" when inbound, "Label" when outbound — same field
   countryCode: string;
   phoneNumber: string;
-  priority: number;
-  callDirection: "inbound" | "outbound";
+  priority?: number;             // outbound only
   active: boolean;
-  usernameOrApiKey?: string;
-  passwordOrApiSecret?: string;
+  usernameOrApiKey?: string;     // outbound only
+  passwordOrApiSecret?: string;  // outbound only
+  prompt?: string;               // inbound only
+  model?: string;                // inbound only
 }
 
 const SEED_TRUNKS: SipTrunk[] = [
   { id: "1", provider: "Twilio",  label: "Twilio-US",       countryCode: "US", phoneNumber: "13323333850",  priority: 1, callDirection: "outbound", active: true },
-  { id: "2", provider: "Plivo",   label: "MC-B2C-Plivo",    countryCode: "IN", phoneNumber: "918035375213", priority: 1, callDirection: "inbound",  active: true },
+  { id: "2", provider: "Plivo",   label: "MC-B2C-Plivo",    countryCode: "IN", phoneNumber: "918035375213", callDirection: "inbound",  active: true, prompt: "Greet the customer warmly and route support inquiries.", model: "Gemini 2.5 Flash" },
   { id: "3", provider: "Zadarma", label: "Swe-Zad-341038",  countryCode: "SE", phoneNumber: "46766920242",  priority: 1, callDirection: "outbound", active: true },
-  { id: "4", provider: "Zadarma", label: "UK-Zad357159",    countryCode: "GB", phoneNumber: "447458038154", priority: 1, callDirection: "inbound",  active: true },
-  { id: "5", provider: "Zadarma", label: "Sing-Zad-230180", countryCode: "SG", phoneNumber: "6531251652",   priority: 1, callDirection: "inbound",  active: true },
-  { id: "6", provider: "Zadarma", label: "SA-Zad-25139",    countryCode: "ZA", phoneNumber: "27600858573",  priority: 1, callDirection: "inbound",  active: true },
+  { id: "4", provider: "Zadarma", label: "UK-Zad357159",    countryCode: "GB", phoneNumber: "447458038154", callDirection: "inbound",  active: true, prompt: "Answer incoming UK sales calls, note customer interest.", model: "GPT-4o Mini" },
+  { id: "5", provider: "Zadarma", label: "Sing-Zad-230180", countryCode: "SG", phoneNumber: "6531251652",   callDirection: "inbound",  active: true, prompt: "Help Singapore users with onboarding and account setup.", model: "Deepseek V4 Flash" },
+  { id: "6", provider: "Zadarma", label: "SA-Zad-25139",    countryCode: "ZA", phoneNumber: "27600858573",  callDirection: "inbound",  active: true, prompt: "Handle general billing and subscription questions.", model: "Gemini 2.5 Flash" },
   { id: "7", provider: "Zadarma", label: "Kate-Zad-SIP",    countryCode: "US", phoneNumber: "14842918903",  priority: 1, callDirection: "outbound", active: true },
+];
+
+const MODEL_OPTIONS = [
+  "Gemini 2.5 Flash",
+  "GPT-4o Mini",
+  "Deepseek V4 Flash"
 ];
 
 // ─── Country flag emoji map ────────────────────────────────────────────────────
@@ -158,21 +168,36 @@ function TrunkCard({
 
 // ─── Add Form ─────────────────────────────────────────────────────────────────
 
-function AddSipTrunkView({ onBack, onCreated }: { onBack: () => void; onCreated: (trunk: SipTrunk) => void }) {
+function AddSipTrunkView({
+  direction,
+  onBack,
+  onCreated,
+}: {
+  direction: "inbound" | "outbound";
+  onBack: () => void;
+  onCreated: (trunk: SipTrunk) => void;
+}) {
   const [selectedProvider, setSelectedProvider] = useState("Twilio");
   const [label, setLabel] = useState("");
   const [priority, setPriority] = useState(1);
-  const [callDirection, setCallDirection] = useState<"inbound" | "outbound" | null>(null);
   const [countryCode, setCountryCode] = useState("US");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [model, setModel] = useState("Gemini 2.5 Flash");
 
   const handleCreate = () => {
-    if (!callDirection) { toast.error("Call Direction is required"); return; }
-    if (!label.trim()) { toast.error("Label is required"); return; }
-    if (!phoneNumber.trim()) { toast.error("Phone number is required"); return; }
+    if (direction === "inbound") {
+      if (!label.trim()) { toast.error("Trunk Name is required"); return; }
+      if (!phoneNumber.trim()) { toast.error("Phone number is required"); return; }
+      if (!prompt.trim()) { toast.error("Prompt is required"); return; }
+      if (!model) { toast.error("Model is required"); return; }
+    } else {
+      if (!label.trim()) { toast.error("Label is required"); return; }
+      if (!phoneNumber.trim()) { toast.error("Phone number is required"); return; }
+    }
 
     const trunk: SipTrunk = {
       id: String(Date.now()),
@@ -180,18 +205,29 @@ function AddSipTrunkView({ onBack, onCreated }: { onBack: () => void; onCreated:
       label: label.trim(),
       countryCode: countryCode.toUpperCase(),
       phoneNumber: phoneNumber.trim(),
-      priority,
-      callDirection,
+      callDirection: direction,
       active: true,
-      usernameOrApiKey: username.trim() || undefined,
-      passwordOrApiSecret: password.trim() || undefined,
+      ...(direction === "outbound"
+        ? {
+            priority,
+            usernameOrApiKey: username.trim() || undefined,
+            passwordOrApiSecret: password.trim() || undefined,
+          }
+        : {
+            prompt: prompt.trim(),
+            model: model,
+          }),
     };
     onCreated(trunk);
-    toast.success("SIP trunk added successfully");
+    if (direction === "inbound") {
+      toast.success("Inbound trunk added successfully");
+    } else {
+      toast.success("SIP trunk added successfully");
+    }
   };
 
   const inputCls = "w-full px-4 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:border-blue-400 transition-colors";
-  const labelCls = "block text-sm font-medium text-[#374151] mb-1.5";
+  const labelCls = "block text-sm font-medium text-[#374151]";
   const tutorialUrl = TUTORIAL_URLS[selectedProvider] ?? "";
 
   return (
@@ -221,108 +257,175 @@ function AddSipTrunkView({ onBack, onCreated }: { onBack: () => void; onCreated:
 
       {/* ── Column 2: Form ── */}
       <div className="space-y-4">
-        {/* Call Direction (first field) */}
-        <div>
-          <label className={labelCls}>Call Direction</label>
-          <div className="flex border border-[#E5E7EB] rounded-xl overflow-hidden w-fit">
-            {(["inbound", "outbound"] as const).map((dir, i) => (
-              <button
-                key={dir}
-                type="button"
-                onClick={() => setCallDirection(dir)}
-                className={`px-4 py-2 text-sm font-medium capitalize transition-colors ${
-                  i < 1 ? "border-r border-[#E5E7EB]" : ""
-                } ${
-                  callDirection === dir
-                    ? "bg-[#1A73E8] text-white"
-                    : "bg-white text-[#374151] hover:bg-gray-50"
-                }`}
-              >
-                {dir.charAt(0).toUpperCase() + dir.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
+        {direction === "inbound" ? (
+          <>
+            {/* Trunk Name */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className={labelCls}>Trunk Name</label>
+                <Tooltip text="A friendly internal name to identify this inbound trunk.">
+                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                </Tooltip>
+              </div>
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Primary Support Line"
+                className={inputCls}
+              />
+            </div>
 
-        {/* Label */}
-        <div>
-          <label className={labelCls}>Label</label>
-          <input
-            type="text"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Primary US Number"
-            className={inputCls}
-          />
-        </div>
+            {/* Phone Number */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className={labelCls}>Number</label>
+                <Tooltip text="The phone number that will receive inbound calls on this trunk.">
+                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                </Tooltip>
+              </div>
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-24 px-2 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:border-blue-400"
+                >
+                  {Object.entries(COUNTRY_FLAGS).map(([code, flag]) => (
+                    <option key={code} value={code}>{flag} {code}</option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  className={inputCls}
+                />
+              </div>
+            </div>
 
-        {/* Priority */}
-        <div>
-          <label className={labelCls}>Priority</label>
-          <input
-            type="number"
-            value={priority}
-            onChange={(e) => setPriority(Number(e.target.value))}
-            min={1}
-            className={inputCls}
-          />
-        </div>
+            {/* Prompt */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className={labelCls}>Prompt</label>
+                <Tooltip text="Instructions for how the AI should handle this inbound call — greeting, tone, what to ask, and when to escalate to a human.">
+                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                </Tooltip>
+              </div>
+              <textarea
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="e.g. Greet the caller warmly, confirm their identity, and route billing questions to..."
+                rows={4}
+                className={`${inputCls} resize-none`}
+              />
+            </div>
 
-        {/* Phone Number */}
-        <div>
-          <label className={labelCls}>Phone Number</label>
-          <div className="flex gap-2">
-            <select
-              value={countryCode}
-              onChange={(e) => setCountryCode(e.target.value)}
-              className="w-24 px-2 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:border-blue-400"
-            >
-              {Object.entries(COUNTRY_FLAGS).map(([code, flag]) => (
-                <option key={code} value={code}>{flag} {code}</option>
-              ))}
-            </select>
-            <input
-              type="tel"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="+1 (555) 000-0000"
-              className={inputCls}
-            />
-          </div>
-        </div>
+            {/* Model */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className={labelCls}>Model</label>
+                <Tooltip text="The AI model that will process and respond to calls on this inbound trunk.">
+                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                </Tooltip>
+              </div>
+              <Select value={model} onValueChange={setModel}>
+                <SelectTrigger className="w-full px-4 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm h-10 text-left flex justify-between items-center focus:outline-none focus:border-blue-400 transition-colors">
+                  <SelectValue placeholder="Select a model" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border border-[#E5E7EB] rounded-xl shadow-lg z-50">
+                  {MODEL_OPTIONS.map((opt) => (
+                    <SelectItem key={opt} value={opt} className="hover:bg-blue-50 focus:bg-blue-50 cursor-pointer">
+                      {opt}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        ) : (
+          <>
+            {/* Label */}
+            <div>
+              <label className={`${labelCls} mb-1.5`}>Label</label>
+              <input
+                type="text"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Primary US Number"
+                className={inputCls}
+              />
+            </div>
 
-        {/* Username / API Key */}
-        <div>
-          <label className={labelCls}>Username / API Key</label>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter Username or API Key"
-            className={inputCls}
-          />
-        </div>
+            {/* Priority */}
+            <div>
+              <label className={`${labelCls} mb-1.5`}>Priority</label>
+              <input
+                type="number"
+                value={priority}
+                onChange={(e) => setPriority(Number(e.target.value))}
+                min={1}
+                className={inputCls}
+              />
+            </div>
 
-        {/* Password / API Secret */}
-        <div>
-          <label className={labelCls}>Password / API Secret</label>
-          <div className="relative">
-            <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter Password or API Secret"
-              className={`${inputCls} pr-10`}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
+            {/* Phone Number */}
+            <div>
+              <label className={`${labelCls} mb-1.5`}>Phone Number</label>
+              <div className="flex gap-2">
+                <select
+                  value={countryCode}
+                  onChange={(e) => setCountryCode(e.target.value)}
+                  className="w-24 px-2 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm focus:outline-none focus:border-blue-400"
+                >
+                  {Object.entries(COUNTRY_FLAGS).map(([code, flag]) => (
+                    <option key={code} value={code}>{flag} {code}</option>
+                  ))}
+                </select>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="+1 (555) 000-0000"
+                  className={inputCls}
+                />
+              </div>
+            </div>
+
+            {/* Username / API Key */}
+            <div>
+              <label className={`${labelCls} mb-1.5`}>Username / API Key</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter Username or API Key"
+                className={inputCls}
+              />
+            </div>
+
+            {/* Password / API Secret */}
+            <div>
+              <label className={`${labelCls} mb-1.5`}>Password / API Secret</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter Password or API Secret"
+                  className={`${inputCls} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="flex gap-3 pt-2">
           <button
@@ -385,6 +488,8 @@ export function TelephonyIntegrationPanel() {
   const [mode, setMode] = useState<"list" | "add">("list");
   const [trunks, setTrunks] = useState<SipTrunk[]>(SEED_TRUNKS);
   const [directionFilter, setDirectionFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [addDirection, setAddDirection] = useState<"inbound" | "outbound" | null>(null);
+  const [showDirectionPopover, setShowDirectionPopover] = useState(false);
 
   const filteredTrunks = trunks.filter((t) => {
     if (directionFilter === "all") return true;
@@ -403,6 +508,7 @@ export function TelephonyIntegrationPanel() {
 
   const handleCreated = (trunk: SipTrunk) => {
     setTrunks((prev) => [...prev, trunk]);
+    setAddDirection(null);
     setMode("list");
   };
 
@@ -416,7 +522,10 @@ export function TelephonyIntegrationPanel() {
           <div className="flex items-center gap-3">
             {mode === "add" && (
               <button
-                onClick={() => setMode("list")}
+                onClick={() => {
+                  setMode("list");
+                  setAddDirection(null);
+                }}
                 className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-[#374151]"
                 title="Back to list"
               >
@@ -433,20 +542,80 @@ export function TelephonyIntegrationPanel() {
               >
                 Telephony Provider
               </h2>
-              <p className="text-sm text-[#6B7280]">
-                Configure your SIP trunks and voice provider credentials
-              </p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-sm text-[#6B7280]">
+                  Configure your SIP trunks and voice provider credentials
+                </p>
+                {mode === "add" && addDirection && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    {addDirection === "inbound" ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-green-50 text-green-600 border border-green-200">
+                        <PhoneIncoming className="w-3 h-3" />
+                        Inbound Number
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                        <PhoneOutgoing className="w-3 h-3" />
+                        Outbound Number
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {mode === "list" && (
-            <button
-              onClick={() => setMode("add")}
-              className="inline-flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white rounded-full px-4 py-2 text-sm font-medium transition-colors flex-shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              Add SIP Trunk
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowDirectionPopover(!showDirectionPopover)}
+                className="inline-flex items-center gap-1.5 bg-[#111827] hover:bg-[#1f2937] text-white rounded-full px-4 py-2 text-sm font-medium transition-colors flex-shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                Add SIP Trunk
+              </button>
+
+              {/* Popover */}
+              {showDirectionPopover && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowDirectionPopover(false)} />
+                  <div className="absolute right-0 top-11 bg-white border border-[#E5E7EB] rounded-lg shadow-lg z-50 p-2 min-w-[240px] flex flex-col gap-1">
+                    <button
+                      onClick={() => {
+                        setAddDirection("inbound");
+                        setShowDirectionPopover(false);
+                        setMode("add");
+                      }}
+                      className="w-full text-left p-2.5 rounded-md hover:bg-gray-50 transition-colors flex items-start gap-2.5"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 flex-shrink-0">
+                        <PhoneIncoming className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#111827]">Inbound Number</p>
+                        <p className="text-xs text-gray-500">Receive calls on this trunk</p>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAddDirection("outbound");
+                        setShowDirectionPopover(false);
+                        setMode("add");
+                      }}
+                      className="w-full text-left p-2.5 rounded-md hover:bg-gray-50 transition-colors flex items-start gap-2.5"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                        <PhoneOutgoing className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-[#111827]">Outbound Number</p>
+                        <p className="text-xs text-gray-500">Make calls from this trunk</p>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           )}
         </div>
 
@@ -500,13 +669,56 @@ export function TelephonyIntegrationPanel() {
                     ? "No SIP trunks configured yet"
                     : `No ${directionFilter} numbers yet`}
                 </p>
-                <button
-                  onClick={() => setMode("add")}
-                  className="inline-flex items-center gap-1.5 bg-[#111827] text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-[#1f2937] transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add SIP Trunk
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowDirectionPopover(!showDirectionPopover)}
+                    className="inline-flex items-center gap-1.5 bg-[#111827] text-white rounded-full px-4 py-2 text-sm font-medium hover:bg-[#1f2937] transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add SIP Trunk
+                  </button>
+
+                  {/* Popover */}
+                  {showDirectionPopover && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowDirectionPopover(false)} />
+                      <div className="absolute left-1/2 -translate-x-1/2 top-11 bg-white border border-[#E5E7EB] rounded-lg shadow-lg z-50 p-2 min-w-[240px] flex flex-col gap-1 text-left">
+                        <button
+                          onClick={() => {
+                            setAddDirection("inbound");
+                            setShowDirectionPopover(false);
+                            setMode("add");
+                          }}
+                          className="w-full text-left p-2.5 rounded-md hover:bg-gray-50 transition-colors flex items-start gap-2.5"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-green-50 flex items-center justify-center text-green-600 flex-shrink-0">
+                            <PhoneIncoming className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[#111827]">Inbound Number</p>
+                            <p className="text-xs text-gray-500">Receive calls on this trunk</p>
+                          </div>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setAddDirection("outbound");
+                            setShowDirectionPopover(false);
+                            setMode("add");
+                          }}
+                          className="w-full text-left p-2.5 rounded-md hover:bg-gray-50 transition-colors flex items-start gap-2.5"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0">
+                            <PhoneOutgoing className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[#111827]">Outbound Number</p>
+                            <p className="text-xs text-gray-500">Make calls from this trunk</p>
+                          </div>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="mt-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -524,8 +736,15 @@ export function TelephonyIntegrationPanel() {
         )}
 
         {/* ── Add View ── */}
-        {mode === "add" && (
-          <AddSipTrunkView onBack={() => setMode("list")} onCreated={handleCreated} />
+        {mode === "add" && addDirection && (
+          <AddSipTrunkView
+            direction={addDirection}
+            onBack={() => {
+              setMode("list");
+              setAddDirection(null);
+            }}
+            onCreated={handleCreated}
+          />
         )}
       </div>
     </div>
