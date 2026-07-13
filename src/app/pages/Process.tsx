@@ -26,7 +26,6 @@ import { WorkflowStep } from "../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
 import StepParametersFields from "../components/process/StepParametersFields";
 import StepDetailDrawer from "../components/process/StepDetailDrawer";
-import KnowledgeBaseTab, { KnowledgeBase } from "../components/process/KnowledgeBaseTab";
 
 interface AISettings {
   platform: string;
@@ -649,7 +648,6 @@ export default function Process() {
   const [workflowStepsExpanded, setWorkflowStepsExpanded] = useState(true);
   const [workflowStepsDrawerOpen, setWorkflowStepsDrawerOpen] = useState(false);
   const [workflowSteps, setWorkflowSteps] = useState<WorkflowStep[]>([]);
-  const [stageKnowledgeBases, setStageKnowledgeBases] = useState<Record<string, KnowledgeBase[]>>({});
   const [workflowStepCategory, setWorkflowStepCategory] = useState("all");
   const [workflowStepSearch, setWorkflowStepSearch] = useState("");
   const [selectedWorkflowStepCard, setSelectedWorkflowStepCard] = useState<string | null>(null);
@@ -3019,7 +3017,6 @@ export default function Process() {
                         {[
                           { id: "basic", label: "Basic" },
                           { id: "advanced", label: "Advance" },
-                          { id: "knowledgebase", label: "Knowledge Base" },
                           { id: "automation", label: "Automation" },
                           { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
@@ -4682,16 +4679,6 @@ export default function Process() {
                         </div>
                       )}
 
-                      {activeTab === "knowledgebase" && (
-                        <KnowledgeBaseTab
-                          processName={selectedProcessData?.name ?? "Current Process"}
-                          stageName={stage.name}
-                          knowledgeBases={stageKnowledgeBases[stage.id] ?? []}
-                          onKnowledgeBasesChange={(kbs) =>
-                            setStageKnowledgeBases((prev) => ({ ...prev, [stage.id]: kbs }))
-                          }
-                        />
-                      )}
 
                       {/* Flow Builder Tab */}
                       {activeTab === "flowbuilder" && (
@@ -4960,17 +4947,15 @@ export default function Process() {
                       />
 
 
-                      {activeTab !== "knowledgebase" && (
-                        <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
-                          <Button variant="outline" onClick={() => {
-                            setExpandedStage(null);
-                            setViewMode("process");
-                          }}>Cancel</Button>
-                          <Button variant="primary" onClick={() => toast.success("Stage configuration saved")}>
-                            Save Changes
-                          </Button>
-                        </div>
-                      )}
+                      <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
+                        <Button variant="outline" onClick={() => {
+                          setExpandedStage(null);
+                          setViewMode("process");
+                        }}>Cancel</Button>
+                        <Button variant="primary" onClick={() => toast.success("Stage configuration saved")}>
+                          Save Changes
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 );

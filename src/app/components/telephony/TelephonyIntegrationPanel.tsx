@@ -5,7 +5,6 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { Tooltip } from "../ui/Tooltip";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
 
 // ─── Data Model ───────────────────────────────────────────────────────────────
 
@@ -20,24 +19,16 @@ export interface SipTrunk {
   active: boolean;
   usernameOrApiKey?: string;     // outbound only
   passwordOrApiSecret?: string;  // outbound only
-  prompt?: string;               // inbound only
-  model?: string;                // inbound only
 }
 
 const SEED_TRUNKS: SipTrunk[] = [
   { id: "1", provider: "Twilio",  label: "Twilio-US",       countryCode: "US", phoneNumber: "13323333850",  priority: 1, callDirection: "outbound", active: true },
-  { id: "2", provider: "Plivo",   label: "MC-B2C-Plivo",    countryCode: "IN", phoneNumber: "918035375213", callDirection: "inbound",  active: true, prompt: "Greet the customer warmly and route support inquiries.", model: "Gemini 2.5 Flash" },
+  { id: "2", provider: "Plivo",   label: "MC-B2C-Plivo",    countryCode: "IN", phoneNumber: "918035375213", callDirection: "inbound",  active: true },
   { id: "3", provider: "Zadarma", label: "Swe-Zad-341038",  countryCode: "SE", phoneNumber: "46766920242",  priority: 1, callDirection: "outbound", active: true },
-  { id: "4", provider: "Zadarma", label: "UK-Zad357159",    countryCode: "GB", phoneNumber: "447458038154", callDirection: "inbound",  active: true, prompt: "Answer incoming UK sales calls, note customer interest.", model: "GPT-4o Mini" },
-  { id: "5", provider: "Zadarma", label: "Sing-Zad-230180", countryCode: "SG", phoneNumber: "6531251652",   callDirection: "inbound",  active: true, prompt: "Help Singapore users with onboarding and account setup.", model: "Deepseek V4 Flash" },
-  { id: "6", provider: "Zadarma", label: "SA-Zad-25139",    countryCode: "ZA", phoneNumber: "27600858573",  callDirection: "inbound",  active: true, prompt: "Handle general billing and subscription questions.", model: "Gemini 2.5 Flash" },
+  { id: "4", provider: "Zadarma", label: "UK-Zad357159",    countryCode: "GB", phoneNumber: "447458038154", callDirection: "inbound",  active: true },
+  { id: "5", provider: "Zadarma", label: "Sing-Zad-230180", countryCode: "SG", phoneNumber: "6531251652",   callDirection: "inbound",  active: true },
+  { id: "6", provider: "Zadarma", label: "SA-Zad-25139",    countryCode: "ZA", phoneNumber: "27600858573",  callDirection: "inbound",  active: true },
   { id: "7", provider: "Zadarma", label: "Kate-Zad-SIP",    countryCode: "US", phoneNumber: "14842918903",  priority: 1, callDirection: "outbound", active: true },
-];
-
-const MODEL_OPTIONS = [
-  "Gemini 2.5 Flash",
-  "GPT-4o Mini",
-  "Deepseek V4 Flash"
 ];
 
 // ─── Country flag emoji map ────────────────────────────────────────────────────
@@ -185,15 +176,10 @@ function AddSipTrunkView({
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState("Gemini 2.5 Flash");
-
   const handleCreate = () => {
     if (direction === "inbound") {
       if (!label.trim()) { toast.error("Trunk Name is required"); return; }
       if (!phoneNumber.trim()) { toast.error("Phone number is required"); return; }
-      if (!prompt.trim()) { toast.error("Prompt is required"); return; }
-      if (!model) { toast.error("Model is required"); return; }
     } else {
       if (!label.trim()) { toast.error("Label is required"); return; }
       if (!phoneNumber.trim()) { toast.error("Phone number is required"); return; }
@@ -207,16 +193,11 @@ function AddSipTrunkView({
       phoneNumber: phoneNumber.trim(),
       callDirection: direction,
       active: true,
-      ...(direction === "outbound"
-        ? {
-            priority,
-            usernameOrApiKey: username.trim() || undefined,
-            passwordOrApiSecret: password.trim() || undefined,
-          }
-        : {
-            prompt: prompt.trim(),
-            model: model,
-          }),
+      ...(direction === "outbound" && {
+        priority,
+        usernameOrApiKey: username.trim() || undefined,
+        passwordOrApiSecret: password.trim() || undefined,
+      }),
     };
     onCreated(trunk);
     if (direction === "inbound") {
@@ -302,45 +283,6 @@ function AddSipTrunkView({
                   className={inputCls}
                 />
               </div>
-            </div>
-
-            {/* Prompt */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className={labelCls}>Prompt</label>
-                <Tooltip text="Instructions for how the AI should handle this inbound call — greeting, tone, what to ask, and when to escalate to a human.">
-                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                </Tooltip>
-              </div>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Greet the caller warmly, confirm their identity, and route billing questions to..."
-                rows={4}
-                className={`${inputCls} resize-none`}
-              />
-            </div>
-
-            {/* Model */}
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className={labelCls}>Model</label>
-                <Tooltip text="The AI model that will process and respond to calls on this inbound trunk.">
-                  <HelpCircle className="w-3.5 h-3.5 text-gray-400 cursor-help" />
-                </Tooltip>
-              </div>
-              <Select value={model} onValueChange={setModel}>
-                <SelectTrigger className="w-full px-4 py-2 bg-gray-50 border border-[#E5E7EB] rounded-xl text-sm h-10 text-left flex justify-between items-center focus:outline-none focus:border-blue-400 transition-colors">
-                  <SelectValue placeholder="Select a model" />
-                </SelectTrigger>
-                <SelectContent className="bg-white border border-[#E5E7EB] rounded-xl shadow-lg z-50">
-                  {MODEL_OPTIONS.map((opt) => (
-                    <SelectItem key={opt} value={opt} className="hover:bg-blue-50 focus:bg-blue-50 cursor-pointer">
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </>
         ) : (
