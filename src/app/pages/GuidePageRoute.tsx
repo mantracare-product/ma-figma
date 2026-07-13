@@ -249,58 +249,6 @@ const GUIDE_DATA: GuidePageData[] = [
         ],
     },
     {
-        slug: "deals",
-        title: "Deals & Sales Pipeline",
-        intro:
-            "The Deals screen is a visual Kanban board representing your sales pipelines. It lets you monitor prospective deal values, drag cards across columns representing process stages, track deal statuses, and check associated call activity metrics.",
-        icon: Kanban,
-        group: "Core",
-        features: [
-            {
-                title: "Interactive Kanban Board",
-                whatItDoes: "Deals as card widgets arranged in columns representing process stages.",
-                whyHelps: "An instant visual representation of your sales pipeline health.",
-                howToUse: "Press and hold a deal card, drag it to another column, and release — its stage updates automatically.",
-            },
-            {
-                title: "Search & Pipeline Selector",
-                whatItDoes: "Search deals by name/client and switch between active pipelines using a dropdown.",
-                whyHelps: "Keeps separate sales flows organized so agents only see relevant deals.",
-                howToUse: "Use the search field at the top left, or the pipeline dropdown next to it.",
-            },
-            {
-                title: "Add Deal Popup Form",
-                whatItDoes: "Specify Deal Name, Client, Amount, Currency, Owner, and initial Pipeline Stage.",
-                whyHelps: "Lets you log and track financial values tied to client milestones manually.",
-                howToUse: "Click + Add Deal, fill in the fields, and click Save.",
-            },
-            {
-                title: "Deal Status Badges (Won/Lost)",
-                whatItDoes: "Mark a deal as Won or Lost via inline card actions.",
-                whyHelps: "Cleans up your board while retaining record history for conversion analytics.",
-                howToUse: "Click the three dots on a card and select Mark Won or Mark Lost.",
-            },
-        ],
-        workflows: [
-            {
-                title: "Advancing a deal after manual verification",
-                steps: [
-                    "Find the deal card for the client.",
-                    "Drag it from Initial Contact to Insurance Verify.",
-                    "The system records the stage change and updates pipeline value statistics.",
-                ],
-            },
-            {
-                title: "Closing a won deal",
-                steps: [
-                    "Click the three-dot menu on the deal card.",
-                    "Select Mark Won.",
-                    "The board total value adjusts and the win is tracked in organization statistics.",
-                ],
-            },
-        ],
-    },
-    {
         slug: "process-settings",
         title: "Process & Stage Configuration",
         intro:
@@ -966,6 +914,120 @@ const GUIDE_DATA: GuidePageData[] = [
                     "Go to Settings → Integrations.",
                     "Click Connect on HubSpot or Salesforce.",
                     "Log in and authorize — call summaries now sync automatically.",
+                ],
+            },
+        ],
+    },
+    {
+        slug: "deals",
+        title: "Process",
+        intro:
+            "The Process screen (sometimes called the Sales Pipeline) is where you see exactly which process every client is enrolled in and which stage they're currently sitting at. It defaults to a searchable List view with clickable stage-progress blocks, and can switch to a drag-and-drop Kanban board. From here you can bulk-trigger or cancel calls, import/export client-process records, and drill into any client's full field history.",
+        icon: Kanban,
+        group: "Core",
+        features: [
+            {
+                title: "List / Kanban View Toggle",
+                whatItDoes: "Two tabs — List and Kanban — switch between a spreadsheet-style table and a drag-and-drop board of the same underlying client-process records.",
+                whyHelps: "List is best for scanning and bulk actions across many clients at once; Kanban is best for visually moving a handful of clients through stages.",
+                howToUse: "Click List or Kanban at the top of the page toolbar.",
+            },
+            {
+                title: "Process Filter Dropdown",
+                whatItDoes: "A dropdown next to the view tabs narrows every result — in both List and Kanban — down to a single process, such as Patient Intake or Billing Support.",
+                whyHelps: "Keeps unrelated processes out of view when you only care about one workflow at a time.",
+                howToUse: "Click the Process dropdown in the toolbar and pick a process, or choose All to clear the filter.",
+            },
+            {
+                title: "Stage Progress Blocks (List View)",
+                whatItDoes: "In the List view's Stage column, each client's progress is shown as a row of small blocks — one per stage — filled in blue up to their current stage.",
+                whyHelps: "Lets you see how far along a client is at a glance, without opening their record, and jump them to a different stage in one click.",
+                howToUse: "Hover a block to see its stage name, then click it to move that client directly to that stage.",
+            },
+            {
+                title: "Advanced Search Panel",
+                whatItDoes: "Clicking into the search bar opens a full filter panel with saved searches on the left (e.g. \"Process in progress\", \"Closed process\") and filter fields on the right — Name, Responsible Person, Stage Group, Comment, Created On, Call Type, Status, Duration, Client details, and more.",
+                whyHelps: "Goes far beyond a simple keyword search, letting you build and reuse complex filters like \"all clients assigned to Sarah, created in the last 30 days, in the Follow-up stage group.\"",
+                howToUse: "Click the search bar to open the panel, check the fields you need under Add Field, fill them in, and click Search. Use Restore Default Fields to reset.",
+            },
+            {
+                title: "Import / Export",
+                whatItDoes: "Import client-process records via CSV upload, a connected Custom API, or a webhook URL; export the current filtered list to CSV.",
+                whyHelps: "Bulk-loads clients into a process from an external list, or pulls data automatically from another system without manual entry.",
+                howToUse: "Click the Upload icon to import (choose CSV / API / Webhook tab), or the Download icon to export the current view.",
+            },
+            {
+                title: "Customizable Columns (List View)",
+                whatItDoes: "A settings icon in the table header lets you show or hide columns — Client, Process, Stage, Status, Created, Activity, Responsible.",
+                whyHelps: "Keeps the table focused on only the columns relevant to your current task.",
+                howToUse: "Click the gear icon at the top-left of the table and toggle columns on or off.",
+            },
+            {
+                title: "Row Actions Menu",
+                whatItDoes: "Each row's three-dot menu offers View, Edit, and Delete for that client's process record.",
+                whyHelps: "Quick access to record-level actions without leaving the list.",
+                howToUse: "Click the three dots at the start of any row and choose an action. View opens the full detail drawer.",
+            },
+            {
+                title: "Bulk Selection & Call Actions",
+                whatItDoes: "Checkboxes let you select multiple rows at once, then Trigger Calls (immediately or scheduled for a later date/time) or Cancel Scheduled Calls for everyone selected.",
+                whyHelps: "Saves time when you need to kick off or stop outbound calls for a whole batch of clients instead of one at a time.",
+                howToUse: "Check the rows you want, then use the bulk action buttons that appear to trigger or cancel calls for the selection.",
+            },
+            {
+                title: "Kanban Board",
+                whatItDoes: "Displays stage columns (grouped by process category) as a horizontally scrollable board; each client appears as a draggable card showing their process, status, created date, and responsible person.",
+                whyHelps: "Gives a visual, at-a-glance view of how many clients are sitting in each stage, and makes moving someone forward as simple as a drag.",
+                howToUse: "Drag a card from one stage column and drop it in another to update that client's stage. Use a card's three-dot menu for Edit, Call, or Delete.",
+            },
+            {
+                title: "Client Detail Drawer",
+                whatItDoes: "Opens from the row/card menu's View option (or by clicking a client's name). It shows a clickable stage-pipeline strip at the top, then two tabs: General Information (editable fields — client name, responsible person, dates, contact details, custom fields you add yourself) and History (a full event log of stage changes and activities, with its own filter panel).",
+                whyHelps: "One place to review or correct everything about a client's progress through a process, and to see exactly when and by whom each change was made.",
+                howToUse: "Click a client to open the drawer, click the pipeline strip to change their stage, click any field in General Information to edit it inline, or switch to History and use Add Field / Restore Default Fields to adjust which event details are shown.",
+            },
+            {
+                title: "Responsible Person Quick-View",
+                whatItDoes: "Clicking a responsible person's name (in the list, a Kanban card, or the detail drawer) opens their Team Member profile drawer.",
+                whyHelps: "Lets you check who owns a client's process and see their contact details without leaving the page.",
+                howToUse: "Click the responsible person's name wherever it appears.",
+            },
+        ],
+        workflows: [
+            {
+                title: "Advancing a client to the next stage from List view",
+                steps: [
+                    "Find the client's row in the List view.",
+                    "Hover over the Stage column to see each stage's name on its block.",
+                    "Click the block for the stage you want to move them to.",
+                    "The stage updates instantly and a confirmation toast appears.",
+                ],
+            },
+            {
+                title: "Moving a client on the Kanban board",
+                steps: [
+                    "Switch to the Kanban tab.",
+                    "Optionally filter to a single process using the Process dropdown.",
+                    "Press and drag the client's card from its current stage column into the target column.",
+                    "Release — the card settles into the new column and the underlying record updates.",
+                ],
+            },
+            {
+                title: "Bulk-triggering calls for a filtered group",
+                steps: [
+                    "Use the Advanced Search Panel or Process filter to narrow the list to the group you want.",
+                    "Check the select-all checkbox (or individual rows) to select them.",
+                    "Click Trigger Calls, choose Start Immediately or Schedule for Later, and confirm.",
+                    "All selected clients now have a call queued or scheduled.",
+                ],
+            },
+            {
+                title: "Reviewing a client's full history and reassigning ownership",
+                steps: [
+                    "Click into a client's row to open the Client Detail Drawer.",
+                    "Switch to the History tab to see every stage change and activity, filtering by Event Type, Created By, or Date if needed.",
+                    "Switch back to General Information, click the Responsible field, and pick a new team member from the dropdown.",
+                    "The change saves immediately and is added to the client's History log.",
                 ],
             },
         ],
