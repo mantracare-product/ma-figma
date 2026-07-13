@@ -336,10 +336,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setClientLocation(client.location || "");
       setClientCountry((client as any).country || "");
 
-      const keys: string[] = (client as any).visibleFieldKeys || [];
-      setVisibleFieldKeys(keys);
-
       const allClientFields = getAllFields("client");
+
+      // Merge: explicitly selected keys  +  any custom field key that already has a
+      // non-empty value on the client record (e.g. written there by a form submission).
+      // This ensures submitted values are immediately visible without a manual Select step.
+      const savedKeys: string[] = (client as any).visibleFieldKeys || [];
+      const savedKeySet = new Set(savedKeys);
+      const autoKeys: string[] = [];
+      allClientFields.forEach(f => {
+        if (!HARDCODED_KEYS.has(f.key) && !savedKeySet.has(f.key)) {
+          const val = (client as any)[f.key];
+          if (val !== undefined && val !== null && val !== "") {
+            autoKeys.push(f.key);
+          }
+        }
+      });
+      const mergedKeys = [...savedKeys, ...autoKeys];
+      setVisibleFieldKeys(mergedKeys);
+
       const values: Record<string, string> = {};
       allClientFields.forEach(f => {
         if (!HARDCODED_KEYS.has(f.key)) {
@@ -2029,6 +2044,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {fieldManagerOpen && fieldManagerMode === "select" && (
             <SelectFieldsModal
               initiallySelected={visibleFieldKeys}
+              onlyModules={["client"]}
               onClose={() => setFieldManagerOpen(false)}
               onApply={(keys) => {
                 setVisibleFieldKeys(keys);

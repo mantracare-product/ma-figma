@@ -1481,6 +1481,40 @@ export default function WebForms() {
 
       if (existing) {
         resolvedClientId = existing.id;
+
+        // Map submitted system/custom fields onto existing client
+        const updated = { ...existing };
+        let updatedAny = false;
+        form.fields.forEach((f) => {
+          const val = fieldValues[`submit-${f.label}`];
+          if (!val || !f.sourceFieldKey) return;
+          const key = f.sourceFieldKey;
+          if (key === "email" && !updated.email) { updated.email = val; updatedAny = true; }
+          else if (key === "phone" && !updated.phone) { updated.phone = val.replace(/\D/g, ""); updatedAny = true; }
+          else if (key === "company") { (updated as any).companyName = val; updatedAny = true; }
+          else if (key === "role") { (updated as any).jobPosition = val; updatedAny = true; }
+          else if (key === "country" && !updated.country) { updated.country = val; updatedAny = true; }
+          else if (key === "name" && !updated.name) { updated.name = val; updatedAny = true; }
+          else if (!["processes", "email", "phone", "country", "name", "company", "role"].includes(key)) {
+            if ((updated as any)[key] !== val) {
+              (updated as any)[key] = val;
+              updatedAny = true;
+            }
+          }
+
+          // Also make sure it's in visibleFieldKeys if it's a client-module field
+          if (f.module === "client") {
+            const visible = (updated as any).visibleFieldKeys || [];
+            if (!visible.includes(key)) {
+              (updated as any).visibleFieldKeys = [...visible, key];
+              updatedAny = true;
+            }
+          }
+        });
+
+        if (updatedAny) {
+          setClients(prev => prev.map(c => c.id === existing.id ? updated : c));
+        }
       } else {
         // Auto-create a new Client
         const newId = `CL-${String(Date.now()).slice(-6)}`;
@@ -1519,17 +1553,26 @@ export default function WebForms() {
           status: "Active",
         };
 
+        const visibleKeys: string[] = [];
+
         // Map all submitted system and custom field values via sourceFieldKey
         // onto the persisted client record (company, role, patient_id, etc.)
         form.fields.forEach(f => {
           const val = fieldValues[`submit-${f.label}`];
           if (!val || !f.sourceFieldKey) return;
           const key = f.sourceFieldKey;
+          
+          if (f.module === "client") {
+            visibleKeys.push(key);
+          }
+
           if (["email", "phone", "processes", "country", "name"].includes(key)) return;
           if (key === "company") { (newClient as any).companyName = val; return; }
           if (key === "role") { (newClient as any).jobPosition = val; return; }
           (newClient as any)[key] = val;
         });
+
+        (newClient as any).visibleFieldKeys = visibleKeys;
 
         setClients(prev => [newClient, ...prev]);
         resolvedClientId = newId;

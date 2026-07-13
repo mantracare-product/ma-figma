@@ -506,12 +506,22 @@ export default function Appointments() {
 
     // Populate custom field values from the appointment object
     const values: Record<string, string> = {};
+    const autoKeys: string[] = [];
     appointmentCustomFields.forEach(f => {
-      if ((appointment as any)[f.key] !== undefined) {
-        values[f.key] = String((appointment as any)[f.key]);
+      const val = (appointment as any)[f.key];
+      if (val !== undefined && val !== null && val !== "") {
+        values[f.key] = String(val);
+        autoKeys.push(f.key);
       }
     });
     setCustomFieldValues(values);
+
+    if (autoKeys.length > 0) {
+      setApptVisibleFieldKeys(prev => {
+        const set = new Set([...prev, ...autoKeys]);
+        return Array.from(set);
+      });
+    }
 
     setShowEditModal(true);
   };

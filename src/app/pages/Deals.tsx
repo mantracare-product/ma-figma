@@ -262,11 +262,23 @@ export default function Deals() {
   useEffect(() => {
     if (selectedLogForView) {
       setEditedValues({});
-      const keys: string[] = (selectedLogForView as any).visibleFieldKeys || [
+      const allProcessFields = getAllFields("process");
+      const defaultKeys = [
         "client_name", "responsible", "deal_type", "source", "start_date", "end_date",
         "email_id", "country_code", "country", "time_slot", "comment"
       ];
-      setDrawerVisibleFields(keys);
+      const savedKeys: string[] = (selectedLogForView as any).visibleFieldKeys || defaultKeys;
+      const savedKeySet = new Set(savedKeys);
+      const autoKeys: string[] = [];
+      allProcessFields.forEach(f => {
+        if (!savedKeySet.has(f.key) && !defaultKeys.includes(f.key)) {
+          const val = (selectedLogForView as any)[f.key];
+          if (val !== undefined && val !== null && val !== "") {
+            autoKeys.push(f.key);
+          }
+        }
+      });
+      setDrawerVisibleFields([...savedKeys, ...autoKeys]);
     }
   }, [selectedLogForView]);
 

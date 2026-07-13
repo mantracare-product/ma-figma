@@ -340,6 +340,40 @@ export default function WebFormsTest() {
         if (existing) {
           clientMatched = `${existing.id} — ${existing.name}`;
           resolvedClientId = existing.id;
+
+          // Map submitted system/custom fields onto existing client
+          const updated = { ...existing };
+          let updatedAny = false;
+          fields.forEach((f) => {
+            const val = fieldValues[f.label];
+            if (!val || !f.sourceFieldKey) return;
+            const key = f.sourceFieldKey;
+            if (key === "email" && !updated.email) { updated.email = val; updatedAny = true; }
+            else if (key === "phone" && !updated.phone) { updated.phone = val.replace(/\D/g, ""); updatedAny = true; }
+            else if (key === "company") { (updated as any).companyName = val; updatedAny = true; }
+            else if (key === "role") { (updated as any).jobPosition = val; updatedAny = true; }
+            else if (key === "country" && !updated.country) { updated.country = val; updatedAny = true; }
+            else if (key === "name" && !updated.name) { updated.name = val; updatedAny = true; }
+            else if (!["processes", "email", "phone", "country", "name", "company", "role"].includes(key)) {
+              if ((updated as any)[key] !== val) {
+                (updated as any)[key] = val;
+                updatedAny = true;
+              }
+            }
+
+            // Also make sure it's in visibleFieldKeys if it's a client-module field
+            if (f.module === "client") {
+              const visible = (updated as any).visibleFieldKeys || [];
+              if (!visible.includes(key)) {
+                (updated as any).visibleFieldKeys = [...visible, key];
+                updatedAny = true;
+              }
+            }
+          });
+
+          if (updatedAny) {
+            saveClients(existingClients.map((c) => (c.id === existing.id ? updated : c)));
+          }
         } else {
           // Precedence rule: a form field explicitly bound to the "processes" system
           // key (sourceFieldKey === "processes") or whose label matches /process/i
@@ -376,6 +410,8 @@ export default function WebFormsTest() {
             status: "Active",
           };
 
+          const visibleKeys: string[] = [];
+
           // Map every submitted field value that has a sourceFieldKey onto the
           // client record so custom fields (patient_id, insurance_provider, role,
           // company, etc.) are actually persisted, not just shown in the modal.
@@ -383,6 +419,11 @@ export default function WebFormsTest() {
             const val = fieldValues[f.label];
             if (!val || !f.sourceFieldKey) return;
             const key = f.sourceFieldKey;
+            
+            if (f.module === "client") {
+              visibleKeys.push(key);
+            }
+
             // Skip fields already mapped above
             if (["email", "phone", "processes", "country"].includes(key)) return;
             if (key === "name") return; // already in newClient.name
@@ -390,6 +431,8 @@ export default function WebFormsTest() {
             if (key === "role") { (newClient as any).jobPosition = val; return; }
             (newClient as unknown as Record<string, unknown>)[key] = val;
           });
+
+          (newClient as any).visibleFieldKeys = visibleKeys;
 
           try {
             // Prepend new client so they appear at the top of Clients list immediately
