@@ -1,5 +1,6 @@
 import React, { ReactNode } from "react";
 import { Play, CheckCircle2, X } from "lucide-react";
+import { useNavigate, useLocation } from "react-router";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 
@@ -24,18 +25,23 @@ export function HowItWorksModal({
   guideUrl,
   extraFooterButtons,
 }: HowItWorksModalProps) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const footer = (
     <div className="flex items-center justify-between w-full">
       {guideUrl ? (
-        <a
-          href={guideUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5"
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            navigate(guideUrl, { state: { from: location.pathname } });
+          }}
+          className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1.5 bg-transparent border-none p-0 cursor-pointer"
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           View Detailed Guide →
-        </a>
+        </button>
       ) : (
         <div />
       )}

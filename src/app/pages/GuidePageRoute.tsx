@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, useLocation, Link } from "react-router";
-import { Search, ChevronRight, X, Menu, ExternalLink, Layers, Users, Phone, Kanban, GitBranch, FileText, MessageSquare, Calendar, Briefcase, Building2, CreditCard, Settings as SettingsIcon, Home } from "lucide-react";
+import { Search, ChevronRight, X, Menu, ExternalLink, Layers, Users, Phone, Kanban, GitBranch, FileText, MessageSquare, Calendar, Briefcase, Building2, CreditCard, Settings as SettingsIcon, Home, Database, ArrowLeft } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  1. CONTENT DATA                                                    */
@@ -260,7 +260,6 @@ const GUIDE_DATA: GuidePageData[] = [
             { id: "stage-level-configuration", title: "Stage-Level Configuration", note: "Overrides for one specific stage" },
             { id: "basic-tab", title: "Basic Tab" },
             { id: "advanced-tab", title: "Advanced Tab" },
-            { id: "knowledge-base-tab", title: "Knowledge Base Tab" },
             { id: "automation-tab", title: "Automation Tab" },
             { id: "flow-builder-tab", title: "Flow Builder Tab" },
         ],
@@ -379,13 +378,6 @@ const GUIDE_DATA: GuidePageData[] = [
                 howToUse: "Open the Advance tab and use the Enable Voicemail Detection toggle.",
             },
 
-            // ── Stage → Knowledge Base tab ──
-            {
-                title: "Knowledge Library Links",
-                whatItDoes: "Links specific uploaded reference documents or FAQs to this stage.",
-                whyHelps: "Empowers the AI to answer stage-specific questions accurately.",
-                howToUse: "Click Add Knowledge Base, check the items to include, and save.",
-            },
 
             // ── Stage → Automation tab ──
             {
@@ -532,6 +524,73 @@ const GUIDE_DATA: GuidePageData[] = [
                     "Find your form and click the Test icon.",
                     "Type test information, including an invalid email.",
                     "Submit — confirm the validator blocks it, then fix and resubmit to inspect the output.",
+                ],
+            },
+        ],
+    },
+    {
+        slug: "knowledge-base",
+        title: "Knowledge Base",
+        intro:
+            "The Knowledge Base gives your AI receptionist reference material — text, uploaded documents, or files — that it can pull from when answering caller questions. Each knowledge source is scoped to the exact processes and stages where it should apply, so the AI only uses it when it's relevant.",
+        icon: Database,
+        group: "Automation",
+        features: [
+            {
+                title: "Create Knowledge Base",
+                whatItDoes: "Opens a drawer to add a new reference source.",
+                whyHelps: "Centralizes your reference materials in one place for the AI to query.",
+                howToUse: "Click the Create Knowledge Base button, fill in the Name, Tags, Applicable Processes, and Content Type, and click Save.",
+            },
+            {
+                title: "Applicable Processes Scoping",
+                whatItDoes: "Restricts a knowledge source to specific processes/stages or applies it globally across all processes.",
+                whyHelps: "Prevents the AI from referencing irrelevant materials outside their intended context.",
+                howToUse: "Open the Applicable Processes dropdown in the create/edit drawer and check specific processes and stages, or choose 'All' to make it available everywhere.",
+            },
+            {
+                title: "Content Types: Text, File, URL",
+                whatItDoes: "Provides three ways to supply reference material: typed or pasted text, uploaded files, or a single page URL.",
+                whyHelps: "Ensures flexibility for different source document formats.",
+                howToUse: "Select a Content Type button, and then either type in the text box or drag and drop your file in the upload zone.",
+            },
+            {
+                title: "Tags / Categories",
+                whatItDoes: "Labels knowledge sources using preset categories or custom-defined tags.",
+                whyHelps: "Keeps your library organized and easily searchable.",
+                howToUse: "Select tags from the Tags combo dropdown or type a custom tag name and press Enter.",
+            },
+            {
+                title: "Search, Filter & View Toggle",
+                whatItDoes: "Searches sources by name, filters by type (All/URL/Files/Text), and toggles between list table and grid card layouts.",
+                whyHelps: "Helps you quickly find specific references as your library grows.",
+                howToUse: "Type in the search bar, click a filter tab, or select the List/Grid view toggle on the toolbar row.",
+            },
+            {
+                title: "Row Actions (View / Edit / Delete)",
+                whatItDoes: "Provides a hamburger menu next to each source to view, edit, or delete the record.",
+                whyHelps: "Allows you to manage individual sources on the fly.",
+                howToUse: "Click the vertical kebab menu (⋮) on any table row or grid card, then select View, Edit, or Delete.",
+            },
+        ],
+        workflows: [
+            {
+                title: "Adding a source scoped to one stage",
+                steps: [
+                    "Click the Create Knowledge Base button.",
+                    "Enter a descriptive Name, then choose or type Tags.",
+                    "Open the Applicable Processes dropdown, uncheck All, and select the target process.",
+                    "Expand the process and check the specific stage.",
+                    "Select your Content Type and fill or upload your reference material.",
+                    "Click Save to publish the source.",
+                ],
+            },
+            {
+                title: "Finding all URL-based sources",
+                steps: [
+                    "Locate the view and filter toolbar directly below the search bar.",
+                    "Click the URL filter tab.",
+                    "The list or grid view will update immediately to display only URL-based reference materials.",
                 ],
             },
         ],
@@ -1401,7 +1460,10 @@ export default function GuidePageRoute() {
     const page = getPage(slug);
 
     const goTo = (targetSlug: string, sectionId?: string) => {
-        navigate(`/guide/${targetSlug}${sectionId ? `#${sectionId}` : ""}`);
+        const state = location.state as { from?: string } | null;
+        navigate(`/guide/${targetSlug}${sectionId ? `#${sectionId}` : ""}`, {
+            state: { from: state?.from }
+        });
     };
 
     // Scroll to hash anchor whenever the route/hash changes
@@ -1433,12 +1495,21 @@ export default function GuidePageRoute() {
                     <div className="flex-1 max-w-md">
                         <GuideSearch onNavigate={goTo} />
                     </div>
-                    <a
-                        href="/"
-                        className="hidden sm:flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800"
+                    <button
+                        type="button"
+                        onClick={() => {
+                            const state = location.state as { from?: string } | null;
+                            const from = state?.from;
+                            if (from) {
+                                navigate(from);
+                            } else {
+                                navigate(-1);
+                            }
+                        }}
+                        className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-gray-800 bg-transparent border-none p-0 cursor-pointer"
                     >
-                        Back to app <ExternalLink className="w-3 h-3" />
-                    </a>
+                        <ArrowLeft className="w-3.5 h-3.5" /> Back to app
+                    </button>
                 </div>
             </div>
 

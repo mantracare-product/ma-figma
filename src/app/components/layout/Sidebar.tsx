@@ -21,7 +21,8 @@ import {
   Package,
   Calendar as CalendarIcon,
   Workflow,
-  MessageCircle
+  MessageCircle,
+  Database,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/", label: "Overview", icon: LayoutDashboard },
     { path: "/clients", label: "Clients", icon: Users },
     { path: "/deals", label: "Processes", icon: Workflow },
+    { path: "/knowledge-base", label: "Knowledge Base", icon: Database },
     { path: "/call-logs", label: "Calls", icon: Phone },
     { path: "/chats", label: "Chats", icon: MessageCircle },
     { path: "/settings", label: "Settings", icon: Settings },
