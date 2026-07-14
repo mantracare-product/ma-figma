@@ -313,18 +313,21 @@ export default function WebFormsTest() {
 
       const submissionId = `SUB-${String(Date.now()).slice(-8)}`;
 
-      const submittedName = Object.entries(fieldValues).find(([label]) => {
-        const f = fields.find((fi) => fi.label === label);
-        return f && /name/i.test(f.label);
-      })?.[1] ?? "";
-      const submittedEmail = Object.entries(fieldValues).find(([label]) => {
-        const f = fields.find((fi) => fi.label === label);
-        return f && (/email/i.test(f.label) || f.type === "email");
-      })?.[1] ?? "";
-      const submittedPhone = Object.entries(fieldValues).find(([label]) => {
-        const f = fields.find((fi) => fi.label === label);
-        return f && (/phone/i.test(f.label) || f.type === "tel");
-      })?.[1] ?? "";
+      // Resolve key submitter identifiers strictly from explicitly linked registry fields.
+      // Form Elements (Short Text etc.) carry no sourceFieldKey/module and are
+      // intentionally excluded — they must NOT trigger client creation/updates.
+      const submittedName = (() => {
+        const f = fields.find(fi => fi.sourceFieldKey === "name" && fi.module === "client");
+        return f ? fieldValues[f.label] ?? "" : "";
+      })();
+      const submittedEmail = (() => {
+        const f = fields.find(fi => fi.sourceFieldKey === "email" && fi.module === "client");
+        return f ? fieldValues[f.label] ?? "" : "";
+      })();
+      const submittedPhone = (() => {
+        const f = fields.find(fi => fi.sourceFieldKey === "phone" && fi.module === "client");
+        return f ? fieldValues[f.label] ?? "" : "";
+      })();
 
       let resolvedClientId = "";
 
@@ -378,8 +381,12 @@ export default function WebFormsTest() {
           // Precedence rule: a form field explicitly bound to the "processes" system
           // key (sourceFieldKey === "processes") or whose label matches /process/i
           // takes precedence over the form-level autoCreateProcessId default.
+          // Resolve process and country strictly from explicitly linked registry fields.
+          // Label-matching fallbacks are intentionally removed to prevent Form Elements
+          // (e.g. a Short Text labeled "Country") from accidentally routing data into
+          // client/process records.
           const processField = fields.find(
-            (f) => f.sourceFieldKey === "processes" || /process/i.test(f.label)
+            (f) => f.sourceFieldKey === "processes" && f.module === "client"
           );
           const submittedProcess = processField
             ? (fieldValues[processField.label] ?? "").trim()
@@ -388,9 +395,8 @@ export default function WebFormsTest() {
           const stageName = selectedForm.autoCreateStageId || "Initial Contact";
           const stageLabel = processName ? `${processName}: ${stageName}` : stageName;
 
-          // Resolve country from a submitted field if available
           const countryField = fields.find(
-            (f) => f.sourceFieldKey === "country" || /^country$/i.test(f.label)
+            (f) => f.sourceFieldKey === "country" && f.module === "client"
           );
           const resolvedCountry = countryField
             ? (fieldValues[countryField.label] || "US")

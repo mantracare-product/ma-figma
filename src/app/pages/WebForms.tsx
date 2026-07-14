@@ -1460,15 +1460,16 @@ export default function WebForms() {
       month: "short", day: "numeric", year: "numeric",
     });
 
-    // Resolve the submitter's key fields from form field mappings
+    // Resolve the submitter's key fields strictly from explicitly linked registry fields.
+    // Form Elements carry no sourceFieldKey/module and must NOT drive client record creation.
     const getVal = (key: string) => {
-      const field = form.fields.find(f => f.sourceFieldKey === key);
+      const field = form.fields.find(f => f.sourceFieldKey === key && f.module === "client");
       return field ? fieldValues[`submit-${field.label}`] ?? "" : "";
     };
 
-    const submittedEmail = getVal("email") || Object.values(fieldValues).find(v => v.includes("@")) || "";
-    const submittedName = getVal("name") || "";
-    const submittedPhone = getVal("phone") || "";
+    const submittedEmail = getVal("email");
+    const submittedName = getVal("name");
+    const submittedPhone = getVal("phone");
 
     let resolvedClientId = "";
 
@@ -1519,11 +1520,12 @@ export default function WebForms() {
         // Auto-create a new Client
         const newId = `CL-${String(Date.now()).slice(-6)}`;
 
-        // Precedence rule: a form field bound to the "processes" system key
-        // (sourceFieldKey === "processes") takes precedence over the form's
-        // autoCreateProcessId default. Fallback to /process/i label match.
+        // Resolve process and country strictly from explicitly linked registry fields.
+        // Label-matching fallbacks are intentionally removed to prevent Form Elements
+        // (e.g. a Short Text labeled "Country") from accidentally routing data into
+        // client/process records.
         const processField = form.fields.find(
-          f => f.sourceFieldKey === "processes" || /process/i.test(f.label)
+          f => f.sourceFieldKey === "processes" && f.module === "client"
         );
         const submittedProcess = processField
           ? (fieldValues[`submit-${processField.label}`] ?? "").trim()
@@ -1531,9 +1533,8 @@ export default function WebForms() {
         const processName = submittedProcess || form.autoCreateProcessId || "";
         const stageName = form.autoCreateStageId || "Initial Contact";
 
-        // Resolve country from submitted field if available
         const countryField = form.fields.find(
-          f => f.sourceFieldKey === "country" || /^country$/i.test(f.label)
+          f => f.sourceFieldKey === "country" && f.module === "client"
         );
         const resolvedCountry = countryField
           ? (fieldValues[`submit-${countryField.label}`] || "US")

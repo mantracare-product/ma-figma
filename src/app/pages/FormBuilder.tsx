@@ -39,6 +39,10 @@ import {
   ShieldCheck,
   EyeOff,
   Layout,
+  Type,
+  AlignLeft,
+  Circle,
+  Square,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { toast } from "sonner";
@@ -47,8 +51,9 @@ import FormSettings from "../components/form-builder/FormSettings";
 import { useClientFields } from "../context/ClientFieldsContext";
 import type { CustomField } from "../context/ClientFieldsContext";
 import { useFieldRegistry, FieldModule, FieldInputType } from "../context/FieldRegistryContext";
+import type { FieldDefinition } from "../context/FieldRegistryContext";
 import VariablePickerButton from "../components/process/VariablePickerButton";
-import { CreateFieldModal } from "../components/help/FieldManager";
+import { CreateFieldModal, SelectFieldsModal } from "../components/help/FieldManager";
 import { INITIAL_FORMS } from "../../data/forms";
 
 interface FieldOption {
@@ -148,24 +153,14 @@ export default function FormBuilder() {
   const [inlineFieldType, setInlineFieldType] = useState("TEXT");
   const [inlineFieldRequired, setInlineFieldRequired] = useState(false);
 
-  // Collapsible sidebar sections - one per module + form-elements
-  const MODULE_LIST: { key: Exclude<FieldModule, "deal">; label: string; color: string; icon: React.ElementType<{ className?: string }> }[] = [
-    { key: "client",       label: "Client",       color: "bg-blue-50 text-blue-600",    icon: Users },
-    { key: "process",      label: "Process",      color: "bg-indigo-50 text-indigo-600", icon: Workflow },
-    { key: "appointment",  label: "Appointment",  color: "bg-emerald-50 text-emerald-600", icon: CalendarCheck },
-    { key: "call",         label: "Call",         color: "bg-amber-50 text-amber-600",  icon: PhoneCall },
-    { key: "service",      label: "Service",      color: "bg-rose-50 text-rose-600",    icon: Wrench },
-    { key: "organization", label: "Organization", color: "bg-purple-50 text-purple-600", icon: Building2 },
-  ];
-
-  const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>(() => {
-    const init: Record<string, boolean> = { formElements: false };
-    MODULE_LIST.forEach(m => { init[m.key] = m.key === "client"; });
-    return init;
+  const [sidebarSections, setSidebarSections] = useState<{ [key: string]: boolean }>({
+    formElements: true,
+    existingFields: true,
   });
 
   // State for CreateFieldModal (unified; replaces inline panel + inline flow)
   const [showCreateFieldModal, setShowCreateFieldModal] = useState(false);
+  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
 
   const toggleSidebarSection = (section: string) => {
     setSidebarSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -196,11 +191,16 @@ export default function FormBuilder() {
     return { type: "text" };
   };
 
-  const handleAddRegistryField = (fieldKey: string, module: FieldModule, source: "system" | "custom") => {
-    const fields = getAllFields(module);
-    const sf = fields.find(f => f.key === fieldKey);
-    if (!sf) return;
-    const isAlreadyAdded = formFields.some(f => f.sourceFieldKey === fieldKey && f.module === module);
+  /**
+   * Directly build a FormField from a FieldDefinition and push it onto the
+   * canvas. This is the single source-of-truth for registry-linked fields.
+   * Using a FieldDefinition directly avoids the React async state-update delay
+   * that occurs when looking up a freshly-added custom field from the context.
+   */
+  const addFormFieldFromDefinition = (sf: FieldDefinition, source: "system" | "custom") => {
+    const isAlreadyAdded = formFields.some(
+      f => f.sourceFieldKey === sf.key && f.module === sf.module
+    );
     if (isAlreadyAdded) {
       toast.info(`"${sf.label}" is already in the form`);
       return;
@@ -220,21 +220,30 @@ export default function FormBuilder() {
             "text",
       placeholder: sf.placeholder || `Enter ${sf.label.toLowerCase()}`,
       required: sf.required || false,
-      essential: ["name", "email", "phone"].includes(fieldKey) && module === "client",
+      essential: ["name", "email", "phone"].includes(sf.key) && sf.module === "client",
       label: sf.label,
       helpText: "",
       validation: sf.validation || "",
-      options: sf.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) || (sf.inputType === "yes_no" ? [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] : undefined),
+      options: sf.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) ||
+               (sf.inputType === "yes_no" ? [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] : undefined),
       allowOther: false,
       defaultValue: "",
       sourceType: source,
-      sourceFieldKey: fieldKey,
-      module,
+      sourceFieldKey: sf.key,
+      module: sf.module as FieldModule,
     };
     setFormFields(prev => [...prev, newField]);
     setSelectedField(newField);
     setShowFieldSettings(true);
     toast.success(`${sf.label} field added`);
+  };
+
+  /** Look up a field in the registry then delegate to addFormFieldFromDefinition. */
+  const handleAddRegistryField = (fieldKey: string, module: FieldModule, source: "system" | "custom") => {
+    const fields = getAllFields(module);
+    const sf = fields.find(f => f.key === fieldKey);
+    if (!sf) return;
+    addFormFieldFromDefinition(sf, source);
   };
 
   const handleAddSystemField = (key: string) => {
@@ -2130,121 +2139,10 @@ export default function FormBuilder() {
                   </div>
                 </div>
               ) : (
-                 /* Field Categories — Module-Grouped */
+                 /* Field Categories — Restructured into Exactly Two Sections */
                 <div className="divide-y divide-gray-100/80">
-
-                  {/* ── Per-module sections ── */}
-                  {MODULE_LIST.map(mod => {
-                    const allModFields = getAllFields(mod.key);
-                    const sysFields = allModFields.filter(f => f.source === "system");
-                    const custFields = allModFields.filter(f => f.source === "custom");
-                    const isOpen = sidebarSections[mod.key];
-                    const ModIcon = mod.icon;
-                    // Derive accent color class from the color token
-                    const [bgClass, textClass] = mod.color.split(" ");
-                    return (
-                      <div key={mod.key}>
-                        <button
-                          onClick={() => toggleSidebarSection(mod.key)}
-                          className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${
-                            isOpen
-                              ? `${bgClass}/60 border-l-2 border-current`
-                              : "hover:bg-gray-50"
-                          }`}
-                        >
-                          <span className={`flex items-center gap-2 text-xs font-medium ${
-                            isOpen ? textClass : "text-[#475569]"
-                          }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            <ModIcon className={`w-3.5 h-3.5 flex-shrink-0 ${
-                              isOpen ? "" : "text-gray-400"
-                            }`} />
-                            {mod.label} Fields
-                          </span>
-                          <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${
-                            isOpen ? `${textClass} rotate-180` : "text-gray-300"
-                          }`} />
-                        </button>
-
-                        {isOpen && (
-                          <div className="px-3 pt-2 pb-3 space-y-1">
-                            {sysFields.length > 0 && (
-                              <>
-                                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">System</p>
-                                <div className="grid grid-cols-2 gap-1.5 mb-2">
-                                  {sysFields.map(sf => {
-                                    const isAdded = formFields.some(f => f.sourceFieldKey === sf.key && f.module === mod.key);
-                                    return (
-                                      <button
-                                        key={sf.key}
-                                        onClick={() => handleAddRegistryField(sf.key, mod.key, "system")}
-                                        disabled={isAdded}
-                                        className={`flex items-center gap-2 p-2 bg-white border rounded-lg text-left text-xs transition-all ${
-                                          isAdded
-                                            ? "border-primary/30 bg-primary/5 opacity-60 cursor-not-allowed"
-                                            : "border-gray-200 hover:border-primary hover:shadow-sm cursor-pointer"
-                                        }`}
-                                      >
-                                        <span className="font-medium truncate flex-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>{sf.label}</span>
-                                        {isAdded && <span className="text-[9px] text-primary font-bold">✓</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </>
-                            )}
-
-                            {custFields.length > 0 && (
-                              <>
-                                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Custom</p>
-                                <div className="grid grid-cols-2 gap-1.5">
-                                  {custFields.map(cf => {
-                                    const isAdded = formFields.some(f => f.sourceFieldKey === cf.key && f.module === mod.key);
-                                    return (
-                                      <button
-                                        key={cf.key}
-                                        onClick={() => handleAddRegistryField(cf.key, mod.key, "custom")}
-                                        disabled={isAdded}
-                                        className={`flex items-center gap-2 p-2 bg-white border rounded-lg text-left text-xs transition-all ${
-                                          isAdded
-                                            ? "border-purple-200 bg-purple-50/50 opacity-60 cursor-not-allowed"
-                                            : "border-gray-200 hover:border-purple-400 hover:shadow-sm cursor-pointer"
-                                        }`}
-                                      >
-                                        <Tag className="w-3 h-3 text-purple-500 flex-shrink-0" />
-                                        <span className="font-medium truncate flex-1" style={{ fontFamily: 'Outfit, sans-serif', color: '#475569' }}>{cf.label}</span>
-                                        {isAdded && <span className="text-[9px] text-purple-600 font-bold">✓</span>}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </>
-                            )}
-
-                            {custFields.length === 0 && (
-                              <p className="text-[10px] text-gray-400 py-1" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                No custom {mod.label.toLowerCase()} fields yet.
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* ── Create Custom Field ── */}
-                  <div className="px-3 py-3">
-                    <button
-                      onClick={() => setShowCreateFieldModal(true)}
-                      className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Create Custom Field
-                    </button>
-                  </div>
-
                   {/* ── Form Elements ── */}
-                  <div className="border-t border-gray-100/80">
+                  <div>
                     <button
                       onClick={() => toggleSidebarSection("formElements")}
                       className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${
@@ -2253,7 +2151,7 @@ export default function FormBuilder() {
                           : "hover:bg-gray-50"
                       }`}
                     >
-                      <span className={`flex items-center gap-2 text-xs font-medium ${
+                      <span className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${
                         sidebarSections.formElements ? "text-[#374151]" : "text-[#475569]"
                       }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
                         <LayoutGrid className={`w-3.5 h-3.5 flex-shrink-0 ${
@@ -2267,16 +2165,15 @@ export default function FormBuilder() {
                     </button>
 
                     {sidebarSections.formElements && (
-                      <div className="px-3 pt-2 pb-3 grid grid-cols-3 gap-2">
+                      <div className="px-3 pt-2 pb-3 grid grid-cols-2 gap-2">
                         {[
-                          { type: "signature", label: "Signature",    icon: Palette },
-                          { type: "captcha",   label: "CAPTCHA",      icon: ShieldCheck },
-                          { type: "password",  label: "Password",     icon: EyeOff },
-                          { type: "rating",    label: "Rating",       icon: Star },
-                          { type: "color",     label: "Color Picker", icon: Palette },
-                          { type: "pagebreak", label: "Page Break",   icon: Layout },
-                          { type: "html",      label: "HTML Block",   icon: Code },
-                          { type: "divider",   label: "Divider",      icon: MinusIcon },
+                          { type: "text",     label: "Short Text",    icon: Type },
+                          { type: "textarea", label: "Long Text",     icon: AlignLeft },
+                          { type: "number",   label: "Number",        icon: Hash },
+                          { type: "date",     label: "Date",          icon: Calendar },
+                          { type: "select",   label: "Dropdown",      icon: ChevronDown },
+                          { type: "radio",    label: "Radio Button",  icon: Circle },
+                          { type: "checkbox", label: "Checkbox",      icon: Square },
                           { type: "file",      label: "File Upload",  icon: Upload },
                         ].map((item) => (
                           <button
@@ -2298,6 +2195,50 @@ export default function FormBuilder() {
                     )}
                   </div>
 
+                  {/* ── Create form using existing fields ── */}
+                  <div className="border-t border-gray-100/80">
+                    <button
+                      onClick={() => toggleSidebarSection("existingFields")}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 transition-colors text-left ${
+                        sidebarSections.existingFields
+                          ? "bg-gray-50/80 border-l-2 border-gray-400"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className={`flex items-center gap-2 text-xs font-semibold uppercase tracking-wider ${
+                        sidebarSections.existingFields ? "text-[#374151]" : "text-[#475569]"
+                      }`} style={{ fontFamily: 'Outfit, sans-serif' }}>
+                        <Sliders className={`w-3.5 h-3.5 flex-shrink-0 ${
+                          sidebarSections.existingFields ? "text-gray-500" : "text-gray-400"
+                        }`} />
+                        Create form using existing fields
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform flex-shrink-0 ${
+                        sidebarSections.existingFields ? "text-gray-500 rotate-180" : "text-gray-300"
+                      }`} />
+                    </button>
+
+                    {sidebarSections.existingFields && (
+                      <div className="px-3 pt-3 pb-3 space-y-2">
+                        <button
+                          onClick={() => setShowSelectFieldModal(true)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-blue-300 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                          Select System Field
+                        </button>
+                        <button
+                          onClick={() => setShowCreateFieldModal(true)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors cursor-pointer"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Create Custom Field
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -2363,8 +2304,33 @@ export default function FormBuilder() {
           sourceFormId={formId}
           onClose={() => setShowCreateFieldModal(false)}
           onCreated={(field) => {
-            // Auto-add the created field to the form
-            handleAddRegistryField(field.key, field.module as FieldModule, "custom");
+            // Call addFormFieldFromDefinition directly with the returned FieldDefinition
+            // so we bypass the async React context state-update delay that would
+            // cause getAllFields() to still return the OLD list inside handleAddRegistryField.
+            addFormFieldFromDefinition(field, "custom");
+            setShowCreateFieldModal(false);
+          }}
+        />
+      )}
+      {showSelectFieldModal && (
+        <SelectFieldsModal
+          initiallySelected={formFields.filter(f => f.sourceFieldKey).map(f => f.sourceFieldKey!)}
+          onClose={() => setShowSelectFieldModal(false)}
+          onApply={(keys) => {
+            keys.forEach(key => {
+              const allModules: FieldModule[] = ["client", "process", "appointment", "call", "service", "organization"];
+              for (const mod of allModules) {
+                const fields = getAllFields(mod);
+                const match = fields.find(f => f.key === key);
+                if (match) {
+                  const exists = formFields.some(ff => ff.sourceFieldKey === key && ff.module === mod);
+                  if (!exists) {
+                    handleAddRegistryField(key, mod, match.source);
+                  }
+                  break;
+                }
+              }
+            });
           }}
         />
       )}
