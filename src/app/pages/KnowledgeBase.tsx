@@ -1,4 +1,4 @@
-import React, { useRef, useState, useMemo } from "react";
+import React, { useRef, useState, useMemo, useEffect } from "react";
 import {
   ArrowLeft,
   Upload,
@@ -25,6 +25,7 @@ import {
   MoreVertical,
   Eye,
   Edit,
+  Settings,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Button } from "../components/ui/Button";
@@ -208,6 +209,29 @@ const KbIdCell: React.FC<{ id: string }> = ({ id }) => {
   );
 };
 
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+const STATUS_STYLES: Record<SourceStatus, { bg: string; text: string; dot: string }> = {
+  completed:  { bg: "bg-[#F0FDF4]", text: "text-[#16A34A]", dot: "bg-[#16A34A]" },
+  pending:    { bg: "bg-[#FFFBEB]", text: "text-[#D97706]", dot: "bg-[#D97706]" },
+  processing: { bg: "bg-[#EFF6FF]", text: "text-[#2563EB]", dot: "bg-[#2563EB]" },
+  failed:     { bg: "bg-[#FEF2F2]", text: "text-[#DC2626]", dot: "bg-[#DC2626]" },
+};
+
+const StatusBadge: React.FC<{ status: SourceStatus }> = ({ status }) => {
+  const s = STATUS_STYLES[status];
+  const label = status.charAt(0).toUpperCase() + status.slice(1);
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${s.bg} ${s.text}`}
+      style={{ fontFamily: "Outfit, sans-serif" }}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
+      {label}
+    </span>
+  );
+};
+
 // ─── Scope chip listing helper ───────────────────────────────────────────────
 
 interface FlattenedScope {
@@ -371,12 +395,15 @@ const SourceCard: React.FC<{
         </div>
       )}
 
-      {/* Footer Section (KB ID left, Date right) */}
-      <div className="border-t border-gray-100 pt-3 flex items-center justify-between mt-auto">
+      {/* Footer Section (KB ID left, Status + Date right) */}
+      <div className="border-t border-gray-100 pt-3 flex items-center justify-between mt-auto gap-2">
         <KbIdCell id={src.id} />
-        <p className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
-          {formatDate(src.createdAt)}
-        </p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <StatusBadge status={src.status} />
+          <p className="text-xs text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+            {formatDate(src.createdAt)}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -1095,6 +1122,8 @@ const SEED_SOURCES: GlobalKnowledgeSource[] = [
 const PAGE_SIZES = [10, 25, 50] as const;
 type PageSizeValue = (typeof PAGE_SIZES)[number];
 
+const TABLE_HEADERS = ["Actions", "Name", "Type", "Scope", "Tags", "KB ID", "Status", "Created"];
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function KnowledgeBase() {
@@ -1106,16 +1135,6 @@ export default function KnowledgeBase() {
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSizeValue>(10);
-
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editingSource, setEditingSource] = useState<GlobalKnowledgeSource | null>(null);
-  const [viewSource, setViewSource] = useState<GlobalKnowledgeSource | null>(null);
-
-  const [deleteTargetList, setDeleteTargetList] = useState<GlobalKnowledgeSource[] | null>(null);
-  const [showHelp, setShowHelp] = useState(false);
-
-  // Row selection state
-  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
 
   // Derived list
   const filtered = useMemo(() => {
@@ -1134,12 +1153,117 @@ export default function KnowledgeBase() {
     return list;
   }, [sources, activeFilter, searchQuery]);
 
+  // Table scroll state
+  const tableScrollRef = useRef<HTMLDivElement>(null);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+  const [showScrollLeftIndicator, setShowScrollLeftIndicator] = useState(false);
+  const scrollIntervalRef = useRef<number | null>(null);
+
+  const handleScrollRightMouseEnter = () => {
+    let velocity = 0;
+    const maxVelocity = 3;
+    const acceleration = 0.15;
+
+    const scroll = () => {
+      if (tableScrollRef.current) {
+        velocity = Math.min(velocity + acceleration, maxVelocity);
+        tableScrollRef.current.scrollLeft += velocity;
+
+        const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+        if (scrollLeft >= scrollWidth - clientWidth) {
+          if (scrollIntervalRef.current) {
+            cancelAnimationFrame(scrollIntervalRef.current);
+            scrollIntervalRef.current = null;
+          }
+          return;
+        }
+
+        scrollIntervalRef.current = requestAnimationFrame(scroll);
+      }
+    };
+
+    scrollIntervalRef.current = requestAnimationFrame(scroll);
+  };
+
+  const handleScrollLeftMouseEnter = () => {
+    let velocity = 0;
+    const maxVelocity = 3;
+    const acceleration = 0.15;
+
+    const scroll = () => {
+      if (tableScrollRef.current) {
+        velocity = Math.min(velocity + acceleration, maxVelocity);
+        tableScrollRef.current.scrollLeft -= velocity;
+
+        if (tableScrollRef.current.scrollLeft <= 0) {
+          if (scrollIntervalRef.current) {
+            cancelAnimationFrame(scrollIntervalRef.current);
+            scrollIntervalRef.current = null;
+          }
+          return;
+        }
+
+        scrollIntervalRef.current = requestAnimationFrame(scroll);
+      }
+    };
+
+    scrollIntervalRef.current = requestAnimationFrame(scroll);
+  };
+
+  const handleScrollMouseLeave = () => {
+    if (scrollIntervalRef.current) {
+      cancelAnimationFrame(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+  };
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<GlobalKnowledgeSource | null>(null);
+  const [viewSource, setViewSource] = useState<GlobalKnowledgeSource | null>(null);
+
+  const [deleteTargetList, setDeleteTargetList] = useState<GlobalKnowledgeSource[] | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Row selection state
+  const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
+
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(currentPage, totalPages);
   const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const startItem = filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
   const endItem   = Math.min(safePage * pageSize, filtered.length);
+
+  // Check if table needs horizontal scroll
+  useEffect(() => {
+    let active = true;
+    const checkScroll = () => {
+      if (!active) return;
+      if (tableScrollRef.current) {
+        const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+        const canScrollRight = scrollWidth > clientWidth + 1 && scrollLeft < (scrollWidth - clientWidth - 10);
+        const canScrollLeft = scrollWidth > clientWidth + 1 && scrollLeft > 10;
+        setShowScrollIndicator(canScrollRight);
+        setShowScrollLeftIndicator(canScrollLeft);
+      }
+    };
+
+    const handle = requestAnimationFrame(() => {
+      checkScroll();
+    });
+
+    window.addEventListener("resize", checkScroll);
+
+    return () => {
+      active = false;
+      cancelAnimationFrame(handle);
+      window.removeEventListener("resize", checkScroll);
+      if (scrollIntervalRef.current) {
+        cancelAnimationFrame(scrollIntervalRef.current);
+      }
+    };
+  }, [sources, filtered, paginated, pageSize, viewMode]);
 
   const resetPage = () => setCurrentPage(1);
   const handleSetFilter = (f: FilterTab) => { setActiveFilter(f); resetPage(); };
@@ -1217,8 +1341,6 @@ export default function KnowledgeBase() {
     { key: "files", label: "Files" },
     { key: "url",   label: "URLs" },
   ];
-
-  const TABLE_HEADERS = ["Name", "Type", "Scope", "Tags", "KB ID", "Created", "Actions"];
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
@@ -1376,7 +1498,20 @@ export default function KnowledgeBase() {
         ) : (
           /* List View (Table card matching Clients page) */
           <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative animate-in fade-in duration-200">
-            <div className="overflow-x-auto scrollbar-hide">
+            <div
+              ref={tableScrollRef}
+              className="overflow-x-auto scrollbar-hide"
+              style={{ scrollBehavior: "auto" }}
+              onScroll={() => {
+                if (tableScrollRef.current) {
+                  const { scrollWidth, clientWidth, scrollLeft } = tableScrollRef.current;
+                  const canScrollRight = scrollWidth > clientWidth + 1 && scrollLeft < (scrollWidth - clientWidth - 10);
+                  const canScrollLeft = scrollWidth > clientWidth + 1 && scrollLeft > 10;
+                  setShowScrollIndicator(canScrollRight);
+                  setShowScrollLeftIndicator(canScrollLeft);
+                }
+              }}
+            >
               <table className="w-full">
                 <thead className="border-b border-border" style={{ backgroundColor: "#1F2937" }}>
                   <tr>
@@ -1397,10 +1532,16 @@ export default function KnowledgeBase() {
                         key={h}
                         className={`px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider text-white ${
                           h === "Scope" ? "w-[280px] max-w-[280px]" : ""
-                        }`}
+                        } ${h === "Actions" ? "w-16 max-w-16" : ""}`}
                         style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                       >
-                        {h}
+                        {h === "Actions" ? (
+                          <div className="flex items-center justify-center">
+                            <Settings className="w-4 h-4 text-white" />
+                          </div>
+                        ) : (
+                          h
+                        )}
                       </th>
                     ))}
                   </tr>
@@ -1421,6 +1562,28 @@ export default function KnowledgeBase() {
                           onChange={() => handleSelectRow(src.id)}
                           className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
                         />
+                      </td>
+
+                      {/* Actions (Hamburger vertical menu) - Moved to second column */}
+                      <td className="px-4 py-2.5 relative">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center">
+                              <MoreVertical className="w-4 h-4 text-gray-500" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => { setViewSource(src); setCreateOpen(true); }}>
+                              <Eye className="w-4 h-4 mr-2" /> View
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setEditingSource(src); setCreateOpen(true); }}>
+                              <Edit className="w-4 h-4 mr-2" /> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setDeleteTargetList([src])} className="text-red-600 focus:text-red-600">
+                              <Trash2 className="w-4 h-4 mr-2 text-red-600" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </td>
 
                       {/* Name Cell (no leading icon, no chips below) */}
@@ -1480,37 +1643,106 @@ export default function KnowledgeBase() {
                         <KbIdCell id={src.id} />
                       </td>
 
+                      {/* Status Cell */}
+                      <td className="px-4 py-2.5">
+                        <StatusBadge status={src.status} />
+                      </td>
+
                       {/* Created Cell */}
                       <td className="px-4 py-2.5 text-xs whitespace-nowrap text-muted-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                         {formatDate(src.createdAt)}
-                      </td>
-
-                      {/* Actions (Hamburger vertical menu) */}
-                      <td className="px-4 py-2.5 relative">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center">
-                              <MoreVertical className="w-4 h-4 text-gray-500" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setViewSource(src); setCreateOpen(true); }}>
-                              <Eye className="w-4 h-4 mr-2" /> View
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setEditingSource(src); setCreateOpen(true); }}>
-                              <Edit className="w-4 h-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteTargetList([src])} className="text-red-600 focus:text-red-600">
-                              <Trash2 className="w-4 h-4 mr-2 text-red-600" /> Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Scroll Right Button - Semicircle */}
+            <button
+              className="absolute right-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+              style={{
+                top: "50%",
+                transform: "translateY(-50%)",
+                height: "112px",
+                width: "40px",
+                backgroundColor: "rgba(255, 255, 255, 0.5)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                borderTopLeftRadius: "9999px",
+                borderBottomLeftRadius: "9999px",
+                borderTopRightRadius: "0",
+                borderBottomRightRadius: "0",
+                opacity: showScrollIndicator ? 1 : 0,
+                visibility: showScrollIndicator ? "visible" : "hidden",
+                pointerEvents: showScrollIndicator ? "auto" : "none"
+              }}
+              onMouseEnter={(e) => {
+                if (showScrollIndicator) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.65)";
+                  e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
+                  const icon = e.currentTarget.querySelector("svg");
+                  if (icon) {
+                    (icon as SVGElement).style.transform = "scale(1.1)";
+                  }
+                  handleScrollRightMouseEnter();
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.5)";
+                e.currentTarget.style.boxShadow = "";
+                const icon = e.currentTarget.querySelector("svg");
+                if (icon) {
+                  (icon as SVGElement).style.transform = "scale(1)";
+                }
+                handleScrollMouseLeave();
+              }}
+            >
+              <ChevronRight className="w-5 h-5 transition-transform" style={{ color: "#1F2937", opacity: 1 }} />
+            </button>
+
+            {/* Scroll Left Button - Semicircle */}
+            <button
+              className="absolute left-0 flex items-center justify-center pointer-events-auto z-10 transition-all"
+              style={{
+                top: "50%",
+                transform: "translateY(-50%)",
+                height: "112px",
+                width: "40px",
+                backgroundColor: "rgba(255, 255, 255, 0.5)",
+                backdropFilter: "blur(8px)",
+                WebkitBackdropFilter: "blur(8px)",
+                borderTopRightRadius: "9999px",
+                borderBottomRightRadius: "9999px",
+                borderTopLeftRadius: "0",
+                borderBottomLeftRadius: "0",
+                opacity: showScrollLeftIndicator ? 1 : 0,
+                visibility: showScrollLeftIndicator ? "visible" : "hidden",
+                pointerEvents: showScrollLeftIndicator ? "auto" : "none"
+              }}
+              onMouseEnter={(e) => {
+                if (showScrollLeftIndicator) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.65)";
+                  e.currentTarget.style.boxShadow = "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)";
+                  const icon = e.currentTarget.querySelector("svg");
+                  if (icon) {
+                    (icon as SVGElement).style.transform = "scale(1.1)";
+                  }
+                  handleScrollLeftMouseEnter();
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.5)";
+                e.currentTarget.style.boxShadow = "";
+                const icon = e.currentTarget.querySelector("svg");
+                if (icon) {
+                  (icon as SVGElement).style.transform = "scale(1)";
+                }
+                handleScrollMouseLeave();
+              }}
+            >
+              <ChevronLeft className="w-5 h-5 transition-transform" style={{ color: "#1F2937", opacity: 1 }} />
+            </button>
 
             {/* ── Pagination Footer inside Table Card ── */}
             {filtered.length > 0 && (
