@@ -23,7 +23,6 @@ import {
   ChevronDown,
   ChevronRight as ChevronRightIcon,
   MoreVertical,
-  Eye,
   Edit,
   Settings,
 } from "lucide-react";
@@ -314,10 +313,9 @@ const ScopeChipList: React.FC<ScopeChipListProps> = ({ scopes, allProcesses }) =
 
 const SourceCard: React.FC<{
   src: GlobalKnowledgeSource;
-  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ src, onView, onEdit, onDelete }) => {
+}> = ({ src, onEdit, onDelete }) => {
   const hasScope = src.allProcesses || src.scopes.length > 0;
   const hasTags = src.tags && src.tags.length > 0;
 
@@ -327,13 +325,14 @@ const SourceCard: React.FC<{
       <div className="flex items-center justify-between gap-3">
         {/* Name and Type inline next to it */}
         <div className="flex items-center gap-2 min-w-0 flex-1 justify-start">
-          <p
-            className="text-sm font-bold text-gray-900 truncate text-left"
+          <button
+            className="text-sm font-bold text-blue-600 hover:underline hover:text-blue-700 cursor-pointer truncate text-left"
             style={{ fontFamily: "DM Sans, sans-serif" }}
             title={getSourceName(src)}
+            onClick={onEdit}
           >
             {getSourceName(src)}
-          </p>
+          </button>
           <div className="flex-shrink-0">
             <TypeBadge type={src.type} />
           </div>
@@ -348,9 +347,6 @@ const SourceCard: React.FC<{
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onView}>
-                <Eye className="w-4 h-4 mr-2" /> View
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={onEdit}>
                 <Edit className="w-4 h-4 mr-2" /> Edit
               </DropdownMenuItem>
@@ -564,7 +560,6 @@ interface CreateKnowledgeBaseModalProps {
   onClose: () => void;
   onSave: (src: GlobalKnowledgeSource) => void;
   initialSource?: GlobalKnowledgeSource | null;
-  readOnly?: boolean;
 }
 
 const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
@@ -572,7 +567,6 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
   onClose,
   onSave,
   initialSource,
-  readOnly = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -631,19 +625,16 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
   }, [tags, tagInput]);
 
   const removeTag = (t: string) => {
-    if (readOnly) return;
     setTags((prev) => prev.filter((x) => x !== t));
   };
 
   const handleFiles = (files: FileList | null) => {
-    if (readOnly) return;
     if (!files || files.length === 0) return;
     const f = files[0];
     setFile({ name: f.name, sizeLabel: formatBytes(f.size) });
   };
 
   const handleSave = () => {
-    if (readOnly) return;
     if (!name.trim()) { toast.error("Please enter a Knowledge Base name"); return; }
     if (!allProcesses && scopes.length === 0) { toast.error("Please select at least one process or stage"); return; }
 
@@ -688,9 +679,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
     return `${scopes.length} processes selected`;
   };
 
-  const footer = readOnly ? (
-    <Button variant="primary" size="sm" onClick={handleClose}>Close</Button>
-  ) : (
+  const footer = (
     <>
       <Button variant="outline" size="sm" onClick={handleClose}>Cancel</Button>
       <Button variant="primary" size="sm" onClick={handleSave}>Save</Button>
@@ -701,7 +690,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
     <Drawer
       isOpen={isOpen}
       onClose={handleClose}
-      title={readOnly ? "View Knowledge Base" : initialSource ? "Edit Knowledge Base" : "Create Knowledge Base"}
+      title={initialSource ? "Edit Knowledge Base" : "Create Knowledge Base"}
       footer={footer}
       maxWidth="sm:max-w-xl"
     >
@@ -718,7 +707,6 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Insurance Policy FAQs"
-            disabled={readOnly}
           />
         </div>
 
@@ -730,14 +718,13 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
             </label>
             <InfoTooltip text="Group related sources together. Pick an existing tag or add your own." />
           </div>
-          {!readOnly ? (
-            <div className="relative">
-              <Input
-                value={tagInput}
-                onChange={(e) => {
-                  setTagInput(e.target.value);
-                  setTagDropdownOpen(true);
-                }}
+          <div className="relative">
+            <Input
+              value={tagInput}
+              onChange={(e) => {
+                setTagInput(e.target.value);
+                setTagDropdownOpen(true);
+              }}
                 onFocus={() => setTagDropdownOpen(true)}
                 placeholder="Select tags or type custom..."
                 onKeyDown={(e) => {
@@ -792,8 +779,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                   </div>
                 </>
               )}
-            </div>
-          ) : null}
+          </div>
 
           {/* Selected Chips */}
           {tags.length > 0 && (
@@ -805,11 +791,9 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {t}
-                  {!readOnly && (
-                    <button type="button" onClick={() => removeTag(t)} className="hover:text-blue-900 transition-colors">
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
+                  <button type="button" onClick={() => removeTag(t)} className="hover:text-blue-900 transition-colors">
+                    <X className="w-3 h-3" />
+                  </button>
                 </span>
               ))}
             </div>
@@ -829,15 +813,14 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
           </div>
           <button
             type="button"
-            disabled={readOnly}
             onClick={() => setProcessDropdownOpen((prev) => !prev)}
-            className={`w-full h-10 px-3 flex items-center justify-between bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-left ${readOnly ? "bg-gray-50 text-gray-500 cursor-not-allowed" : ""}`}
+            className="w-full h-10 px-3 flex items-center justify-between bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-left"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <span>{getScopesSummary()}</span>
             <ChevronDown className="w-4 h-4 text-gray-400" />
           </button>
-          {processDropdownOpen && !readOnly && (
+          {processDropdownOpen && (
             <>
               <div className="fixed inset-0 z-30" onClick={() => setProcessDropdownOpen(false)} />
               <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-xl shadow-lg z-45 p-4 max-h-[350px] overflow-y-auto space-y-3">
@@ -875,13 +858,12 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
             {/* Text */}
             <button
               type="button"
-              disabled={readOnly}
               onClick={() => setContentType("text")}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all w-full h-11 justify-center ${
                 contentType === "text"
                   ? "border-blue-600 bg-blue-50 text-blue-700"
                   : "border-gray-200 bg-white text-gray-600 hover:border-blue-300"
-              } ${readOnly ? "cursor-default" : ""}`}
+              }`}
               style={{ fontFamily: "DM Sans, sans-serif" }}
             >
               <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: contentType === "text" ? "#2563EB" : "#94A3B8" }}>
@@ -893,13 +875,12 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
             {/* File */}
             <button
               type="button"
-              disabled={readOnly}
               onClick={() => setContentType("document")}
               className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-all w-full h-11 justify-center ${
                 contentType === "document"
                   ? "border-blue-600 bg-blue-50 text-blue-700"
                   : "border-gray-200 bg-white text-gray-600 hover:border-blue-300"
-              } ${readOnly ? "cursor-default" : ""}`}
+              }`}
               style={{ fontFamily: "DM Sans, sans-serif" }}
             >
               <div className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0" style={{ backgroundColor: contentType === "document" ? "#2563EB" : "#94A3B8" }}>
@@ -931,8 +912,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                 value={textContent}
                 onChange={(e) => setTextContent(e.target.value)}
                 placeholder="Paste or type the reference text here…"
-                disabled={readOnly}
-                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl resize-none text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all disabled:bg-gray-50 disabled:text-gray-500"
+                className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl resize-none text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all"
                 style={{ fontFamily: "Outfit, sans-serif", minHeight: "120px" }}
               />
               <p className="text-xs" style={{ color: "#94A3B8", fontFamily: "Outfit, sans-serif" }}>
@@ -955,32 +935,26 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                       <p className="text-xs text-gray-500">{file.sizeLabel}</p>
                     </div>
                   </div>
-                  {!readOnly && (
-                    <button type="button" onClick={() => setFile(null)} className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors flex-shrink-0">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+                  <button type="button" onClick={() => setFile(null)} className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors flex-shrink-0">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
               ) : (
-                !readOnly ? (
-                  <div className="relative">
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple={false}
-                      accept=".pdf,.doc,.docx,.txt,.csv"
-                      onChange={(e) => handleFiles(e.target.files)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    <div className="border-2 border-dashed border-blue-300 rounded-xl bg-blue-50 p-8 text-center cursor-pointer hover:bg-blue-100 transition-colors">
-                      <Upload className="w-7 h-7 text-blue-500 mx-auto mb-2" />
-                      <p className="text-sm font-medium text-gray-700">Click or drag files here to upload</p>
-                      <p className="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, or CSV</p>
-                    </div>
+                <div className="relative">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    multiple={false}
+                    accept=".pdf,.doc,.docx,.txt,.csv"
+                    onChange={(e) => handleFiles(e.target.files)}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                  />
+                  <div className="border-2 border-dashed border-blue-300 rounded-xl bg-blue-50 p-8 text-center cursor-pointer hover:bg-blue-100 transition-colors">
+                    <Upload className="w-7 h-7 text-blue-500 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-gray-700">Click or drag files here to upload</p>
+                    <p className="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, or CSV</p>
                   </div>
-                ) : (
-                  <div className="text-sm text-gray-500 italic">No file attached</div>
-                )
+                </div>
               )}
             </div>
           )}
@@ -1122,7 +1096,7 @@ const SEED_SOURCES: GlobalKnowledgeSource[] = [
 const PAGE_SIZES = [10, 25, 50] as const;
 type PageSizeValue = (typeof PAGE_SIZES)[number];
 
-const TABLE_HEADERS = ["Actions", "Name", "Type", "Scope", "Tags", "KB ID", "Status", "Created"];
+const TABLE_HEADERS = ["Actions", "Name", "Type", "Scope", "Tags", "Status", "Created"];
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -1219,7 +1193,6 @@ export default function KnowledgeBase() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<GlobalKnowledgeSource | null>(null);
-  const [viewSource, setViewSource] = useState<GlobalKnowledgeSource | null>(null);
 
   const [deleteTargetList, setDeleteTargetList] = useState<GlobalKnowledgeSource[] | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -1332,7 +1305,6 @@ export default function KnowledgeBase() {
   const handleCloseDrawer = () => {
     setCreateOpen(false);
     setEditingSource(null);
-    setViewSource(null);
   };
 
   const filterTabs: { key: FilterTab; label: string }[] = [
@@ -1376,7 +1348,6 @@ export default function KnowledgeBase() {
                 variant="primary"
                 onClick={() => {
                   setEditingSource(null);
-                  setViewSource(null);
                   setCreateOpen(true);
                 }}
                 className="h-10 ml-auto"
@@ -1480,7 +1451,6 @@ export default function KnowledgeBase() {
         {filtered.length === 0 ? (
           <EmptyState onCreate={() => {
             setEditingSource(null);
-            setViewSource(null);
             setCreateOpen(true);
           }} />
         ) : viewMode === "grid" ? (
@@ -1489,7 +1459,6 @@ export default function KnowledgeBase() {
               <SourceCard
                 key={src.id}
                 src={src}
-                onView={() => { setViewSource(src); setCreateOpen(true); }}
                 onEdit={() => { setEditingSource(src); setCreateOpen(true); }}
                 onDelete={() => setDeleteTargetList([src])}
               />
@@ -1573,9 +1542,6 @@ export default function KnowledgeBase() {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setViewSource(src); setCreateOpen(true); }}>
-                              <Eye className="w-4 h-4 mr-2" /> View
-                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => { setEditingSource(src); setCreateOpen(true); }}>
                               <Edit className="w-4 h-4 mr-2" /> Edit
                             </DropdownMenuItem>
@@ -1586,16 +1552,16 @@ export default function KnowledgeBase() {
                         </DropdownMenu>
                       </td>
 
-                      {/* Name Cell (no leading icon, no chips below) */}
                       <td className="px-4 py-2.5">
                         <div className="min-w-0 max-w-[220px]">
-                          <span
-                            className="font-medium truncate block text-sm"
-                            style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
+                          <button
+                            className="font-medium truncate block text-sm text-blue-600 hover:underline hover:text-blue-700 cursor-pointer text-left w-full"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
                             title={getSourceName(src)}
+                            onClick={() => { setEditingSource(src); setCreateOpen(true); }}
                           >
                             {getSourceName(src)}
-                          </span>
+                          </button>
                         </div>
                       </td>
 
@@ -1638,10 +1604,6 @@ export default function KnowledgeBase() {
                         </div>
                       </td>
 
-                      {/* KB ID Cell */}
-                      <td className="px-4 py-2.5">
-                        <KbIdCell id={src.id} />
-                      </td>
 
                       {/* Status Cell */}
                       <td className="px-4 py-2.5">
@@ -1820,8 +1782,7 @@ export default function KnowledgeBase() {
         isOpen={createOpen}
         onClose={handleCloseDrawer}
         onSave={handleAddSource}
-        initialSource={editingSource || viewSource}
-        readOnly={!!viewSource}
+        initialSource={editingSource}
       />
       <DeleteConfirmModal
         isOpen={!!deleteTargetList}
