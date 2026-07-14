@@ -817,7 +817,9 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
             className="w-full h-10 px-3 flex items-center justify-between bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-left"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            <span>{getScopesSummary()}</span>
+            <span className={allProcesses || scopes.length > 0 ? "text-gray-700" : "text-gray-400"}>
+              {allProcesses || scopes.length > 0 ? "Add or remove processes…" : "Select processes…"}
+            </span>
             <ChevronDown className="w-4 h-4 text-gray-400" />
           </button>
           {processDropdownOpen && (
@@ -843,6 +845,64 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                 </div>
               </div>
             </>
+          )}
+
+          {/* Selected scope chips — mirrors Tags chip row */}
+          {(allProcesses || scopes.length > 0) && (
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {allProcesses ? (
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  All Processes
+                  <button
+                    type="button"
+                    onClick={() => setAllProcesses(false)}
+                    className="hover:text-blue-900 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ) : (
+                getFlattenedScopes(scopes, false).map((fs) => (
+                  <span
+                    key={fs.id}
+                    className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    {fs.label}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (fs.stageId) {
+                          // Remove a specific stage from its process scope
+                          setScopes((prev) =>
+                            prev
+                              .map((sc) =>
+                                sc.processId === fs.processId
+                                  ? { ...sc, stageIds: sc.stageIds.filter((s) => s !== fs.stageId) }
+                                  : sc
+                              )
+                              .filter((sc) => {
+                                if (sc.processId !== fs.processId) return true;
+                                // Drop the entire scope entry if no stages remain
+                                return sc.stageIds.length > 0;
+                              })
+                          );
+                        } else {
+                          // Remove the entire process scope entry
+                          setScopes((prev) => prev.filter((sc) => sc.processId !== fs.processId));
+                        }
+                      }}
+                      className="hover:text-blue-900 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))
+              )}
+            </div>
           )}
         </div>
 
