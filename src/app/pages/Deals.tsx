@@ -206,6 +206,14 @@ export default function Deals() {
   const [webhookGenerated, setWebhookGenerated] = useState(false);
   const [apiImportSelectedFields, setApiImportSelectedFields] = useState<string[]>([]);
   const [apiFieldSearchQuery, setApiFieldSearchQuery] = useState("");
+  const [apiTabMode, setApiTabMode] = useState<"pull" | "push">("pull");
+  const [pushSelectedFields, setPushSelectedFields] = useState<string[]>(["dealName", "clientName"]);
+  const [pushRequiredFields, setPushRequiredFields] = useState<Record<string, boolean>>({ dealName: true, clientName: true });
+  const [pushFieldDropdownOpen, setPushFieldDropdownOpen] = useState(false);
+  const [pushFieldSearchQuery, setPushFieldSearchQuery] = useState("");
+  const [pushAuthType, setPushAuthType] = useState<"none" | "api_key" | "bearer_token">("bearer_token");
+  const [pushEndpointGenerated, setPushEndpointGenerated] = useState(false);
+
 
   useEffect(() => {
     if (selectedImportApiId) {
@@ -227,10 +235,14 @@ export default function Deals() {
       if (webhookFieldDropdownOpen && !target.closest('.webhook-field-dropdown-container')) {
         setWebhookFieldDropdownOpen(false);
       }
+      if (pushFieldDropdownOpen && !target.closest('.push-field-dropdown-container')) {
+        setPushFieldDropdownOpen(false);
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setWebhookFieldDropdownOpen(false);
+        setPushFieldDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -239,8 +251,33 @@ export default function Deals() {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [webhookFieldDropdownOpen]);
+  }, [webhookFieldDropdownOpen, pushFieldDropdownOpen]);
 
+
+  const getMergedDealFields = () => {
+    const defaultDealWebhookFields = [
+      { key: "dealName", label: "Deal Name", source: "system", inputType: "text" },
+      { key: "clientName", label: "Client Name", source: "system", inputType: "text" },
+      { key: "amount", label: "Amount", source: "system", inputType: "number" },
+      { key: "currency", label: "Currency", source: "system", inputType: "text" },
+      { key: "status", label: "Status", source: "system", inputType: "select" },
+      { key: "responsible", label: "Responsible Person", source: "system", inputType: "select" },
+      { key: "stage", label: "Stage", source: "system", inputType: "text" },
+    ];
+    const registryFields = getAllFields("deal");
+    const mergedDealFields = [...defaultDealWebhookFields];
+    registryFields.forEach(regField => {
+      if (!mergedDealFields.some(f => f.key === regField.key)) {
+        mergedDealFields.push({
+          key: regField.key,
+          label: regField.label,
+          source: regField.source || "custom",
+          inputType: regField.inputType || "text",
+        });
+      }
+    });
+    return mergedDealFields;
+  };
 
   const fieldSampleValues: Record<string, any> = {
     dealName: "Patient Intake Package",
@@ -294,6 +331,19 @@ export default function Deals() {
       }
     });
     return JSON.stringify(payload, null, 2);
+  };
+
+  const MAX_BATCH_SIZE = 500;
+
+  const getExampleBatchPayload = (selectedKeys: string[]) => {
+    const singleRecord = JSON.parse(getExamplePayload(selectedKeys));
+    const secondRecord = { ...singleRecord };
+    // vary realistic identity-like fields for the second sample row
+    if ('dealName' in secondRecord) secondRecord.dealName = 'Orthopedic Assessment Package';
+    if ('clientName' in secondRecord) secondRecord.clientName = 'James Patel';
+    if ('amount' in secondRecord) secondRecord.amount = 18500;
+    if ('responsible' in secondRecord) secondRecord.responsible = 'Priya Nair';
+    return JSON.stringify({ records: [singleRecord, secondRecord] }, null, 2);
   };
 
 
@@ -3520,6 +3570,8 @@ export default function Deals() {
               setShowImportModal(false);
               setSelectedFile(null);
               setImportMethod("csv");
+              setApiTabMode("pull");
+              setPushEndpointGenerated(false);
             }}
           />
 
@@ -3536,6 +3588,8 @@ export default function Deals() {
                   setShowImportModal(false);
                   setSelectedFile(null);
                   setImportMethod("csv");
+                  setApiTabMode("pull");
+                  setPushEndpointGenerated(false);
                 }}
                 className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
               >
@@ -3633,196 +3687,525 @@ export default function Deals() {
                     Connect to an external API to pull {entityLabel} directly into your account.
                   </p>
 
-                  {customApiIntegrations.length === 0 ? (
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-                      <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                      <h4 className="font-semibold mb-1">No API connections yet</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
-                      </p>
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          setShowImportModal(false);
-                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
-                        }}
-                      >
-                        <Plus className="w-4 h-4" /> Add API
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {customApiIntegrations.map((api) => (
-                        <label
-                          key={api.id}
-                          className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="radio"
-                              name="importApi"
-                              checked={selectedImportApiId === api.id}
-                              onChange={() => setSelectedImportApiId(api.id)}
-                              className="w-4 h-4"
-                            />
-                            <div>
-                              <p className="text-sm font-semibold">{api.name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
+                  <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setApiTabMode("pull")}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${apiTabMode === "pull" ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      Pull from API
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setApiTabMode("push")}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${apiTabMode === "push" ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"}`}
+                    >
+                      Push to API
+                    </button>
+                  </div>
+
+                  {apiTabMode === "pull" && (
+                    <div className="space-y-4">
+                      {customApiIntegrations.length === 0 ? (
+                        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                          <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                          <h4 className="font-semibold mb-1">No API connections yet</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
+                          </p>
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setShowImportModal(false);
+                              navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                            }}
+                          >
+                            <Plus className="w-4 h-4" /> Add API
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {customApiIntegrations.map((api) => (
+                            <label
+                              key={api.id}
+                              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                                }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="radio"
+                                  name="importApi"
+                                  checked={selectedImportApiId === api.id}
+                                  onChange={() => setSelectedImportApiId(api.id)}
+                                  className="w-4 h-4"
+                                />
+                                <div>
+                                  <p className="text-sm font-semibold">{api.name}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                                Connected ✅
+                              </span>
+                            </label>
+                          ))}
+                          <button
+                            onClick={() => {
+                              setShowImportModal(false);
+                              navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                            }}
+                            className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add another API
+                          </button>
+                        </div>
+                      )}
+
+                      {selectedImportApiId && (
+                        <div className="space-y-4">
+                          <div className="p-3 bg-muted/20 border border-border rounded-lg">
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(() => {
+                                const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                                const selectedMappings = integration?.fieldMappings.filter(f => apiImportSelectedFields.includes(f.key)) || [];
+                                if (selectedMappings.length === 0) {
+                                  return <span className="text-xs text-muted-foreground italic">No fields selected</span>;
+                                }
+                                return selectedMappings.map((f) => (
+                                  <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
+                                    {f.label || f.key}
+                                  </span>
+                                ));
+                              })()}
                             </div>
                           </div>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
-                            Connected ✅
-                          </span>
-                        </label>
-                      ))}
-                      <button
-                        onClick={() => {
-                          setShowImportModal(false);
-                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
-                        }}
-                        className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add another API
-                      </button>
+
+                          {/* API Fields to include picker */}
+                          {(() => {
+                            const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                            const mappings = integration?.fieldMappings || [];
+                            if (mappings.length === 0) return null;
+
+                            const filtered = mappings.filter(f =>
+                              (f.label || "").toLowerCase().includes(apiFieldSearchQuery.toLowerCase()) ||
+                              f.key.toLowerCase().includes(apiFieldSearchQuery.toLowerCase())
+                            );
+
+                            const handleSelectAll = () => {
+                              const keysToAdd = filtered.map(f => f.key);
+                              setApiImportSelectedFields(prev => Array.from(new Set([...prev, ...keysToAdd])));
+                            };
+
+                            const handleClearAll = () => {
+                              const keysToRemove = filtered.map(f => f.key);
+                              setApiImportSelectedFields(prev => prev.filter(k => !keysToRemove.includes(k)));
+                            };
+
+                            return (
+                              <div className="space-y-2 mt-4">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-sm font-semibold text-foreground">Fields to include</label>
+                                  <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold">
+                                    {apiImportSelectedFields.length} of {mappings.length} selected
+                                  </span>
+                                </div>
+
+                                <div className="border border-border rounded-lg bg-white shadow-sm overflow-hidden flex flex-col">
+                                  {/* Search box */}
+                                  <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                    <input
+                                      type="text"
+                                      placeholder="Search API fields..."
+                                      value={apiFieldSearchQuery}
+                                      onChange={(e) => setApiFieldSearchQuery(e.target.value)}
+                                      className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
+                                    />
+                                    {apiFieldSearchQuery && (
+                                      <button
+                                        onClick={() => setApiFieldSearchQuery("")}
+                                        className="text-muted-foreground hover:text-foreground"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Select All / Clear All Row */}
+                                  <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground text-[11px] font-medium">
+                                      {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSelectAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Select all
+                                      </button>
+                                      <span className="text-muted-foreground/30">|</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleClearAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Clear all
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Field List Container */}
+                                  <div className="max-h-[160px] overflow-y-auto divide-y divide-border text-xs">
+                                    {filtered.map(f => {
+                                      const isChecked = apiImportSelectedFields.includes(f.key);
+                                      return (
+                                        <label
+                                          key={f.key}
+                                          className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => {
+                                                if (e.target.checked) {
+                                                  setApiImportSelectedFields(prev => [...prev, f.key]);
+                                                } else {
+                                                  setApiImportSelectedFields(prev => prev.filter(k => k !== f.key));
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
+                                            />
+                                            <span className="font-medium text-foreground truncate">{f.label || f.key}</span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {f.key}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                    {filtered.length === 0 && (
+                                      <div className="p-4 text-center text-muted-foreground text-xs">
+                                        No fields match your search
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {selectedImportApiId && (
+                  {apiTabMode === "push" && (
                     <div className="space-y-4">
-                      <div className="p-3 bg-muted/20 border border-border rounded-lg">
-                        <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {(() => {
-                            const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
-                            const selectedMappings = integration?.fieldMappings.filter(f => apiImportSelectedFields.includes(f.key)) || [];
-                            if (selectedMappings.length === 0) {
-                              return <span className="text-xs text-muted-foreground italic">No fields selected</span>;
-                            }
-                            return selectedMappings.map((f) => (
-                              <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
-                                {f.label || f.key}
-                              </span>
-                            ));
-                          })()}
-                        </div>
+                      <p className="text-sm text-muted-foreground">
+                        Generate an authenticated endpoint that an external system can POST {entityLabel} data to.
+                      </p>
+
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Select fields</label>
+                        {(() => {
+                          const mergedDealFields = getMergedDealFields();
+                          const filtered = mergedDealFields.filter(f =>
+                            f.label.toLowerCase().includes(pushFieldSearchQuery.toLowerCase()) ||
+                            f.key.toLowerCase().includes(pushFieldSearchQuery.toLowerCase())
+                          );
+
+                          const systemFields = filtered.filter(f => f.source === "system");
+                          const customFields = filtered.filter(f => f.source === "custom");
+
+                          const handleSelectAll = () => {
+                            const keysToAdd = filtered.map(f => f.key);
+                            setPushSelectedFields(prev => Array.from(new Set([...prev, ...keysToAdd])));
+                          };
+
+                          const handleClearAll = () => {
+                            const keysToRemove = filtered.map(f => f.key);
+                            setPushSelectedFields(prev => prev.filter(k => !keysToRemove.includes(k)));
+                          };
+
+                          const renderFieldRow = (f: typeof mergedDealFields[0]) => {
+                            const isChecked = pushSelectedFields.includes(f.key);
+                            return (
+                              <label
+                                key={f.key}
+                                className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setPushSelectedFields(prev => [...prev, f.key]);
+                                      } else {
+                                        setPushSelectedFields(prev => prev.filter(k => k !== f.key));
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
+                                  />
+                                  <span className="font-medium text-foreground truncate">{f.label}</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                                  {f.key}
+                                </span>
+                              </label>
+                            );
+                          };
+
+                          return (
+                            <div className="relative push-field-dropdown-container">
+                              <button
+                                type="button"
+                                onClick={() => setPushFieldDropdownOpen(prev => !prev)}
+                                className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                              >
+                                {pushSelectedFields.length > 0 ? (
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+                                      {pushSelectedFields.length} selected
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setPushSelectedFields([]);
+                                        }}
+                                        className="hover:bg-primary/20 rounded-full p-0.5 cursor-pointer flex items-center justify-center"
+                                        title="Clear selection"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </span>
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">Select fields...</span>
+                                )}
+                                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${pushFieldDropdownOpen ? "rotate-180" : ""}`} />
+                              </button>
+
+                              {pushFieldDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 flex flex-col overflow-hidden max-h-[320px]">
+                                  {/* Search box */}
+                                  <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                    <input
+                                      type="text"
+                                      placeholder="Search fields..."
+                                      value={pushFieldSearchQuery}
+                                      onChange={(e) => setPushFieldSearchQuery(e.target.value)}
+                                      className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
+                                    />
+                                    {pushFieldSearchQuery && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setPushFieldSearchQuery("")}
+                                        className="text-muted-foreground hover:text-foreground"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Select All / Clear All Row */}
+                                  <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs flex-shrink-0">
+                                    <span className="text-muted-foreground text-[11px] font-medium">
+                                      {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSelectAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Select all
+                                      </button>
+                                      <span className="text-muted-foreground/30">|</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleClearAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Clear all
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Scrollable list */}
+                                  <div className="overflow-y-auto divide-y divide-border text-xs flex-1">
+                                    {systemFields.length > 0 && (
+                                      <div>
+                                        <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-b border-border">
+                                          System Fields ({systemFields.length})
+                                        </div>
+                                        <div className="divide-y divide-border">
+                                          {systemFields.map(renderFieldRow)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {customFields.length > 0 && (
+                                      <div>
+                                        <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-t border-border border-b border-border">
+                                          Custom Fields ({customFields.length})
+                                        </div>
+                                        <div className="divide-y divide-border">
+                                          {customFields.map(renderFieldRow)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {filtered.length === 0 && (
+                                      <div className="p-4 text-center text-muted-foreground">
+                                        No fields match your search
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
-                      {/* API Fields to include picker */}
-                      {(() => {
-                        const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
-                        const mappings = integration?.fieldMappings || [];
-                        if (mappings.length === 0) return null;
-
-                        const filtered = mappings.filter(f =>
-                          (f.label || "").toLowerCase().includes(apiFieldSearchQuery.toLowerCase()) ||
-                          f.key.toLowerCase().includes(apiFieldSearchQuery.toLowerCase())
-                        );
-
-                        const handleSelectAll = () => {
-                          const keysToAdd = filtered.map(f => f.key);
-                          setApiImportSelectedFields(prev => Array.from(new Set([...prev, ...keysToAdd])));
-                        };
-
-                        const handleClearAll = () => {
-                          const keysToRemove = filtered.map(f => f.key);
-                          setApiImportSelectedFields(prev => prev.filter(k => !keysToRemove.includes(k)));
-                        };
-
-                        return (
-                          <div className="space-y-2 mt-4">
-                            <div className="flex items-center justify-between">
-                              <label className="text-sm font-semibold text-foreground">Fields to include</label>
-                              <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold">
-                                {apiImportSelectedFields.length} of {mappings.length} selected
-                              </span>
-                            </div>
-
-                            <div className="border border-border rounded-lg bg-white shadow-sm overflow-hidden flex flex-col">
-                              {/* Search box */}
-                              <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
-                                <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      {/* Required toggle list */}
+                      {pushSelectedFields.length > 0 && (
+                        <div className="space-y-1 border border-border rounded-lg p-3">
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">Field requirements</p>
+                          <p className="text-[11px] text-muted-foreground mb-2 leading-relaxed">Required fields are enforced per record. A record missing a required field is rejected individually; the rest of the batch still succeeds.</p>
+                          {pushSelectedFields.map(key => (
+                            <label key={key} className="flex items-center justify-between py-1.5 text-sm">
+                              <span className="font-mono text-xs text-muted-foreground">{key}</span>
+                              <span className="flex items-center gap-2">
+                                <span className="text-xs text-muted-foreground">Required</span>
                                 <input
-                                  type="text"
-                                  placeholder="Search API fields..."
-                                  value={apiFieldSearchQuery}
-                                  onChange={(e) => setApiFieldSearchQuery(e.target.value)}
-                                  className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
+                                  type="checkbox"
+                                  checked={!!pushRequiredFields[key]}
+                                  onChange={(e) => setPushRequiredFields(prev => ({ ...prev, [key]: e.target.checked }))}
+                                  className="w-3.5 h-3.5"
                                 />
-                                {apiFieldSearchQuery && (
-                                  <button
-                                    onClick={() => setApiFieldSearchQuery("")}
-                                    className="text-muted-foreground hover:text-foreground"
-                                  >
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
 
-                              {/* Select All / Clear All Row */}
-                              <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs">
-                                <span className="text-muted-foreground text-[11px] font-medium">
-                                  {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    onClick={handleSelectAll}
-                                    className="text-primary hover:underline text-[11px] font-semibold"
-                                  >
-                                    Select all
-                                  </button>
-                                  <span className="text-muted-foreground/30">|</span>
-                                  <button
-                                    type="button"
-                                    onClick={handleClearAll}
-                                    className="text-primary hover:underline text-[11px] font-semibold"
-                                  >
-                                    Clear all
-                                  </button>
-                                </div>
-                              </div>
+                      {/* Authentication Type */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Authentication Type</label>
+                        <select
+                          value={pushAuthType}
+                          onChange={(e) => setPushAuthType(e.target.value as "none" | "api_key" | "bearer_token")}
+                          className="w-full px-3 py-2 bg-input-background border border-input rounded-lg text-sm"
+                        >
+                          <option value="none">None</option>
+                          <option value="api_key">API Key (header)</option>
+                          <option value="bearer_token">Bearer Token (header)</option>
+                        </select>
+                        {pushAuthType === "none" ? (
+                          <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                            <span>⚠️</span>
+                            <span className="font-medium">No authentication — anyone with this URL can push data.</span>
+                          </div>
+                        ) : (
+                          <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 border border-border rounded-lg px-2.5 py-2">
+                            <Shield className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span>
+                              Include header{" "}
+                              <code className="font-mono bg-muted px-1 rounded">
+                                {pushAuthType === "bearer_token" ? "Authorization: Bearer <org-api-key>" : "X-API-Key: <org-api-key>"}
+                              </code>
+                            </span>
+                          </div>
+                        )}
+                      </div>
 
-                              {/* Field List Container */}
-                              <div className="max-h-[160px] overflow-y-auto divide-y divide-border text-xs">
-                                {filtered.map(f => {
-                                  const isChecked = apiImportSelectedFields.includes(f.key);
-                                  return (
-                                    <label
-                                      key={f.key}
-                                      className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
-                                    >
-                                      <div className="flex items-center gap-2 min-w-0">
-                                        <input
-                                          type="checkbox"
-                                          checked={isChecked}
-                                          onChange={(e) => {
-                                            if (e.target.checked) {
-                                              setApiImportSelectedFields(prev => [...prev, f.key]);
-                                            } else {
-                                              setApiImportSelectedFields(prev => prev.filter(k => k !== f.key));
-                                            }
-                                          }}
-                                          className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
-                                        />
-                                        <span className="font-medium text-foreground truncate">{f.label || f.key}</span>
-                                      </div>
-                                      <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
-                                        {f.key}
-                                      </span>
-                                    </label>
-                                  );
-                                })}
-                                {filtered.length === 0 && (
-                                  <div className="p-4 text-center text-muted-foreground text-xs">
-                                    No fields match your search
-                                  </div>
-                                )}
-                              </div>
+                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground bg-muted/20 border border-border rounded-lg px-2.5 py-2">
+                        <span className="text-muted-foreground mt-0.5">📦</span>
+                        <span>Accepts up to <strong>{MAX_BATCH_SIZE}</strong> records per request. Larger batches will be rejected with a <code className="font-mono bg-muted px-1 rounded">413</code> error.</span>
+                      </div>
+
+                      <Button variant="primary" className="w-full" onClick={() => setPushEndpointGenerated(true)}>
+                        Generate Endpoint
+                      </Button>
+
+                      {pushEndpointGenerated && (
+                        <div className="space-y-4 pt-2 border-t border-border animate-fade-in">
+                          <div>
+                            <p className="text-sm font-semibold mb-2">Endpoint URL</p>
+                            <p className="text-[11px] text-muted-foreground mb-2">POST an array of records to this URL.</p>
+                            <div className="relative bg-white border border-border rounded-lg pl-3 pr-10 py-2">
+                              <code className="text-xs text-foreground break-all font-mono">
+                                {`https://app.mantraassist.com/api/inbound/${entityType}`}
+                              </code>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(`https://app.mantraassist.com/api/inbound/${entityType}`);
+                                  toast.success("Endpoint URL copied");
+                                }}
+                                className="absolute top-1.5 right-1.5 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
                             </div>
                           </div>
-                        );
-                      })()}
+
+                          <div>
+                            <p className="text-sm font-semibold mb-2">Example Payload</p>
+                            <div className="relative bg-muted/30 border border-border rounded-lg text-xs font-mono max-h-[180px] flex">
+                              <pre className="p-4 overflow-auto w-full max-h-[178px] pr-10">
+                                {getExampleBatchPayload(pushSelectedFields)}
+                              </pre>
+                              <button
+                                onClick={() => {
+                                  navigator.clipboard.writeText(getExampleBatchPayload(pushSelectedFields));
+                                  toast.success("Payload copied");
+                                }}
+                                className="absolute top-2 right-2 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Response format */}
+                          <div>
+                            <p className="text-sm font-semibold mb-1">Response format</p>
+                            <p className="text-[11px] text-muted-foreground mb-2">Each record is validated independently — a bad row won't block the rest of the batch.</p>
+                            <div className="relative bg-muted/30 border border-border rounded-lg text-xs font-mono">
+                              <pre className="p-4 overflow-auto w-full max-h-[160px] pr-10">{`{
+  "accepted": 48,
+  "rejected": 2,
+  "errors": [
+    { "index": 12, "reason": "missing required field: clientName" },
+    { "index": 37, "reason": "invalid amount format" }
+  ]
+}`}</pre>
+                            </div>
+                          </div>
+
+                          {pushAuthType === "none" ? (
+                            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2">
+                              <span>⚠️</span>
+                              <span className="font-medium">No authentication — anyone with this URL can push data.</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/20 border border-border rounded-lg px-2.5 py-2">
+                              <Shield className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span>
+                                Include header{" "}
+                                <code className="font-mono bg-muted px-1 rounded">
+                                  {pushAuthType === "bearer_token" ? "Authorization: Bearer <org-api-key>" : "X-API-Key: <org-api-key>"}
+                                </code>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -3838,27 +4221,8 @@ export default function Deals() {
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-foreground">Select fields</label>
                     {(() => {
-                      const defaultDealWebhookFields = [
-                        { key: "dealName", label: "Deal Name", source: "system", inputType: "text" },
-                        { key: "clientName", label: "Client Name", source: "system", inputType: "text" },
-                        { key: "amount", label: "Amount", source: "system", inputType: "number" },
-                        { key: "currency", label: "Currency", source: "system", inputType: "text" },
-                        { key: "status", label: "Status", source: "system", inputType: "select" },
-                        { key: "responsible", label: "Responsible Person", source: "system", inputType: "select" },
-                        { key: "stage", label: "Stage", source: "system", inputType: "text" },
-                      ];
-                      const registryFields = getAllFields("deal");
-                      const mergedDealFields = [...defaultDealWebhookFields];
-                      registryFields.forEach(regField => {
-                        if (!mergedDealFields.some(f => f.key === regField.key)) {
-                          mergedDealFields.push({
-                            key: regField.key,
-                            label: regField.label,
-                            source: regField.source || "custom",
-                            inputType: regField.inputType || "text",
-                          });
-                        }
-                      });
+                      const mergedDealFields = getMergedDealFields();
+
 
                       const filtered = mergedDealFields.filter(f =>
                         f.label.toLowerCase().includes(webhookFieldSearchQuery.toLowerCase()) ||
@@ -4119,9 +4483,7 @@ export default function Deals() {
                       {/* Example Payload — system mode only */}
                       {webhookLinkMode === "system" && (
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm font-semibold">Example Payload</p>
-                          </div>
+                          <p className="text-sm font-semibold mb-2">Example Payload</p>
                           <div className="relative bg-muted/30 border border-border rounded-lg text-xs font-mono max-h-[180px] flex">
                             <pre className="p-4 overflow-auto w-full max-h-[178px] pr-10">
                               {getExamplePayload(webhookImportSelectedFields)}
@@ -4156,13 +4518,15 @@ export default function Deals() {
 
             {/* Fixed Footer */}
             <div className="border-t border-gray-200 px-5 py-4 bg-gray-50 flex items-center justify-end gap-3">
-              {importMethod === "webhook" ? (
+              {importMethod === "webhook" || (importMethod === "api" && apiTabMode === "push") ? (
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShowImportModal(false);
                     setSelectedFile(null);
                     setImportMethod("csv");
+                    setApiTabMode("pull");
+                    setPushEndpointGenerated(false);
                   }}
                 >
                   Close
@@ -4175,6 +4539,8 @@ export default function Deals() {
                       setShowImportModal(false);
                       setSelectedFile(null);
                       setImportMethod("csv");
+                      setApiTabMode("pull");
+                      setPushEndpointGenerated(false);
                     }}
                   >
                     Cancel
@@ -4193,6 +4559,8 @@ export default function Deals() {
                         setShowImportModal(false);
                         setSelectedFile(null);
                         setImportMethod("csv");
+                        setApiTabMode("pull");
+                        setPushEndpointGenerated(false);
                       }}
                     >
                       Fetch & Import
