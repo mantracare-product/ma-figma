@@ -176,8 +176,87 @@ export default function Clients() {
     allowedMethods: string[]; fieldMappings: Array<{ key: string; label: string }>;
   }>>([]);
   const [selectedImportApiId, setSelectedImportApiId] = useState<string>("");
-  const [webhookLinkMode, setWebhookLinkMode] = useState<"system" | "manual">("system");
+  const [webhookLinkMode, setWebhookLinkMode] = useState<"system" | "manual">("manual");
   const [showWebhookInfo, setShowWebhookInfo] = useState(false);
+  const [webhookImportSelectedFields, setWebhookImportSelectedFields] = useState<string[]>([
+    "name", "email", "phone", "country", "processes", "stage", "responsible", "status"
+  ]);
+  const [webhookFieldDropdownOpen, setWebhookFieldDropdownOpen] = useState(false);
+  const [webhookFieldSearchQuery, setWebhookFieldSearchQuery] = useState("");
+  const [webhookGenerated, setWebhookGenerated] = useState(false);
+  const [apiImportSelectedFields, setApiImportSelectedFields] = useState<string[]>([]);
+  const [apiFieldSearchQuery, setApiFieldSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (selectedImportApiId) {
+      const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
+      if (integration) {
+        setApiImportSelectedFields(integration.fieldMappings.map(f => f.key));
+      } else {
+        setApiImportSelectedFields([]);
+      }
+    } else {
+      setApiImportSelectedFields([]);
+    }
+  }, [selectedImportApiId, customApiIntegrations]);
+
+
+  const fieldSampleValues: Record<string, any> = {
+    name: "Sarah Johnson",
+    email: "sarah.j@email.com",
+    phone: "+1 5551234567",
+    country: "US",
+    processes: ["Patient Intake"],
+    stage: "Initial Contact",
+    responsible: "John Smith",
+    status: "Active"
+  };
+
+  const getWebhookManualUrl = (selectedKeys: string[]) => {
+    const baseUrl = `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}`;
+    const params = selectedKeys.map(key => {
+      let val = `{${key.toUpperCase()}}`;
+      if (key === "name") val = "{CLIENT_NAME}";
+      if (key === "email") val = "{CLIENT_EMAIL}";
+      if (key === "phone") val = "{CLIENT_PHONE}";
+      if (key === "country") val = "{COUNTRY_CODE}";
+      if (key === "processes") val = "{PROCESS_NAME}";
+      if (key === "stage") val = "{STAGE_NAME}";
+      if (key === "responsible") val = "{RESPONSIBLE_PERSON}";
+      if (key === "status") val = "{STATUS}";
+      return `&${key}=${val}`;
+    }).join("");
+    return baseUrl + params;
+  };
+
+  const getExamplePayload = (selectedKeys: string[]) => {
+    const payload: Record<string, any> = {};
+    const allFields = getAllFields("client");
+    selectedKeys.forEach(key => {
+      if (key in fieldSampleValues) {
+        payload[key] = fieldSampleValues[key];
+      } else {
+        const fieldDef = allFields.find(f => f.key === key);
+        if (fieldDef) {
+          if (fieldDef.inputType === "number" || fieldDef.inputType === "money") {
+            payload[key] = 123;
+          } else if (fieldDef.inputType === "yes_no") {
+            payload[key] = true;
+          } else if (fieldDef.inputType === "date" || fieldDef.inputType === "date_time") {
+            payload[key] = new Date().toISOString().split("T")[0];
+          } else if (fieldDef.inputType === "select" && fieldDef.options && fieldDef.options.length > 0) {
+            payload[key] = fieldDef.options[0].value;
+          } else {
+            payload[key] = "Sample Value";
+          }
+        } else {
+          payload[key] = "Sample Value";
+        }
+      }
+    });
+    return JSON.stringify(payload, null, 2);
+  };
+
 
   useEffect(() => {
     if (showImportModal && importMethod === "api") {
@@ -415,7 +494,7 @@ export default function Clients() {
     { code: "+61", flag: "🇦🇺", name: "Australia" },
   ];
 
-  // Close dropdown when clicking outside
+  // Close dropdown when clicking outside or pressing Escape
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -448,13 +527,25 @@ export default function Clients() {
       if (showWebhookInfo && !target.closest('.webhook-info-popover')) {
         setShowWebhookInfo(false);
       }
+      // Close webhook field picker dropdown when clicking outside
+      if (webhookFieldDropdownOpen && !target.closest('.webhook-field-dropdown-container')) {
+        setWebhookFieldDropdownOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setWebhookFieldDropdownOpen(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup, showWebhookInfo]);
+  }, [processDropdownOpen, showFieldPicker, filterDropdowns, showFilterPanel, showAddFieldPopup, showWebhookInfo, webhookFieldDropdownOpen]);
 
   // Check if table needs horizontal scroll
   useEffect(() => {
@@ -3489,30 +3580,663 @@ export default function Clients() {
             </div>
           </Modal>
 
-          {/* Import Clients Modal */}
-          <Modal
-            isOpen={showImportModal}
-            onClose={() => {
-              setShowImportModal(false);
-              setSelectedFile(null);
-              setImportMethod("csv");
-            }}
-            title="Import Clients"
-            footer={
-              <>
-                {importMethod === "webhook" ? (
-                  <Button
-                    variant="outline"
+          {/* Import Clients Drawer */}
+          {showImportModal && (
+            <>
+              {/* Overlay */}
+              <div
+                className="fixed inset-0 bg-black/30 z-40 animate-fade-in"
+                onClick={() => {
+                  setShowImportModal(false);
+                  setSelectedFile(null);
+                  setImportMethod("csv");
+                }}
+              />
+
+              {/* Drawer Container */}
+              <div className="fixed right-0 top-0 h-full w-[500px] bg-white z-50 shadow-xl flex flex-col animate-slide-in-right">
+                {/* Header */}
+                <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-gray-700" />
+                    <h2 className="text-base font-bold text-gray-900">Import Clients</h2>
+                  </div>
+                  <button
                     onClick={() => {
                       setShowImportModal(false);
                       setSelectedFile(null);
                       setImportMethod("csv");
                     }}
+                    className="w-7 h-7 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-colors"
                   >
-                    Close
-                  </Button>
-                ) : (
-                  <>
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                </div>
+
+                {/* Scrollable Body */}
+                <div className="flex-1 overflow-y-auto p-5 space-y-6">
+                  <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-lg w-fit">
+                    {(["csv", "api", "webhook"] as const).map((method) => {
+                      const tooltipText = method === "csv"
+                        ? "Import clients by uploading a standard CSV file."
+                        : method === "api"
+                          ? "Fetch and import clients directly from your connected external API."
+                          : "Get a URL you can call from an external system to create clients automatically.";
+                      return (
+                        <div key={method} className="flex items-center gap-0.5 px-1">
+                          <button
+                            onClick={() => setImportMethod(method)}
+                            className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
+                              }`}
+                          >
+                            {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
+                          </button>
+                          <InfoTooltip text={tooltipText} />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {importMethod === "csv" && (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Upload a CSV file to import {entityLabel}. Make sure your file follows the correct format.
+                      </p>
+
+                      {/* Template Download Box */}
+                      <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-foreground">Need a template?</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
+                          </div>
+                          <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
+                            <Download className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* File Upload - Drag and Drop */}
+                      <div>
+                        <label className="block text-sm font-medium mb-2">Upload CSV File</label>
+                        <div
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
+                            ? "border-primary bg-primary/5"
+                            : "border-border bg-input-background"
+                            }`}
+                        >
+                          <input
+                            type="file"
+                            accept=".csv"
+                            onChange={handleFileSelect}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            id="file-upload"
+                          />
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="w-8 h-8 text-muted-foreground" />
+                            <div>
+                              <p className="text-sm font-medium">
+                                <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
+                                  Click to upload
+                                </label>
+                                {" "}or drag and drop
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
+                            </div>
+                          </div>
+                        </div>
+                        {selectedFile && (
+                          <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileText className="w-4 h-4 text-primary" />
+                              <span className="text-sm font-medium">{selectedFile.name}</span>
+                            </div>
+                            <button
+                              onClick={() => setSelectedFile(null)}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {importMethod === "api" && (
+                    <div className="space-y-4">
+                      <p className="text-sm text-muted-foreground">
+                        Connect to an external API to pull {entityLabel} directly into your account.
+                      </p>
+
+                      {customApiIntegrations.length === 0 ? (
+                        <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
+                          <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
+                          <h4 className="font-semibold mb-1">No API connections yet</h4>
+                          <p className="text-sm text-muted-foreground mb-4">
+                            Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
+                          </p>
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setShowImportModal(false);
+                              navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                            }}
+                          >
+                            <Plus className="w-4 h-4" /> Add API
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {customApiIntegrations.map((api) => (
+                            <label
+                              key={api.id}
+                              className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
+                                }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <input
+                                  type="radio"
+                                  name="importApi"
+                                  checked={selectedImportApiId === api.id}
+                                  onChange={() => setSelectedImportApiId(api.id)}
+                                  className="w-4 h-4"
+                                />
+                                <div>
+                                  <p className="text-sm font-semibold">{api.name}</p>
+                                  <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
+                                </div>
+                              </div>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
+                                Connected ✅
+                              </span>
+                            </label>
+                          ))}
+                          <button
+                            onClick={() => {
+                              setShowImportModal(false);
+                              navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
+                            }}
+                            className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <Plus className="w-3.5 h-3.5" /> Add another API
+                          </button>
+                        </div>
+                      )}
+
+                      {selectedImportApiId && (
+                        <div className="space-y-4">
+                          <div className="p-3 bg-muted/20 border border-border rounded-lg">
+                            <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {(() => {
+                                const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                                const selectedMappings = integration?.fieldMappings.filter(f => apiImportSelectedFields.includes(f.key)) || [];
+                                if (selectedMappings.length === 0) {
+                                  return <span className="text-xs text-muted-foreground italic">No fields selected</span>;
+                                }
+                                return selectedMappings.map((f) => (
+                                  <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
+                                    {f.label || f.key}
+                                  </span>
+                                ));
+                              })()}
+                            </div>
+                          </div>
+
+                          {/* API Fields to include picker */}
+                          {(() => {
+                            const integration = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                            const mappings = integration?.fieldMappings || [];
+                            if (mappings.length === 0) return null;
+
+                            const filtered = mappings.filter(f =>
+                              (f.label || "").toLowerCase().includes(apiFieldSearchQuery.toLowerCase()) ||
+                              f.key.toLowerCase().includes(apiFieldSearchQuery.toLowerCase())
+                            );
+
+                            const handleSelectAll = () => {
+                              const keysToAdd = filtered.map(f => f.key);
+                              setApiImportSelectedFields(prev => Array.from(new Set([...prev, ...keysToAdd])));
+                            };
+
+                            const handleClearAll = () => {
+                              const keysToRemove = filtered.map(f => f.key);
+                              setApiImportSelectedFields(prev => prev.filter(k => !keysToRemove.includes(k)));
+                            };
+
+                            return (
+                              <div className="space-y-2 mt-4">
+                                <div className="flex items-center justify-between">
+                                  <label className="text-sm font-semibold text-foreground">Fields to include</label>
+                                  <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold">
+                                    {apiImportSelectedFields.length} of {mappings.length} selected
+                                  </span>
+                                </div>
+
+                                <div className="border border-border rounded-lg bg-white shadow-sm overflow-hidden flex flex-col">
+                                  {/* Search box */}
+                                  <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                    <input
+                                      type="text"
+                                      placeholder="Search API fields..."
+                                      value={apiFieldSearchQuery}
+                                      onChange={(e) => setApiFieldSearchQuery(e.target.value)}
+                                      className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
+                                    />
+                                    {apiFieldSearchQuery && (
+                                      <button
+                                        onClick={() => setApiFieldSearchQuery("")}
+                                        className="text-muted-foreground hover:text-foreground"
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Select All / Clear All Row */}
+                                  <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs">
+                                    <span className="text-muted-foreground text-[11px] font-medium">
+                                      {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSelectAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Select all
+                                      </button>
+                                      <span className="text-muted-foreground/30">|</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleClearAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Clear all
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Field List Container */}
+                                  <div className="max-h-[160px] overflow-y-auto divide-y divide-border text-xs">
+                                    {filtered.map(f => {
+                                      const isChecked = apiImportSelectedFields.includes(f.key);
+                                      return (
+                                        <label
+                                          key={f.key}
+                                          className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors"
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <input
+                                              type="checkbox"
+                                              checked={isChecked}
+                                              onChange={(e) => {
+                                                if (e.target.checked) {
+                                                  setApiImportSelectedFields(prev => [...prev, f.key]);
+                                                } else {
+                                                  setApiImportSelectedFields(prev => prev.filter(k => k !== f.key));
+                                                }
+                                              }}
+                                              className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
+                                            />
+                                            <span className="font-medium text-foreground truncate">{f.label || f.key}</span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                                            {f.key}
+                                          </span>
+                                        </label>
+                                      );
+                                    })}
+                                    {filtered.length === 0 && (
+                                      <div className="p-4 text-center text-muted-foreground text-xs">
+                                        No fields match your search
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {importMethod === "webhook" && (
+                    <div className="space-y-5">
+                      <p className="text-sm text-muted-foreground">
+                        Use a webhook URL to automatically create a single client whenever an external system sends data to it.
+                      </p>
+
+                      {/* Fields to include picker */}
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">Select fields</label>
+                        {(() => {
+                          const defaultClientWebhookFields = [
+                            { key: "name", label: "Name", source: "system", inputType: "text" },
+                            { key: "email", label: "Email", source: "system", inputType: "email" },
+                            { key: "phone", label: "Phone", source: "system", inputType: "tel" },
+                            { key: "country", label: "Country", source: "system", inputType: "text" },
+                            { key: "processes", label: "Processes", source: "system", inputType: "select" },
+                            { key: "stage", label: "Stage", source: "system", inputType: "text" },
+                            { key: "responsible", label: "Responsible Person", source: "system", inputType: "select" },
+                            { key: "status", label: "Status", source: "system", inputType: "select" },
+                          ];
+                          const registryFields = getAllFields("client");
+                          const mergedClientFields = [...defaultClientWebhookFields];
+                          registryFields.forEach(regField => {
+                            if (!mergedClientFields.some(f => f.key === regField.key)) {
+                              mergedClientFields.push({
+                                key: regField.key,
+                                label: regField.label,
+                                source: regField.source || "custom",
+                                inputType: regField.inputType || "text",
+                              });
+                            }
+                          });
+
+                          const filtered = mergedClientFields.filter(f =>
+                            f.label.toLowerCase().includes(webhookFieldSearchQuery.toLowerCase()) ||
+                            f.key.toLowerCase().includes(webhookFieldSearchQuery.toLowerCase())
+                          );
+
+                          const systemFields = filtered.filter(f => f.source === "system");
+                          const customFields = filtered.filter(f => f.source === "custom");
+
+                          const handleSelectAll = () => {
+                            const keysToAdd = filtered.map(f => f.key);
+                            setWebhookImportSelectedFields(prev => Array.from(new Set([...prev, ...keysToAdd])));
+                          };
+
+                          const handleClearAll = () => {
+                            const keysToRemove = filtered.map(f => f.key);
+                            setWebhookImportSelectedFields(prev => prev.filter(k => !keysToRemove.includes(k)));
+                          };
+
+                          const renderFieldRow = (f: typeof mergedClientFields[0]) => {
+                            const isChecked = webhookImportSelectedFields.includes(f.key);
+                            return (
+                              <label
+                                key={f.key}
+                                className="flex items-center justify-between gap-4 px-3 py-2.5 hover:bg-muted/30 cursor-pointer transition-colors animate-none"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setWebhookImportSelectedFields(prev => [...prev, f.key]);
+                                      } else {
+                                        setWebhookImportSelectedFields(prev => prev.filter(k => k !== f.key));
+                                      }
+                                    }}
+                                    className="w-3.5 h-3.5 rounded border-gray-300 text-primary focus:ring-primary flex-shrink-0"
+                                  />
+                                  <span className="font-medium text-foreground truncate">{f.label}</span>
+                                </div>
+                                <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
+                                  {f.key}
+                                </span>
+                              </label>
+                            );
+                          };
+
+                          return (
+                            <div className="relative webhook-field-dropdown-container">
+                              <button
+                                type="button"
+                                onClick={() => setWebhookFieldDropdownOpen(prev => !prev)}
+                                className="w-full h-10 px-3 flex items-center justify-between bg-white border rounded-md hover:bg-gray-50 transition-colors"
+                                style={{ borderColor: '#E2E8F0', fontFamily: 'Outfit, sans-serif', fontSize: '13px' }}
+                              >
+                                {webhookImportSelectedFields.length > 0 ? (
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-semibold flex items-center gap-1">
+                                      {webhookImportSelectedFields.length} selected
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setWebhookImportSelectedFields([]);
+                                        }}
+                                        className="hover:bg-primary/20 rounded-full p-0.5 cursor-pointer flex items-center justify-center"
+                                        title="Clear selection"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </span>
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground">Select fields...</span>
+                                )}
+                                <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${webhookFieldDropdownOpen ? "rotate-180" : ""}`} />
+                              </button>
+
+                              {webhookFieldDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-1 w-full bg-white border border-border rounded-lg shadow-lg z-50 flex flex-col overflow-hidden max-h-[320px]">
+                                  {/* Search box */}
+                                  <div className="p-2 border-b border-border bg-muted/10 flex items-center gap-2">
+                                    <Search className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                                    <input
+                                      type="text"
+                                      placeholder="Search fields..."
+                                      value={webhookFieldSearchQuery}
+                                      onChange={(e) => setWebhookFieldSearchQuery(e.target.value)}
+                                      className="bg-transparent text-xs w-full focus:outline-none border-none p-0"
+                                    />
+                                    {webhookFieldSearchQuery && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setWebhookFieldSearchQuery("")}
+                                        className="text-muted-foreground hover:text-foreground"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Select All / Clear All Row */}
+                                  <div className="px-3 py-1.5 border-b border-border bg-muted/5 flex items-center justify-between text-xs flex-shrink-0">
+                                    <span className="text-muted-foreground text-[11px] font-medium">
+                                      {filtered.length} field{filtered.length !== 1 ? 's' : ''} found
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={handleSelectAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Select all
+                                      </button>
+                                      <span className="text-muted-foreground/30">|</span>
+                                      <button
+                                        type="button"
+                                        onClick={handleClearAll}
+                                        className="text-primary hover:underline text-[11px] font-semibold"
+                                      >
+                                        Clear all
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  {/* Scrollable list */}
+                                  <div className="overflow-y-auto divide-y divide-border text-xs flex-1">
+                                    {systemFields.length > 0 && (
+                                      <div>
+                                        <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-b border-border">
+                                          System Fields ({systemFields.length})
+                                        </div>
+                                        <div className="divide-y divide-border">
+                                          {systemFields.map(renderFieldRow)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {customFields.length > 0 && (
+                                      <div>
+                                        <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-t border-border border-b border-border">
+                                          Custom Fields ({customFields.length})
+                                        </div>
+                                        <div className="divide-y divide-border">
+                                          {customFields.map(renderFieldRow)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {filtered.length === 0 && (
+                                      <div className="p-4 text-center text-muted-foreground">
+                                        No fields match your search
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+
+                      {/* Generate Webhook Reveal Button */}
+                      <div className="pt-2">
+                        <Button
+                          variant="primary"
+                          className="w-full"
+                          onClick={() => setWebhookGenerated(true)}
+                        >
+                          Generate Webhook
+                        </Button>
+                      </div>
+
+                      {webhookGenerated && (
+                        <div className="space-y-5 pt-2 border-t border-border animate-fade-in">
+                          {/* Unified URL container */}
+                          <div>
+                            {/* Header row */}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-semibold">Webhook URL</p>
+                                {/* (i) info button with popover */}
+                                <div className="relative webhook-info-popover">
+                                  <button
+                                    className="text-muted-foreground hover:text-foreground transition-colors"
+                                    onMouseEnter={() => setShowWebhookInfo(true)}
+                                    onMouseLeave={(e) => {
+                                      const rel = e.relatedTarget as HTMLElement | null;
+                                      if (!rel?.closest('.webhook-info-popover')) setShowWebhookInfo(false);
+                                    }}
+                                    onClick={() => setShowWebhookInfo(v => !v)}
+                                    aria-label="Webhook URL info"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  {showWebhookInfo && (
+                                    <div
+                                      className="absolute top-full left-0 mt-2 z-50 w-72 bg-white border border-border rounded-lg shadow-lg p-3 webhook-info-popover"
+                                      onMouseEnter={() => setShowWebhookInfo(true)}
+                                      onMouseLeave={() => setShowWebhookInfo(false)}
+                                    >
+                                      {webhookLinkMode === "system" ? (
+                                        <p className="text-xs text-muted-foreground leading-relaxed">
+                                          Use this URL if you're embedding the webhook into your own system or backend. Send a POST request with a JSON body (see Example Payload) and an Authorization header.
+                                        </p>
+                                      ) : (
+                                        <div className="space-y-2">
+                                          <p className="text-xs text-muted-foreground leading-relaxed">
+                                            For manual, one-off entries — replace the placeholders (e.g. {'{CLIENT_NAME}'}, {'{YOUR_API_KEY}'}) with real values, then open the link in a browser or paste into a tool that supports simple GET requests. No coding required.
+                                          </p>
+                                          <div className="flex items-start gap-1.5 pt-1 border-t border-border">
+                                            <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
+                                            <p className="text-xs text-amber-600">API key is exposed in the URL — avoid sharing publicly or using for sensitive/bulk data.</p>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Code block — same container, only content changes */}
+                            <div className="relative bg-white border border-border rounded-lg pl-3 pr-10 py-2 group">
+                              <code className="text-xs text-foreground break-all font-mono">
+                                {webhookLinkMode === "system"
+                                  ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                                  : getWebhookManualUrl(webhookImportSelectedFields)
+                                }
+                              </code>
+                              <button
+                                onClick={() => {
+                                  const url = webhookLinkMode === "system"
+                                    ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
+                                    : getWebhookManualUrl(webhookImportSelectedFields);
+                                  navigator.clipboard.writeText(url);
+                                  toast.success(webhookLinkMode === "system" ? "Webhook URL copied" : "Link copied");
+                                }}
+                                className="absolute top-1.5 right-1.5 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                                title="Copy"
+                                aria-label="Copy Webhook URL"
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            {/* Mode toggle link */}
+                            <div className="flex justify-end mt-1.5">
+                              <button
+                                onClick={() => setWebhookLinkMode(m => m === "system" ? "manual" : "system")}
+                                className="text-xs text-primary hover:underline cursor-pointer"
+                              >
+                                {webhookLinkMode === "system" ? "Use quick link" : "Use webhook URL instead"}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Example Payload — system mode only */}
+                          {webhookLinkMode === "system" && (
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <p className="text-sm font-semibold">Example Payload</p>
+                              </div>
+                              <div className="relative bg-muted/30 border border-border rounded-lg text-xs font-mono max-h-[180px] flex">
+                                <pre className="p-4 overflow-auto w-full max-h-[178px] pr-10">
+                                  {getExamplePayload(webhookImportSelectedFields)}
+                                </pre>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(getExamplePayload(webhookImportSelectedFields));
+                                    toast.success("Payload copied");
+                                  }}
+                                  className="absolute top-2 right-2 p-1 hover:bg-muted text-muted-foreground hover:text-foreground rounded transition-colors"
+                                  title="Copy"
+                                  aria-label="Copy Payload"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Footer note — POST only */}
+                          {webhookLinkMode === "system" && (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Shield className="w-3.5 h-3.5" />
+                              <span><span className="font-medium">For POST requests only:</span> Include header <code className="font-mono bg-muted px-1 rounded">Authorization: Bearer &lt;org-api-key&gt;</code></span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Fixed Footer */}
+                <div className="border-t border-gray-200 px-5 py-4 bg-gray-50 flex items-center justify-end gap-3">
+                  {importMethod === "webhook" ? (
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -3521,320 +4245,46 @@ export default function Clients() {
                         setImportMethod("csv");
                       }}
                     >
-                      Cancel
+                      Close
                     </Button>
-                    {importMethod === "csv" ? (
-                      <Button variant="primary" onClick={handleImport}>
-                        Import
-                      </Button>
-                    ) : (
+                  ) : (
+                    <>
                       <Button
-                        variant="primary"
-                        disabled={!selectedImportApiId}
+                        variant="outline"
                         onClick={() => {
-                          const api = customApiIntegrations.find(a => a.id === selectedImportApiId);
-                          toast.success(`Fetching records from ${api?.name || "API"}...`);
                           setShowImportModal(false);
                           setSelectedFile(null);
                           setImportMethod("csv");
                         }}
                       >
-                        Fetch & Import
+                        Cancel
                       </Button>
-                    )}
-                  </>
-                )}
-              </>
-            }
-          >
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 mb-5 bg-muted/30 p-1 rounded-lg w-fit">
-                {(["csv", "api", "webhook"] as const).map((method) => {
-                  const tooltipText = method === "csv"
-                    ? "Import clients by uploading a standard CSV file."
-                    : method === "api"
-                      ? "Fetch and import clients directly from your connected external API."
-                      : "Get a URL you can call from an external system to create clients automatically.";
-                  return (
-                    <div key={method} className="flex items-center gap-0.5 px-1">
-                      <button
-                        onClick={() => setImportMethod(method)}
-                        className={`px-3 py-2 text-sm font-medium rounded-md transition-colors ${importMethod === method ? "bg-primary text-white" : "text-gray-600 hover:text-gray-900"
-                          }`}
-                      >
-                        {method === "csv" ? "CSV" : method === "api" ? "API" : "Webhook"}
-                      </button>
-                      <InfoTooltip text={tooltipText} />
-                    </div>
-                  );
-                })}
-              </div>
-
-              {importMethod === "csv" && (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Upload a CSV file to import {entityLabel}. Make sure your file follows the correct format.
-                  </p>
-
-                  {/* Template Download Box */}
-                  <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Need a template?</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Download our sample CSV file</p>
-                      </div>
-                      <Button variant="outline" size="sm" onClick={handleDownloadTemplate}>
-                        <Download className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  {/* File Upload - Drag and Drop */}
-                  <div>
-                    <label className="block text-sm font-medium mb-2">Upload CSV File</label>
-                    <div
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all ${isDragging
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-input-background"
-                        }`}
-                    >
-                      <input
-                        type="file"
-                        accept=".csv"
-                        onChange={handleFileSelect}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                        id="file-upload"
-                      />
-                      <div className="flex flex-col items-center gap-2">
-                        <Upload className="w-8 h-8 text-muted-foreground" />
-                        <div>
-                          <p className="text-sm font-medium">
-                            <label htmlFor="file-upload" className="text-primary cursor-pointer hover:underline">
-                              Click to upload
-                            </label>
-                            {" "}or drag and drop
-                          </p>
-                          <p className="text-xs text-muted-foreground mt-1">CSV files only</p>
-                        </div>
-                      </div>
-                    </div>
-                    {selectedFile && (
-                      <div className="mt-3 p-3 bg-muted rounded-xl flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <FileText className="w-4 h-4 text-primary" />
-                          <span className="text-sm font-medium">{selectedFile.name}</span>
-                        </div>
-                        <button
-                          onClick={() => setSelectedFile(null)}
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {importMethod === "api" && (
-                <>
-                  <p className="text-sm text-muted-foreground">
-                    Connect to an external API to pull {entityLabel} directly into your account.
-                  </p>
-
-                  {customApiIntegrations.length === 0 ? (
-                    <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-                      <Globe className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                      <h4 className="font-semibold mb-1">No API connections yet</h4>
-                      <p className="text-sm text-muted-foreground mb-4">
-                        Connect a Custom API in Settings to pull {entityLabel} directly from an external source.
-                      </p>
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          setShowImportModal(false);
-                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
-                        }}
-                      >
-                        <Plus className="w-4 h-4" /> Add API
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {customApiIntegrations.map((api) => (
-                        <label
-                          key={api.id}
-                          className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-colors ${selectedImportApiId === api.id ? "border-primary bg-primary/5" : "border-border hover:border-primary/30"
-                            }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <input
-                              type="radio"
-                              name="importApi"
-                              checked={selectedImportApiId === api.id}
-                              onChange={() => setSelectedImportApiId(api.id)}
-                              className="w-4 h-4"
-                            />
-                            <div>
-                              <p className="text-sm font-semibold">{api.name}</p>
-                              <p className="text-xs text-muted-foreground font-mono">{api.baseUrl}</p>
-                            </div>
-                          </div>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200 font-semibold">
-                            Connected ✅
-                          </span>
-                        </label>
-                      ))}
-                      <button
-                        onClick={() => {
-                          setShowImportModal(false);
-                          navigate("/settings?tab=integrations&category=crm&integration=custom-api&action=connect");
-                        }}
-                        className="w-full py-2.5 border border-dashed border-primary/40 text-primary text-sm font-medium rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add another API
-                      </button>
-                    </div>
-                  )}
-
-                  {selectedImportApiId && (
-                    <div className="mt-4 p-3 bg-muted/20 border border-border rounded-lg">
-                      <p className="text-xs font-semibold text-muted-foreground mb-2">Fields that will be imported</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {customApiIntegrations.find(a => a.id === selectedImportApiId)?.fieldMappings.map((f) => (
-                          <span key={f.key} className="text-[11px] px-2 py-0.5 rounded bg-white border border-border font-mono">
-                            {f.label || f.key}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {importMethod === "webhook" && (
-                <div className="space-y-5">
-                  <p className="text-sm text-muted-foreground">
-                    Use a webhook URL to automatically create a single {entityLabel} whenever an external system sends data to it.
-                  </p>
-
-                  {/* Unified URL container */}
-                  <div>
-                    {/* Header row */}
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-semibold">Webhook URL</p>
-                        {/* (i) info button with popover */}
-                        <div className="relative webhook-info-popover">
-                          <button
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            onMouseEnter={() => setShowWebhookInfo(true)}
-                            onMouseLeave={(e) => {
-                              const rel = e.relatedTarget as HTMLElement | null;
-                              if (!rel?.closest('.webhook-info-popover')) setShowWebhookInfo(false);
-                            }}
-                            onClick={() => setShowWebhookInfo(v => !v)}
-                            aria-label="Webhook URL info"
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                          </button>
-                          {showWebhookInfo && (
-                            <div
-                              className="absolute top-full left-0 mt-2 z-50 w-72 bg-white border border-border rounded-lg shadow-lg p-3 webhook-info-popover"
-                              onMouseEnter={() => setShowWebhookInfo(true)}
-                              onMouseLeave={() => setShowWebhookInfo(false)}
-                            >
-                              {webhookLinkMode === "system" ? (
-                                <p className="text-xs text-muted-foreground leading-relaxed">
-                                  Use this URL if you're embedding the webhook into your own system or backend. Send a POST request with a JSON body (see Example Payload) and an Authorization header.
-                                </p>
-                              ) : (
-                                <div className="space-y-2">
-                                  <p className="text-xs text-muted-foreground leading-relaxed">
-                                    For manual, one-off entries — replace the placeholders (e.g. {'{CLIENT_NAME}'}, {'{YOUR_API_KEY}'}) with real values, then open the link in a browser or paste into a tool that supports simple GET requests. No coding required.
-                                  </p>
-                                  <div className="flex items-start gap-1.5 pt-1 border-t border-border">
-                                    <AlertCircle className="w-3 h-3 text-amber-500 flex-shrink-0 mt-0.5" />
-                                    <p className="text-xs text-amber-600">API key is exposed in the URL — avoid sharing publicly or using for sensitive/bulk data.</p>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      {/* Copy button */}
-                      <button
-                        onClick={() => {
-                          const url = webhookLinkMode === "system"
-                            ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
-                            : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&name={CLIENT_NAME}&email={CLIENT_EMAIL}&phone={CLIENT_PHONE}&country={COUNTRY_CODE}&processes={PROCESS_NAME}&stage={STAGE_NAME}&responsible={RESPONSIBLE_PERSON}&status={STATUS}`;
-                          navigator.clipboard.writeText(url);
-                          toast.success(webhookLinkMode === "system" ? "Webhook URL copied" : "Link copied");
-                        }}
-                        className="text-xs text-primary hover:underline flex items-center gap-1"
-                      >
-                        <Copy className="w-3 h-3" /> Copy
-                      </button>
-                    </div>
-
-                    {/* Code block — same container, only content changes */}
-                    <div className="bg-white border border-border rounded-lg px-3 py-2">
-                      <code className="text-xs text-foreground break-all font-mono">
-                        {webhookLinkMode === "system"
-                          ? `https://app.mantraassist.com/api/webhooks/import/${entityType}`
-                          : `https://app.mantraassist.com/api/webhooks/import/${entityType}?api_key={YOUR_API_KEY}&name={CLIENT_NAME}&email={CLIENT_EMAIL}&phone={CLIENT_PHONE}&country={COUNTRY_CODE}&processes={PROCESS_NAME}&stage={STAGE_NAME}&responsible={RESPONSIBLE_PERSON}&status={STATUS}`
-                        }
-                      </code>
-                    </div>
-
-                    {/* Mode toggle link */}
-                    <div className="flex justify-end mt-1.5">
-                      <button
-                        onClick={() => setWebhookLinkMode(m => m === "system" ? "manual" : "system")}
-                        className="text-xs text-primary hover:underline cursor-pointer"
-                      >
-                        {webhookLinkMode === "system" ? "Use quick link" : "Use webhook URL instead"}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Example Payload — system mode only */}
-                  {webhookLinkMode === "system" && (
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-sm font-semibold">Example Payload</p>
-                        <button
+                      {importMethod === "csv" ? (
+                        <Button variant="primary" onClick={handleImport}>
+                          Import
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="primary"
+                          disabled={!selectedImportApiId}
                           onClick={() => {
-                            navigator.clipboard.writeText(examplePayloadJson);
-                            toast.success("Payload copied");
+                            const api = customApiIntegrations.find(a => a.id === selectedImportApiId);
+                            toast.success(`Fetching records from ${api?.name || "API"} with ${apiImportSelectedFields.length} selected fields...`);
+                            setShowImportModal(false);
+                            setSelectedFile(null);
+                            setImportMethod("csv");
                           }}
-                          className="text-xs text-primary hover:underline flex items-center gap-1"
                         >
-                          <Copy className="w-3 h-3" /> Copy
-                        </button>
-                      </div>
-                      <pre className="bg-muted/30 border border-border rounded-lg p-4 text-xs overflow-x-auto font-mono">
-                        {examplePayloadJson}
-                      </pre>
-                    </div>
+                          Fetch & Import
+                        </Button>
+                      )}
+                    </>
                   )}
-
-                  {/* Footer note — POST only */}
-                  {webhookLinkMode === "system" && (
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Shield className="w-3.5 h-3.5" />
-                      <span><span className="font-medium">For POST requests only:</span> Include header <code className="font-mono bg-muted px-1 rounded">Authorization: Bearer &lt;org-api-key&gt;</code></span>
-                    </div>
-                  )}
-
                 </div>
-              )}
-            </div>
-          </Modal>
+              </div>
+            </>
+          )}
+
 
           {/* Schedule Call Drawer */}
           {showScheduleCallModal && (

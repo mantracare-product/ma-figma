@@ -33,11 +33,11 @@ import { resolveVisibility } from "../../context/FieldRegistryContext";
 
 // Module → singular noun for prose labels
 const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
-  client:       { singular: "client",       plural: "clients" },
-  process:      { singular: "process",      plural: "processes" },
-  appointment:  { singular: "appointment",  plural: "appointments" },
-  call:         { singular: "call",         plural: "calls" },
-  service:      { singular: "service",      plural: "services" },
+  client: { singular: "client", plural: "clients" },
+  process: { singular: "process", plural: "processes" },
+  appointment: { singular: "appointment", plural: "appointments" },
+  call: { singular: "call", plural: "calls" },
+  service: { singular: "service", plural: "services" },
   organization: { singular: "organization", plural: "organizations" },
 };
 
@@ -476,7 +476,7 @@ export function SelectFieldsModal({
                   </span>
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
                 </button>
-                
+
                 {!isCollapsed && (
                   <div className="p-3 grid grid-cols-2 gap-2">
                     {group.fields.map(f => {
