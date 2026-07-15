@@ -780,10 +780,10 @@ export default function Chats() {
               const tooltipText = tab === "chats"
                 ? "Real-time inbox to chat with patients over SMS or WhatsApp."
                 : tab === "campaigns"
-                ? "Send a message to many clients at once, on a schedule."
-                : tab === "templates"
-                ? "Build pre-approved message templates for WhatsApp."
-                : "Configure the automated assistant to reply to common queries.";
+                  ? "Send a message to many clients at once, on a schedule."
+                  : tab === "templates"
+                    ? "Build pre-approved message templates for WhatsApp."
+                    : "Configure the automated assistant to reply to common queries.";
               return (
                 <div key={tab} className="flex items-center gap-1">
                   <button onClick={() => handleTabChange(tab)}
