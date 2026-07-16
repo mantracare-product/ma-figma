@@ -3850,7 +3850,10 @@ export default function Clients() {
                             <div className="p-4 space-y-4">
                               {/* Webhook Label Input */}
                               <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-foreground">Webhook Label</label>
+                                <div className="flex items-center gap-1">
+                                  <label className="text-xs font-semibold text-foreground">Webhook Label</label>
+                                  <InfoTooltip text="A short internal name to identify this webhook." />
+                                </div>
                                 <input
                                   type="text"
                                   value={config.webhookLabel}
@@ -3862,7 +3865,10 @@ export default function Clients() {
 
                               {/* Select Fields */}
                               <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-foreground">Select fields</label>
+                                <div className="flex items-center gap-1">
+                                  <label className="text-xs font-semibold text-foreground">Select fields</label>
+                                  <InfoTooltip text="Select the fields that will be sent in the webhook payload." />
+                                </div>
                                 <div className={`relative field-dropdown-${config.id}`}>
                                   <button
                                     type="button"
@@ -3931,17 +3937,11 @@ export default function Clients() {
                                       <div className="overflow-y-auto divide-y divide-border text-xs flex-1">
                                         {systemFields.length > 0 && (
                                           <div>
-                                            <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-b border-border">
-                                              System Fields ({systemFields.length})
-                                            </div>
                                             <div className="divide-y divide-border">{systemFields.map(renderFieldRow)}</div>
                                           </div>
                                         )}
                                         {customFields.length > 0 && (
                                           <div>
-                                            <div className="px-3 py-1.5 bg-gray-50/80 font-bold text-muted-foreground text-[10px] uppercase tracking-wider border-t border-border border-b border-border">
-                                              Custom Fields ({customFields.length})
-                                            </div>
                                             <div className="divide-y divide-border">{customFields.map(renderFieldRow)}</div>
                                           </div>
                                         )}
@@ -3956,7 +3956,10 @@ export default function Clients() {
 
                               {/* API Key Section */}
                               <div className="space-y-1.5">
-                                <label className="text-xs font-semibold text-foreground">API Key</label>
+                                <div className="flex items-center gap-1">
+                                  <label className="text-xs font-semibold text-foreground">API Key</label>
+                                  <InfoTooltip text="The secret key used to authenticate requests to this webhook URL." />
+                                </div>
                                 {config.apiKey ? (
                                   <div className="flex flex-col gap-2 p-3 border border-primary/30 bg-primary/5 rounded-lg">
                                     <div className="flex items-center justify-between gap-2">
