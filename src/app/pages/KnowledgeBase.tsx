@@ -26,7 +26,7 @@ import {
   Edit,
   Settings,
 } from "lucide-react";
-import { useNavigate } from "react-router";
+import { useNavigate, useLocation } from "react-router";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -56,7 +56,7 @@ interface ProcessDef {
   stages: ProcessStage[];
 }
 
-const PROCESS_TREE: ProcessDef[] = [
+const PROCESS_TREE_SEED: ProcessDef[] = [
   {
     id: "1",
     name: "Patient Intake",
@@ -156,11 +156,11 @@ const formatDate = (iso: string): string => {
 
 const getSourceName = (src: GlobalKnowledgeSource): string => src.name;
 
-const getScopeLabel = (src: GlobalKnowledgeSource): string => {
+const getScopeLabel = (src: GlobalKnowledgeSource, processTree: ProcessDef[]): string => {
   if (src.allProcesses) return "All Processes";
   if (src.scopes.length === 0) return "—";
   const parts = src.scopes.map((sc) => {
-    const proc = PROCESS_TREE.find((p) => p.id === sc.processId);
+    const proc = processTree.find((p) => p.id === sc.processId);
     if (!proc) return "";
     if (sc.stageIds.length === 0 || sc.stageIds.length === proc.stages.length) {
       return proc.name;
@@ -240,13 +240,17 @@ interface FlattenedScope {
   label: string;
 }
 
-const getFlattenedScopes = (scopes: KnowledgeScopeSelection[], allProcesses: boolean): FlattenedScope[] => {
+const getFlattenedScopes = (
+  scopes: KnowledgeScopeSelection[],
+  allProcesses: boolean,
+  processTree: ProcessDef[]
+): FlattenedScope[] => {
   if (allProcesses) {
     return [{ id: "all", processId: "all", label: "All Processes" }];
   }
   const list: FlattenedScope[] = [];
   scopes.forEach((sc) => {
-    const proc = PROCESS_TREE.find((p) => p.id === sc.processId);
+    const proc = processTree.find((p) => p.id === sc.processId);
     if (!proc) return;
     if (sc.stageIds.length === 0 || sc.stageIds.length === proc.stages.length) {
       list.push({
@@ -272,12 +276,16 @@ const getFlattenedScopes = (scopes: KnowledgeScopeSelection[], allProcesses: boo
 interface ScopeChipListProps {
   scopes: KnowledgeScopeSelection[];
   allProcesses: boolean;
+  processTree: ProcessDef[];
 }
 
-const ScopeChipList: React.FC<ScopeChipListProps> = ({ scopes, allProcesses }) => {
+const ScopeChipList: React.FC<ScopeChipListProps> = ({ scopes, allProcesses, processTree }) => {
   const [showAll, setShowAll] = useState(false);
 
-  const flatScopes = useMemo(() => getFlattenedScopes(scopes, allProcesses), [scopes, allProcesses]);
+  const flatScopes = useMemo(
+    () => getFlattenedScopes(scopes, allProcesses, processTree),
+    [scopes, allProcesses, processTree]
+  );
 
   const limit = 2;
   const hasOverflow = flatScopes.length > limit;
@@ -313,9 +321,10 @@ const ScopeChipList: React.FC<ScopeChipListProps> = ({ scopes, allProcesses }) =
 
 const SourceCard: React.FC<{
   src: GlobalKnowledgeSource;
+  processTree: ProcessDef[];
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ src, onEdit, onDelete }) => {
+}> = ({ src, processTree, onEdit, onDelete }) => {
   const hasScope = src.allProcesses || src.scopes.length > 0;
   const hasTags = src.tags && src.tags.length > 0;
 
@@ -367,6 +376,7 @@ const SourceCard: React.FC<{
           <ScopeChipList
             scopes={src.scopes}
             allProcesses={src.allProcesses}
+            processTree={processTree}
           />
         </div>
       )}
@@ -412,9 +422,10 @@ interface ProcessTreeProps {
   onAllChange: (v: boolean) => void;
   scopes: KnowledgeScopeSelection[];
   onScopesChange: (s: KnowledgeScopeSelection[]) => void;
+  processTree: ProcessDef[];
 }
 
-const ProcessTree: React.FC<ProcessTreeProps> = ({ allSelected, onAllChange, scopes, onScopesChange }) => {
+const ProcessTree: React.FC<ProcessTreeProps> = ({ allSelected, onAllChange, scopes, onScopesChange, processTree }) => {
   const [expanded, setExpanded] = useState<string[]>([]);
 
   const toggleExpand = (pid: string) =>
@@ -484,7 +495,7 @@ const ProcessTree: React.FC<ProcessTreeProps> = ({ allSelected, onAllChange, sco
         <span className="text-sm font-semibold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>All</span>
       </label>
 
-      {PROCESS_TREE.map((proc) => {
+      {processTree.map((proc) => {
         const isExp = expanded.includes(proc.id);
         const procChecked = isProcessChecked(proc);
         const procIndet = isProcessIndeterminate(proc);
@@ -560,6 +571,8 @@ interface CreateKnowledgeBaseModalProps {
   onClose: () => void;
   onSave: (src: GlobalKnowledgeSource) => void;
   initialSource?: GlobalKnowledgeSource | null;
+  processTree: ProcessDef[];
+  prefillProcessId?: string | null;
 }
 
 const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
@@ -567,6 +580,8 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
   onClose,
   onSave,
   initialSource,
+  processTree,
+  prefillProcessId,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -612,9 +627,13 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
         }
       } else {
         resetAll();
+        if (prefillProcessId) {
+          setScopes([{ processId: prefillProcessId, stageIds: [] }]);
+          setAllProcesses(false);
+        }
       }
     }
-  }, [isOpen, initialSource]);
+  }, [isOpen, initialSource, prefillProcessId]);
 
   // Combo dropdown filtered tag presets
   const filteredPresets = useMemo(() => {
@@ -669,7 +688,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
     if (allProcesses) return "All Processes";
     if (scopes.length === 0) return "Select processes…";
     if (scopes.length === 1) {
-      const proc = PROCESS_TREE.find(p => p.id === scopes[0].processId);
+      const proc = processTree.find(p => p.id === scopes[0].processId);
       if (!proc) return "1 process selected";
       if (scopes[0].stageIds.length === 0 || scopes[0].stageIds.length === proc.stages.length) {
         return proc.name;
@@ -837,6 +856,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                   }}
                   scopes={scopes}
                   onScopesChange={setScopes}
+                  processTree={processTree}
                 />
                 <div className="flex justify-end pt-2 border-t border-gray-100">
                   <Button type="button" variant="primary" size="sm" onClick={() => setProcessDropdownOpen(false)}>
@@ -865,7 +885,7 @@ const CreateKnowledgeBaseModal: React.FC<CreateKnowledgeBaseModalProps> = ({
                   </button>
                 </span>
               ) : (
-                getFlattenedScopes(scopes, false).map((fs) => (
+                getFlattenedScopes(scopes, false, processTree).map((fs) => (
                   <span
                     key={fs.id}
                     className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-xs font-medium"
@@ -1162,6 +1182,9 @@ const TABLE_HEADERS = ["Actions", "Name", "Type", "Scope", "Tags", "Status", "Cr
 
 export default function KnowledgeBase() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [processTree, setProcessTree] = useState<ProcessDef[]>(PROCESS_TREE_SEED);
+  const [prefillProcessId, setPrefillProcessId] = useState<string | null>(null);
 
   const [sources, setSources] = useState<GlobalKnowledgeSource[]>(SEED_SOURCES);
   const [searchQuery, setSearchQuery] = useState("");
@@ -1253,6 +1276,37 @@ export default function KnowledgeBase() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSource, setEditingSource] = useState<GlobalKnowledgeSource | null>(null);
+
+  useEffect(() => {
+    const navState = location.state as
+      | { prefillProcess?: { id: string; name: string; stages: { id: string; name: string }[] } }
+      | null;
+
+    if (navState?.prefillProcess) {
+      const incoming = navState.prefillProcess;
+
+      setProcessTree((prev) => {
+        if (prev.some((p) => p.id === incoming.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: incoming.id,
+            name: incoming.name,
+            stages: incoming.stages.map((s) => ({ id: s.id, name: s.name })),
+          },
+        ];
+      });
+
+      setEditingSource(null);
+      setPrefillProcessId(incoming.id);
+      setCreateOpen(true);
+
+      // Clear the nav state so refresh / back-button doesn't reopen the drawer
+      window.history.replaceState({}, document.title);
+    }
+    // Intentionally run once, on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [deleteTargetList, setDeleteTargetList] = useState<GlobalKnowledgeSource[] | null>(null);
   const [showHelp, setShowHelp] = useState(false);
@@ -1365,6 +1419,7 @@ export default function KnowledgeBase() {
   const handleCloseDrawer = () => {
     setCreateOpen(false);
     setEditingSource(null);
+    setPrefillProcessId(null);
   };
 
   const filterTabs: { key: FilterTab; label: string }[] = [
@@ -1408,6 +1463,7 @@ export default function KnowledgeBase() {
                 variant="primary"
                 onClick={() => {
                   setEditingSource(null);
+                  setPrefillProcessId(null);
                   setCreateOpen(true);
                 }}
                 className="h-10 ml-auto"
@@ -1511,6 +1567,7 @@ export default function KnowledgeBase() {
         {filtered.length === 0 ? (
           <EmptyState onCreate={() => {
             setEditingSource(null);
+            setPrefillProcessId(null);
             setCreateOpen(true);
           }} />
         ) : viewMode === "grid" ? (
@@ -1519,7 +1576,8 @@ export default function KnowledgeBase() {
               <SourceCard
                 key={src.id}
                 src={src}
-                onEdit={() => { setEditingSource(src); setCreateOpen(true); }}
+                processTree={processTree}
+                onEdit={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}
                 onDelete={() => setDeleteTargetList([src])}
               />
             ))}
@@ -1602,7 +1660,7 @@ export default function KnowledgeBase() {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setEditingSource(src); setCreateOpen(true); }}>
+                            <DropdownMenuItem onClick={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}>
                               <Edit className="w-4 h-4 mr-2" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setDeleteTargetList([src])} className="text-red-600 focus:text-red-600">
@@ -1618,7 +1676,7 @@ export default function KnowledgeBase() {
                             className="font-medium truncate block text-sm text-blue-600 hover:underline hover:text-blue-700 cursor-pointer text-left w-full"
                             style={{ fontFamily: "DM Sans, sans-serif" }}
                             title={getSourceName(src)}
-                            onClick={() => { setEditingSource(src); setCreateOpen(true); }}
+                            onClick={() => { setEditingSource(src); setPrefillProcessId(null); setCreateOpen(true); }}
                           >
                             {getSourceName(src)}
                           </button>
@@ -1635,6 +1693,7 @@ export default function KnowledgeBase() {
                         <ScopeChipList
                           scopes={src.scopes}
                           allProcesses={src.allProcesses}
+                          processTree={processTree}
                         />
                       </td>
 
@@ -1843,6 +1902,8 @@ export default function KnowledgeBase() {
         onClose={handleCloseDrawer}
         onSave={handleAddSource}
         initialSource={editingSource}
+        processTree={processTree}
+        prefillProcessId={prefillProcessId}
       />
       <DeleteConfirmModal
         isOpen={!!deleteTargetList}

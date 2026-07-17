@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -469,6 +469,7 @@ export default function Process() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
   const { setCollapsed } = useSidebar();
+  const navigate = useNavigate();
 
   useEffect(() => {
     setCollapsed(true);
@@ -2211,6 +2212,41 @@ export default function Process() {
                           </button>
                         </div>
                       </DndProvider>
+                    </div>
+
+                    {/* Knowledge Base */}
+                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 flex items-center justify-between gap-4 flex-wrap">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+                          <Database className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                            Knowledge Base
+                          </h3>
+                          <p className="text-sm mt-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                            Give the AI reference material scoped to this process. The scope will be pre-selected for you.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (!selectedProcessData) return;
+                          navigate("/knowledge-base", {
+                            state: {
+                              prefillProcess: {
+                                id: selectedProcessData.id,
+                                name: selectedProcessData.name,
+                                stages: selectedProcessData.stages.map((s) => ({ id: s.id, name: s.name })),
+                              },
+                            },
+                          });
+                        }}
+                      >
+                        <Database className="w-4 h-4" />
+                        Add Knowledge Base
+                      </Button>
                     </div>
 
                     {/* Advanced Settings */}

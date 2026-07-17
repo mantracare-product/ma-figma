@@ -58,6 +58,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
+import ChatbotTab from "../components/chats/ChatbotTab";
 
 // ─── Type Definitions ────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ interface WhatsappTemplate {
   createdAt: string;
 }
 
-interface CampaignNode {
+export interface CampaignNode {
   id: string;
   type: "message" | "delay" | "condition" | "end";
   label: string;
@@ -108,7 +109,7 @@ interface CampaignNode {
   conditionValue?: string;
 }
 
-interface Campaign {
+export interface Campaign {
   id: string;
   name: string;
   status: "draft" | "active" | "paused" | "completed";
@@ -121,14 +122,14 @@ interface Campaign {
   nodes: CampaignNode[];
 }
 
-interface BusinessInfoItem {
+export interface BusinessInfoItem {
   id: number;
   title: string;
   information: string;
   active: boolean;
 }
 
-interface EscalationRule {
+export interface EscalationRule {
   id: string;
   keyword: string;
   responsiblePersonId: string;
@@ -271,7 +272,7 @@ const getInitials = (name: string) => name.split(" ").map(p => p[0]).join("").to
 
 // ─── Collapsible Accordion Section (Process.tsx-style) ────────────────────────
 
-interface AccordionSectionProps {
+export interface AccordionSectionProps {
   title: string;
   icon: React.ReactNode;
   iconBg: string;
@@ -281,7 +282,7 @@ interface AccordionSectionProps {
   badgeColor?: string;
 }
 
-const AccordionSection: React.FC<AccordionSectionProps> = ({
+export const AccordionSection: React.FC<AccordionSectionProps> = ({
   title, icon, iconBg, children, defaultOpen = false, badge, badgeColor = "bg-gray-100 text-gray-600"
 }) => {
   const [open, setOpen] = useState(defaultOpen);
@@ -705,63 +706,7 @@ export default function Chats() {
     setEditingCampaignId(null);
   };
 
-  // ── Chatbot State ──
-  const [chatbotEnabled, setChatbotEnabled] = useState(true);
-  const [greetingMessage, setGreetingMessage] = useState("Hello! 👋 Welcome to Mantra Health. How can I help you today?");
-  const [aiObjective, setAiObjective] = useState("You are a helpful AI assistant for Mantra Health. Your goal is to answer patient questions, help schedule appointments, and provide information about our services. Always be empathetic, concise, and professional. Escalate to a human when the patient asks for one.");
-  const [businessInfoItems, setBusinessInfoItems] = useState<BusinessInfoItem[]>([
-    { id: 1, title: "Clinic Hours", information: "Monday–Saturday, 9 AM – 7 PM. Closed on Sundays and public holidays.", active: true },
-    { id: 2, title: "Services Offered", information: "General consultation, lab tests, physiotherapy, and specialist referrals.", active: true },
-  ]);
-  const [showBusinessInfoForm, setShowBusinessInfoForm] = useState(false);
-  const [businessInfoFormData, setBusinessInfoFormData] = useState({ title: "", information: "", active: true });
-  const [editingBusinessInfoId, setEditingBusinessInfoId] = useState<number | null>(null);
-
-  // Business Hours
-  const [businessHoursEnabled, setBusinessHoursEnabled] = useState(true);
-  const [afterHoursPersonId, setAfterHoursPersonId] = useState("");
-  const [offlineMessage, setOfflineMessage] = useState("We're currently offline. We'll get back to you during business hours (Mon–Sat, 9AM–7PM).");
-
-  // Human Handoff
-  const [handoffEnabled, setHandoffEnabled] = useState(true);
-  const [handoffKeyword, setHandoffKeyword] = useState("human");
-  const [handoffPersonId, setHandoffPersonId] = useState("");
-
-  // Appointment Booking
-  const [appointmentBookingEnabled, setAppointmentBookingEnabled] = useState(true);
-  const [appointmentCampaignId, setAppointmentCampaignId] = useState("");
-  const [appointmentPersonId, setAppointmentPersonId] = useState("");
-
-  // Escalation Rules (Advance tab)
-  const [escalationRules, setEscalationRules] = useState<EscalationRule[]>([
-    { id: "esc-1", keyword: "cancel subscription", responsiblePersonId: "2", enabled: true },
-    { id: "esc-2", keyword: "complaint", responsiblePersonId: "1", enabled: true },
-  ]);
-  const [showEscalationForm, setShowEscalationForm] = useState(false);
-  const [editingEscalationId, setEditingEscalationId] = useState<string | null>(null);
-  const [escalationForm, setEscalationForm] = useState({ keyword: "", responsiblePersonId: "" });
-
-  // Fallback / AI Model (Advance tab)
-  const [fallbackMessage, setFallbackMessage] = useState("I'm not sure I understood that. Could you rephrase, or would you like to speak with a team member?");
-  const [aiModelTier, setAiModelTier] = useState("Balanced");
-  const [aiVoiceStyle, setAiVoiceStyle] = useState("Professional");
-
-  const handleSaveEscalation = () => {
-    if (!escalationForm.keyword.trim() || !escalationForm.responsiblePersonId) {
-      toast.error("Keyword and responsible person are required");
-      return;
-    }
-    if (editingEscalationId) {
-      setEscalationRules(prev => prev.map(r => r.id === editingEscalationId ? { ...r, ...escalationForm } : r));
-      toast.success("Rule updated");
-    } else {
-      setEscalationRules(prev => [...prev, { id: `esc-${Date.now()}`, ...escalationForm, enabled: true }]);
-      toast.success("Rule added");
-    }
-    setShowEscalationForm(false);
-    setEditingEscalationId(null);
-    setEscalationForm({ keyword: "", responsiblePersonId: "" });
-  };
+  // ── Chatbot state is now managed inside <ChatbotTab /> ──
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -1296,463 +1241,15 @@ export default function Chats() {
           </div>
         )}
 
+
         {/* ══════════════════════════════════════════════════════
-            TAB: CHATBOT — Process.tsx-style layout
+            TAB: CHATBOT — Managed by ChatbotTab component
         ══════════════════════════════════════════════════════ */}
         {activeTab === "chatbot" && (
-          <div className="flex gap-6 min-h-[calc(100vh-250px)] items-start">
-
-            {/* Left Sidebar — Process-style tab list */}
-            <div className="w-[280px] shrink-0">
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Chatbot</h2>
-                  {/* Master toggle */}
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={chatbotEnabled}
-                      onChange={e => { setChatbotEnabled(e.target.checked); toast.success(e.target.checked ? "Chatbot enabled" : "Chatbot disabled"); }} />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500" />
-                  </label>
-                </div>
-                <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 ${chatbotEnabled ? "bg-green-50 border border-green-200" : "bg-gray-50 border border-gray-200"}`}>
-                  <div className={`w-2 h-2 rounded-full ${chatbotEnabled ? "bg-green-500" : "bg-gray-400"}`} />
-                  <p className="text-xs font-medium" style={{ color: chatbotEnabled ? '#15803d' : '#6b7280', fontFamily: "Outfit, sans-serif" }}>
-                    {chatbotEnabled ? "Active — handling inbound messages" : "Inactive"}
-                  </p>
-                </div>
-
-                {/* Live preview */}
-                <div className="rounded-xl border-2 border-gray-800 overflow-hidden bg-[#E5DDD5]" style={{ height: '260px', display: 'flex', flexDirection: 'column' }}>
-                  <div className="bg-[#075E54] text-white px-3 py-2 flex items-center gap-2 flex-shrink-0">
-                    <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center"><Bot className="w-3.5 h-3.5 text-white" /></div>
-                    <div><p className="text-xs font-bold leading-none">Mantra Health Bot</p><p className="text-[9px] opacity-75 mt-0.5">{chatbotEnabled ? "● Online" : "○ Offline"}</p></div>
-                  </div>
-                  <div className="flex-1 p-3 space-y-2 overflow-y-auto">
-                    <div className="flex justify-start">
-                      <div className="bg-white rounded-lg rounded-tl-none shadow-sm px-2.5 py-1.5 max-w-[85%]">
-                        <p className="text-[10px] text-gray-800 leading-snug">{greetingMessage || "Hello! How can I help?"}</p>
-                        <p className="text-[8px] text-gray-400 mt-0.5 text-right">10:00 AM</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <div className="bg-[#DCF8C6] rounded-lg rounded-tr-none shadow-sm px-2.5 py-1.5 max-w-[80%]">
-                        <p className="text-[10px] text-gray-800 leading-snug">I need to book an appointment</p>
-                        <p className="text-[8px] text-gray-400 mt-0.5 text-right">10:01 AM ✓✓</p>
-                      </div>
-                    </div>
-                    <div className="flex justify-start">
-                      <div className="bg-white rounded-lg rounded-tl-none shadow-sm px-2.5 py-1.5 max-w-[85%]">
-                        <p className="text-[10px] text-gray-800 leading-snug">Sure! Let me help you book that. What date works best?</p>
-                        <p className="text-[8px] text-gray-400 mt-0.5 text-right">10:01 AM</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white px-2.5 py-1.5 flex items-center gap-1.5 border-t border-gray-200 flex-shrink-0">
-                    <div className="flex-1 bg-gray-100 rounded-full px-2.5 py-1 text-[9px] text-gray-400">Type a message...</div>
-                    <div className="w-6 h-6 bg-[#075E54] rounded-full flex items-center justify-center"><Send className="w-3 h-3 text-white" /></div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Panel — Accordion Settings */}
-            <div className="flex-1 space-y-3">
-
-              {/* ── BASIC TAB heading ── */}
-              <div className="flex items-center gap-3 mb-2">
-                <div className="bg-white border border-gray-200 rounded-xl p-1 flex gap-1 shadow-sm">
-                  {["Basic", "Advanced"].map(tab => (
-                    <button key={tab}
-                      onClick={() => {/* handled by accordion visibility below */ }}
-                      className="px-4 py-1.5 text-sm font-medium rounded-lg text-blue-600 bg-blue-50"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* ────────── BASIC SETTINGS ────────── */}
-
-              {/* 1. Greeting Message */}
-              <AccordionSection
-                title="Greeting Message"
-                icon={<MessageCircle className="w-5 h-5 text-blue-600" />}
-                iconBg="bg-blue-100"
-                defaultOpen={true}
-              >
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Sent automatically when a contact opens a new conversation.
-                </p>
-                <textarea rows={3} value={greetingMessage} onChange={e => setGreetingMessage(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
-                  style={{ fontFamily: "Outfit, sans-serif" }} />
-              </AccordionSection>
-
-              {/* 2. AI Objective / Behaviour (like Caller Pitch) */}
-              <AccordionSection
-                title="AI Objective & Behaviour"
-                icon={<Bot className="w-5 h-5 text-purple-600" />}
-                iconBg="bg-purple-100"
-                defaultOpen={false}
-              >
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Define the AI's role, goals, and how it should respond. This shapes every reply OpenAI generates — think of it as the system prompt for this chatbot.
-                </p>
-                <textarea rows={6} value={aiObjective} onChange={e => setAiObjective(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y bg-white"
-                  placeholder="You are a helpful assistant for [Business]. Your goal is to..."
-                  style={{ fontFamily: "Outfit, sans-serif", minHeight: '120px' }} />
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-100">
-                  <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Intent detection is handled automatically by OpenAI — no manual keyword lists needed. The AI interprets context and responds accordingly.
-                  </p>
-                </div>
-              </AccordionSection>
-
-              {/* 3. Business Information */}
-              <AccordionSection
-                title="Business Information"
-                icon={<FileText className="w-5 h-5 text-teal-600" />}
-                iconBg="bg-teal-100"
-                defaultOpen={false}
-                badge={businessInfoItems.filter(i => i.active).length > 0 ? `${businessInfoItems.filter(i => i.active).length} active` : undefined}
-                badgeColor="bg-teal-100 text-teal-700"
-              >
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Facts the AI should know and use in replies — hours, services, pricing, FAQs.
-                </p>
-                <div className="space-y-2">
-                  {businessInfoItems.map(item => (
-                    <div key={item.id} className={`p-3 border rounded-lg bg-white ${item.active ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-xs font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>{item.title}</span>
-                        <div className="flex items-center gap-1.5">
-                          {item.active && <span className="text-[9px] font-bold text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-full">Active</span>}
-                          <button onClick={() => { setEditingBusinessInfoId(item.id); setBusinessInfoFormData({ title: item.title, information: item.information, active: item.active }); setShowBusinessInfoForm(true); }}
-                            className="p-1 hover:bg-gray-100 rounded"><Pencil className="w-3 h-3 text-gray-500" /></button>
-                          <button onClick={() => { setBusinessInfoItems(prev => prev.filter(i => i.id !== item.id)); toast.success("Removed"); }}
-                            className="p-1 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3 text-red-400" /></button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-500 line-clamp-2" style={{ fontFamily: "Outfit, sans-serif" }}>{item.information}</p>
-                    </div>
-                  ))}
-                </div>
-                {showBusinessInfoForm && (
-                  <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/40 space-y-3">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Title</label>
-                      <input type="text" value={businessInfoFormData.title} onChange={e => setBusinessInfoFormData(p => ({ ...p, title: e.target.value }))} placeholder="e.g. Clinic Hours"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-600 mb-1">Information</label>
-                      <textarea rows={2} value={businessInfoFormData.information} onChange={e => setBusinessInfoFormData(p => ({ ...p, information: e.target.value }))} placeholder="Monday to Saturday, 9 AM – 7 PM."
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" checked={businessInfoFormData.active} onChange={e => setBusinessInfoFormData(p => ({ ...p, active: e.target.checked }))}
-                          className="w-4 h-4 rounded text-blue-600" />
-                        <span className="text-xs font-medium text-gray-700">Active</span>
-                      </label>
-                      <div className="flex gap-2">
-                        <button type="button" onClick={() => { setShowBusinessInfoForm(false); setEditingBusinessInfoId(null); setBusinessInfoFormData({ title: "", information: "", active: true }); }}
-                          className="px-3 py-1.5 text-xs border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50">Cancel</button>
-                        <button type="button" onClick={() => {
-                          if (!businessInfoFormData.title || !businessInfoFormData.information) return;
-                          if (editingBusinessInfoId !== null) {
-                            setBusinessInfoItems(prev => prev.map(i => i.id === editingBusinessInfoId ? { ...i, ...businessInfoFormData } : i));
-                            toast.success("Updated");
-                          } else {
-                            setBusinessInfoItems(prev => [...prev, { id: Date.now(), ...businessInfoFormData }]);
-                            toast.success("Added");
-                          }
-                          setShowBusinessInfoForm(false); setEditingBusinessInfoId(null); setBusinessInfoFormData({ title: "", information: "", active: true });
-                        }} className="px-3 py-1.5 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {!showBusinessInfoForm && (
-                  <button type="button" onClick={() => setShowBusinessInfoForm(true)}
-                    className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-xs font-semibold text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors flex items-center justify-center gap-1.5">
-                    <Plus className="w-3.5 h-3.5" /> Add Information
-                  </button>
-                )}
-              </AccordionSection>
-
-              {/* 4. Business Hours */}
-              <AccordionSection
-                title="Business Hours"
-                icon={<Clock className="w-5 h-5 text-amber-600" />}
-                iconBg="bg-amber-100"
-                defaultOpen={false}
-                badge={businessHoursEnabled ? "On" : "Off"}
-                badgeColor={businessHoursEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>Restrict chatbot to business hours</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={businessHoursEnabled} onChange={e => setBusinessHoursEnabled(e.target.checked)} />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                  </label>
-                </div>
-                {businessHoursEnabled && (
-                  <>
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-100">
-                      <p className="text-xs text-amber-800 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Mon–Sat, 9 AM – 7 PM · Configure exact hours in <span className="underline cursor-pointer">Settings → Business Hours</span>
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>After-hours Offline Message</label>
-                      <textarea rows={2} value={offlineMessage} onChange={e => setOfflineMessage(e.target.value)}
-                        className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
-                        style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Responsible Person <span className="text-gray-400 font-normal text-xs ml-1">— handles after-hours enquiries</span>
-                      </label>
-                      <select value={afterHoursPersonId} onChange={e => setAfterHoursPersonId(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                        <option value="">Select team member...</option>
-                        {AVAILABLE_EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </AccordionSection>
-
-              {/* 5. Human Handoff */}
-              <AccordionSection
-                title="Human Handoff"
-                icon={<UserCheck className="w-5 h-5 text-indigo-600" />}
-                iconBg="bg-indigo-100"
-                defaultOpen={false}
-                badge={handoffEnabled ? "On" : "Off"}
-                badgeColor={handoffEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>Enable handoff to a human agent</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={handoffEnabled} onChange={e => setHandoffEnabled(e.target.checked)} />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                  </label>
-                </div>
-                {handoffEnabled && (
-                  <>
-                    <div>
-                      <label className="block text-sm font-semibold mb-1.5" style={{ fontFamily: "DM Sans, sans-serif" }}>Trigger Keyword</label>
-                      <p className="text-xs text-gray-500 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>When a contact sends this word, the conversation is flagged for a human.</p>
-                      <input type="text" value={handoffKeyword} onChange={e => setHandoffKeyword(e.target.value)}
-                        placeholder="e.g. human, agent, support" className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Responsible Person <span className="text-gray-400 font-normal text-xs ml-1">— assigned when handoff is triggered</span>
-                      </label>
-                      <select value={handoffPersonId} onChange={e => setHandoffPersonId(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                        <option value="">Select team member...</option>
-                        {AVAILABLE_EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </AccordionSection>
-
-              {/* 6. Appointment Booking */}
-              <AccordionSection
-                title="Appointment Booking"
-                icon={<Calendar className="w-5 h-5 text-rose-600" />}
-                iconBg="bg-rose-100"
-                defaultOpen={false}
-                badge={appointmentBookingEnabled ? "On" : "Off"}
-                badgeColor={appointmentBookingEnabled ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800" style={{ fontFamily: "Outfit, sans-serif" }}>Enable booking via chatbot</span>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" checked={appointmentBookingEnabled} onChange={e => setAppointmentBookingEnabled(e.target.checked)} />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600" />
-                  </label>
-                </div>
-                {appointmentBookingEnabled && (
-                  <>
-                    <div className="flex items-start gap-2 p-3 rounded-lg bg-blue-50 border border-blue-100">
-                      <Info className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-blue-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        When the AI detects booking intent, it triggers the selected campaign flow. Create booking campaigns in the <span className="font-semibold">Template Builder</span> tab.
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Booking Campaign / Flow</label>
-                      <select value={appointmentCampaignId} onChange={e => setAppointmentCampaignId(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                        <option value="">Select campaign...</option>
-                        {campaigns.map(c => <option key={c.id} value={c.id}>{c.name} ({c.status})</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Responsible Person <span className="text-gray-400 font-normal text-xs ml-1">— confirms bookings</span>
-                      </label>
-                      <select value={appointmentPersonId} onChange={e => setAppointmentPersonId(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                        <option value="">Select team member...</option>
-                        {AVAILABLE_EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </AccordionSection>
-
-              {/* ────────── ADVANCED SETTINGS ────────── */}
-              <div className="pt-4 border-t border-gray-200">
-                <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-1" style={{ fontFamily: "Outfit, sans-serif" }}>Advanced</p>
-              </div>
-
-              {/* 7. Escalation Rules */}
-              <AccordionSection
-                title="Escalation Rules"
-                icon={<Shield className="w-5 h-5 text-orange-600" />}
-                iconBg="bg-orange-100"
-                defaultOpen={false}
-                badge={escalationRules.filter(r => r.enabled).length > 0 ? `${escalationRules.filter(r => r.enabled).length} rules` : undefined}
-                badgeColor="bg-orange-100 text-orange-700"
-              >
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Hard overrides — when these keywords appear, always route to a specific person instead of letting the AI improvise. These take priority over the AI's own responses.
-                </p>
-                <div className="space-y-2">
-                  {escalationRules.map(rule => {
-                    const person = AVAILABLE_EMPLOYEES.find(e => e.id === rule.responsiblePersonId);
-                    return (
-                      <div key={rule.id} className={`flex items-center justify-between p-3 border rounded-lg bg-white ${rule.enabled ? "border-gray-200" : "border-gray-100 opacity-60"}`}>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-bold bg-orange-50 text-orange-700 px-2 py-0.5 rounded-full font-mono">{rule.keyword}</span>
-                            {!rule.enabled && <span className="text-[9px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">Disabled</span>}
-                          </div>
-                          <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>→ {person?.name || "Unassigned"}</p>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" checked={rule.enabled}
-                              onChange={() => setEscalationRules(prev => prev.map(r => r.id === rule.id ? { ...r, enabled: !r.enabled } : r))} />
-                            <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600" />
-                          </label>
-                          <button onClick={() => { setEditingEscalationId(rule.id); setEscalationForm({ keyword: rule.keyword, responsiblePersonId: rule.responsiblePersonId }); setShowEscalationForm(true); }}
-                            className="p-1.5 hover:bg-gray-100 rounded"><Pencil className="w-3.5 h-3.5 text-gray-500" /></button>
-                          <button onClick={() => { setEscalationRules(prev => prev.filter(r => r.id !== rule.id)); toast.success("Rule removed"); }}
-                            className="p-1.5 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5 text-red-400" /></button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {showEscalationForm && (
-                  <div className="p-4 border border-blue-200 rounded-lg bg-blue-50/40 space-y-3">
-                    <h4 className="text-sm font-bold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingEscalationId ? "Edit Rule" : "New Escalation Rule"}</h4>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Trigger Keyword</label>
-                        <input type="text" value={escalationForm.keyword} onChange={e => setEscalationForm(p => ({ ...p, keyword: e.target.value }))} placeholder="cancel subscription"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none" style={{ fontFamily: "Outfit, sans-serif" }} />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wide">Route To</label>
-                        <select value={escalationForm.responsiblePersonId} onChange={e => setEscalationForm(p => ({ ...p, responsiblePersonId: e.target.value }))}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none" style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                          <option value="">Select person...</option>
-                          {AVAILABLE_EMPLOYEES.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => { setShowEscalationForm(false); setEditingEscalationId(null); setEscalationForm({ keyword: "", responsiblePersonId: "" }); }}>Cancel</Button>
-                      <Button variant="primary" size="sm" onClick={handleSaveEscalation}>Save Rule</Button>
-                    </div>
-                  </div>
-                )}
-                {!showEscalationForm && (
-                  <button type="button" onClick={() => { setEditingEscalationId(null); setEscalationForm({ keyword: "", responsiblePersonId: "" }); setShowEscalationForm(true); }}
-                    className="w-full py-2.5 border-2 border-dashed border-gray-300 rounded-lg text-xs font-semibold text-blue-600 hover:border-blue-400 hover:bg-blue-50/30 transition-colors flex items-center justify-center gap-1.5">
-                    <Plus className="w-3.5 h-3.5" /> Add Escalation Rule
-                  </button>
-                )}
-              </AccordionSection>
-
-              {/* 8. Fallback Message */}
-              <AccordionSection
-                title="Fallback Message"
-                icon={<AlertTriangle className="w-5 h-5 text-yellow-600" />}
-                iconBg="bg-yellow-100"
-                defaultOpen={false}
-              >
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Sent when OpenAI cannot generate a confident or appropriate response. Use this as a safety net.
-                </p>
-                <textarea rows={3} value={fallbackMessage} onChange={e => setFallbackMessage(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white"
-                  style={{ fontFamily: "Outfit, sans-serif" }} />
-              </AccordionSection>
-
-              {/* 9. AI Model & Response Style */}
-              <AccordionSection
-                title="AI Model & Response Style"
-                icon={<Settings className="w-5 h-5 text-gray-600" />}
-                iconBg="bg-gray-100"
-                defaultOpen={false}
-              >
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Model Tier</label>
-                    <select value={aiModelTier} onChange={e => setAiModelTier(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                      <option value="Express">Express — Fast, lightweight</option>
-                      <option value="Balanced">Balanced — Smart & swift</option>
-                      <option value="Smartest">Smartest — Deep reasoning</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Response Style</label>
-                    <select value={aiVoiceStyle} onChange={e => setAiVoiceStyle(e.target.value)}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      style={{ fontFamily: "Outfit, sans-serif", color: '#020817' }}>
-                      <option value="Professional">Professional</option>
-                      <option value="Friendly">Friendly & Warm</option>
-                      <option value="Concise">Concise</option>
-                      <option value="Empathetic">Empathetic</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 p-3 rounded-lg bg-gray-50 border border-gray-200">
-                  <Info className="w-4 h-4 text-gray-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Model selection affects response quality and cost. Balanced is recommended for most healthcare chatbots. Style is injected as a tone instruction into each request.
-                  </p>
-                </div>
-              </AccordionSection>
-
-              {/* Save Button */}
-              <div className="pt-2 pb-6">
-                <Button variant="primary" className="w-full" onClick={() => toast.success("Chatbot settings saved")}>
-                  Save All Settings
-                </Button>
-              </div>
-            </div>
-          </div>
+          <ChatbotTab
+            campaigns={campaigns}
+            employees={AVAILABLE_EMPLOYEES}
+          />
         )}
       </div>
 
