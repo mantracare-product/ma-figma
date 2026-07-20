@@ -25,6 +25,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   call: "Call Fields",
   service: "Service Fields",
   organization: "Organization Fields",
+  teamMember: "Team Member Fields",
 };
 
 const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization"];
@@ -39,6 +40,7 @@ const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plur
   call: { singular: "call", plural: "calls" },
   service: { singular: "service", plural: "services" },
   organization: { singular: "organization", plural: "organizations" },
+  teamMember: { singular: "team member", plural: "team members" },
 };
 
 interface CreateFieldModalProps {

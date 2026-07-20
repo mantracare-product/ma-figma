@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, X } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
+import { useFieldRegistry, FieldModule } from "../../context/FieldRegistryContext";
 
 interface VariableSelectorModalProps {
     isOpen: boolean;
@@ -9,69 +10,20 @@ interface VariableSelectorModalProps {
     onInsert: (variable: string) => void;
 }
 
-const CATEGORIES = [
-    {
-        id: "system",
-        label: "System Fields",
-        variables: [
-            { name: "Contact Name", token: "{{ContactName}}" },
-            { name: "Email", token: "{{ContactEmail}}" },
-            { name: "Phone", token: "{{ContactPhone}}" },
-            { name: "Country", token: "{{Country}}" },
-            { name: "Language", token: "{{Language}}" },
-        ],
-    },
-    {
-        id: "call",
-        label: "Call Logs",
-        variables: [
-            { name: "Call Duration", token: "{{CallDuration}}" },
-            { name: "Call Summary", token: "{{CallSummary}}" },
-            { name: "Call Sentiment", token: "{{CallSentiment}}" },
-            { name: "Call Intent", token: "{{CallIntent}}" },
-            { name: "Call Status", token: "{{CallStatus}}" },
-            { name: "Call Transcription", token: "{{CallTranscription}}" },
-        ],
-    },
-    {
-        id: "stage",
-        label: "Stage & Process",
-        variables: [
-            { name: "Current Stage", token: "{{CurrentStage}}" },
-            { name: "Current Process", token: "{{CurrentProcess}}" },
-            { name: "Stage Entered At", token: "{{StageEnteredAt}}" },
-        ],
-    },
-    {
-        id: "appointment",
-        label: "Appointment",
-        variables: [
-            { name: "Appointment Date", token: "{{AppointmentDate}}" },
-            { name: "Appointment Time", token: "{{AppointmentTime}}" },
-            { name: "Appointment With", token: "{{AppointmentWith}}" },
-            { name: "Meeting ID", token: "{{MeetingID}}" },
-        ],
-    },
-    {
-        id: "org",
-        label: "Organization",
-        variables: [
-            { name: "Org Name", token: "{{OrgName}}" },
-            { name: "Org Domain", token: "{{OrgDomain}}" },
-        ],
-    },
-    {
-        id: "custom",
-        label: "Custom Fields",
-        variables: [
-            { name: "Custom Field 1", token: "{{CustomField1}}" },
-            { name: "Custom Field 2", token: "{{CustomField2}}" },
-            { name: "Custom Field 3", token: "{{CustomField3}}" },
-        ],
-    },
-];
+const MODULE_LABELS: Record<string, string> = {
+  client: "Client Fields",
+  process: "Process Fields",
+  appointment: "Appointment Fields",
+  call: "Call Fields",
+  service: "Service Fields",
+  organization: "Organization Fields",
+  teamMember: "Team Member Fields",
+};
+
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember"];
 
 export default function VariableSelectorModal({ isOpen, onClose, onInsert }: VariableSelectorModalProps) {
+    const { getAllFields } = useFieldRegistry();
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<string | null>(null);
 
@@ -82,8 +34,26 @@ export default function VariableSelectorModal({ isOpen, onClose, onInsert }: Var
         setSearch("");
     };
 
+    // Construct categories dynamically from the field registry
+    const categories = ALL_MODULES.map((module) => {
+        const fields = getAllFields(module).map((f) => {
+            const tokenVal = module === "teamMember" 
+                ? `teamMember.${f.key}` 
+                : (module === "client" ? f.key : `${module}.${f.key}`);
+            return {
+                name: f.label,
+                token: `{{${tokenVal}}}`
+            };
+        });
+        return {
+            id: module,
+            label: MODULE_LABELS[module] || module,
+            variables: fields
+        };
+    }).filter(cat => cat.variables.length > 0);
+
     const q = search.toLowerCase();
-    const visible = CATEGORIES.map((cat) => ({
+    const visible = categories.map((cat) => ({
         ...cat,
         variables: cat.variables.filter(
             (v) => !q || v.name.toLowerCase().includes(q) || v.token.toLowerCase().includes(q)

@@ -1,4 +1,5 @@
 import { Bot } from "../app/components/chats/ChatbotTab";
+import { getSavedFieldValue, resolveProviderName } from "./chatbotFlowEngine";
 
 export interface TestChatTurn {
   role: "user" | "bot" | "system";
@@ -6,7 +7,9 @@ export interface TestChatTurn {
   matchedReason?: string;
   isMockGenerated?: boolean;
   buttons?: { label: string; nextNodeId: string | null }[];
+  nodeId?: string; // tracks which node was active during this turn
 }
+
 
 export interface TestReplyResult {
   text: string;
@@ -116,6 +119,30 @@ export async function generateTestBotReply(
   };
 }
 
-export function resolveTestVariables(text: string): string {
-  return text.replace(/\{\{[^}]+\}\}/g, "there");
+export function resolveTestVariables(text: string, history: TestChatTurn[] = [], bot?: Bot): string {
+  if (!text) return "";
+  return text.replace(/\{\{([^}]+)\}\}/g, (match, expression) => {
+    const varName = expression.trim();
+    
+    // 1. Resolve teamMember fields
+    if (varName.startsWith("teamMember.") && bot) {
+      const key = varName.split(".")[1];
+      const selectedProvider = resolveProviderName(bot, history) || "Dr. Sarah Jenkins";
+      if (key === "name") return selectedProvider;
+      if (key === "email") return `${selectedProvider.toLowerCase().replace(/[^a-z0-9]/g, "")}@mantracare.org`;
+      if (key === "phone") return "+1 (555) 456-7890";
+      if (key === "role") return "Specialist";
+      if (key === "assigned_service") return "Initial Consultation";
+      if (key === "next_available_slot") return "Thu at 3:30 PM";
+    }
+    
+    // 2. Resolve other fields from history
+    if (bot) {
+      const val = getSavedFieldValue(varName, history, bot);
+      if (val) return val;
+    }
+    
+    // Fallback
+    return "there";
+  });
 }

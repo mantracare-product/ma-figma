@@ -1,10 +1,18 @@
 import { Bot } from "../app/components/chats/ChatbotTab";
+import { getLiveTeamMembers, SYSTEM_SEEDS } from "../app/context/FieldRegistryContext";
+import { availableProcesses } from "../app/components/ui/ProcessStageSelect";
+import { TestChatTurn } from "./chatbotTestReply";
 
+export interface FetchedOption {
+  id: string;
+  label: string;      // what's shown to the user (e.g. Dr. Rao, Mon at 9:00 AM)
+  value: string;       // what gets saved to the mapped field
+}
+
+// Extended with context fields to resolve upstream fetch outputs and prior responses
 export interface FlowExecutionContext {
-  simulatedIdentity: "new_contact" | "returning_with_process" | "returning_no_process";
-  // For "returning_with_process" only — which process/stage to pretend the test contact is already in:
-  simulatedProcessName?: string;
-  simulatedStageName?: string;
+  fetchedOptions?: FetchedOption[];
+  history?: TestChatTurn[];
 }
 
 export interface FlowStepResult {
@@ -13,74 +21,184 @@ export interface FlowStepResult {
   buttons?: { label: string; nextNodeId: string | null }[]; // null = no outgoing connection configured yet
   awaitingInput: boolean; // true if this node expects free-text (Open Question) rather than a button tap
   isEntryPoint?: boolean;
+  saveResponseField?: string;
+  fetchedOptions?: FetchedOption[]; // Output slot data feed passed to next step
+  chatbotHandoff?: { targetBotId: string }; // Set when this node hands off to another bot
 }
 
-const MOCK_PROCESSES_FOR_ENTRY_ROUTER = [
-  // Kept in sync manually with Process.tsx's seed data for now — do not let this drift silently;
-  // if Process.tsx's seed processes change, update this list too.
-  { name: "Patient Intake", firstStageName: "Initial Contact" },
-  { name: "Follow-up Calls", firstStageName: "Post-Visit Check" },
-];
+export function getLiveServices(): FetchedOption[] {
+  try {
+    const raw = sessionStorage.getItem("services");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.map((s: any, idx: number) => ({
+          id: String(s.id || idx + 1),
+          label: s.name || s.label,
+          value: s.name || s.value
+        }));
+      }
+    }
+  } catch {}
+
+  return [
+    { id: "1", label: "Initial Consultation", value: "Initial Consultation" },
+    { id: "2", label: "Follow-up Visit", value: "Follow-up Visit" },
+    { id: "3", label: "Dental Cleaning", value: "Dental Cleaning" },
+    { id: "4", label: "X-Ray Imaging", value: "X-Ray Imaging" }
+  ];
+}
+
+export function mockAvailabilitySlots(providerName: string): FetchedOption[] {
+  const nameHash = providerName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+  const times = ["9:00 AM", "10:30 AM", "1:00 PM", "3:30 PM"];
+  
+  const slots: FetchedOption[] = [];
+  const count = 3 + (nameHash % 3); // 3, 4, or 5 slots
+  for (let i = 0; i < count; i++) {
+    const day = days[(nameHash + i) % days.length];
+    const time = times[(nameHash * (i + 1)) % times.length];
+    const slotText = `${day} at ${time}`;
+    slots.push({
+      id: `slot-${i}-${nameHash}`,
+      label: slotText,
+      value: slotText
+    });
+  }
+  return slots;
+}
+
+export function getSavedFieldValue(fieldKey: string, history: TestChatTurn[], bot: Bot): string {
+  if (!history) return "";
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn.role === "user" && turn.nodeId) {
+      const node = bot.flow?.nodes.find(n => n.id === turn.nodeId);
+      if (node && node.type === "question" && node.data?.saveResponseField === fieldKey) {
+        return turn.text;
+      }
+    }
+  }
+  return "";
+}
+
+export function resolveProviderName(bot: Bot, history: TestChatTurn[]): string {
+  if (!history || !bot?.flow?.nodes) return "";
+  for (let i = history.length - 1; i >= 0; i--) {
+    const turn = history[i];
+    if (turn.role === "user" && turn.nodeId) {
+      const node = bot.flow.nodes.find(n => n.id === turn.nodeId);
+      if (node && node.type === "question") {
+        if (node.data?.optionsSource?.module === "teamMembers" || node.data?.saveResponseField === "client.responsible") {
+          return turn.text;
+        }
+      }
+    }
+  }
+  return getSavedFieldValue("client.responsible", history, bot);
+}
+
+export function resolveDynamicOptions(moduleOrKey: string): FetchedOption[] {
+  if (moduleOrKey === "teamMembers") {
+    return getLiveTeamMembers().map(m => ({ id: String(m.id), label: m.label, value: m.value }));
+  }
+  if (moduleOrKey === "services") {
+    return getLiveServices();
+  }
+  if (moduleOrKey === "processes") {
+    return availableProcesses.map((p, i) => ({ id: String(i + 1), label: p, value: p }));
+  }
+  if (moduleOrKey.includes(".")) {
+    const [moduleName, key] = moduleOrKey.split(".");
+    // Check sessionStorage first (for custom fields)
+    try {
+      const saved = sessionStorage.getItem("fieldRegistry_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const moduleFields = parsed[moduleName] || [];
+        const field = moduleFields.find((f: any) => f.key === key);
+        if (field && field.options) {
+          return field.options.map((o: any) => ({ id: String(o.id), label: o.label, value: o.value }));
+        }
+      }
+    } catch {}
+
+    // Check system seeds
+    const seeds = (SYSTEM_SEEDS as any)[moduleName] || [];
+    const seedField = seeds.find((f: any) => f.key === key);
+    if (seedField && seedField.options) {
+      return seedField.options.map((o: any) => ({ id: String(o.id), label: o.label, value: o.value }));
+    }
+    // Backward compatibility for team member selectors
+    if (key === "responsible" || key === "provider") {
+      return getLiveTeamMembers().map(m => ({ id: String(m.id), label: m.label, value: m.value }));
+    }
+  }
+  return [];
+}
 
 /**
  * Executes the Entry Point node. Called exactly once, when the test/real conversation
- * receives its first inbound message.
+ * starts (Outbound) or receives its first message (Inbound).
+ * Returns the FlowStepResult of the first connected node.
  */
-export function executeEntryRouter(bot: Bot, ctx: FlowExecutionContext): FlowStepResult {
+export function executeEntryRouter(bot: Bot, ctx?: FlowExecutionContext): FlowStepResult | null {
   const entryNode = bot.flow?.nodes.find(n => n.type === "entryRouter");
-  const excludedProcesses: string[] = entryNode?.data?.excludedProcesses ?? [];
-  const showReturningStage: boolean = entryNode?.data?.showReturningStage ?? true;
+  if (!entryNode) return null;
 
-  const newContactPrompt = entryNode?.data?.newContactPrompt ?? "Hi! How can I help you today?";
-  const returningContactPromptTemplate = entryNode?.data?.returningContactPrompt ?? 'Welcome back! You\'re currently in "{{processName}}" — {{stageName}}.';
-  const processButtonLabels: Record<string, string> = entryNode?.data?.processButtonLabels ?? {};
-
-  if (ctx.simulatedIdentity === "returning_with_process" && showReturningStage) {
-    const formattedReturningPrompt = returningContactPromptTemplate
-      .replace("{{processName}}", ctx.simulatedProcessName ?? "")
-      .replace("{{stageName}}", ctx.simulatedStageName ?? "");
-
+  const nextId = entryNode.connections?.[0]?.toNodeId ?? null;
+  if (!nextId) {
     return {
-      nodeId: entryNode?.id ?? "entry-router",
-      isEntryPoint: true,
-      messageText: formattedReturningPrompt,
-      buttons: [
-        { label: `Continue with ${ctx.simulatedProcessName}`, nextNodeId: entryNode?.connections?.[0]?.toNodeId ?? null },
-        { label: "See other options", nextNodeId: "__process_picker__" }, // sentinel, resolved by panel
-      ],
+      nodeId: entryNode.id,
+      messageText: "[Entry point has no outgoing connections]",
       awaitingInput: false,
+      isEntryPoint: true
     };
   }
 
-  // New contact, or returning client with no active process, or "See other options" was tapped —
-  // show the process picker.
-  const eligible = MOCK_PROCESSES_FOR_ENTRY_ROUTER.filter(p => !excludedProcesses.includes(p.name));
-  return {
-    nodeId: entryNode?.id ?? "entry-router",
-    isEntryPoint: true,
-    messageText: newContactPrompt,
-    buttons: eligible.map(p => ({
-      label: processButtonLabels[p.name] ?? p.name,
-      nextNodeId: `__enroll__${p.name}` // sentinel, resolved by caller
-    })),
-    awaitingInput: false,
-  };
+  const result = executeFlowNode(bot, nextId, ctx);
+  if (result) {
+    return {
+      ...result,
+      isEntryPoint: true
+    };
+  }
+  return null;
 }
 
 /**
  * Executes any non-entry node given its id — Send a Message, Ask a Question, Send a Template,
- * Set a Condition. Returns what the bot says/asks next, and the outgoing options if the node branches.
+ * Set a Condition. Returns what the bot says/asks next, and the outgoing options.
  */
-export function executeFlowNode(bot: Bot, nodeId: string): FlowStepResult | null {
+export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionContext): FlowStepResult | null {
   const node = bot.flow?.nodes.find(n => n.id === nodeId);
   if (!node) return null;
 
   switch (node.type) {
+    case "connectChatbot": {
+      const targetBotId = node.data?.targetBotId || "";
+      let targetBotName = "Unknown Bot";
+      try {
+        const raw = localStorage.getItem("chatbotBots");
+        if (raw) {
+          const all = JSON.parse(raw) as Bot[];
+          const found = all.find(b => b.id === targetBotId);
+          if (found) targetBotName = found.name;
+        }
+      } catch {}
+      return {
+        nodeId: node.id,
+        messageText: `[Flow Action: Hand off conversation to '${targetBotName}']`,
+        awaitingInput: false,
+        chatbotHandoff: { targetBotId }
+      };
+    }
     case "message":
       return {
         nodeId: node.id,
         messageText: node.data?.text ?? "",
-        buttons: undefined, // Message nodes are single-output; branching only happens on question/condition nodes
+        buttons: undefined,
         awaitingInput: false,
       };
     case "template":
@@ -89,30 +207,72 @@ export function executeFlowNode(bot: Bot, nodeId: string): FlowStepResult | null
         messageText: `[Would send template: ${node.data?.templateId ?? "Unnamed template"}]`,
         awaitingInput: false,
       };
-    case "question":
+    case "question": {
+      let choices: FetchedOption[] = [];
+      const mode = node.data?.optionsSource?.mode ?? "static";
+      const moduleKey = node.data?.optionsSource?.module;
+
+      if (mode === "available") {
+        if (moduleKey === "providerAvailability") {
+          // Provider Availability: real-time slots, resolved per provider at conversation time
+          const providerName = resolveProviderName(bot, ctx?.history || []) || "Sarah Jenkins";
+          choices = mockAvailabilitySlots(providerName);
+        } else {
+          // Available: fixed registry (team members, services, processes, custom field options)
+          choices = resolveDynamicOptions(moduleKey || "teamMembers");
+        }
+      } else {
+        // Static: literal admin-typed choices
+        const staticList = node.data?.questionType === "buttons"
+          ? (node.data?.buttons || [])
+          : (node.data?.listItems || []);
+        choices = staticList.map((label: string, i: number) => ({
+          id: String(i),
+          label: label || `Choice ${i + 1}`,
+          value: label
+        }));
+      }
+
       if (node.data?.questionType === "open" || !node.data?.questionType) {
         return {
           nodeId: node.id,
           messageText: node.data?.text ?? "Please enter your response:",
-          awaitingInput: true
+          awaitingInput: true,
+          saveResponseField: node.data?.saveResponseField,
         };
       }
-      // Buttons or List type — both render as tappable options in Test Mode
-      const choices = node.data?.questionType === "buttons"
-        ? (node.data?.buttons ?? [])
-        : (node.data?.listItems ?? []);
+
+      // Provider Availability: all slots share a single "any" outgoing connection
+      if (mode === "available" && moduleKey === "providerAvailability") {
+        const nextNodeIdForAny = node.connections?.find(c => c.fromPort === "any" || !c.fromPort)?.toNodeId ?? null;
+        return {
+          nodeId: node.id,
+          messageText: node.data?.text ?? "Please choose an available slot:",
+          buttons: choices.map((opt: FetchedOption) => ({
+            label: opt.label,
+            nextNodeId: nextNodeIdForAny,
+          })),
+          awaitingInput: false,
+          saveResponseField: node.data?.saveResponseField,
+          fetchedOptions: choices
+        };
+      }
+
+      // Static and standard Available modes: per-choice connections via choice-N ports
       return {
         nodeId: node.id,
         messageText: node.data?.text ?? "Please choose an option:",
-        buttons: choices.map((opt: string, i: number) => ({
-          label: opt || `Choice ${i + 1}`,
-          nextNodeId: node.connections?.[i]?.toNodeId ?? null,
+        buttons: choices.map((opt: FetchedOption, i: number) => ({
+          label: opt.label,
+          nextNodeId: node.connections?.find(c => c.fromPort === `choice-${i}`)?.toNodeId
+            ?? node.connections?.[i]?.toNodeId
+            ?? null,
         })),
         awaitingInput: false,
+        saveResponseField: node.data?.saveResponseField,
       };
+    }
     case "condition":
-      // Test Mode can't evaluate real condition variables (no live client/call data) —
-      // surface this honestly instead of guessing a branch.
       return {
         nodeId: node.id,
         messageText: `[Condition node reached - Test Mode can't evaluate live variables. Configured branches: ${
@@ -126,24 +286,13 @@ export function executeFlowNode(bot: Bot, nodeId: string): FlowStepResult | null
         }),
         awaitingInput: false,
       };
-    case "assignHuman":
-      return {
-        nodeId: node.id,
-        messageText: `[Flow Action: Assign to human - employee ID ${node.data?.employeeId || "unassigned"}]`,
-        awaitingInput: false,
-      };
-    case "assignTeam":
-      return {
-        nodeId: node.id,
-        messageText: `[Flow Action: Assign team - ${node.data?.teamName || "unassigned"}]`,
-        awaitingInput: false,
-      };
     case "updateChatStatus":
       return {
         nodeId: node.id,
         messageText: `[Flow Action: Update chat status to ${node.data?.status || "Open"}]`,
         awaitingInput: false,
       };
+
     case "setTags":
       return {
         nodeId: node.id,

@@ -1,4 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   MessageCircle,
   HelpCircle,
@@ -38,6 +39,7 @@ import { InfoTooltip } from "../help/InfoTooltip";
 import { Bot, ChannelType } from "./ChatbotTab";
 import { WhatsappTemplate } from "../../pages/Chats";
 import { availableProcesses } from "../ui/ProcessStageSelect";
+import { resolveDynamicOptions } from "../../../lib/chatbotFlowEngine";
 import TestChatDrawer from "./TestChatDrawer";
 import ChatbotAdvanceSettingsDrawer from "./ChatbotAdvanceSettingsDrawer";
 import WhatsAppMessagePreview from "./WhatsAppMessagePreview";
@@ -57,7 +59,8 @@ export interface ChatbotFlowNode {
     | "assignTeam"
     | "updateChatStatus"
     | "setTags"
-    | "timeDelay";
+    | "timeDelay"
+    | "connectChatbot";
   position: { x: number; y: number };
   data: Record<string, any>;
   connections: Array<{ toNodeId: string; fromPort?: string }>;
@@ -162,6 +165,13 @@ const NODE_STYLE: Record<
     activeBorder: "border-slate-500",
     text: "text-slate-700 dark:text-slate-400",
     iconBg: "bg-slate-200"
+  },
+  connectChatbot: {
+    bg: "bg-indigo-50 dark:bg-indigo-950/20",
+    border: "border-indigo-300",
+    activeBorder: "border-indigo-500",
+    text: "text-indigo-700 dark:text-indigo-400",
+    iconBg: "bg-indigo-100"
   }
 };
 
@@ -191,7 +201,8 @@ const NODE_ICONS: Record<ChatbotFlowNode["type"], React.ReactNode> = {
   assignTeam: <Users className="w-4 h-4 text-indigo-600" />,
   updateChatStatus: <RefreshCw className="w-4 h-4 text-purple-600" />,
   setTags: <Tag className="w-4 h-4 text-purple-600" />,
-  timeDelay: <Clock className="w-4 h-4 text-slate-650" />
+  timeDelay: <Clock className="w-4 h-4 text-slate-650" />,
+  connectChatbot: <BotIcon className="w-4 h-4 text-indigo-600" />
 };
 
 const NODE_LABELS: Record<ChatbotFlowNode["type"], string> = {
@@ -204,7 +215,8 @@ const NODE_LABELS: Record<ChatbotFlowNode["type"], string> = {
   assignTeam: "Assign Team",
   updateChatStatus: "Update Chat Status",
   setTags: "Set Tags",
-  timeDelay: "Time Delay"
+  timeDelay: "Time Delay",
+  connectChatbot: "Connect to Chatbot"
 };
 
 const CHANNEL_CLASSES: Record<ChannelType, string> = {
@@ -218,6 +230,54 @@ const CHANNEL_LABELS: Record<ChannelType, string> = {
   sms: "SMS",
   website: "Website"
 };
+
+// ── Option Source Constants & Helpers ──────────────────────────────────────
+
+const LIVE_REGISTRIES = [
+  { value: "teamMembers", label: "Team Members" },
+  { value: "services",    label: "Services" },
+  { value: "processes",   label: "Processes" },
+  { value: "providerAvailability", label: "Provider Availability (Real-Time)" }
+];
+
+const MODULE_LABELS: Record<string, string> = {
+  client:       "Client Fields",
+  process:      "Process Fields",
+  appointment:  "Appointment Fields",
+  call:         "Call Fields",
+  service:      "Service Fields",
+  organization: "Organization Fields"
+};
+
+function getDynamicOptions(moduleKey: string): { id: string; label: string; value: string }[] {
+  return resolveDynamicOptions(moduleKey);
+}
+
+function getSelectFields(): { key: string; label: string; module: string }[] {
+  try {
+    const saved = sessionStorage.getItem("fieldRegistry_v1");
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const result: { key: string; label: string; module: string }[] = [];
+      for (const [mod, fields] of Object.entries(parsed)) {
+        for (const f of (fields as any[])) {
+          if (f.type === "select" && (f.options?.length ?? 0) > 0) {
+            result.push({ key: `${mod}.${f.key}`, label: f.label, module: mod });
+          }
+        }
+      }
+      return result;
+    }
+  } catch {}
+  return [];
+}
+
+function resolveDynamicSaveField(optionsSource: any): { fieldKey: string } | null {
+  if (!optionsSource?.module) return null;
+  if (optionsSource.module === "teamMembers") return { fieldKey: "client.responsible" };
+  if (optionsSource.module.includes(".")) return { fieldKey: optionsSource.module };
+  return null;
+}
 
 export default function ChatbotFlowBuilder({
   bot,
@@ -260,6 +320,27 @@ export default function ChatbotFlowBuilder({
   // Textarea refs for VariablePickerButton cursor insertion
   const messageTextRef = useRef<HTMLTextAreaElement | null>(null);
   const questionTextRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Module dropdown portal (for Available option source)
+  const [moduleDropdownOpen, setModuleDropdownOpen] = useState(false);
+  const [moduleDropdownPos, setModuleDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
+  const moduleTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const moduleDropdownPanelRef = useRef<HTMLDivElement | null>(null);
+
+  // Other bots for handoff picker (from localStorage)
+  const otherBots = useMemo(() => {
+    try {
+      const raw = localStorage.getItem("chatbotBots");
+      if (raw) {
+        const all = JSON.parse(raw) as { id: string; name: string }[];
+        return all.filter(b => b.id !== bot.id);
+      }
+    } catch {}
+    return [];
+  }, [bot.id]);
+
+  // Select-type custom fields (for Available source module dropdown)
+  const selectFields = useMemo(() => getSelectFields(), []);
 
   // Canvas
   const [nodes, setNodes] = useState<CanvasNode[]>(() => {
@@ -431,6 +512,8 @@ export default function ChatbotFlowBuilder({
       config = { tags: [] };
     } else if (type === "timeDelay") {
       config = { duration: 1, unit: "Minute" };
+    } else if (type === "connectChatbot") {
+      config = { targetBotId: "" };
     }
 
     const newNode: CanvasNode = {
@@ -467,8 +550,19 @@ export default function ChatbotFlowBuilder({
   // ── Ports & Routing ────────────────────────────────────────────────────────
 
   const getOutputPorts = (node: CanvasNode): Array<{ port: string; label: string }> => {
+    // connectChatbot is terminal — control fully transfers, no outgoing ports are drawn
+    if (node.type === "connectChatbot") return [];
+
     if (node.type === "question") {
       const qType = node.config.questionType || "open";
+      const mode = node.config.optionsSource?.mode;
+      const module = node.config.optionsSource?.module;
+
+      // Provider Availability: single shared connector for any slot
+      if (mode === "available" && module === "providerAvailability") {
+        return [{ port: "any", label: "Any slot selected →" }];
+      }
+
       if (qType === "buttons") {
         const buttons = node.config.buttons || [];
         return buttons.map((b: string, i: number) => ({
@@ -664,12 +758,39 @@ export default function ChatbotFlowBuilder({
         { type: "assignTeam" as const, label: "Assign Team", icon: <Users className="w-4 h-4" />, desc: "Forward thread context to a specific team" },
         { type: "updateChatStatus" as const, label: "Update Chat Status", icon: <RefreshCw className="w-4 h-4" />, desc: "Change context ticket category" },
         { type: "setTags" as const, label: "Set Tags", icon: <Tag className="w-4 h-4" />, desc: "Affix tags filters to caller metadata" },
-        { type: "timeDelay" as const, label: "Time Delay", icon: <Clock className="w-4 h-4" />, desc: "Pause flow progression for interval duration" }
+        { type: "timeDelay" as const, label: "Time Delay", icon: <Clock className="w-4 h-4" />, desc: "Pause flow progression for interval duration" },
+        { type: "connectChatbot" as const, label: "Connect to Chatbot", icon: <BotIcon className="w-4 h-4" />, desc: "Hand off the conversation to another bot" }
       ]
     }
   ];
 
   const handleSave = () => {
+    // Validate chatbotHandoff references
+    let allBots: Bot[] = [];
+    try {
+      const raw = localStorage.getItem("chatbotBots");
+      if (raw) {
+        allBots = JSON.parse(raw);
+      }
+    } catch {}
+
+    for (const node of nodes) {
+      if (node.type === "connectChatbot") {
+        const targetBotId = node.config?.targetBotId;
+        if (targetBotId) {
+          if (targetBotId === bot.id) {
+            alert(`Validation Error on "${node.label}": A chatbot cannot hand off to itself. Please select a different target bot.`);
+            return;
+          }
+          const exists = allBots.some(b => b.id === targetBotId);
+          if (!exists) {
+            alert(`Validation Warning on "${node.label}": The target chatbot no longer exists. Please reconfigure the handoff before saving.`);
+            return;
+          }
+        }
+      }
+    }
+
     // 1. Compile nodes into Bot Flow builder formats
     const chatbotNodes: ChatbotFlowNode[] = nodes.map((node) => {
       // Find outbound connections from this node
@@ -1178,6 +1299,8 @@ export default function ChatbotFlowBuilder({
                               ? node.config.teamName || "Unassigned"
                               : node.type === "timeDelay"
                               ? `${node.config.duration} ${node.config.unit}`
+                              : node.type === "connectChatbot"
+                              ? `Handoff: ${otherBots.find(b => b.id === node.config.targetBotId)?.name || "Unassigned"}`
                               : "Double-click to set params"}
                           </p>
                         </div>
@@ -1555,108 +1678,329 @@ export default function ChatbotFlowBuilder({
                     />
                   </div>
 
-                  {configNode.config.questionType === "buttons" && (
-                    <div className="space-y-3 pt-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Button Choices
-                      </label>
-                      {(configNode.config.buttons || []).map((btn: string, idx: number) => (
-                        <div key={idx} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={btn}
-                            onChange={(e) => {
-                              const list = [...configNode.config.buttons];
-                              list[idx] = e.target.value;
-                              updateNodeConfig(configNode.id, { buttons: list });
-                            }}
-                            placeholder={`Choice ${idx + 1}`}
-                            className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const list = (configNode.config.buttons || []).filter(
-                                (_: any, i: number) => i !== idx
-                              );
-                              updateNodeConfig(configNode.id, { buttons: list });
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                  {/* ── Option Source (buttons & list only) ─────────────────── */}
+                  {(configNode.config.questionType === "buttons" || configNode.config.questionType === "list") && (
+                    <div className="space-y-3 pt-1">
+                      {/* Segmented control */}
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                          Option Source
+                        </label>
+                        <div className="flex p-1 bg-slate-100 rounded-lg border border-slate-200">
+                          {(["static", "available"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => {
+                                if (m === "static") {
+                                  updateNodeConfig(configNode.id, { optionsSource: { mode: "static" } });
+                                } else {
+                                  const mod = "teamMembers";
+                                  const opts = getDynamicOptions(mod);
+                                  const labels = opts.map(o => o.label);
+                                  const isBtn = configNode.config.questionType === "buttons";
+                                  const nextSource = { mode: "available", module: mod };
+                                  const resolvedSave = resolveDynamicSaveField(nextSource);
+                                  updateNodeConfig(configNode.id, {
+                                    optionsSource: nextSource,
+                                    saveResponseField: resolvedSave?.fieldKey,
+                                    buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                    listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                  });
+                                }
+                              }}
+                              className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer capitalize ${
+                                (m === "static" && (!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static")) ||
+                                (m !== "static" && configNode.config.optionsSource?.mode === m)
+                                  ? "bg-white text-gray-800 shadow-sm border border-gray-200"
+                                  : "text-gray-500 hover:text-gray-700"
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
                         </div>
-                      ))}
-                      {(configNode.config.buttons || []).length < 3 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const list = [...(configNode.config.buttons || []), ""];
-                            updateNodeConfig(configNode.id, { buttons: list });
-                          }}
-                          className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
-                        >
-                          + Add Button Choice
-                        </button>
+                      </div>
+
+                      {/* ── STATIC: manual text editors ── */}
+                      {(!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static") && (
+                        <>
+                          {configNode.config.questionType === "buttons" && (
+                            <div className="space-y-2">
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Button Choices</label>
+                              {(configNode.config.buttons || []).map((btn: string, idx: number) => (
+                                <div key={idx} className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={btn}
+                                    onChange={(e) => {
+                                      const list = [...configNode.config.buttons];
+                                      list[idx] = e.target.value;
+                                      updateNodeConfig(configNode.id, { buttons: list });
+                                    }}
+                                    placeholder={`Choice ${idx + 1}`}
+                                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = (configNode.config.buttons || []).filter((_: any, i: number) => i !== idx);
+                                      updateNodeConfig(configNode.id, { buttons: list });
+                                    }}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              {(configNode.config.buttons || []).length < 3 && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateNodeConfig(configNode.id, { buttons: [...(configNode.config.buttons || []), ""] })}
+                                  className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
+                                >
+                                  + Add Button Choice
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {configNode.config.questionType === "list" && (
+                            <div className="space-y-2">
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">List Options</label>
+                              {(configNode.config.listItems || []).map((item: string, idx: number) => (
+                                <div key={idx} className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={item}
+                                    onChange={(e) => {
+                                      const list = [...configNode.config.listItems];
+                                      list[idx] = e.target.value;
+                                      updateNodeConfig(configNode.id, { listItems: list });
+                                    }}
+                                    placeholder={`Item ${idx + 1}`}
+                                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const list = (configNode.config.listItems || []).filter((_: any, i: number) => i !== idx);
+                                      updateNodeConfig(configNode.id, { listItems: list });
+                                    }}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded animate-none cursor-pointer"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                              {(configNode.config.listItems || []).length < 10 && (
+                                <button
+                                  type="button"
+                                  onClick={() => updateNodeConfig(configNode.id, { listItems: [...(configNode.config.listItems || []), ""] })}
+                                  className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
+                                >
+                                  + Add List Option
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </>
                       )}
+
+                      {/* ── AVAILABLE: registry + custom field picker + preview ── */}
+                      {configNode.config.optionsSource?.mode === "available" && (() => {
+                        const currentModule = configNode.config.optionsSource?.module || "teamMembers";
+
+                        const getSelectedLabel = () => {
+                          const reg = LIVE_REGISTRIES.find(r => r.value === currentModule);
+                          if (reg) return reg.label;
+                          const sf = selectFields.find(f => f.key === currentModule);
+                          if (sf) return `${sf.label} (${MODULE_LABELS[sf.module] ?? sf.module})`;
+                          return currentModule;
+                        };
+
+                        const customFieldGroups = (["client", "process", "appointment", "call", "service", "organization"] as const)
+                          .map(mod => ({ mod, label: MODULE_LABELS[mod], fields: selectFields.filter(f => f.module === mod) }))
+                          .filter(g => g.fields.length > 0);
+
+                        return (
+                          <div className="space-y-3 p-3 bg-slate-50 border border-gray-200 rounded-xl">
+                            {/* Source Module selector */}
+                            <div>
+                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                                Source Module
+                              </label>
+                              <div className="relative">
+                                <button
+                                  ref={moduleTriggerRef}
+                                  type="button"
+                                  onClick={() => {
+                                    if (moduleDropdownOpen) {
+                                      setModuleDropdownOpen(false);
+                                    } else {
+                                      const rect = moduleTriggerRef.current?.getBoundingClientRect();
+                                      if (rect) {
+                                        setModuleDropdownPos({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
+                                        setModuleDropdownOpen(true);
+                                      }
+                                    }
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 flex items-center justify-between shadow-sm hover:border-gray-300 transition-colors"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <span className="font-medium text-gray-700">{getSelectedLabel()}</span>
+                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                                </button>
+
+                                {moduleDropdownOpen && moduleDropdownPos && createPortal(
+                                  <>
+                                    <div className="fixed inset-0 cursor-default" style={{ zIndex: 9998 }} onClick={() => setModuleDropdownOpen(false)} />
+                                    <div
+                                      ref={moduleDropdownPanelRef}
+                                      className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden"
+                                      style={{ position: "absolute", top: moduleDropdownPos.top + 4, left: moduleDropdownPos.left, width: moduleDropdownPos.width, maxHeight: 280, zIndex: 9999, overflowY: "auto" }}
+                                    >
+                                      {/* Live Registries */}
+                                      <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-b border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                        Live Registries
+                                      </div>
+                                      {LIVE_REGISTRIES.map(item => (
+                                        <button
+                                          key={item.value}
+                                          type="button"
+                                          onClick={() => {
+                                            const isBtn = configNode.config.questionType === "buttons";
+                                            const nextSource = { mode: "available", module: item.value };
+                                            const resolvedSave = resolveDynamicSaveField(nextSource);
+                                            const opts = getDynamicOptions(item.value);
+                                            const labels = opts.map(o => o.label);
+                                            updateNodeConfig(configNode.id, {
+                                              optionsSource: nextSource,
+                                              saveResponseField: resolvedSave?.fieldKey,
+                                              buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                              listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                            });
+                                            setModuleDropdownOpen(false);
+                                          }}
+                                          className={`w-full text-left px-4 py-1.5 text-xs font-medium transition-colors ${currentModule === item.value ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
+                                          style={{ fontFamily: "Outfit, sans-serif" }}
+                                        >
+                                          {item.label}
+                                        </button>
+                                      ))}
+
+                                      {/* Custom Fields */}
+                                      {customFieldGroups.length > 0 && (
+                                        <>
+                                          <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-y border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                            Custom Fields
+                                          </div>
+                                          {customFieldGroups.map(g => (
+                                            <div key={g.mod}>
+                                              <div className="px-5 py-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>{g.label}</div>
+                                              {g.fields.map(field => (
+                                                <button
+                                                  key={field.key}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    const isBtn = configNode.config.questionType === "buttons";
+                                                    const nextSource = { mode: "available", module: field.key };
+                                                    const resolvedSave = resolveDynamicSaveField(nextSource);
+                                                    const opts = getDynamicOptions(field.key);
+                                                    const labels = opts.map(o => o.label);
+                                                    updateNodeConfig(configNode.id, {
+                                                      optionsSource: nextSource,
+                                                      saveResponseField: resolvedSave?.fieldKey,
+                                                      buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                                      listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                                    });
+                                                    setModuleDropdownOpen(false);
+                                                  }}
+                                                  className={`w-full text-left px-6 py-1.5 text-xs transition-colors ${currentModule === field.key ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
+                                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                                >
+                                                  {field.label}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          ))}
+                                        </>
+                                      )}
+                                    </div>
+                                  </>,
+                                  document.body
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Source Preview or Explainer */}
+                            {currentModule === "providerAvailability" ? (
+                              <div className="space-y-2 pt-1">
+                                <label className="block text-[10px] font-bold text-gray-450 uppercase tracking-wider mb-1">
+                                  Provider Availability
+                                </label>
+                                <p className="text-[11px] text-gray-500 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Fetches this provider's live availability at conversation time.
+                                </p>
+                                {!nodes.some(n =>
+                                  n.id !== configNode.id &&
+                                  n.type === "question" &&
+                                  (n.config?.optionsSource?.module === "teamMembers" || n.config?.saveResponseField === "client.responsible")
+                                ) && (
+                                  <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800 font-medium leading-relaxed">
+                                    ⚠️ No team member question found earlier in this flow — add one that saves to a Team Member field before this step.
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                  Source Preview
+                                </label>
+                                <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border rounded-lg max-h-28 overflow-y-auto">
+                                  {(() => {
+                                    const opts = getDynamicOptions(currentModule);
+                                    return opts.length > 0
+                                      ? opts.map((opt, i) => (
+                                          <span key={i} className="text-[10px] font-medium bg-slate-100 border px-2 py-0.5 rounded text-gray-600">{opt.label}</span>
+                                        ))
+                                      : <span className="text-xs text-gray-400 italic">No options found</span>;
+                                  })()}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
 
-                  {configNode.config.questionType === "list" && (
-                    <div className="space-y-3 pt-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        List Options
-                      </label>
-                      {(configNode.config.listItems || []).map((item: string, idx: number) => (
-                        <div key={idx} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={item}
-                            onChange={(e) => {
-                              const list = [...configNode.config.listItems];
-                              list[idx] = e.target.value;
-                              updateNodeConfig(configNode.id, { listItems: list });
-                            }}
-                            placeholder={`Item ${idx + 1}`}
-                            className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const list = (configNode.config.listItems || []).filter(
-                                (_: any, i: number) => i !== idx
-                              );
-                              updateNodeConfig(configNode.id, { listItems: list });
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded animate-none cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                      {(configNode.config.listItems || []).length < 10 && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const list = [...(configNode.config.listItems || []), ""];
-                            updateNodeConfig(configNode.id, { listItems: list });
-                          }}
-                          className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
-                        >
-                          + Add List Option
-                        </button>
-                      )}
-                    </div>
-                  )}
                   {/* Live WhatsApp-style preview for question node */}
                   <WhatsAppMessagePreview
                     botName={botName}
                     text={configNode.config.text || ""}
-                    buttons={configNode.config.questionType === "buttons" ? (configNode.config.buttons || []) : undefined}
-                    listItems={configNode.config.questionType === "list" ? (configNode.config.listItems || []) : undefined}
+                    buttons={
+                      configNode.config.questionType === "buttons"
+                        ? (configNode.config.optionsSource?.mode === "available"
+                            ? (configNode.config.optionsSource.module === "providerAvailability"
+                                ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM"]
+                                : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 3).map(o => o.label))
+                            : (configNode.config.buttons || []))
+                        : undefined
+                    }
+                    listItems={
+                      configNode.config.questionType === "list"
+                        ? (configNode.config.optionsSource?.mode === "available"
+                            ? (configNode.config.optionsSource.module === "providerAvailability"
+                                ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM", "Wed at 3:30 PM"]
+                                : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 10).map(o => o.label))
+                            : (configNode.config.listItems || []))
+                        : undefined
+                    }
                   />
                 </div>
               )}
+
 
               {/* WHATSAPP TEMPLATE CONFIG */}
               {configNode.type === "template" && (
@@ -1903,6 +2247,32 @@ export default function ChatbotFlowBuilder({
                         <option>Day</option>
                       </select>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* CONNECT CHATBOT CONFIG */}
+              {configNode.type === "connectChatbot" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
+                      Target Chatbot
+                    </label>
+                    <select
+                      value={configNode.config.targetBotId || ""}
+                      onChange={(e) => updateNodeConfig(configNode.id, { targetBotId: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                    >
+                      <option value="">Choose target bot...</option>
+                      {otherBots.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-[10px] text-gray-400 mt-2 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      The conversation will continue entirely inside the selected bot — nothing after this step will run.
+                    </p>
                   </div>
                 </div>
               )}

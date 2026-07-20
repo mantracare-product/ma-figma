@@ -9,9 +9,10 @@ const MODULE_LABELS: Record<string, string> = {
   call: "Call Fields",
   service: "Service Fields",
   organization: "Organization Fields",
+  teamMember: "Team Member Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember"];
 
 // Live field sources helper for backwards compatibility Proxy
 export function getLiveFieldSources() {
@@ -83,6 +84,7 @@ export interface VariablePickerButtonProps {
   moduleFilter?: FieldModule[];
   onBeforeOpen?: () => void;
   mode?: "insert" | "replace";
+  customFields?: { key: string; label: string }[];
 }
 
 const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
@@ -93,6 +95,7 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
   moduleFilter,
   onBeforeOpen,
   mode = "insert",
+  customFields,
 }) => {
   const { getAllFields } = useFieldRegistry();
   const [isOpen, setIsOpen] = useState(false);
@@ -106,11 +109,27 @@ const VariablePickerButton: React.FC<VariablePickerButtonProps> = ({
   // Filter and deduplicate modules
   const uniqueModules = Array.from(new Set(modulesToUse));
 
-  const variableGroups = uniqueModules.map(module => ({
-    value: module,
-    label: MODULE_LABELS[module] || module,
-    fields: getAllFields(module).map(f => ({ value: f.key, label: f.label })),
-  })).filter(g => g.fields.length > 0);
+  const variableGroups = customFields
+    ? [
+        {
+          value: "custom_flow",
+          label: "Populated Flow Fields",
+          fields: customFields.map((cf) => ({ value: cf.key, label: cf.label })),
+        },
+      ]
+    : uniqueModules
+        .map((module) => ({
+          value: module,
+          label: MODULE_LABELS[module] || module,
+          fields: getAllFields(module).map((f) => {
+            const tokenVal = module === "teamMember" 
+              ? `teamMember.${f.key}` 
+              : (module === "client" ? f.key : `${module}.${f.key}`);
+            return { value: tokenVal, label: f.label };
+          }),
+        }))
+        .filter((g) => g.fields.length > 0);
+
 
   const handleSelectField = (fieldValue: string) => {
     const insertText = `{{${fieldValue}}}`;
