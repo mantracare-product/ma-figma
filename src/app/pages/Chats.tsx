@@ -45,6 +45,7 @@ import {
   Volume2,
   Phone,
   AlertTriangle,
+  PanelLeft,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
@@ -59,6 +60,8 @@ import {
   SelectValue,
 } from "../components/ui/select";
 import ChatbotTab from "../components/chats/ChatbotTab";
+import InboxNavSidebar from "../components/chats/InboxNavSidebar";
+import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
 
 // ─── Type Definitions ────────────────────────────────────────────────────────
 
@@ -74,15 +77,17 @@ interface Conversation {
   id: string;
   contactName: string;
   phoneNumber: string;
-  channel: "whatsapp" | "sms";
+  channel: "whatsapp" | "sms" | "website";
   lastMessage: string;
   timestamp: string;
   unreadCount: number;
   status: "open" | "resolved";
   messages: Message[];
+  botStatus?: "active" | "paused" | "off";
+  assignedPersonId?: string;
 }
 
-interface WhatsappTemplate {
+export interface WhatsappTemplate {
   id: string;
   name: string;
   identifier: string;
@@ -122,16 +127,22 @@ export interface Campaign {
   nodes: CampaignNode[];
 }
 
-export interface BusinessInfoItem {
-  id: number;
-  title: string;
-  information: string;
-  active: boolean;
+
+
+export type EscalationMatchType = "contains" | "exact" | "starts_with";
+
+export interface TemplateRule {
+  id: string;
+  triggerKeyword: string;
+  matchType: EscalationMatchType;
+  templateId: string;
+  enabled: boolean;
 }
 
 export interface EscalationRule {
   id: string;
   keyword: string;
+  matchType: EscalationMatchType;
   responsiblePersonId: string;
   enabled: boolean;
 }
@@ -164,6 +175,8 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       { id: "msg-1-2", text: "Could I reschedule my appointment for tomorrow?", timestamp: "10:32 AM", sender: "contact" },
       { id: "msg-1-3", text: "I wanted to change my appointment slot to 3:00 PM if possible.", timestamp: "10:35 AM", sender: "contact" },
     ],
+    botStatus: "active",
+    assignedPersonId: "",
   },
   {
     id: "conv-2",
@@ -178,6 +191,8 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       { id: "msg-2-1", text: "Hi Michael, your lab reports have been received.", timestamp: "Yesterday, 4:15 PM", sender: "me", status: "read" },
       { id: "msg-2-2", text: "Thanks, I will confirm by tonight.", timestamp: "Yesterday, 4:20 PM", sender: "contact" },
     ],
+    botStatus: "paused",
+    assignedPersonId: "1",
   },
   {
     id: "conv-3",
@@ -192,6 +207,24 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       { id: "msg-3-1", text: "Hello Elena, how is your recovery progressing?", timestamp: "Yesterday, 11:00 AM", sender: "me", status: "read" },
       { id: "msg-3-2", text: "Awesome service! Thanks for checking in.", timestamp: "Yesterday, 11:15 AM", sender: "contact" },
     ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "conv-4",
+    contactName: "Priya Nair",
+    phoneNumber: "Website Visitor",
+    channel: "website",
+    lastMessage: "Do you accept walk-ins?",
+    timestamp: "2 hours ago",
+    unreadCount: 1,
+    status: "open",
+    messages: [
+      { id: "msg-4-1", text: "Hi! How can I help you today?", timestamp: "2 hours ago", sender: "me", status: "read" },
+      { id: "msg-4-2", text: "Do you accept walk-ins?", timestamp: "2 hours ago", sender: "contact" },
+    ],
+    botStatus: "active",
+    assignedPersonId: "",
   },
 ];
 
@@ -482,8 +515,11 @@ export default function Chats() {
   });
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
-  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms">("all");
-  const [statusFilter, setStatusFilter] = useState<"open" | "resolved" | "all">("open");
+  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website">("all");
+  type ViewFilter = "all" | "open" | "resolved" | "unread";
+  const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [showInlineSearch, setShowInlineSearch] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [showUseTemplateDropdown, setShowUseTemplateDropdown] = useState(false);
 
@@ -504,6 +540,14 @@ export default function Chats() {
     toast.success(`Conversation marked as ${newStatus}`);
   };
 
+  const handleToggleBotStatus = () => {
+    if (!activeConversation) return;
+    const current = activeConversation.botStatus ?? "off";
+    const nextStatus = current === "active" ? "paused" : "active";
+    setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: nextStatus } : c));
+    toast.success(`Bot is now ${nextStatus}`);
+  };
+
   const handleSendMessage = () => {
     if (!composerText.trim() || !activeConversation) return;
     const newMessage: Message = { id: `msg-${Date.now()}`, text: composerText, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: "me", status: "read" };
@@ -515,8 +559,11 @@ export default function Chats() {
   const filteredConversations = conversations.filter(c => {
     const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
     const matchesChannel = channelFilter === "all" ? true : c.channel === channelFilter;
-    const matchesStatus = statusFilter === "all" ? true : c.status === statusFilter;
-    return matchesSearch && matchesChannel && matchesStatus;
+    const matchesView =
+      viewFilter === "all" ? true :
+      viewFilter === "unread" ? c.unreadCount > 0 :
+      c.status === viewFilter;
+    return matchesSearch && matchesChannel && matchesView;
   });
 
   // ── Templates State ──
@@ -721,7 +768,7 @@ export default function Chats() {
         <div className="flex justify-between items-center bg-white p-2 border border-gray-200 rounded-xl shadow-sm">
           <div className="bg-gray-100 p-1 rounded-xl flex gap-1">
             {TAB_ORDER.map(tab => {
-              const label = tab === "chatbot" ? "Chatbot" : tab === "campaigns" ? "Campaigns" : tab === "templates" ? "Template Builder" : "Chats";
+              const label = tab === "chatbot" ? "Chatbot" : tab === "campaigns" ? "Campaigns" : tab === "templates" ? "Template Builder" : "Inbox";
               const tooltipText = tab === "chats"
                 ? "Real-time inbox to chat with patients over SMS or WhatsApp."
                 : tab === "campaigns"
@@ -748,36 +795,67 @@ export default function Chats() {
         ══════════════════════════════════════════════════════ */}
         {activeTab === "chats" && (
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex h-[calc(100vh-250px)] overflow-hidden">
-            {/* Left Pane */}
-            <div className="w-[320px] border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
-              {/* Search */}
-              <div className="p-4 border-b border-gray-200 bg-white">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)}
-                    placeholder="Search conversations..." className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    style={{ fontFamily: "Outfit, sans-serif" }} />
+            {/* Pane 0 — Nav Sidebar */}
+            {!navCollapsed && (
+              <InboxNavSidebar
+                channelFilter={channelFilter}
+                setChannelFilter={setChannelFilter}
+                viewFilter={viewFilter}
+                setViewFilter={setViewFilter}
+                onOpenSettings={() => handleTabChange("chatbot")}
+                onOpenBroadcasts={() => handleTabChange("campaigns")}
+              />
+            )}
+
+            {/* Pane 1 — List Pane */}
+            <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
+              {/* Header */}
+              <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button type="button" onClick={() => setNavCollapsed(v => !v)}
+                      className="p-1 hover:bg-gray-100 rounded text-gray-400 shrink-0"
+                      title={navCollapsed ? "Show sidebar" : "Hide sidebar"}>
+                      <PanelLeft className="w-4 h-4" />
+                    </button>
+                    <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : "All chats"}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button type="button" onClick={() => setShowInlineSearch(v => !v)}
+                      className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
+                      <Search className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => toast("Coming soon")}
+                      className="w-7 h-7 flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full">
+                      <Plus className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-              {/* Filters */}
-              <div className="px-4 py-2.5 border-b border-gray-200 bg-white space-y-2">
-                <div className="flex gap-1">
-                  {(["all", "whatsapp", "sms"] as const).map(ch => (
-                    <button key={ch} onClick={() => setChannelFilter(ch)}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${channelFilter === ch ? "bg-blue-50 border-blue-200 text-blue-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"}`}
+                <p className="text-[11px] text-gray-400 pl-7" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {filteredConversations.length} Chats · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
+                </p>
+                {showInlineSearch && (
+                  <div className="relative pt-1">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)} autoFocus
+                      placeholder="Search conversations..."
+                      className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      style={{ fontFamily: "Outfit, sans-serif" }} />
+                  </div>
+                )}
+                {/* View filter pills */}
+                <div className="flex gap-1.5 pt-1">
+                  {(["all", "open", "unread", "resolved"] as const).map(v => (
+                    <button key={v} onClick={() => setViewFilter(v)}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${
+                        viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
                       style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {ch === "all" ? "All" : ch === "whatsapp" ? "WhatsApp" : "SMS"}
+                      {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : "Resolved"}
                     </button>
                   ))}
-                  <div className="flex-1" />
-                  <Select value={statusFilter} onValueChange={(v: any) => setStatusFilter(v)}>
-                    <SelectTrigger className="h-7 text-xs rounded-lg border-gray-200 w-[90px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">Open</SelectItem>
-                      <SelectItem value="resolved">Resolved</SelectItem>
-                      <SelectItem value="all">All</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
               </div>
               {/* Conversation List */}
@@ -786,6 +864,11 @@ export default function Chats() {
                   <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
                 ) : filteredConversations.map(conv => {
                   const isSelected = conv.id === selectedConversationId;
+                  const botStatus = conv.botStatus ?? "off";
+                  const statusDotColor = botStatus === "active" ? "bg-blue-500" : botStatus === "paused" ? "bg-amber-500" : "bg-gray-400";
+                  const statusDotTitle = botStatus === "active" ? "Bot: Active" : botStatus === "paused" ? "Bot: Paused" : "Bot: Off";
+                  const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find(e => e.id === conv.assignedPersonId) : null;
+
                   return (
                     <div key={conv.id} onClick={() => setSelectedConversationId(conv.id)}
                       className={`flex items-start gap-3 p-4 cursor-pointer hover:bg-blue-50/30 transition-all border-l-2 border-b border-gray-100 ${isSelected ? "bg-blue-50 border-l-blue-600" : "border-l-transparent bg-white"}`}>
@@ -794,13 +877,21 @@ export default function Chats() {
                           {getInitials(conv.contactName)}
                         </div>
                         <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm" style={{ width: '18px', height: '18px' }}>
-                          {conv.channel === "whatsapp" ? <MessageCircle className="w-3 h-3 text-[#25D366]" /> : <MessageSquare className="w-3 h-3 text-blue-600" />}
+                          {conv.channel === "whatsapp" ? <MessageCircle className="w-3 h-3 text-[#25D366]" /> :
+                           conv.channel === "sms" ? <MessageSquare className="w-3 h-3 text-blue-600" /> :
+                           <Globe className="w-3 h-3 text-purple-600" />}
                         </span>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between mb-0.5">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColor}`} title={statusDotTitle} />
                           <h4 className={`text-sm font-semibold truncate ${isSelected ? "text-blue-700" : "text-gray-900"}`} style={{ fontFamily: "DM Sans, sans-serif" }}>{conv.contactName}</h4>
-                          <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.timestamp}</span>
+                          {assignedPerson && (
+                            <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+                              👤 {getInitials(assignedPerson.name)}
+                            </span>
+                          )}
+                          <span className="text-[10px] text-gray-400 flex-shrink-0 ml-auto" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.timestamp}</span>
                         </div>
                         <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.lastMessage}</p>
                         {conv.status === "resolved" && (
@@ -827,18 +918,69 @@ export default function Chats() {
                         {getInitials(activeConversation.contactName)}
                       </div>
                       <div>
-                        <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                            (activeConversation.botStatus ?? "off") === "active" ? "bg-blue-500" :
+                            (activeConversation.botStatus ?? "off") === "paused" ? "bg-amber-500" :
+                            "bg-gray-400"
+                          }`} title={`Bot status: ${activeConversation.botStatus ?? "off"}`} />
+                          <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
+                          {activeConversation.assignedPersonId && (() => {
+                            const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                            return emp ? (
+                              <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-2 py-0.5 rounded-full">
+                                Assigned to {emp.name}
+                              </span>
+                            ) : null;
+                          })()}
+                        </div>
                         <p className="text-xs text-gray-400 font-mono">{activeConversation.phoneNumber}</p>
                       </div>
-                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${activeConversation.channel === "whatsapp" ? "bg-[#E8F8F0] border-[#A8E6CF] text-[#2E7D32]" : "bg-blue-50 border-blue-100 text-blue-700"}`}>
-                        {activeConversation.channel}
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${CHANNEL_CLASSES[activeConversation.channel]}`}>
+                        {CHANNEL_LABELS[activeConversation.channel]}
                       </span>
                     </div>
-                    <Button variant="outline" size="sm" onClick={handleMarkResolved}
-                      className={activeConversation.status === "resolved" ? "border-green-500 text-green-600" : ""}>
-                      {activeConversation.status === "resolved" ? "Re-open" : "Mark Resolved"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      {(activeConversation.botStatus ?? "off") !== "off" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleToggleBotStatus}
+                          className={(activeConversation.botStatus ?? "off") === "paused" ? "border-amber-500 text-amber-600 hover:text-amber-700 hover:bg-amber-50" : ""}
+                        >
+                          {(activeConversation.botStatus ?? "off") === "active" ? "Pause Bot" : "Resume Bot"}
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={handleMarkResolved}
+                        className={activeConversation.status === "resolved" ? "border-green-500 text-green-600" : ""}>
+                        {activeConversation.status === "resolved" ? "Re-open" : "Mark Resolved"}
+                      </Button>
+                    </div>
                   </div>
+
+                  {/* Hand-off / Paused Bot warning banner */}
+                  {activeConversation.assignedPersonId && (() => {
+                    const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                    return emp ? (
+                      <div className="bg-amber-50 border-b border-amber-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-xs text-amber-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                          <span>Bot is paused. Conversation is assigned to <strong>{emp.name}</strong>.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "active", assignedPersonId: "" } : c));
+                            toast.success("Bot resumed and human assignment cleared");
+                          }}
+                          className="text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-md transition-colors"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          Resume Bot
+                        </button>
+                      </div>
+                    ) : null;
+                  })()}
 
                   {/* Messages */}
                   <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{ backgroundColor: '#F1F5F9' }}>
@@ -1249,6 +1391,7 @@ export default function Chats() {
           <ChatbotTab
             campaigns={campaigns}
             employees={AVAILABLE_EMPLOYEES}
+            templates={globalTemplates}
           />
         )}
       </div>

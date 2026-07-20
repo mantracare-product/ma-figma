@@ -2052,7 +2052,8 @@ export default function MyAIReceptionist() {
                         type: "text",
                         active: true,
                         tokens: Math.floor(newTextContent.length / 4), // Rough estimate
-                        content: newTextContent
+                        content: newTextContent,
+                        processing: false
                       };
                       setBusinessInfoEntries([...businessInfoEntries, newEntry]);
                       setShowAddTextModal(false);

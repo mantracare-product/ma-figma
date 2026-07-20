@@ -12,10 +12,10 @@ import {
   AlertCircle,
   Play,
 } from "lucide-react";
-import { Tooltip } from "../ui/Tooltip";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
-import { Modal } from "../ui/Modal";
+import { Tooltip } from "./ui/Tooltip";
+import { Button } from "./ui/Button";
+import { Input } from "./ui/Input";
+import { Modal } from "./ui/Modal";
 import { toast } from "sonner";
 
 export type KnowledgeSourceType = "text" | "document" | "url";
@@ -58,8 +58,8 @@ export interface KnowledgeBase {
 }
 
 interface KnowledgeBaseTabProps {
-  processName: string;
-  stageName: string;
+  processName?: string;
+  stageName?: string;
   knowledgeBases: KnowledgeBase[];
   onKnowledgeBasesChange: (knowledgeBases: KnowledgeBase[]) => void;
 }
@@ -564,8 +564,6 @@ const KnowledgeBaseHowItWorksModal: React.FC<{
 );
 
 const KnowledgeBaseTab: React.FC<KnowledgeBaseTabProps> = ({
-  processName,
-  stageName,
   knowledgeBases,
   onKnowledgeBasesChange,
 }) => {
