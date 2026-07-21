@@ -770,7 +770,7 @@ export default function Chats() {
   });
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
-  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website">("all");
+  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>(null);
   const [campaignStatusFilter, setCampaignStatusFilter] = useState<"all" | "active" | "draft" | "completed">("all");
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
@@ -1004,7 +1004,7 @@ export default function Chats() {
 
   const filteredConversations = conversations.filter(c => {
     const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
-    const matchesChannel = channelFilter === "all" ? true : c.channel === channelFilter;
+    const matchesChannel = channelFilter === null ? false : channelFilter === "all" ? true : c.channel === channelFilter;
     const matchesView =
       viewFilter === "all" ? true :
       viewFilter === "unread" ? c.unreadCount > 0 :
@@ -1401,10 +1401,6 @@ export default function Chats() {
                       className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
                       <Search className="w-4 h-4" />
                     </button>
-                    <button type="button" onClick={() => toast("Coming soon")}
-                      className="w-7 h-7 flex items-center justify-center bg-green-600 hover:bg-green-700 text-white rounded-full">
-                      <Plus className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
                 <p className="text-[11px] text-gray-400 pl-7" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -1434,7 +1430,15 @@ export default function Chats() {
               </div>
               {/* Conversation List */}
               <div className="flex-1 overflow-y-auto">
-                {filteredConversations.length === 0 ? (
+                {channelFilter === null ? (
+                  <div className="p-10 flex flex-col items-center text-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                      <MessageCircle className="w-6 h-6 text-gray-400" />
+                    </div>
+                    <p className="text-sm font-semibold text-gray-600" style={{ fontFamily: "DM Sans, sans-serif" }}>Select a channel</p>
+                    <p className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>Choose WhatsApp, SMS, or Website from the sidebar to view conversations.</p>
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
                 ) : filteredConversations.map(conv => {
                   const isSelected = conv.id === selectedConversationId;

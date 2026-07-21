@@ -27,7 +27,7 @@ interface ChatsNavSidebarProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   // Inbox sub-filters
-  channelFilter: "all" | ChannelType;
+  channelFilter: "all" | ChannelType | null;
   setChannelFilter: (v: "all" | ChannelType) => void;
 }
 
@@ -117,11 +117,11 @@ export default function InboxNavSidebar({
         <div className="flex-1 space-y-2 flex flex-col items-center">
           <button
             type="button"
-            onClick={() => handleTopLevelClick("chats")}
+            onClick={toggleCollapsed}
             className={`p-2.5 rounded-lg transition-colors relative ${
               activeTab === "chats" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
             }`}
-            title="Inbox"
+            title="Inbox — expand sidebar to pick a channel"
           >
             <InboxIcon className="w-5 h-5" />
           </button>
@@ -187,7 +187,7 @@ export default function InboxNavSidebar({
         {/* 1. INBOX */}
         <div>
           <div
-            onClick={() => handleTopLevelClick("chats")}
+            onClick={() => setInboxExpanded(prev => !prev)}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
               activeTab === "chats" ? "bg-green-50 text-green-800 font-semibold" : "text-gray-800 hover:bg-gray-100"
             }`}
@@ -196,13 +196,7 @@ export default function InboxNavSidebar({
               <InboxIcon className="w-4 h-4 text-green-700" />
               <span>Inbox</span>
             </div>
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setInboxExpanded(prev => !prev); }}
-              className="p-0.5 hover:bg-black/5 rounded text-gray-500"
-            >
-              {inboxExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-            </button>
+            {inboxExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
           </div>
 
           {inboxExpanded && (
