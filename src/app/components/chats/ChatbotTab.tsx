@@ -338,9 +338,6 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                       Channels
                     </th>
                     <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Linked Process
-                    </th>
-                    <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
                       Status
                     </th>
                     <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
@@ -406,17 +403,6 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                                 ))
                               )}
                             </div>
-                          </td>
-
-                          {/* Linked Process */}
-                          <td className="px-4 py-4">
-                            {bot.linkedProcessId ? (
-                              <span className="text-xs text-gray-700 font-medium bg-gray-100 px-2.5 py-1 rounded-lg">
-                                {availableProcesses.find(p => p === bot.linkedProcessId) || bot.linkedProcessId}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-gray-400 italic">Not linked</span>
-                            )}
                           </td>
 
                           {/* Status */}
