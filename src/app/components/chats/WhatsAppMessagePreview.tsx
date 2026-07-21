@@ -5,6 +5,10 @@ import { ButtonAction } from "../../../lib/chatbotTypes";
 interface WhatsAppMessagePreviewProps {
   botName: string;
   messageType?: "text" | "image" | "video" | "audio" | "document";
+  headerType?: "none" | "text" | "image" | "video" | "document";
+  headerText?: string;
+  headerMediaUrl?: string;
+  headerFileName?: string;
   text: string;
   mediaUrl?: string;
   caption?: string;
@@ -25,6 +29,10 @@ function getButtonIcon(actionType: ButtonAction["actionType"] | undefined) {
 export default function WhatsAppMessagePreview({
   botName,
   messageType = "text",
+  headerType = "none",
+  headerText,
+  headerMediaUrl,
+  headerFileName,
   text,
   mediaUrl,
   caption,
@@ -60,6 +68,20 @@ export default function WhatsAppMessagePreview({
         <div className={`rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] space-y-1.5 select-none relative ${
           flipped ? "bg-[#DCF8C6] ml-auto rounded-tr-none" : "bg-white rounded-tl-none"
         }`}>
+          {/* Header section if headerType !== "none" */}
+          {headerType !== "none" && (
+            <div className="border-b border-gray-100 pb-1 mb-1">
+              {headerType === "text" && headerText && (
+                <p className="font-bold text-[11px] text-gray-900">{headerText}</p>
+              )}
+              {headerType !== "text" && (
+                <div className="rounded bg-gray-100 border border-gray-200 px-2 py-2 text-center text-[9px] text-gray-600 font-mono">
+                  {headerType === "image" ? "🖼️ Header Image" : headerType === "video" ? "🎬 Header Video" : "📄 " + (headerFileName || "Header Document")}
+                  {headerMediaUrl ? <span className="block text-[8px] text-gray-400 truncate mt-0.5">{headerMediaUrl}</span> : null}
+                </div>
+              )}
+            </div>
+          )}
           {messageType !== "text" && mediaUrl && (
             <div className="rounded bg-gray-100 border border-gray-200 px-2 py-3 text-center text-[9px] text-gray-500 font-mono">
               {messageType === "image" ? "🖼️" : messageType === "video" ? "🎬" : messageType === "audio" ? "🎵" : "📄"}{" "}

@@ -1914,7 +1914,7 @@ export default function ChatbotFlowBuilder({
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                     >
                       <option value="">Select template...</option>
-                      {templates.map((tpl) => (
+                      {templates.filter(t => t.approvalStatus === "approved").map((tpl) => (
                         <option key={tpl.id} value={tpl.id}>
                           {tpl.name}
                         </option>
@@ -2257,7 +2257,7 @@ export default function ChatbotFlowBuilder({
                         className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
                       >
                         <option value="">Select template…</option>
-                        {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        {templates.filter(t => t.approvalStatus === "approved").map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     )}
                     {(configNode.config.noResponse?.type) === "chatbot" && (

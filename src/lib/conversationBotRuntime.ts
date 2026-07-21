@@ -14,6 +14,12 @@ export interface RuntimeMessage {
   sender: "contact" | "me";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
   buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+  header?: {
+    type?: "none" | "text" | "image" | "video" | "document";
+    text?: string;
+    mediaUrl?: string;
+    fileName?: string;
+  };
 }
 
 export interface ConversationRuntimeState {
@@ -39,6 +45,12 @@ export interface ConversationShape {
     status?: "sent" | "delivered" | "read";
     origin?: "human" | "bot" | "campaign" | "template" | "system";
     buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+    header?: {
+      type?: "none" | "text" | "image" | "video" | "document";
+      text?: string;
+      mediaUrl?: string;
+      fileName?: string;
+    };
   }>;
   botStatus?: "active" | "paused" | "off";
   assignedPersonId?: string;
@@ -83,11 +95,21 @@ export function buildTemplateMessage(
       }))
     : undefined;
 
+  const header = (template.headerType && template.headerType !== "none") || template.header?.type
+    ? {
+        type: template.headerType || template.header?.type || "none",
+        text: template.headerText || template.header?.content || "",
+        mediaUrl: template.headerMediaUrl || "",
+        fileName: template.headerFileName || "",
+      }
+    : undefined;
+
   return {
     text: resolvedText ?? template.bodyText,
     sender: extra?.sender || "me",
     origin: extra?.origin || "template",
     buttons,
+    header,
   };
 }
 

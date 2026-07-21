@@ -30,6 +30,7 @@ export interface FlowStepResult {
   chatbotHandoff?: { targetBotId: string }; // Set when this node hands off to another bot
   assignHuman?: { personId: string };       // Set when a humanHandoff "yes" fires
   delayMs?: number;                         // Set by timeDelay node, actual ms to wait
+  header?: { type?: string; text?: string; mediaUrl?: string; fileName?: string };
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -255,6 +256,7 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
       const templateId = node.data?.templateId;
       let msgText = `[Would send template: ${templateId ?? "Unnamed template"}]`;
       let templateButtons: any = undefined;
+      let templateHeader: any = undefined;
       if (templateId) {
         try {
           const rawTemplates = localStorage.getItem("whatsappGlobalTemplates");
@@ -265,6 +267,7 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
               const tmplMsg = buildTemplateMessage(tmpl, resolveTestVariables(tmpl.bodyText || ""));
               msgText = tmplMsg.text;
               templateButtons = tmplMsg.buttons;
+              templateHeader = tmplMsg.header;
             }
           }
         } catch {}
@@ -273,6 +276,7 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
         nodeId: node.id,
         messageText: msgText,
         buttons: templateButtons,
+        header: templateHeader,
         awaitingInput: false,
       };
     }

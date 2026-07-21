@@ -4,6 +4,7 @@ import { Bot } from "./ChatbotTab";
 import {
   ConversationShape,
   advanceBotForInboundMessage,
+  RuntimeMessage,
 } from "../../../lib/conversationBotRuntime";
 import { generateId } from "../../../lib/ids";
 
@@ -34,18 +35,14 @@ export default function TestAsContactDrawer({
   if (!isOpen || !conversation) return null;
 
   /** Helper: map a RuntimeMessage to a ConversationShape message row */
-  const makeMsg = (m: {
-    text: string;
-    sender: "contact" | "me";
-    origin?: string;
-    buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
-  }): ConversationShape["messages"][number] => ({
+  const makeMsg = (m: RuntimeMessage): ConversationShape["messages"][number] => ({
     id: generateId("msg"),
     text: m.text,
     timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     sender: m.sender,
-    origin: m.origin as ConversationShape["messages"][number]["origin"],
+    origin: m.origin,
     buttons: m.buttons,
+    header: m.header,
   });
 
   const handleSendMessage = async (
@@ -252,6 +249,20 @@ export default function TestAsContactDrawer({
                           : "bg-background border border-border text-foreground rounded-tl-xs"
                       }`}
                     >
+                      {/* Header block */}
+                      {msg.header && msg.header.type && msg.header.type !== "none" && (
+                        <div className="border-b border-border/50 pb-1.5 mb-1">
+                          {msg.header.type === "text" && msg.header.text ? (
+                            <p className="font-bold text-xs">{msg.header.text}</p>
+                          ) : (
+                            <div className="rounded bg-muted px-2 py-1.5 text-center text-[9px] font-mono text-muted-foreground">
+                              {msg.header.type === "image" ? "🖼️ Header Image"
+                                : msg.header.type === "video" ? "🎬 Header Video"
+                                : "📄 " + (msg.header.fileName || "Header Document")}
+                            </div>
+                          )}
+                        </div>
+                      )}
                       <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                       <div
                         className={`flex items-center justify-between text-[10px] gap-2 ${

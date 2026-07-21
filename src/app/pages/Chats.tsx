@@ -41,10 +41,14 @@ import {
   MessageCircle as ChatIcon,
   UserCheck,
   Shield,
+  ShieldCheck,
   Calendar,
   AlertTriangle,
   PanelLeft,
   FlaskConical,
+  Share2,
+  Copy,
+  Upload,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
@@ -53,7 +57,9 @@ import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import AssignChatbotModal from "../components/chats/AssignChatbotModal";
 import EnrollCampaignModal from "../components/chats/EnrollCampaignModal";
+import CampaignShareModal from "../components/chats/CampaignShareModal";
 import TestAsContactDrawer from "../components/chats/TestAsContactDrawer";
+import RequestTemplateApprovalModal from "../components/chats/RequestTemplateApprovalModal";
 import { Bot as BotType } from "../components/chats/ChatbotTab";
 import {
   advanceCampaignStep,
@@ -83,6 +89,12 @@ interface Message {
   status?: "sent" | "delivered" | "read";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
   buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+  header?: {
+    type?: "none" | "text" | "image" | "video" | "document";
+    text?: string;
+    mediaUrl?: string;
+    fileName?: string;
+  };
 }
 
 interface Conversation {
@@ -123,12 +135,23 @@ export interface WhatsappTemplate {
   footerText?: string;
   buttons: Array<{ type: string; label: string; value?: string }>;
   createdAt: string;
+  // Standalone header fields (preferred over legacy `header` object)
+  headerType?: "none" | "text" | "image" | "video" | "document";
+  headerText?: string;
+  headerMediaUrl?: string;
+  headerFileName?: string;
   /** Maps each {{variable}} token in bodyText to a data source */
   variableMappings?: Record<string, {
     source: "static" | "field" | "availability";
     staticValue?: string;
     fieldKey?: string;
   }>;
+  // Approval workflow
+  approvalStatus?: "pending" | "approved" | "denied";
+  metaTemplateId?: string;
+  submittedAt?: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
 }
 
 export interface CampaignNode {
@@ -158,6 +181,7 @@ export interface Campaign {
   clicked: number;
   createdAt: string;
   nodes: CampaignNode[];
+  audienceClientIds?: string[];
 }
 
 
@@ -596,7 +620,10 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
                           onChange={e => updateNode({ templateIdentifier: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
                           <option value="">Select template…</option>
-                          {globalTemplates.map(t => (
+                          {globalTemplates.filter(t => t.approvalStatus === "approved").length === 0 && (
+                            <option disabled value="">No approved templates yet</option>
+                          )}
+                          {globalTemplates.filter(t => t.approvalStatus === "approved").map(t => (
                             <option key={t.id} value={t.identifier || t.id}>{t.name} ({t.category})</option>
                           ))}
                         </select>
@@ -754,6 +781,7 @@ export default function Chats() {
   const [composerText, setComposerText] = useState("");
   const [showUseTemplateDropdown, setShowUseTemplateDropdown] = useState(false);
   const [showComposerGearMenu, setShowComposerGearMenu] = useState(false);
+  const [assignAgentMenuOpen, setAssignAgentMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
@@ -764,11 +792,13 @@ export default function Chats() {
       if (e.key === "Escape") {
         setShowComposerGearMenu(false);
         setShowUseTemplateDropdown(false);
+        setAssignAgentMenuOpen(false);
       }
     };
     const handleClickOutside = (e: MouseEvent) => {
       if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) {
         setShowComposerGearMenu(false);
+        setAssignAgentMenuOpen(false);
       }
     };
     document.addEventListener("keydown", handleKeyDown);
@@ -992,7 +1022,8 @@ export default function Chats() {
   const [showVarMapping, setShowVarMapping] = useState(false);
   const [templateForm, setTemplateForm] = useState<Omit<WhatsappTemplate, "id" | "createdAt">>({
     name: "", identifier: "", category: "Marketing", language: "English",
-    header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {}
+    header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {},
+    headerType: "none", headerText: "", headerMediaUrl: "", headerFileName: "",
   });
 
 
@@ -1018,14 +1049,14 @@ export default function Chats() {
 
   const handleCreateNewTemplate = () => {
     setEditingTemplateId(null);
-    setTemplateForm({ name: "", identifier: "", category: "Marketing", language: "English", header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {} });
+    setTemplateForm({ name: "", identifier: "", category: "Marketing", language: "English", header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {}, headerType: "none", headerText: "", headerMediaUrl: "", headerFileName: "", approvalStatus: "pending" });
     setTemplatesView("builder");
     setShowVarMapping(false);
   };
 
   const handleEditTemplate = (tpl: WhatsappTemplate) => {
     setEditingTemplateId(tpl.id);
-    setTemplateForm({ name: tpl.name, identifier: tpl.identifier, category: tpl.category, language: tpl.language, header: tpl.header || { type: "none", content: "" }, bodyText: tpl.bodyText, footerText: tpl.footerText || "", buttons: tpl.buttons || [], variableMappings: tpl.variableMappings || {} });
+    setTemplateForm({ name: tpl.name, identifier: tpl.identifier, category: tpl.category, language: tpl.language, header: tpl.header || { type: "none", content: "" }, bodyText: tpl.bodyText, footerText: tpl.footerText || "", buttons: tpl.buttons || [], variableMappings: tpl.variableMappings || {}, headerType: tpl.headerType || "none", headerText: tpl.headerText || "", headerMediaUrl: tpl.headerMediaUrl || "", headerFileName: tpl.headerFileName || "", approvalStatus: tpl.approvalStatus || "pending", metaTemplateId: tpl.metaTemplateId, submittedAt: tpl.submittedAt, reviewedAt: tpl.reviewedAt, rejectionReason: tpl.rejectionReason });
     setTemplatesView("builder");
     setShowVarMapping(false);
   };
@@ -1043,13 +1074,17 @@ export default function Chats() {
     if (!templateForm.name.trim()) { toast.error("Template name is required"); return; }
     if (!templateForm.identifier.trim()) { toast.error("Template identifier is required"); return; }
     if (!templateForm.bodyText.trim()) { toast.error("Template body text is required"); return; }
+    const mediaTypes = ["image", "video", "document"] as const;
+    if (templateForm.headerType && mediaTypes.includes(templateForm.headerType as any) && !templateForm.headerMediaUrl?.trim()) {
+      toast.error("Media header requires a file upload"); return;
+    }
     const isDuplicate = globalTemplates.some(t => t.identifier.toLowerCase() === templateForm.identifier.toLowerCase() && t.id !== editingTemplateId);
     if (isDuplicate) { toast.error("Template identifier must be unique"); return; }
     if (editingTemplateId) {
       setGlobalTemplates(prev => prev.map(t => t.id === editingTemplateId ? { ...t, ...templateForm } : t));
       toast.success("Template updated successfully");
     } else {
-      const newTemplate: WhatsappTemplate = { id: `tpl-${Date.now()}`, ...templateForm, createdAt: new Date().toISOString() };
+      const newTemplate: WhatsappTemplate = { id: `tpl-${Date.now()}`, ...templateForm, createdAt: new Date().toISOString(), approvalStatus: "pending" };
       setGlobalTemplates(prev => [...prev, newTemplate]);
       toast.success("Template created successfully");
     }
@@ -1057,13 +1092,25 @@ export default function Chats() {
     setEditingTemplateId(null);
   };
 
+  // ── Action Dropdowns Position State & Refs ──
+  const [openMenuTemplateId, setOpenMenuTemplateId] = useState<string | null>(null);
+  const [templateMenuPos, setTemplateMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const templateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const campaignTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  const [approvingTemplate, setApprovingTemplate] = useState<WhatsappTemplate | null>(null);
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+
   const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [viewingCampaign, setViewingCampaign] = useState<Campaign | null>(null);
   const [showCampaignBuilder, setShowCampaignBuilder] = useState(false);
   const [editingCampaignId, setEditingCampaignId] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [sharingCampaign, setSharingCampaign] = useState<Campaign | null>(null);
   const [campaignForm, setCampaignForm] = useState({ name: "", audience: "" });
   const [campaignNodes, setCampaignNodes] = useState<CampaignNode[]>([
     { id: "n1", type: "message", label: "Message 1", content: "", templateIdentifier: "" },
@@ -1071,22 +1118,55 @@ export default function Chats() {
   ]);
   const [editingNodeId, setEditingNodeId] = useState<string | null>(null);
 
+  // Close menus on scroll (page or container scroll) and screen resize
   useEffect(() => {
-    if (openMenuCampaignId === null) return;
-    const handleClick = (e: MouseEvent) => {
-      if (!(e.target as HTMLElement).closest('.campaign-menu-container') && !(e.target as HTMLElement).closest('.campaign-menu-portal')) {
-        setOpenMenuCampaignId(null);
-      }
+    if (!openMenuTemplateId && !openMenuCampaignId) return;
+    const handleScroll = () => {
+      setOpenMenuTemplateId(null);
+      setOpenMenuCampaignId(null);
     };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [openMenuCampaignId]);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [openMenuTemplateId, openMenuCampaignId]);
 
-  const handleToggleMenu = (campaignId: string, e: React.MouseEvent<HTMLButtonElement>) => {
-    if (openMenuCampaignId === campaignId) { setOpenMenuCampaignId(null); return; }
-    const rect = e.currentTarget.getBoundingClientRect();
-    setMenuPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  const openTemplateMenu = (templateId: string) => {
+    const btn = templateTriggerRefs.current[templateId];
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      setTemplateMenuPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.right + window.scrollX - 208, // right-align button (w-52 = 208px)
+      });
+    }
+    setOpenMenuTemplateId(templateId);
+  };
+
+  const openCampaignMenu = (campaignId: string) => {
+    const btn = campaignTriggerRefs.current[campaignId];
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      setMenuPos({
+        top: rect.bottom + window.scrollY + 4,
+        left: rect.right + window.scrollX - 176, // right-align button (w-44 = 176px)
+      });
+    }
     setOpenMenuCampaignId(campaignId);
+  };
+
+  const handleTemplateApprovalSubmit = (templateId: string, patch: Partial<WhatsappTemplate>) => {
+    setGlobalTemplates(prev => prev.map(t => t.id === templateId ? { ...t, ...patch } : t));
+    toast.success("Template submitted for approval");
+    // Simulate Meta review: auto-approve after 5 seconds
+    setTimeout(() => {
+      setGlobalTemplates(prev => prev.map(t =>
+        t.id === templateId ? { ...t, approvalStatus: "approved", reviewedAt: new Date().toISOString() } : t
+      ));
+      toast.success("✅ Template approved by Meta");
+    }, 5000);
   };
 
   const handleToggleCampaign = (id: string) => {
@@ -1128,6 +1208,110 @@ export default function Chats() {
   const handleNewCampaignFromAnywhere = () => {
     handleOpenCreate();
     handleTabChange("campaigns");
+  };
+
+  const handleShareCampaign = (
+    campaign: Campaign,
+    payload: {
+      channel: "whatsapp" | "sms";
+      clientIds: string[];
+      manualRecipients: { name?: string; phone: string }[];
+    }
+  ) => {
+    const totalRecipients = payload.clientIds.length + payload.manualRecipients.length;
+    if (totalRecipients === 0) return;
+
+    setConversations(prev => {
+      const updated = [...prev];
+
+      const processRecipient = (name: string, phone: string) => {
+        let existingIdx = updated.findIndex(c => c.phoneNumber === phone);
+        let convo: Conversation;
+        if (existingIdx >= 0) {
+          convo = { ...updated[existingIdx] };
+        } else {
+          convo = {
+            id: `conv-share-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            contactName: name,
+            phoneNumber: phone,
+            channel: payload.channel,
+            lastMessage: "",
+            timestamp: "Just now",
+            unreadCount: 0,
+            status: "open",
+            messages: [],
+            botStatus: "off",
+            assignedPersonId: "",
+          };
+          updated.push(convo);
+          existingIdx = updated.length - 1;
+        }
+
+        const stepRes = advanceCampaignStep(convo as ConversationShape, campaign, 0);
+        const newMsgs: Message[] = stepRes.newMessages.map(m => ({
+          id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          text: m.text,
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          sender: m.sender,
+          origin: (m.origin || "campaign") as Message["origin"],
+          buttons: m.buttons,
+          header: m.header,
+        }));
+        const lastMsg = newMsgs[newMsgs.length - 1];
+        const existingEnrollments = convo.campaignEnrollments || [];
+        const filteredEnrollments = existingEnrollments.filter(e => e.campaignId !== campaign.id);
+        updated[existingIdx] = {
+          ...convo,
+          channel: payload.channel,
+          messages: [...convo.messages, ...newMsgs],
+          lastMessage: lastMsg?.text || convo.lastMessage || campaign.name,
+          timestamp: "Just now",
+          campaignEnrollments: [...filteredEnrollments, stepRes.enrollmentPatch],
+        };
+      };
+
+      // 1. Process clientIds
+      payload.clientIds.forEach(clientId => {
+        let clientName = clientId;
+        let clientPhone = "+1 (555) 000-0000";
+        try {
+          const rawClients = sessionStorage.getItem("clients") || localStorage.getItem("clients");
+          if (rawClients) {
+            const clients = JSON.parse(rawClients) as any[];
+            const found = clients.find((c: any) => String(c.id) === clientId || c.name === clientId);
+            if (found) {
+              clientName = found.name || found.contactName || clientId;
+              clientPhone = found.phoneNumber || found.phone || "+1 (555) 000-0000";
+            }
+          }
+        } catch {}
+
+        processRecipient(clientName, clientPhone);
+      });
+
+      // 2. Process manualRecipients
+      payload.manualRecipients.forEach(rec => {
+        const name = rec.name || rec.phone;
+        const phone = rec.phone;
+        processRecipient(name, phone);
+      });
+
+      return updated;
+    });
+
+    setCampaigns(prev =>
+      prev.map(c =>
+        c.id === campaign.id
+          ? {
+              ...c,
+              audienceClientIds: payload.clientIds,
+              audience: `${totalRecipients} recipient${totalRecipients !== 1 ? "s" : ""}`
+            }
+          : c
+      )
+    );
+
+    toast.success(`Campaign shared with ${totalRecipients} recipient${totalRecipients !== 1 ? "s" : ""}`);
   };
 
   const handleAddNode = (type: CampaignNode["type"]) => {
@@ -1254,9 +1438,11 @@ export default function Chats() {
                   <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
                 ) : filteredConversations.map(conv => {
                   const isSelected = conv.id === selectedConversationId;
-                  const botStatus = conv.botStatus ?? "off";
-                  const statusDotColor = botStatus === "active" ? "bg-blue-500" : botStatus === "paused" ? "bg-amber-500" : "bg-gray-400";
-                  const statusDotTitle = botStatus === "active" ? "Bot: Active" : botStatus === "paused" ? "Bot: Paused" : "Bot: Off";
+                  const hasHuman = !!conv.assignedPersonId;
+                  const isBotActive = !hasHuman && conv.botStatus === "active";
+                  const isBotPausedOrHuman = hasHuman || conv.botStatus === "paused";
+                  const statusDotColor = isBotActive ? "bg-blue-500" : isBotPausedOrHuman ? "bg-amber-500" : "bg-gray-400";
+                  const statusDotTitle = isBotActive ? "Bot: Active" : isBotPausedOrHuman ? "Bot Paused / Assigned" : "Bot Off";
                   const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find(e => e.id === conv.assignedPersonId) : null;
 
                   return (
@@ -1310,10 +1496,11 @@ export default function Chats() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                            (activeConversation.botStatus ?? "off") === "active" ? "bg-blue-500" :
-                            (activeConversation.botStatus ?? "off") === "paused" ? "bg-amber-500" :
+                            !!activeConversation.assignedPersonId ? "bg-amber-500" :
+                            activeConversation.botStatus === "active" ? "bg-blue-500" :
+                            activeConversation.botStatus === "paused" ? "bg-amber-500" :
                             "bg-gray-400"
-                          }`} title={`Bot status: ${activeConversation.botStatus ?? "off"}`} />
+                          }`} title={`Status dot`} />
                           <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
                           {activeConversation.assignedPersonId && (() => {
                             const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
@@ -1331,33 +1518,34 @@ export default function Chats() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {/* Read-only status chip */}
-                      {activeConversation.assignedBotId && (activeConversation.botStatus ?? "off") === "active" && !activeConversation.assignedPersonId && (() => {
-                        let botName = "Chatbot";
-                        try {
-                          const rawBots = localStorage.getItem("chatbotBots");
-                          if (rawBots) {
-                            const found = JSON.parse(rawBots).find((b: any) => b.id === activeConversation.assignedBotId);
-                            if (found?.name) botName = found.name;
-                          }
-                        } catch {}
-                        return (
-                          <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold">
-                            <Bot className="w-3.5 h-3.5 text-blue-600" />
-                            <span>🤖 {botName} active</span>
-                          </div>
-                        );
-                      })()}
-                      {activeConversation.assignedPersonId && (() => {
-                        let personName = "team member";
-                        const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                        if (emp?.name) personName = emp.name;
-                        return (
-                          <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold">
-                            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-                            <span>👤 Assigned to {personName}</span>
-                          </div>
-                        );
+                      {/* Unified Read-only status chip */}
+                      {(() => {
+                        const isHumanAssigned = !!activeConversation.assignedPersonId;
+                        const isBotActive = !isHumanAssigned && activeConversation.botStatus === "active";
+                        if (isBotActive) {
+                          return (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <Bot className="w-3.5 h-3.5 text-blue-600" />
+                              <span>🤖 Bot Active</span>
+                            </div>
+                          );
+                        } else if (isHumanAssigned) {
+                          const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                          const name = emp ? emp.name : "Agent";
+                          return (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                              <span>👤 Bot Paused / Assigned to {name}</span>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                              <span>⚪ Unassigned (Bot Off)</span>
+                            </div>
+                          );
+                        }
                       })()}
                     </div>
                   </div>
@@ -1365,11 +1553,12 @@ export default function Chats() {
                   {/* Hand-off / Paused Bot warning banner */}
                   {activeConversation.assignedPersonId && (() => {
                     const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                    return emp ? (
+                    const name = emp ? emp.name : "Agent";
+                    return (
                       <div className="bg-amber-50 border-b border-amber-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-xs text-amber-800" style={{ fontFamily: "Outfit, sans-serif" }}>
                         <div className="flex items-center gap-1.5 font-medium">
                           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Bot is paused. Conversation is assigned to <strong>{emp.name}</strong>.</span>
+                          <span>Bot is paused. Conversation is assigned to <strong>{name}</strong>.</span>
                         </div>
                         <button
                           type="button"
@@ -1383,7 +1572,7 @@ export default function Chats() {
                           Resume Bot
                         </button>
                       </div>
-                    ) : null;
+                    );
                   })()}
 
                   {/* Messages */}
@@ -1454,138 +1643,201 @@ export default function Chats() {
                         {/* Upward-expanding Gear Menu */}
                         {showComposerGearMenu && (
                           <div className="absolute bottom-full mb-2 left-0 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 text-xs font-medium text-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                            {/* 1. Templates */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu(false);
-                                setShowUseTemplateDropdown(true);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                            >
-                              <FileText className="w-4 h-4 text-amber-600 shrink-0" />
-                              <span>Templates</span>
-                            </button>
-
-                            {/* 2. Assign Chatbot */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu(false);
-                                setShowAssignBotModal(true);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                            >
-                              <Bot className="w-4 h-4 text-blue-600 shrink-0" />
-                              <span>Assign Chatbot</span>
-                            </button>
-
-                            {/* 3. Enroll in Campaign */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu(false);
-                                setShowEnrollCampaignModal(true);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                            >
-                              <Zap className="w-4 h-4 text-purple-600 shrink-0" />
-                              <span>Enroll in Campaign</span>
-                            </button>
-
-                            {/* 4. Take Over from Bot */}
-                            {(() => {
-                              const isBotActive =
-                                activeConversation.assignedBotId &&
-                                (activeConversation.botStatus ?? "off") === "active" &&
-                                !activeConversation.assignedPersonId;
-                              return (
+                            {assignAgentMenuOpen ? (
+                              <div className="flex flex-col">
+                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 font-bold text-gray-900 bg-gray-50 text-[10px] uppercase tracking-wider">
+                                  <button
+                                    type="button"
+                                    onClick={() => setAssignAgentMenuOpen(false)}
+                                    className="p-1 -ml-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors text-xs font-bold font-mono"
+                                  >
+                                    &lt;
+                                  </button>
+                                  <span>Assign to Agent</span>
+                                </div>
+                                <div className="max-h-56 overflow-y-auto py-1">
+                                  {AVAILABLE_EMPLOYEES.map(emp => (
+                                    <button
+                                      key={emp.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "paused", assignedPersonId: emp.id } : c));
+                                        toast.success(`Assigned to ${emp.name}. Bot paused.`);
+                                        setShowComposerGearMenu(false);
+                                        setAssignAgentMenuOpen(false);
+                                      }}
+                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors ${
+                                        activeConversation.assignedPersonId === emp.id ? "bg-amber-50 text-amber-900 font-semibold" : "text-gray-700"
+                                      }`}
+                                    >
+                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConversation.assignedPersonId === emp.id ? "bg-amber-500" : "bg-gray-300"}`} />
+                                      <span>{emp.name}</span>
+                                    </button>
+                                  ))}
+                                  {activeConversation.assignedPersonId && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, assignedPersonId: "" } : c));
+                                        toast.success(`Cleared assignment`);
+                                        setShowComposerGearMenu(false);
+                                        setAssignAgentMenuOpen(false);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left font-semibold border-t border-gray-100 transition-colors"
+                                    >
+                                      <span>Clear Assignment</span>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {/* 1. Templates */}
                                 <button
                                   type="button"
-                                  disabled={!isBotActive}
                                   onClick={() => {
                                     setShowComposerGearMenu(false);
-                                    setConversations((prev) =>
-                                      prev.map((c) =>
-                                        c.id === selectedConversationId
-                                          ? { ...c, botStatus: "paused", assignedPersonId: "1" }
-                                          : c
-                                      )
-                                    );
-                                    toast.success("Bot paused. You took over the conversation.");
+                                    setShowUseTemplateDropdown(true);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                >
+                                  <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                                  <span>Templates</span>
+                                </button>
+
+                                {/* 2. Assign Chatbot */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowComposerGearMenu(false);
+                                    setShowAssignBotModal(true);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                >
+                                  <Bot className="w-4 h-4 text-blue-600 shrink-0" />
+                                  <span>Assign Chatbot</span>
+                                </button>
+
+                                {/* 3. Enroll in Campaign */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowComposerGearMenu(false);
+                                    setShowEnrollCampaignModal(true);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                >
+                                  <Zap className="w-4 h-4 text-purple-600 shrink-0" />
+                                  <span>Enroll in Campaign</span>
+                                </button>
+
+                                {/* 4. Assign to Agent */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAssignAgentMenuOpen(true);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                >
+                                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                  <span>Assign to Agent</span>
+                                </button>
+
+                                <div className="my-1 border-t border-gray-100" />
+
+                                {/* 5. Take Over from Bot */}
+                                {(() => {
+                                  const isBotActive =
+                                    activeConversation.assignedBotId &&
+                                    (activeConversation.botStatus ?? "off") === "active" &&
+                                    !activeConversation.assignedPersonId;
+                                  return (
+                                    <button
+                                      type="button"
+                                      disabled={!isBotActive}
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        setConversations((prev) =>
+                                          prev.map((c) =>
+                                            c.id === selectedConversationId
+                                              ? { ...c, botStatus: "paused", assignedPersonId: "1" }
+                                              : c
+                                          )
+                                        );
+                                        toast.success("Bot paused. You took over the conversation.");
+                                      }}
+                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
+                                        isBotActive
+                                          ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                          : "opacity-40 cursor-not-allowed text-gray-400"
+                                      }`}
+                                    >
+                                      <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                                      <span>Take Over from Bot</span>
+                                    </button>
+                                  );
+                                })()}
+
+                                {/* 6. Test (DEV-only) */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowComposerGearMenu(false);
+                                    setShowTestContactDrawer(true);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
+                                >
+                                  <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
+                                  <span>Test</span>
+                                  <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
+                                </button>
+
+                                {/* 7. Pause / Resume Bot */}
+                                {(activeConversation.botStatus ?? "off") !== "off" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowComposerGearMenu(false);
+                                      handleToggleBotStatus();
+                                    }}
+                                    className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
+                                      (activeConversation.botStatus ?? "off") === "paused"
+                                        ? "hover:bg-amber-50 text-amber-700 font-semibold"
+                                        : "hover:bg-gray-50 text-gray-700"
+                                    }`}
+                                  >
+                                    {(activeConversation.botStatus ?? "off") === "active" ? (
+                                      <>
+                                        <Pause className="w-4 h-4 text-amber-600 shrink-0" />
+                                        <span>Pause Bot</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Play className="w-4 h-4 text-emerald-600 shrink-0" />
+                                        <span>Resume Bot</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+
+                                {/* 8. Mark Resolved / Re-open */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setShowComposerGearMenu(false);
+                                    handleMarkResolved();
                                   }}
                                   className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                    isBotActive
-                                      ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
-                                      : "opacity-40 cursor-not-allowed text-gray-400"
+                                    activeConversation.status === "resolved"
+                                      ? "hover:bg-green-50 text-green-700 font-semibold"
+                                      : "hover:bg-gray-50 text-gray-700"
                                   }`}
                                 >
-                                  <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                                  <span>Take Over from Bot</span>
+                                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                                  <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
                                 </button>
-                              );
-                            })()}
-
-                            <div className="my-1 border-t border-gray-100" />
-
-                            {/* 5. Test (DEV-only) */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu(false);
-                                setShowTestContactDrawer(true);
-                              }}
-                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
-                            >
-                              <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
-                              <span>Test</span>
-                              <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
-                            </button>
-
-                            {/* 6. Pause / Resume Bot */}
-                            {(activeConversation.botStatus ?? "off") !== "off" && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowComposerGearMenu(false);
-                                  handleToggleBotStatus();
-                                }}
-                                className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                  (activeConversation.botStatus ?? "off") === "paused"
-                                    ? "hover:bg-amber-50 text-amber-700 font-semibold"
-                                    : "hover:bg-gray-50 text-gray-700"
-                                }`}
-                              >
-                                {(activeConversation.botStatus ?? "off") === "active" ? (
-                                  <>
-                                    <Pause className="w-4 h-4 text-amber-600 shrink-0" />
-                                    <span>Pause Bot</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Play className="w-4 h-4 text-emerald-600 shrink-0" />
-                                    <span>Resume Bot</span>
-                                  </>
-                                )}
-                              </button>
+                              </>
                             )}
-
-                            {/* 7. Mark Resolved / Re-open */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu(false);
-                                handleMarkResolved();
-                              }}
-                              className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                activeConversation.status === "resolved"
-                                  ? "hover:bg-green-50 text-green-700 font-semibold"
-                                  : "hover:bg-gray-50 text-gray-700"
-                              }`}
-                            >
-                              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                              <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
-                            </button>
                           </div>
                         )}
 
@@ -1597,10 +1849,10 @@ export default function Chats() {
                               <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
                             </div>
                             <div className="max-h-56 overflow-y-auto py-1">
-                              {globalTemplates.length === 0 ? (
-                                <div className="p-4 text-center text-xs text-gray-500">No templates yet. Create one in Templates tab.</div>
+                              {globalTemplates.filter(t => t.approvalStatus === "approved").length === 0 ? (
+                                <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first.</div>
                               ) : (
-                                globalTemplates.map((t) => (
+                                globalTemplates.filter(t => t.approvalStatus === "approved").map((t) => (
                                   <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
                                     <button
                                       onClick={() => {
@@ -1686,7 +1938,7 @@ export default function Chats() {
                 <table className="w-full">
                   <thead style={{ backgroundColor: "#1F2937" }}>
                     <tr>
-                      {["Name", "Identifier", "Category", "Language", "Actions"].map(col => (
+                      {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
                         <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
                       ))}
                     </tr>
@@ -1701,11 +1953,28 @@ export default function Chats() {
                         </td>
                         <td className="px-4 py-4"><span className="text-xs font-mono text-gray-500">{tpl.identifier}</span></td>
                         <td className="px-4 py-4"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">{tpl.category}</span></td>
+                        {/* STATUS column */}
+                        <td className="px-4 py-4">
+                          {(!tpl.approvalStatus || tpl.approvalStatus === "pending") && (
+                            <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
+                          )}
+                          {tpl.approvalStatus === "approved" && (
+                            <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
+                          )}
+                          {tpl.approvalStatus === "denied" && (
+                            <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
+                          )}
+                        </td>
                         <td className="px-4 py-4"><span className="text-xs text-gray-500">{tpl.language}</span></td>
                         <td className="px-5 py-4">
-                          <div className="flex items-center gap-2 justify-end">
-                            <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><Pencil className="w-4 h-4" /></button>
-                            <button onClick={() => handleDeleteTemplate(tpl.id)} className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          <div className="flex justify-end">
+                            <button
+                              ref={el => { templateTriggerRefs.current[tpl.id] = el; }}
+                              onClick={() => openMenuTemplateId === tpl.id ? setOpenMenuTemplateId(null) : openTemplateMenu(tpl.id)}
+                              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            >
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1717,7 +1986,20 @@ export default function Chats() {
           </div>
         )}
 
-        {activeTab === "templates" && templatesView === "builder" && (
+          {activeTab === "templates" && templatesView === "builder" && (() => {
+            // ── Drag-and-drop state for media header upload (scoped to builder render) ──
+            const mediaTypes = ["image", "video", "document"] as const;
+            const acceptForHeaderType =
+              templateForm.headerType === "image" ? ".png,.jpg,.jpeg"
+              : templateForm.headerType === "video" ? ".mp4"
+              : ".pdf,.doc,.docx";
+
+            const handleFileDrop = (file: File) => {
+              const objectUrl = URL.createObjectURL(file);
+              setTemplateForm(prev => ({ ...prev, headerMediaUrl: objectUrl, headerFileName: file.name }));
+            };
+
+            return (
           <div className="flex gap-6 items-start">
             <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
               <div className="flex justify-between items-center border-b border-gray-100 pb-3">
@@ -1752,6 +2034,97 @@ export default function Chats() {
                   </Select>
                 </div>
               </div>
+
+              {/* ── HEADER (moved above Body) ── */}
+              <div className="border border-gray-100 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                  <label className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Header <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+                  </label>
+                  <div className="flex gap-1 text-[11px]">
+                    {(["none", "text", "image", "video", "document"] as const).map(ht => (
+                      <button
+                        key={ht}
+                        type="button"
+                        onClick={() => setTemplateForm(prev => ({ ...prev, headerType: ht, headerText: ht === "text" ? prev.headerText || "" : "", headerMediaUrl: ht !== "text" && ht !== "none" ? "" : "", headerFileName: "" }))}
+                        className={`px-2 py-0.5 rounded-full border capitalize transition-colors ${templateForm.headerType === ht ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300"}`}
+                      >
+                        {ht}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {templateForm.headerType && templateForm.headerType !== "none" && (
+                  <div className="p-4 space-y-3 bg-white">
+                    {templateForm.headerType === "text" ? (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Header Text</label>
+                        <input
+                          type="text"
+                          value={templateForm.headerText || ""}
+                          onChange={e => setTemplateForm(prev => ({ ...prev, headerText: e.target.value }))}
+                          placeholder="Bold headline text..."
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {/* File uploaded — show chip */}
+                        {templateForm.headerMediaUrl ? (
+                          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                            <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-blue-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                {templateForm.headerFileName || "Uploaded file"}
+                              </p>
+                              <p className="text-[10px] text-blue-500" style={{ fontFamily: "Outfit, sans-serif" }}>Stored as local object URL</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setTemplateForm(prev => ({ ...prev, headerMediaUrl: "", headerFileName: "" }))}
+                              className="p-1 text-blue-400 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          /* Drag-and-drop upload zone */
+                          <div
+                            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
+                            onDragLeave={e => { e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50'); }}
+                            onDrop={e => {
+                              e.preventDefault();
+                              e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                              const file = e.dataTransfer.files[0];
+                              if (file) handleFileDrop(file);
+                            }}
+                            className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center transition-all hover:border-blue-400"
+                          >
+                            <input
+                              type="file"
+                              accept={acceptForHeaderType}
+                              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f); }}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <div className="flex flex-col items-center gap-2 pointer-events-none">
+                              <Upload className="w-8 h-8 text-gray-400" />
+                              <p className="text-sm font-medium text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                <span className="text-blue-600">Click to upload</span> or drag and drop
+                              </p>
+                              <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {templateForm.headerType === "image" ? "PNG, JPG up to 5MB" : templateForm.headerType === "video" ? "MP4 up to 16MB" : "PDF up to 100MB"}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Body Text ── */}
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
@@ -1859,6 +2232,9 @@ export default function Chats() {
                   );
                 })()}
               </div>
+
+              {/* ── Header section removed from here (moved above Body) ── */}
+
               <div>
                 <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
                 <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
@@ -1962,6 +2338,31 @@ export default function Chats() {
                 </div>
                 <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
                   <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
+                    {/* Header preview */}
+                    {templateForm.headerType === "text" && templateForm.headerText && (
+                      <p className="font-bold text-[11px] text-gray-900 leading-tight">{templateForm.headerText}</p>
+                    )}
+                    {templateForm.headerType === "image" && templateForm.headerMediaUrl && (
+                      templateForm.headerMediaUrl.startsWith("blob:") ? (
+                        <img src={templateForm.headerMediaUrl} alt="Header preview" className="w-full rounded object-cover max-h-20" />
+                      ) : (
+                        <div className="w-full h-14 bg-gray-100 rounded flex items-center justify-center">
+                          <ImageIcon className="w-5 h-5 text-gray-400" />
+                        </div>
+                      )
+                    )}
+                    {templateForm.headerType === "video" && (
+                      <div className="w-full h-14 bg-gray-900 rounded flex items-center justify-center gap-1.5">
+                        <Play className="w-5 h-5 text-white" />
+                        <span className="text-[9px] text-white font-medium">Video</span>
+                      </div>
+                    )}
+                    {templateForm.headerType === "document" && (
+                      <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1">
+                        <FileText className="w-4 h-4 text-red-500" />
+                        <span className="text-[9px] text-gray-700 font-medium truncate">{templateForm.headerFileName || "document.pdf"}</span>
+                      </div>
+                    )}
                     <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
                     {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
                   </div>
@@ -1982,7 +2383,8 @@ export default function Chats() {
               </div>
             </div>
           </div>
-        )}
+        );
+      })()}
 
 
         {/* ══════════════════════════════════════════════════════
@@ -2044,14 +2446,30 @@ export default function Chats() {
                       <tr key={campaign.id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-3"><p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{campaign.name}</p></td>
                         <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>{campaign.status}</span></td>
-                        <td className="px-4 py-3"><p className="text-xs text-gray-500 max-w-[160px] truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{campaign.audience}</p></td>
+                        <td className="px-4 py-3">
+                          {campaign.audienceClientIds?.length ? (
+                            <button
+                              onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
+                              className="text-xs text-purple-700 font-semibold hover:underline"
+                              title="Click to manage audience"
+                            >
+                              {campaign.audienceClientIds.length} client{campaign.audienceClientIds.length !== 1 ? "s" : ""}
+                            </button>
+                          ) : (
+                            <p className="text-xs text-gray-500 max-w-[160px] truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{campaign.audience}</p>
+                          )}
+                        </td>
                         {[campaign.sent, campaign.delivered, campaign.opened, campaign.clicked].map((val, i) => (
                           <td key={i} className="px-4 py-3 text-center"><p className="text-sm font-bold text-gray-900">{val.toLocaleString()}</p></td>
                         ))}
                         <td className="px-4 py-3"><p className="text-xs text-gray-400">{campaign.createdAt}</p></td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center">
-                            <button className="campaign-menu-container p-1.5 hover:bg-gray-100 rounded-lg text-gray-500" onClick={e => handleToggleMenu(campaign.id, e)}>
+                            <button
+                              ref={el => { campaignTriggerRefs.current[campaign.id] = el; }}
+                              onClick={() => openMenuCampaignId === campaign.id ? setOpenMenuCampaignId(null) : openCampaignMenu(campaign.id)}
+                              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
+                            >
                               <MoreVertical className="w-4 h-4" />
                             </button>
                           </div>
@@ -2082,42 +2500,91 @@ export default function Chats() {
         </div>
       </div>
 
+      {/* Template Row Actions Menu */}
+      {openMenuTemplateId && templateMenuPos && createPortal(
+        <>
+          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpenMenuTemplateId(null)} />
+          {(() => {
+            const tpl = globalTemplates.find(t => t.id === openMenuTemplateId);
+            if (!tpl) return null;
+            return (
+              <div className="absolute w-52 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                style={{ top: templateMenuPos.top, left: templateMenuPos.left, zIndex: 9999, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
+                <button
+                  onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); setOpenMenuTemplateId(null); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-gray-50 text-left text-sm text-gray-700 transition-colors"
+                >
+                  <Pencil className="w-4 h-4 text-blue-500" /> Edit
+                </button>
+                {tpl.approvalStatus !== "approved" ? (
+                  <button
+                    onClick={() => { setApprovingTemplate(tpl); setShowApprovalModal(true); setOpenMenuTemplateId(null); }}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-green-50 text-left text-sm text-green-700 font-semibold transition-colors"
+                  >
+                    <ShieldCheck className="w-4 h-4" /> Get Approved
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2.5 px-3.5 py-2.5 text-sm text-gray-400 cursor-not-allowed">
+                    <Check className="w-4 h-4 text-green-500" /> Already Approved
+                  </div>
+                )}
+                <div className="border-t border-gray-100" />
+                <button
+                  onClick={() => { handleDeleteTemplate(tpl.id); setOpenMenuTemplateId(null); }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 hover:bg-red-50 text-left text-sm text-red-600 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" /> Delete
+                </button>
+              </div>
+            );
+          })()}
+        </>,
+        document.body
+      )}
+
       {/* Campaign Row Actions Menu */}
       {openMenuCampaignId && menuPos && createPortal(
-        (() => {
-          const campaign = campaigns.find(c => c.id === openMenuCampaignId);
-          if (!campaign) return null;
-          return (
-            <div className="campaign-menu-portal fixed w-44 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden"
-              style={{ top: menuPos.top, right: menuPos.right, zIndex: 9999, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
-              <button onClick={() => handleOpenView(campaign)}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Eye className="w-4 h-4" />View Overview
-              </button>
-              <button onClick={() => { setOpenMenuCampaignId(null); handleOpenEdit(campaign); handleTabChange("campaigns"); }}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Pencil className="w-4 h-4" />Edit Campaign
-              </button>
-              {(campaign.status === "active" || campaign.status === "paused") && (
-                <button onClick={() => { handleToggleCampaign(campaign.id); setOpenMenuCampaignId(null); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {campaign.status === "active" ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                  {campaign.status === "active" ? "Pause" : "Resume"}
+        <>
+          <div className="fixed inset-0" style={{ zIndex: 9998 }} onClick={() => setOpenMenuCampaignId(null)} />
+          {(() => {
+            const campaign = campaigns.find(c => c.id === openMenuCampaignId);
+            if (!campaign) return null;
+            return (
+              <div className="absolute w-44 bg-white border border-gray-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-100"
+                style={{ top: menuPos.top, left: menuPos.left, zIndex: 9999, boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
+                <button onClick={() => handleOpenView(campaign)}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Eye className="w-4 h-4" />View Overview
                 </button>
-              )}
-              {campaign.status === "draft" && (
-                <button onClick={() => { setCampaigns(prev => prev.map(c => c.id === campaign.id ? { ...c, status: "active" } : c)); toast.success("Campaign launched!"); setOpenMenuCampaignId(null); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <Play className="w-4 h-4" />Launch
+                <button onClick={() => { setOpenMenuCampaignId(null); handleOpenEdit(campaign); handleTabChange("campaigns"); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Pencil className="w-4 h-4" />Edit Campaign
                 </button>
-              )}
-              <button onClick={() => { handleDeleteCampaign(campaign.id); setOpenMenuCampaignId(null); }}
-                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100" style={{ fontFamily: "Outfit, sans-serif" }}>
-                <Trash2 className="w-4 h-4" />Delete
-              </button>
-            </div>
-          );
-        })(),
+                <button onClick={() => { setOpenMenuCampaignId(null); setSharingCampaign(campaign); setShowShareModal(true); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Share2 className="w-4 h-4" />Share
+                </button>
+                {(campaign.status === "active" || campaign.status === "paused") && (
+                  <button onClick={() => { handleToggleCampaign(campaign.id); setOpenMenuCampaignId(null); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {campaign.status === "active" ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    {campaign.status === "active" ? "Pause" : "Resume"}
+                  </button>
+                )}
+                {campaign.status === "draft" && (
+                  <button onClick={() => { setCampaigns(prev => prev.map(c => c.id === campaign.id ? { ...c, status: "active" } : c)); toast.success("Campaign launched!"); setOpenMenuCampaignId(null); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <Play className="w-4 h-4" />Launch
+                  </button>
+                )}
+                <button onClick={() => { handleDeleteCampaign(campaign.id); setOpenMenuCampaignId(null); }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <Trash2 className="w-4 h-4" />Delete
+                </button>
+              </div>
+            );
+          })()}
+        </>,
         document.body
       )}
 
@@ -2220,6 +2687,21 @@ export default function Chats() {
         onUpdateConversation={(updated) => {
           setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
         }}
+      />
+
+      <CampaignShareModal
+        isOpen={showShareModal}
+        onClose={() => { setShowShareModal(false); setSharingCampaign(null); }}
+        campaign={sharingCampaign}
+        initialSelectedIds={sharingCampaign?.audienceClientIds || []}
+        onShare={(payload) => sharingCampaign && handleShareCampaign(sharingCampaign, payload)}
+      />
+
+      <RequestTemplateApprovalModal
+        isOpen={showApprovalModal}
+        onClose={() => { setShowApprovalModal(false); setApprovingTemplate(null); }}
+        template={approvingTemplate}
+        onSubmit={handleTemplateApprovalSubmit}
       />
 
       <HowItWorksModal
