@@ -2,6 +2,7 @@ import { Bot } from "../app/components/chats/ChatbotTab";
 import { getLiveTeamMembers, SYSTEM_SEEDS } from "../app/context/FieldRegistryContext";
 import { availableProcesses } from "../app/components/ui/ProcessStageSelect";
 import { TestChatTurn } from "./chatbotTestReply";
+import { ButtonAction } from "./chatbotTypes";
 
 export interface FetchedOption {
   id: string;
@@ -18,12 +19,24 @@ export interface FlowExecutionContext {
 export interface FlowStepResult {
   nodeId: string;
   messageText: string;
-  buttons?: { label: string; nextNodeId: string | null }[]; // null = no outgoing connection configured yet
+  buttons?: { label: string; nextNodeId: string | null; actionType?: ButtonAction["actionType"]; actionValue?: string }[]; // null = no outgoing connection configured yet
   awaitingInput: boolean; // true if this node expects free-text (Open Question) rather than a button tap
   isEntryPoint?: boolean;
   saveResponseField?: string;
   fetchedOptions?: FetchedOption[]; // Output slot data feed passed to next step
   chatbotHandoff?: { targetBotId: string }; // Set when this node hands off to another bot
+  assignHuman?: { personId: string };       // Set when a humanHandoff "yes" fires
+  delayMs?: number;                         // Set by timeDelay node, actual ms to wait
+}
+
+// ── helpers ─────────────────────────────────────────────────────────────────
+
+export function getDelayMs(duration: number, unit: string): number {
+  const d = Math.max(1, Math.floor(duration));
+  if (unit === "Second") return d * 1000;
+  if (unit === "Hour")   return d * 3600 * 1000;
+  if (unit === "Day")    return d * 86400 * 1000;
+  return d * 60 * 1000; // default: Minute
 }
 
 export function getLiveServices(): FetchedOption[] {
@@ -169,7 +182,8 @@ export function executeEntryRouter(bot: Bot, ctx?: FlowExecutionContext): FlowSt
 
 /**
  * Executes any non-entry node given its id — Send a Message, Ask a Question, Send a Template,
- * Set a Condition. Returns what the bot says/asks next, and the outgoing options.
+ * Set a Condition, Human Handoff, Time Delay, etc.
+ * Returns what the bot says/asks next, and the outgoing options.
  */
 export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionContext): FlowStepResult | null {
   const node = bot.flow?.nodes.find(n => n.id === nodeId);
@@ -194,6 +208,38 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
         chatbotHandoff: { targetBotId }
       };
     }
+
+    case "humanHandoff": {
+      // Ask the handoff question with Yes/No buttons
+      const questionText = node.data?.handoffQuestionText || "Would you like to speak with a human agent?";
+      const yesPersonId = node.data?.yesPersonId || "";
+      const noResponse = node.data?.noResponse;
+
+      return {
+        nodeId: node.id,
+        messageText: questionText,
+        awaitingInput: false,
+        buttons: [
+          {
+            label: "Yes",
+            nextNodeId: null, // Handled by handoffYes result — caller sees assignHuman
+            actionType: "quick_reply" as const,
+            // We encode the personId and "yes" in a special way that BotTestChatPanel can detect
+          },
+          {
+            label: "No",
+            nextNodeId: null,
+            actionType: "quick_reply" as const,
+          }
+        ],
+        // Also expose the branch data so the test panel can route to the right outcome
+        assignHuman: yesPersonId ? { personId: yesPersonId } : undefined,
+        // Store noResponse in messageText auxiliary via a JSON side-channel:
+        // The panel checks btn.label === "Yes" / "No" when nodeType is humanHandoff
+        // We'll handle this in BotTestChatPanel directly by inspecting the node type
+      };
+    }
+
     case "message":
       return {
         nodeId: node.id,
@@ -201,12 +247,14 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
         buttons: undefined,
         awaitingInput: false,
       };
+
     case "template":
       return {
         nodeId: node.id,
         messageText: `[Would send template: ${node.data?.templateId ?? "Unnamed template"}]`,
         awaitingInput: false,
       };
+
     case "question": {
       let choices: FetchedOption[] = [];
       const mode = node.data?.optionsSource?.mode ?? "static";
@@ -222,15 +270,18 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
           choices = resolveDynamicOptions(moduleKey || "teamMembers");
         }
       } else {
-        // Static: literal admin-typed choices
-        const staticList = node.data?.questionType === "buttons"
+        // Static: admin-typed ButtonAction[] (new) or plain string[] (legacy)
+        const rawButtons: Array<ButtonAction | string> = node.data?.questionType === "buttons"
           ? (node.data?.buttons || [])
           : (node.data?.listItems || []);
-        choices = staticList.map((label: string, i: number) => ({
-          id: String(i),
-          label: label || `Choice ${i + 1}`,
-          value: label
-        }));
+
+        choices = rawButtons.map((item, i) => {
+          if (typeof item === "string") {
+            return { id: String(i), label: item || `Choice ${i + 1}`, value: item };
+          }
+          // ButtonAction
+          return { id: String(i), label: item.label || `Button ${i + 1}`, value: item.label };
+        });
       }
 
       if (node.data?.questionType === "open" || !node.data?.questionType) {
@@ -251,6 +302,7 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
           buttons: choices.map((opt: FetchedOption) => ({
             label: opt.label,
             nextNodeId: nextNodeIdForAny,
+            actionType: "quick_reply" as const,
           })),
           awaitingInput: false,
           saveResponseField: node.data?.saveResponseField,
@@ -259,19 +311,41 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
       }
 
       // Static and standard Available modes: per-choice connections via choice-N ports
+      // For ButtonAction types (call/url/email), treat as terminal (nextNodeId = null)
+      const rawButtonsForResult: Array<ButtonAction | string> = node.data?.questionType === "buttons"
+        ? (node.data?.buttons || [])
+        : (node.data?.listItems || []);
+
       return {
         nodeId: node.id,
         messageText: node.data?.text ?? "Please choose an option:",
-        buttons: choices.map((opt: FetchedOption, i: number) => ({
-          label: opt.label,
-          nextNodeId: node.connections?.find(c => c.fromPort === `choice-${i}`)?.toNodeId
-            ?? node.connections?.[i]?.toNodeId
-            ?? null,
-        })),
+        buttons: choices.map((opt: FetchedOption, i: number) => {
+          const rawItem = rawButtonsForResult[i];
+          const actionType: ButtonAction["actionType"] =
+            typeof rawItem === "object" && rawItem.actionType ? rawItem.actionType : "quick_reply";
+          const actionValue: string =
+            typeof rawItem === "object" && rawItem.value ? rawItem.value : "";
+
+          // Non-quick_reply buttons are terminal (call/url/email open externally)
+          const isTerminal = actionType !== "quick_reply";
+          const nextNodeId = isTerminal
+            ? null
+            : (node.connections?.find(c => c.fromPort === `choice-${i}`)?.toNodeId
+               ?? node.connections?.[i]?.toNodeId
+               ?? null);
+
+          return {
+            label: opt.label,
+            nextNodeId,
+            actionType,
+            actionValue: isTerminal ? actionValue : undefined,
+          };
+        }),
         awaitingInput: false,
         saveResponseField: node.data?.saveResponseField,
       };
     }
+
     case "condition":
       return {
         nodeId: node.id,
@@ -282,10 +356,11 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
           let label = `Branch ${i + 1} →`;
           if (c.fromPort === "true") label = "True / Yes →";
           if (c.fromPort === "false") label = "False / No →";
-          return { label, nextNodeId: c.toNodeId };
+          return { label, nextNodeId: c.toNodeId, actionType: "quick_reply" as const };
         }),
         awaitingInput: false,
       };
+
     case "updateChatStatus":
       return {
         nodeId: node.id,
@@ -299,12 +374,39 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
         messageText: `[Flow Action: Set tags - ${(node.data?.tags || []).join(", ") || "none"}]`,
         awaitingInput: false,
       };
-    case "timeDelay":
+
+    case "timeDelay": {
+      const duration = node.data?.duration || 1;
+      const unit = node.data?.unit || "Minute";
+      const delayMs = getDelayMs(duration, unit);
       return {
         nodeId: node.id,
-        messageText: `[Flow Action: Wait for ${node.data?.duration || 1} ${node.data?.unit || "Minute"}(s)]`,
+        messageText: `[Flow Action: Wait for ${duration} ${unit}(s)]`,
+        awaitingInput: false,
+        delayMs,
+      };
+    }
+
+    case "assignHuman": {
+      const personId = node.data?.employeeId || "";
+      return {
+        nodeId: node.id,
+        messageText: `[Flow Action: Assign conversation to team member${personId ? ` (id: ${personId})` : ""}]`,
+        awaitingInput: false,
+        assignHuman: personId ? { personId } : undefined,
+      };
+    }
+
+    case "fieldUpdate": {
+      const fieldKey = node.data?.fieldKey || "—";
+      const value = node.data?.value || "—";
+      return {
+        nodeId: node.id,
+        messageText: `[Flow Action: Update field "${fieldKey}" → "${value}"]`,
         awaitingInput: false,
       };
+    }
+
     default:
       return {
         nodeId: node.id,

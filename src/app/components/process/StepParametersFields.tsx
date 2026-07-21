@@ -57,6 +57,8 @@ export default function StepParametersFields({
 
   const [parametersSectionExpanded, setParametersSectionExpanded] = useState(true);
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
+  const [whatsappCampaigns, setWhatsappCampaigns] = useState<any[]>([]);
+  const [whatsappChatbots, setWhatsappChatbots] = useState<any[]>([]);
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
   const [jsonPaste, setJsonPaste] = useState("");
@@ -73,8 +75,9 @@ export default function StepParametersFields({
   useEffect(() => {
     if (stepKey === "whatsapp" || stepKey === "send-whatsapp") {
       try {
-        const stored = JSON.parse(localStorage.getItem("whatsappGlobalTemplates") || "[]");
-        setWhatsappTemplates(stored);
+        setWhatsappTemplates(JSON.parse(localStorage.getItem("whatsappGlobalTemplates") || "[]"));
+        setWhatsappCampaigns(JSON.parse(localStorage.getItem("whatsappCampaigns") || "[]"));
+        setWhatsappChatbots(JSON.parse(localStorage.getItem("chatbotBots") || "[]"));
       } catch (e) {
         console.error(e);
       }
@@ -133,6 +136,9 @@ export default function StepParametersFields({
   const callActionVoiceResponse = params.callActionVoiceResponse ?? "";
 
   const whatsappTemplate = params.whatsappTemplate ?? "";
+  const whatsappSource = params.whatsappSource ?? "template";
+  const whatsappCampaignId = params.whatsappCampaignId ?? "";
+  const whatsappChatbotId = params.whatsappChatbotId ?? "";
   const smsMessage = params.smsMessage ?? "";
   const smsConnectedAccount = params.smsConnectedAccount ?? "";
   const emailConnectedAccount = params.emailConnectedAccount ?? "";
@@ -723,46 +729,138 @@ export default function StepParametersFields({
 
             {(stepKey === "whatsapp" || stepKey === "send-whatsapp") && (
               <div className="space-y-4">
-                {whatsappTemplates.length === 0 ? (
-                  <div className="space-y-1.5">
-                    <label className="block text-sm font-semibold text-[#020817]">Template</label>
-                    <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                      <span>No templates yet — create one in Chats → Template Builder</span>
-                      <Link to="/chats?tab=templates" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                        Manage Templates →
-                      </Link>
-                    </div>
+                {renderField(
+                  "Select Source",
+                  <div className="inline-flex rounded-md border border-border overflow-hidden bg-white">
+                    {[
+                      { v: "template", l: "Template" },
+                      { v: "campaign", l: "Campaign" },
+                      { v: "chatbot", l: "Chatbot" }
+                    ].map(opt => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => {
+                          if (opt.v === "template") {
+                            onChange({ whatsappSource: "template", whatsappCampaignId: "", whatsappChatbotId: "" });
+                          } else if (opt.v === "campaign") {
+                            onChange({ whatsappSource: "campaign", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappChatbotId: "" });
+                          } else if (opt.v === "chatbot") {
+                            onChange({ whatsappSource: "chatbot", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappCampaignId: "" });
+                          }
+                        }}
+                        className={`px-3 py-1.5 text-xs font-semibold ${whatsappSource === opt.v ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
+                      >
+                        {opt.l}
+                      </button>
+                    ))}
                   </div>
-                ) : (
-                  renderField(
-                    "Template",
-                    <select
-                      value={whatsappTemplate}
-                      onChange={e => {
-                        const id = e.target.value;
-                        const selectedTpl = whatsappTemplates.find(t => t.id === id);
-                        onChange({
-                          whatsappTemplate: id,
-                          whatsappTemplateIdentifier: selectedTpl ? selectedTpl.identifier : ""
-                        });
-                      }}
-                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                    >
-                      <option value="">Select Template...</option>
-                      {whatsappTemplates.map(t => (
-                        <option key={t.id} value={t.id}>
-                          {t.name} — {t.category}
-                        </option>
-                      ))}
-                    </select>
+                )}
+
+                {whatsappSource === "template" && (
+                  <>
+                    {whatsappTemplates.length === 0 ? (
+                      <div className="space-y-1.5">
+                        <label className="block text-sm font-semibold text-[#020817]">Template</label>
+                        <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                          <span>No templates yet — create one in Chats → Template Builder</span>
+                          <Link to="/chats?tab=templates" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                            Manage Templates →
+                          </Link>
+                        </div>
+                      </div>
+                    ) : (
+                      renderField(
+                        "Template",
+                        <select
+                          value={whatsappTemplate}
+                          onChange={e => {
+                            const id = e.target.value;
+                            const selectedTpl = whatsappTemplates.find(t => t.id === id);
+                            onChange({
+                              whatsappTemplate: id,
+                              whatsappTemplateIdentifier: selectedTpl ? selectedTpl.identifier : ""
+                            });
+                          }}
+                          className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                        >
+                          <option value="">Select Template...</option>
+                          {whatsappTemplates.map(t => (
+                            <option key={t.id} value={t.id}>
+                              {t.name} — {t.category}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    )}
+                    {renderField(
+                      "Connected Account",
+                      <select className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors">
+                        <option value="">Select WhatsApp account...</option>
+                        <option>+1 (555) 123-4567</option>
+                      </select>
+                    )}
+                  </>
+                )}
+
+                {whatsappSource === "campaign" && (
+                  whatsappCampaigns.length === 0 ? (
+                    <div className="space-y-1.5">
+                      <label className="block text-sm font-semibold text-[#020817]">Campaign</label>
+                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                        <span>No campaigns yet — create one in Chats → Campaigns</span>
+                        <Link to="/chats?tab=campaigns" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                          Manage Campaigns →
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    renderField(
+                      "Campaign",
+                      <select
+                        value={whatsappCampaignId}
+                        onChange={e => onChange({ whatsappCampaignId: e.target.value })}
+                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                      >
+                        <option value="">Select Campaign...</option>
+                        {whatsappCampaigns.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    )
                   )
                 )}
-                {renderField(
-                  "Connected Account",
-                  <select className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors">
-                    <option value="">Select WhatsApp account...</option>
-                    <option>+1 (555) 123-4567</option>
-                  </select>
+
+                {whatsappSource === "chatbot" && (
+                  whatsappChatbots.length === 0 ? (
+                    <div className="space-y-1.5">
+                      <label className="block text-sm font-semibold text-[#020817]">Chatbot</label>
+                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
+                        <span>No chatbots yet — create one in Chats → Chatbot</span>
+                        <Link to="/chats?tab=chatbot" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
+                          Manage Chatbots →
+                        </Link>
+                      </div>
+                    </div>
+                  ) : (
+                    renderField(
+                      "Chatbot",
+                      <select
+                        value={whatsappChatbotId}
+                        onChange={e => onChange({ whatsappChatbotId: e.target.value })}
+                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                      >
+                        <option value="">Select Chatbot...</option>
+                        {whatsappChatbots.map(b => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                    )
+                  )
                 )}
               </div>
             )}

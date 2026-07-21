@@ -1790,11 +1790,6 @@ export default function Settings() {
     setValidationErrors({});
     setIntegrationConfigTab("api"); // Start with API tab
 
-    if (integration.id === "whatsapp-business") {
-      const creds = integration.credentials || {};
-      setWhatsappProvider(creds.provider || "twilio");
-    }
-
     // Initialize default values for toggles
     const fields = getIntegrationFields(integration.id);
     const defaultValues: Record<string, string> = {};
@@ -1817,10 +1812,6 @@ export default function Settings() {
     setValidationErrors({});
     setIntegrationConfigTab("api"); // Start with API tab when managing
 
-    if (integration.id === "whatsapp-business") {
-      const creds = integration.credentials || {};
-      setWhatsappProvider(creds.provider || "twilio");
-    }
     // If Bitrix is already connected, mark as tested and expand mapping section
     if (integration.id === "bitrix24" && integration.connected) {
       setBitrixConnectionTested(true);
@@ -1846,6 +1837,79 @@ export default function Settings() {
       setMetaSelectedForms([]);
     }
     setShowIntegrationModal(true);
+  };
+
+  const handleMetaEmbeddedSignup = () => {
+    // Meta's Embedded Signup is launched via the Facebook JS SDK's FB.login,
+    // using a config_id created in Meta App Dashboard > WhatsApp > Embedded Signup.
+    // This must load the FB SDK (already common practice for meta-leads-style integrations)
+    // and call it with the WhatsApp-specific config_id + response_type: "code".
+    if (typeof (window as any).FB === "undefined") {
+      toast.error("Facebook SDK not loaded — please refresh and try again.");
+      return;
+    }
+
+    (window as any).FB.login(
+      (response: any) => {
+        if (response.authResponse && response.authResponse.code) {
+          // Exchange the auth code server-side for a system user access token,
+          // WABA ID, and phone number ID. This exchange must happen on the backend —
+          // never expose the app secret client-side.
+          handleMetaSignupCallback(response.authResponse.code);
+        } else {
+          toast.error("WhatsApp signup was cancelled or did not complete.");
+        }
+      },
+      {
+        config_id: "YOUR_META_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID", // from Meta App Dashboard
+        response_type: "code",
+        override_default_response_type: true,
+        extras: {
+          setup: {
+            // Pre-fill the phone number hint if provided
+            phone: integrationCredentials.phoneNumberHint || undefined,
+          },
+          featureType: "whatsapp_business_app_onboarding",
+          sessionInfoVersion: "3",
+        },
+      }
+    );
+  };
+
+  const handleMetaSignupCallback = async (authCode: string) => {
+    // TODO(backend): POST authCode to your server, which exchanges it with Meta's
+    // Graph API for a long-lived access token, then fetches the WABA ID and
+    // phone_number_id via the /debug_token and /waba endpoints.
+    // On success, the backend returns { wabaId, phoneNumberId, businessAccountId, displayPhoneNumber }.
+    try {
+      // Placeholder for the actual backend call — replace with real endpoint.
+      const result = await fetch("/api/integrations/whatsapp/meta-signup-callback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: authCode }),
+      }).then((r) => r.json());
+
+      setIntegrationCredentials({
+        ...integrationCredentials,
+        wabaId: result.wabaId,
+        phoneNumberId: result.phoneNumberId,
+        businessAccountId: result.businessAccountId,
+        displayPhoneNumber: result.displayPhoneNumber,
+        connectedViaMeta: "true",
+      });
+
+      setIntegrations((prev) =>
+        prev.map((i) =>
+          i.id === "whatsapp-business"
+            ? { ...i, connected: true, credentials: { ...integrationCredentials, ...result, connectedViaMeta: "true" } }
+            : i
+        )
+      );
+
+      toast.success(`WhatsApp Business connected: ${result.displayPhoneNumber}`);
+    } catch (err) {
+      toast.error("Couldn't complete WhatsApp signup — please try again.");
+    }
   };
 
   const handleSaveIntegration = () => {
@@ -1901,53 +1965,20 @@ export default function Settings() {
     }
 
     if (selectedIntegration.id === "whatsapp-business") {
-      if (!integrationCredentials.name) {
-        setValidationErrors({ ...validationErrors, name: "Connection Name is required" });
-        toast.error("Please fill in all required fields");
-        return;
-      }
-
-      const providerFields = getWhatsappProviderFields(whatsappProvider);
-      const errors: Record<string, string> = {};
-      let hasErrors = false;
-
-      providerFields.forEach(field => {
-        if (field.label.endsWith("*")) {
-          const val = integrationCredentials[field.name];
-          if (!val || !val.trim()) {
-            errors[field.name] = `${field.label.replace(" *", "")} is required`;
-            hasErrors = true;
-          }
-        }
-      });
-
-      if (hasErrors) {
-        setValidationErrors(errors);
-        toast.error("Please fill in all required fields");
-        return;
-      }
-
       try {
         const existing = JSON.parse(localStorage.getItem('whatsappTemplateIntegrations') || '[]');
         const connectionId = integrationCredentials.id || `wa-${Date.now()}`;
 
-        const providerSpecificFieldValues: Record<string, string> = {};
-        providerFields.forEach(field => {
-          providerSpecificFieldValues[field.name] = integrationCredentials[field.name] || "";
-        });
-
         const credentialsData = {
+          ...integrationCredentials,
           id: connectionId,
-          name: integrationCredentials.name,
-          provider: whatsappProvider,
-          ...providerSpecificFieldValues
         };
 
         const newEntry = {
           id: connectionId,
-          name: integrationCredentials.name,
-          provider: whatsappProvider,
-          providerLabel: WHATSAPP_PROVIDERS.find(p => p.id === whatsappProvider)?.name || whatsappProvider,
+          name: integrationCredentials.displayPhoneNumber ? `WhatsApp (${integrationCredentials.displayPhoneNumber})` : "WhatsApp Business",
+          provider: "meta",
+          providerLabel: "Meta Cloud API",
           credentials: credentialsData,
         };
 
@@ -1959,7 +1990,7 @@ export default function Settings() {
         localStorage.setItem('whatsappTemplateIntegrations', JSON.stringify(updated));
         
         integrationCredentials.id = connectionId;
-        integrationCredentials.provider = whatsappProvider;
+        integrationCredentials.provider = "meta";
       } catch (e) {
         console.error(e);
       }
@@ -2443,51 +2474,6 @@ export default function Settings() {
     return fields[integrationId] || [];
   };
 
-  const WHATSAPP_PROVIDERS = [
-    { id: "twilio", name: "Twilio" },
-    { id: "interakt", name: "Interakt" },
-    { id: "whapi", name: "WhAPI (whapi.cloud)" },
-  ];
-
-  const getWhatsappProviderFields = (provider: string) => {
-    const fields: Record<string, Array<{ name: string; label: string; type?: string; placeholder?: string; tooltip?: string; readonly?: boolean }>> = {
-      twilio: [
-        { name: "accountSid", label: "Account SID *", type: "password", placeholder: "ACxxxxxxxxxxxxxxxxxxxx", tooltip: "Found in Twilio Console → Account Info" },
-        { name: "authToken", label: "Auth Token *", type: "password", placeholder: "Enter Auth Token", tooltip: "Secret key used to authenticate API requests" },
-        { name: "whatsappNumber", label: "WhatsApp Sender Number *", type: "text", placeholder: "whatsapp:+14155238886", tooltip: "The WhatsApp-enabled number provisioned in your Twilio account" }
-      ],
-      interakt: [
-        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter Interakt API Key", tooltip: "Found in Interakt → Settings → API Keys" },
-        { name: "phoneNumberId", label: "WABA Phone Number ID *", type: "text", placeholder: "Enter Phone Number ID" },
-        { name: "verifyToken", label: "Webhook Verify Token", type: "text", placeholder: "Create a secret string", tooltip: "Used by Interakt to verify webhook requests are genuine" }
-      ],
-      whapi: [
-        { name: "apiToken", label: "API Token *", type: "password", placeholder: "Enter WhAPI Token", tooltip: "Found in your WhAPI Cloud dashboard" },
-        { name: "channelId", label: "Channel / Instance ID *", type: "text", placeholder: "Enter Channel ID" }
-      ],
-      gupshup: [
-        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter Gupshup API Key" },
-        { name: "appName", label: "App Name *", type: "text", placeholder: "Enter Gupshup App Name" },
-        { name: "sourceNumber", label: "Source Number *", type: "text", placeholder: "+14155238886" }
-      ],
-      "360dialog": [
-        { name: "apiKey", label: "D360 API Key *", type: "password", placeholder: "Enter 360dialog API Key", tooltip: "Sent as the D360-API-KEY header" },
-        { name: "channelId", label: "Channel ID *", type: "text", placeholder: "Enter Channel ID" }
-      ],
-      messagebird: [
-        { name: "apiKey", label: "API Key *", type: "password", placeholder: "Enter MessageBird API Key" },
-        { name: "channelId", label: "WhatsApp Channel ID *", type: "text", placeholder: "Enter Channel ID" },
-        { name: "originator", label: "Originator Number *", type: "text", placeholder: "+14155238886" }
-      ],
-      other: [
-        { name: "providerName", label: "Provider Name *", type: "text", placeholder: "e.g. Internal Gateway" },
-        { name: "apiEndpoint", label: "API Endpoint *", type: "text", placeholder: "https://api.provider.com/send" },
-        { name: "apiKey", label: "API Key / Token *", type: "password", placeholder: "Enter credential" }
-      ]
-    };
-    return fields[provider] || [];
-  };
-
   // Integrations State
   const [integrations, setIntegrations] = useState<Integration[]>([
     // EHR
@@ -2547,7 +2533,6 @@ export default function Settings() {
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [integrationCredentials, setIntegrationCredentials] = useState<Record<string, string>>({});
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({});
-  const [whatsappProvider, setWhatsappProvider] = useState<string>("twilio");
   const [isTestingConnection, setIsTestingConnection] = useState(false);
   const [testConnectionStatus, setTestConnectionStatus] = useState<"idle" | "success" | "error">("idle");
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -9583,9 +9568,11 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                   ) : (
                     <div>
                       {/* Section: API Details */}
-                      <h3 className="text-base font-semibold mb-4" style={TEXT_STYLES.heading}>
-                        {selectedIntegration.id === "zadarma" ? "SIP Configuration" : "API Details"}
-                      </h3>
+                      {selectedIntegration.id !== "whatsapp-business" && (
+                        <h3 className="text-base font-semibold mb-4" style={TEXT_STYLES.heading}>
+                          {selectedIntegration.id === "zadarma" ? "SIP Configuration" : "API Details"}
+                        </h3>
+                      )}
                       <div className="space-y-4">
                         {getIntegrationFields(selectedIntegration.id).map((field) => (
                           <div key={field.name}>
@@ -9707,203 +9694,83 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
 
                   {selectedIntegration?.id === "whatsapp-business" && (
                     <div className="space-y-6">
-                      {/* Connection Name */}
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <label className="block text-sm font-medium">Connection Name *</label>
-                          <Tooltip text="Internal label so your team can identify this connection. Not sent anywhere.">
-                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                          </Tooltip>
-                        </div>
-                        <input
-                          type="text"
-                          value={integrationCredentials.name || ""}
-                          onChange={(e) => setIntegrationCredentials({ ...integrationCredentials, name: e.target.value })}
-                          placeholder="e.g. Front Desk WhatsApp"
-                          className={`w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm ${validationErrors.name ? "border-destructive" : ""}`}
-                        />
-                        {validationErrors.name && (
-                          <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                            <AlertCircle className="w-3 h-3" />
-                            {validationErrors.name}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Provider Selector */}
-                      <div>
-                        <label className="block text-sm font-medium mb-2">Provider</label>
-                        <select
-                          value={whatsappProvider}
-                          onChange={(e) => {
-                            setWhatsappProvider(e.target.value);
-                            setValidationErrors({});
-                          }}
-                          className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
-                        >
-                          {WHATSAPP_PROVIDERS.map((prov) => (
-                            <option key={prov.id} value={prov.id}>
-                              {prov.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      {/* Provider specific inputs */}
-                      <div className="space-y-4">
-                        {getWhatsappProviderFields(whatsappProvider).map((field) => (
-                          <div key={field.name}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <label className="block text-sm font-medium">{field.label}</label>
-                              {field.tooltip && (
-                                <Tooltip text={field.tooltip}>
-                                  <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                                </Tooltip>
-                              )}
-                            </div>
-
-                            <div className="relative">
-                              <input
-                                type={field.type === "password" && !visibleFields[field.name] ? "password" : "text"}
-                                value={integrationCredentials[field.name] || ""}
-                                onChange={(e) =>
-                                  setIntegrationCredentials({
-                                    ...integrationCredentials,
-                                    [field.name]: e.target.value,
-                                  })
-                                }
-                                placeholder={field.placeholder}
-                                className={`w-full px-4 py-2 pr-10 bg-input-background border border-input rounded-xl text-sm ${
-                                  validationErrors[field.name] ? "border-destructive" : ""
-                                }`}
-                              />
-                              {field.type === "password" && (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setVisibleFields({
-                                      ...visibleFields,
-                                      [field.name]: !visibleFields[field.name],
-                                    })
-                                  }
-                                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                >
-                                  {visibleFields[field.name] ? (
-                                    <EyeOff className="w-4 h-4" />
-                                  ) : (
-                                    <Eye className="w-4 h-4" />
-                                  )}
-                                </button>
-                              )}
-                            </div>
-
-                            {validationErrors[field.name] && (
-                              <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3" />
-                                {validationErrors[field.name]}
+                      {integrationCredentials.connectedViaMeta === "true" || selectedIntegration.connected ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
+                            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                            <div>
+                              <p className="text-sm font-semibold text-green-900">
+                                Connected: {integrationCredentials.displayPhoneNumber || integrationCredentials.phoneNumberHint || "WhatsApp Business"}
                               </p>
-                            )}
+                              <p className="text-xs text-green-700 mt-0.5">
+                                WABA ID: {integrationCredentials.wabaId || "WABA-META-CLOUD"} · Managed via Meta
+                              </p>
+                            </div>
                           </div>
-                        ))}
-                      </div>
 
-                       {/* Webhook status — provider-aware */}
-                      {whatsappProvider === "twilio" ? (
-                        <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                          <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-semibold text-green-900">Webhook auto-configured</p>
-                            <p className="text-xs text-green-700 mt-0.5">
-                              MantraAssist will register the inbound webhook with Twilio automatically on save — no manual setup needed.
-                            </p>
+                          <div className="flex gap-3">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleMetaEmbeddedSignup}
+                              className="flex-1 justify-center text-xs"
+                            >
+                              Reconnect / Switch Number
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleDisconnectIntegration}
+                              className="flex-1 justify-center text-xs border-destructive text-destructive hover:bg-destructive/10"
+                            >
+                              Disconnect
+                            </Button>
                           </div>
                         </div>
                       ) : (
-                        <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-                          <div className="flex items-center gap-2">
-                            <Info className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                            <p className="text-sm font-semibold text-blue-900">Inbound Webhook URL (Manual setup required)</p>
+                        <div className="space-y-4">
+                          <div>
+                            <div className="flex items-center gap-2 mb-2">
+                              <label className="block text-sm font-medium">WhatsApp Business Phone Number</label>
+                              <Tooltip text="The number you plan to use for WhatsApp Business. You'll confirm or add this number inside the Meta signup window.">
+                                <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
+                              </Tooltip>
+                            </div>
+                            <input
+                              type="text"
+                              value={integrationCredentials.phoneNumberHint || ""}
+                              onChange={(e) =>
+                                setIntegrationCredentials({
+                                  ...integrationCredentials,
+                                  phoneNumberHint: e.target.value,
+                                })
+                              }
+                              placeholder="+1 555 123 4567"
+                              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
+                            />
+                            <p className="text-[11px] text-muted-foreground mt-1.5 leading-normal">
+                              If left blank, you'll enter your number during Meta signup.
+                            </p>
                           </div>
-                          <p className="text-xs text-blue-700">
-                            Paste this URL into your {WHATSAPP_PROVIDERS.find(p => p.id === whatsappProvider)?.name || whatsappProvider} webhook settings so incoming WhatsApp messages reach MantraAssist.
-                          </p>
-                          <div className="flex items-center gap-2 bg-white border border-blue-200 rounded-lg px-3 py-2">
-                            <code className="text-xs text-blue-800 flex-1 break-all">
-                              {`https://app.mantraassist.com/api/webhooks/whatsapp/${whatsappProvider}`}
-                            </code>
+
+                          <div className="pt-2">
                             <button
                               type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(`https://app.mantraassist.com/api/webhooks/whatsapp/${whatsappProvider}`);
-                                toast.success("Webhook URL copied");
-                              }}
-                              className="flex-shrink-0 text-blue-600 hover:text-blue-800"
+                              onClick={handleMetaEmbeddedSignup}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl font-semibold text-sm transition-colors cursor-pointer"
                             >
-                              <Copy className="w-4 h-4" />
+                              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                              </svg>
+                              Continue with Facebook — Set Up WhatsApp
                             </button>
+                            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                              This opens Meta's official WhatsApp Business signup. You'll log into your Facebook Business account, select or create your WhatsApp Business Account, and confirm your phone number — Meta handles the rest, including webhook setup.
+                            </p>
                           </div>
                         </div>
                       )}
 
-                      {/* Linked WhatsApp Templates */}
-                      <div className="border-t border-border pt-6 space-y-4">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Linked WhatsApp Templates</h3>
-                          <Tooltip text="Templates managed centrally in Chats and available for outbound automations.">
-                            <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                          </Tooltip>
-                        </div>
-
-                        {(() => {
-                          const globalTemplates = (() => {
-                            try {
-                              return JSON.parse(localStorage.getItem('whatsappGlobalTemplates') || '[]');
-                            } catch {
-                              return [];
-                            }
-                          })();
-
-                          if (globalTemplates.length === 0) {
-                            return (
-                              <div className="border-2 border-dashed border-border rounded-xl p-8 text-center">
-                                <MessageCircle className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                                <h4 className="font-semibold mb-1" style={TEXT_STYLES.heading}>No templates added yet</h4>
-                                <p className="text-sm text-muted-foreground">Add and manage WhatsApp templates in the Template Builder.</p>
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <div className="border border-border rounded-xl overflow-hidden divide-y divide-border">
-                              {globalTemplates.map((t: any) => (
-                                <div key={t.id} className="flex items-center justify-between p-3 hover:bg-muted/30 transition-colors">
-                                  <div>
-                                    <p className="text-sm font-medium">{t.name}</p>
-                                    <p className="text-xs text-muted-foreground font-mono">{t.identifier}</p>
-                                  </div>
-                                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                    {t.category}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          );
-                        })()}
-
-                        <Button
-                          variant="outline"
-                          type="button"
-                          className="w-full justify-center"
-                          onClick={() => {
-                            setShowIntegrationModal(false);
-                            setSelectedIntegration(null);
-                            setIntegrationCredentials({});
-                            navigate("/chats?tab=templates");
-                          }}
-                        >
-                          Manage Templates →
-                        </Button>
-                      </div>
                     </div>
                   )}
 
@@ -10374,24 +10241,26 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                         Cancel
                       </Button>
                     </Tooltip>
-                    <Tooltip
-                      text={
-                        selectedIntegration.id === "bitrix24"
-                          ? "Verify if the API URL is working correctly."
-                          : selectedIntegration.id === "salesforce"
-                            ? "Verify if the API URL and authorization token are working."
-                            : "Verify credentials before saving"
-                      }
-                    >
-                      <Button
-                        variant="outline"
-                        onClick={handleTestConnection}
-                        loading={isTestingConnection}
-                        className="flex-1"
+                    {selectedIntegration.id !== "whatsapp-business" && (
+                      <Tooltip
+                        text={
+                          selectedIntegration.id === "bitrix24"
+                            ? "Verify if the API URL is working correctly."
+                            : selectedIntegration.id === "salesforce"
+                              ? "Verify if the API URL and authorization token are working."
+                              : "Verify credentials before saving"
+                        }
                       >
-                        Test Connection
-                      </Button>
-                    </Tooltip>
+                        <Button
+                          variant="outline"
+                          onClick={handleTestConnection}
+                          loading={isTestingConnection}
+                          className="flex-1"
+                        >
+                          Test Connection
+                        </Button>
+                      </Tooltip>
+                    )}
                     <Tooltip
                       text={
                         selectedIntegration.id === "bitrix24"

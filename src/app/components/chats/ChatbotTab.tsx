@@ -4,6 +4,7 @@ import { Search, Plus, Trash2, Pencil, Bot } from "lucide-react";
 
 import { Campaign, WhatsappTemplate, EscalationRule, TemplateRule } from "../../pages/Chats";
 import ChatbotFlowBuilder, { ChatbotFlowNode } from "./ChatbotFlowBuilder";
+import { DynamicResponse, HandoffNoResponse, ButtonAction } from "../../../lib/chatbotTypes";
 
 export type ChannelType = "whatsapp" | "sms" | "website";
 
@@ -20,14 +21,18 @@ export interface Bot {
   afterHoursPersonId: string;
   offlineMessage: string;
   handoffEnabled: boolean;
-  handoffKeyword: string;
-  handoffPersonId: string;
+  handoffKeyword?: string;          // Deprecated, kept for fallback
+  handoffPersonId?: string;         // Deprecated, kept for fallback
+  handoffQuestionText?: string;     // Question asked when human handoff is triggered
+  handoffYesPersonId?: string;      // Assigned person on "Yes"
+  handoffNoResponse?: HandoffNoResponse; // Response on "No"
   appointmentBookingEnabled: boolean;
   appointmentCampaignId: string;
   appointmentPersonId: string;
   // Advanced
   escalationRules: EscalationRule[];
-  fallbackMessage: string;
+  fallbackMessage?: string;          // Deprecated, kept for fallback
+  fallbackResponse?: DynamicResponse; // Dynamic response (Text/Question/Template)
   aiModelTier: string;
   aiVoiceStyle: string;
   businessHoursMode?: "inherit" | "custom";
@@ -52,10 +57,21 @@ export interface Bot {
   };
 }
 
+export function getEffectiveFallbackResponse(bot: Bot): DynamicResponse {
+  if (bot.fallbackResponse) {
+    return bot.fallbackResponse;
+  }
+  return {
+    type: "text",
+    text: bot.fallbackMessage || "I'm not sure I understood that. Could you rephrase, or would you like to speak with a team member?"
+  };
+}
+
 interface ChatbotTabProps {
   campaigns: Campaign[];
   employees: { id: string; name: string }[];
   templates?: WhatsappTemplate[];
+  statusFilter?: "all" | "active" | "inactive";
 }
 
 const SEED_BOTS: Bot[] = [
@@ -152,7 +168,7 @@ const CHANNEL_LABELS: Record<ChannelType, string> = {
 
 import { availableProcesses } from "../ui/ProcessStageSelect";
 
-export default function ChatbotTab({ campaigns, employees, templates = [] }: ChatbotTabProps) {
+export default function ChatbotTab({ campaigns, employees, templates = [], statusFilter = "all" }: ChatbotTabProps) {
   const [bots, setBots] = useState<Bot[]>(() => {
     const stored = localStorage.getItem("chatbotBots");
     return stored ? JSON.parse(stored) : SEED_BOTS;
@@ -236,6 +252,7 @@ export default function ChatbotTab({ campaigns, employees, templates = [] }: Cha
             bot={builderBot}
             employees={employees}
             templates={templates}
+            allBots={bots}
             onClose={() => setFlowBuilderBotId(null)}
             onSave={(updatedBot) => {
               setBots(prev => prev.map(b => b.id === updatedBot.id ? updatedBot : b));
@@ -336,11 +353,13 @@ export default function ChatbotTab({ campaigns, employees, templates = [] }: Cha
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {bots
-                    .filter(b =>
-                      !botSearchQuery ||
-                      b.name.toLowerCase().includes(botSearchQuery.toLowerCase()) ||
-                      b.description.toLowerCase().includes(botSearchQuery.toLowerCase())
-                    )
+                    .filter(b => {
+                      const matchesSearch = !botSearchQuery ||
+                        b.name.toLowerCase().includes(botSearchQuery.toLowerCase()) ||
+                        b.description.toLowerCase().includes(botSearchQuery.toLowerCase());
+                      const matchesStatus = statusFilter === "all" ? true : statusFilter === "active" ? b.active : !b.active;
+                      return matchesSearch && matchesStatus;
+                    })
                     .map((bot) => {
                       const nodeCount = bot.flow?.nodes?.length ?? 0;
                       return (

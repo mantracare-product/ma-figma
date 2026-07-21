@@ -98,6 +98,12 @@ export interface WhatsappTemplate {
   footerText?: string;
   buttons: Array<{ type: string; label: string; value?: string }>;
   createdAt: string;
+  /** Maps each {{variable}} token in bodyText to a data source */
+  variableMappings?: Record<string, {
+    source: "static" | "field" | "availability";
+    staticValue?: string;
+    fieldKey?: string;
+  }>;
 }
 
 export interface CampaignNode {
@@ -112,6 +118,8 @@ export interface CampaignNode {
   conditionField?: string;
   conditionOp?: string;
   conditionValue?: string;
+  messageMode?: "text" | "template" | "chatbot";
+  targetBotId?: string;
 }
 
 export interface Campaign {
@@ -410,78 +418,273 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
   campaignForm, setCampaignForm, campaignNodes, setCampaignNodes,
   editingNodeId, setEditingNodeId, editingCampaignId, globalTemplates,
   handleAddNode, handleSaveCampaign, onBack, backLabel = "Cancel",
-}) => (
-  <div className="flex gap-6 items-start">
-    <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <div>
-          <input type="text" value={campaignForm.name} onChange={e => setCampaignForm(prev => ({ ...prev, name: e.target.value }))}
-            placeholder="Campaign name..." className="text-xl font-bold text-gray-900 outline-none border-b-2 border-transparent focus:border-blue-500 transition-colors pb-0.5 bg-transparent"
-            style={{ fontFamily: "DM Sans, sans-serif" }} />
-          <input type="text" value={campaignForm.audience} onChange={e => setCampaignForm(prev => ({ ...prev, audience: e.target.value }))}
-            placeholder="Target audience (e.g. All new leads)" className="block text-sm text-gray-500 outline-none mt-1 bg-transparent w-full"
-            style={{ fontFamily: "Outfit, sans-serif" }} />
+}) => {
+  const nodeTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const conditionValueRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const [availableBots, setAvailableBots] = useState<{ id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("chatbotBots");
+      if (raw) {
+        setAvailableBots(JSON.parse(raw));
+      }
+    } catch {}
+  }, []);
+
+  return (
+    <div className="flex gap-6 items-start">
+      <div className="flex-1 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <input type="text" value={campaignForm.name} onChange={e => setCampaignForm(prev => ({ ...prev, name: e.target.value }))}
+              placeholder="Campaign name..." className="text-xl font-bold text-gray-900 outline-none border-b-2 border-transparent focus:border-blue-500 transition-colors pb-0.5 bg-transparent"
+              style={{ fontFamily: "DM Sans, sans-serif" }} />
+            <input type="text" value={campaignForm.audience} onChange={e => setCampaignForm(prev => ({ ...prev, audience: e.target.value }))}
+              placeholder="Target audience (e.g. All new leads)" className="block text-sm text-gray-500 outline-none mt-1 bg-transparent w-full"
+              style={{ fontFamily: "Outfit, sans-serif" }} />
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onBack}>{backLabel}</Button>
+            <Button variant="primary" onClick={handleSaveCampaign}>{editingCampaignId ? "Update Campaign" : "Save Campaign"}</Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={onBack}>{backLabel}</Button>
-          <Button variant="primary" onClick={handleSaveCampaign}>{editingCampaignId ? "Update Campaign" : "Save Campaign"}</Button>
+        <div className="p-6 space-y-0 max-h-[calc(100vh-340px)] overflow-y-auto">
+          {campaignNodes.map((node, idx) => {
+            const isSelected = editingNodeId === node.id;
+            return (
+              <div key={node.id}>
+                <div className={`relative border-2 rounded-xl p-4 cursor-pointer transition-all ${isSelected ? "border-blue-500 shadow-md" : "border-gray-200 hover:border-gray-300"} ${node.type === "end" ? "opacity-60" : ""}`}
+                  onClick={() => node.type !== "end" && setEditingNodeId(editingNodeId === node.id ? null : node.id)}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${NODE_TYPE_COLOR[node.type]}`}>{NODE_TYPE_ICON[node.type]}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{node.label}</p>
+                      {node.type === "message" && (
+                        <p className="text-xs text-gray-500 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {node.messageMode === "template"
+                            ? `Template: ${globalTemplates.find(t => t.identifier === node.templateIdentifier || t.id === node.templateIdentifier)?.name || node.templateIdentifier || "—"}`
+                            : node.messageMode === "chatbot"
+                            ? `Chatbot: ${availableBots.find(b => b.id === node.targetBotId)?.name || "—"}`
+                            : node.content || "—"}
+                        </p>
+                      )}
+                      {node.type === "delay" && node.delayValue && (
+                        <p className="text-xs text-yellow-600 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Wait {node.delayValue} {node.delayUnit}</p>
+                      )}
+                      {node.type === "condition" && (
+                        <p className="text-xs text-purple-650 font-semibold truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          If {node.conditionField || "name"} {node.conditionOp || "equals"} {node.conditionOp !== "is_empty" ? `"${node.conditionValue || ""}"` : ""}
+                        </p>
+                      )}
+                    </div>
+                    {node.type !== "end" && (
+                      <button className="p-1.5 hover:bg-gray-100 rounded-lg" onClick={e => { e.stopPropagation(); setCampaignNodes(prev => prev.filter(n => n.id !== node.id)); if (editingNodeId === node.id) setEditingNodeId(null); toast.success("Step removed"); }}>
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {idx < campaignNodes.length - 1 && (
+                  <div className="flex flex-col items-center py-1">
+                    <div className="w-px h-4 bg-gray-300" />
+                    <ArrowRight className="w-4 h-4 text-gray-300 rotate-90" />
+                    <div className="w-px h-1 bg-gray-300" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <div className="pt-4 flex flex-wrap gap-2 justify-center">
+            {(["message", "delay", "condition"] as const).map(type => (
+              <button key={type} onClick={() => handleAddNode(type)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all hover:shadow-sm ${NODE_TYPE_COLOR[type]}`}
+                style={{ fontFamily: "DM Sans, sans-serif" }}>
+                <Plus className="w-3.5 h-3.5" />Add {type.charAt(0).toUpperCase() + type.slice(1)}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-      <div className="p-6 space-y-0 max-h-[calc(100vh-340px)] overflow-y-auto">
-        {campaignNodes.map((node, idx) => (
-          <div key={node.id}>
-            <div className={`relative border-2 rounded-xl p-4 cursor-pointer transition-all ${editingNodeId === node.id ? "border-blue-500 shadow-md" : "border-gray-200 hover:border-gray-300"} ${node.type === "end" ? "opacity-60" : ""}`}
-              onClick={() => node.type !== "end" && setEditingNodeId(editingNodeId === node.id ? null : node.id)}>
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center border ${NODE_TYPE_COLOR[node.type]}`}>{NODE_TYPE_ICON[node.type]}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{node.label}</p>
-                  {node.type === "message" && node.content && (
-                    <p className="text-xs text-gray-500 truncate mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{node.content}</p>
-                  )}
-                  {node.type === "delay" && node.delayValue && (
-                    <p className="text-xs text-yellow-600 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Wait {node.delayValue} {node.delayUnit}</p>
-                  )}
+      
+      <div className="w-[360px] shrink-0 space-y-4">
+        {editingNodeId && (() => {
+          const node = campaignNodes.find(n => n.id === editingNodeId);
+          if (!node) return null;
+          const updateNode = (patch: Partial<CampaignNode>) => {
+            setCampaignNodes(prev => prev.map(n => n.id === editingNodeId ? { ...n, ...patch } : n));
+          };
+          return (
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center border ${NODE_TYPE_COLOR[node.type]}`}>{NODE_TYPE_ICON[node.type]}</div>
+                  <span className="text-sm font-bold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>Configure Step</span>
                 </div>
-                {node.type !== "end" && (
-                  <button className="p-1.5 hover:bg-gray-100 rounded-lg" onClick={e => { e.stopPropagation(); setCampaignNodes(prev => prev.filter(n => n.id !== node.id)); toast.success("Step removed"); }}>
-                    <Trash2 className="w-3.5 h-3.5 text-red-400" />
-                  </button>
+                <button onClick={() => setEditingNodeId(null)} className="p-1 rounded hover:bg-gray-200 transition-colors">
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* MESSAGE NODE */}
+                {node.type === "message" && (
+                  <>
+                    <div className="flex p-1 bg-slate-100 rounded-lg">
+                      {(["text", "template", "chatbot"] as const).map(m => (
+                        <button key={m} type="button" onClick={() => updateNode({ messageMode: m })}
+                          className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all capitalize cursor-pointer ${
+                            (node.messageMode ?? "text") === m ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500 hover:text-gray-700"
+                          }`}>
+                          {m === "text" ? "Message" : m === "template" ? "Template" : "Chatbot"}
+                        </button>
+                      ))}
+                    </div>
+
+                    {(node.messageMode ?? "text") === "text" && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Message Content</label>
+                          <VariablePickerButton
+                            targetRef={{ current: nodeTextareaRefs.current[node.id] }}
+                            value={node.content || ""}
+                            onChange={v => updateNode({ content: v })}
+                            label="{ } Insert Variable"
+                          />
+                        </div>
+                        <textarea
+                          ref={el => { nodeTextareaRefs.current[node.id] = el; }}
+                          rows={4}
+                          value={node.content || ""}
+                          onChange={e => updateNode({ content: e.target.value })}
+                          placeholder="Type message..."
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
+                        />
+                      </div>
+                    )}
+
+                    {node.messageMode === "template" && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">WhatsApp Template</label>
+                        <select
+                          value={node.templateIdentifier || ""}
+                          onChange={e => updateNode({ templateIdentifier: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
+                          <option value="">Select template…</option>
+                          {globalTemplates.map(t => (
+                            <option key={t.id} value={t.identifier || t.id}>{t.name} ({t.category})</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {node.messageMode === "chatbot" && (
+                      <div>
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Target Chatbot</label>
+                        <select
+                          value={node.targetBotId || ""}
+                          onChange={e => updateNode({ targetBotId: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-755">
+                          <option value="">Select chatbot…</option>
+                          {availableBots.map(b => (
+                            <option key={b.id} value={b.id}>{b.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* DELAY NODE */}
+                {node.type === "delay" && (
+                  <div className="flex gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Duration</label>
+                      <input type="number" min={1} value={node.delayValue ?? 1}
+                        onChange={e => updateNode({ delayValue: parseInt(e.target.value, 10) || 1 })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-700" />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Unit</label>
+                      <select value={node.delayUnit || "days"}
+                        onChange={e => updateNode({ delayUnit: e.target.value as "minutes" | "hours" | "days" })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
+                        <option value="minutes">Minutes</option>
+                        <option value="hours">Hours</option>
+                        <option value="days">Days</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* CONDITION NODE */}
+                {node.type === "condition" && (
+                  <>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Variable</label>
+                      <select value={node.conditionField || "name"}
+                        onChange={e => updateNode({ conditionField: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
+                        <option value="name">Client Name</option>
+                        <option value="email">Client Email</option>
+                        <option value="phone">Client Phone</option>
+                        <option value="status">Client Status</option>
+                        <option value="country">Country</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Operator</label>
+                      <select value={node.conditionOp || "equals"}
+                        onChange={e => updateNode({ conditionOp: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
+                        <option value="equals">Equals</option>
+                        <option value="contains">Contains</option>
+                        <option value="starts_with">Starts With</option>
+                        <option value="ends_with">Ends With</option>
+                        <option value="is_empty">Is Empty</option>
+                      </select>
+                    </div>
+                    {node.conditionOp !== "is_empty" && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Value</label>
+                          <VariablePickerButton
+                            targetRef={{ current: conditionValueRefs.current[node.id] }}
+                            value={node.conditionValue || ""}
+                            onChange={v => updateNode({ conditionValue: v })}
+                            label="{ } Insert Variable"
+                            mode="insert"
+                          />
+                        </div>
+                        <input
+                          ref={el => { conditionValueRefs.current[node.id] = el; }}
+                          type="text"
+                          value={node.conditionValue || ""}
+                          onChange={e => updateNode({ conditionValue: e.target.value })}
+                          placeholder="Match value..."
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-700"
+                        />
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
-            {idx < campaignNodes.length - 1 && (
-              <div className="flex flex-col items-center py-1">
-                <div className="w-px h-4 bg-gray-300" />
-                <ArrowRight className="w-4 h-4 text-gray-300 rotate-90" />
-                <div className="w-px h-1 bg-gray-300" />
-              </div>
-            )}
+          );
+        })()}
+
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
+          <h4 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Flow Summary</h4>
+          <div className="space-y-2 text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <div className="flex justify-between"><span>Messages</span><span className="font-semibold text-blue-600">{campaignNodes.filter(n => n.type === "message").length}</span></div>
+            <div className="flex justify-between"><span>Delays</span><span className="font-semibold text-yellow-600">{campaignNodes.filter(n => n.type === "delay").length}</span></div>
+            <div className="flex justify-between"><span>Total Steps</span><span className="font-semibold">{campaignNodes.length}</span></div>
           </div>
-        ))}
-        <div className="pt-4 flex flex-wrap gap-2 justify-center">
-          {(["message", "delay", "condition"] as const).map(type => (
-            <button key={type} onClick={() => handleAddNode(type)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all hover:shadow-sm ${NODE_TYPE_COLOR[type]}`}
-              style={{ fontFamily: "DM Sans, sans-serif" }}>
-              <Plus className="w-3.5 h-3.5" />Add {type.charAt(0).toUpperCase() + type.slice(1)}
-            </button>
-          ))}
         </div>
       </div>
     </div>
-    <div className="w-[260px] shrink-0 space-y-4">
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-3">
-        <h4 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Flow Summary</h4>
-        <div className="space-y-2 text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-          <div className="flex justify-between"><span>Messages</span><span className="font-semibold text-blue-600">{campaignNodes.filter(n => n.type === "message").length}</span></div>
-          <div className="flex justify-between"><span>Delays</span><span className="font-semibold text-yellow-600">{campaignNodes.filter(n => n.type === "delay").length}</span></div>
-          <div className="flex justify-between"><span>Total Steps</span><span className="font-semibold">{campaignNodes.length}</span></div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
@@ -516,6 +719,9 @@ export default function Chats() {
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website">("all");
+  const [campaignStatusFilter, setCampaignStatusFilter] = useState<"all" | "active" | "draft" | "completed">("all");
+  const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
+  const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
   type ViewFilter = "all" | "open" | "resolved" | "unread";
   const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
   const [navCollapsed, setNavCollapsed] = useState(false);
@@ -572,12 +778,13 @@ export default function Chats() {
     return stored ? JSON.parse(stored) : [];
   });
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
-  const [showBuilderForm, setShowBuilderForm] = useState(false);
+  const [templatesView, setTemplatesView] = useState<"table" | "builder">("table");
+  const [showVarMapping, setShowVarMapping] = useState(false);
   const [templateForm, setTemplateForm] = useState<Omit<WhatsappTemplate, "id" | "createdAt">>({
     name: "", identifier: "", category: "Marketing", language: "English",
-    header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [],
+    header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {}
   });
-  const [showCampaignBuilderInTemplates, setShowCampaignBuilderInTemplates] = useState(false);
+
 
   useEffect(() => { localStorage.setItem("whatsappGlobalTemplates", JSON.stringify(globalTemplates)); }, [globalTemplates]);
 
@@ -601,23 +808,23 @@ export default function Chats() {
 
   const handleCreateNewTemplate = () => {
     setEditingTemplateId(null);
-    setTemplateForm({ name: "", identifier: "", category: "Marketing", language: "English", header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [] });
-    setShowBuilderForm(true);
-    setShowCampaignBuilderInTemplates(false);
+    setTemplateForm({ name: "", identifier: "", category: "Marketing", language: "English", header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {} });
+    setTemplatesView("builder");
+    setShowVarMapping(false);
   };
 
   const handleEditTemplate = (tpl: WhatsappTemplate) => {
     setEditingTemplateId(tpl.id);
-    setTemplateForm({ name: tpl.name, identifier: tpl.identifier, category: tpl.category, language: tpl.language, header: tpl.header || { type: "none", content: "" }, bodyText: tpl.bodyText, footerText: tpl.footerText || "", buttons: tpl.buttons || [] });
-    setShowBuilderForm(true);
-    setShowCampaignBuilderInTemplates(false);
+    setTemplateForm({ name: tpl.name, identifier: tpl.identifier, category: tpl.category, language: tpl.language, header: tpl.header || { type: "none", content: "" }, bodyText: tpl.bodyText, footerText: tpl.footerText || "", buttons: tpl.buttons || [], variableMappings: tpl.variableMappings || {} });
+    setTemplatesView("builder");
+    setShowVarMapping(false);
   };
 
   const handleDeleteTemplate = (id: string) => {
     if (confirm("Are you sure you want to delete this template?")) {
       setGlobalTemplates(prev => prev.filter(t => t.id !== id));
       toast.success("Template deleted successfully");
-      if (editingTemplateId === id) { setShowBuilderForm(false); setEditingTemplateId(null); }
+      if (editingTemplateId === id) { setTemplatesView("table"); setEditingTemplateId(null); }
     }
   };
 
@@ -636,12 +843,19 @@ export default function Chats() {
       setGlobalTemplates(prev => [...prev, newTemplate]);
       toast.success("Template created successfully");
     }
-    setShowBuilderForm(false);
+    setTemplatesView("table");
     setEditingTemplateId(null);
   };
 
   // ── Campaign State ──
-  const [campaigns, setCampaigns] = useState<Campaign[]>(MOCK_CAMPAIGNS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
+    const stored = localStorage.getItem("whatsappCampaigns");
+    return stored ? JSON.parse(stored) : MOCK_CAMPAIGNS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("whatsappCampaigns", JSON.stringify(campaigns));
+  }, [campaigns]);
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
@@ -711,10 +925,8 @@ export default function Chats() {
   };
 
   const handleNewCampaignFromAnywhere = () => {
-    setShowBuilderForm(false);
-    setShowCampaignBuilderInTemplates(true);
     handleOpenCreate();
-    handleTabChange("templates");
+    handleTabChange("campaigns");
   };
 
   const handleAddNode = (type: CampaignNode["type"]) => {
@@ -726,6 +938,12 @@ export default function Chats() {
       templateIdentifier: type === "message" ? "" : undefined,
       delayValue: type === "delay" ? 1 : undefined,
       delayUnit: type === "delay" ? "days" : undefined,
+      messageMode: type === "message" ? "text" : undefined,
+      targetBotId: type === "message" ? "" : undefined,
+      conditionFieldSource: type === "condition" ? "client" : undefined,
+      conditionField: type === "condition" ? "name" : undefined,
+      conditionOp: type === "condition" ? "equals" : undefined,
+      conditionValue: type === "condition" ? "" : undefined,
     };
     setCampaignNodes(prev => {
       const withoutEnd = prev.filter(n => n.type !== "end");
@@ -749,7 +967,6 @@ export default function Chats() {
       toast.success("Campaign saved as draft");
     }
     setShowCampaignBuilder(false);
-    setShowCampaignBuilderInTemplates(false);
     setEditingCampaignId(null);
   };
 
@@ -764,50 +981,22 @@ export default function Chats() {
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Chats Works" />
         </PageHeader>
 
-        {/* Tab Bar */}
-        <div className="flex justify-between items-center bg-white p-2 border border-gray-200 rounded-xl shadow-sm">
-          <div className="bg-gray-100 p-1 rounded-xl flex gap-1">
-            {TAB_ORDER.map(tab => {
-              const label = tab === "chatbot" ? "Chatbot" : tab === "campaigns" ? "Campaigns" : tab === "templates" ? "Template Builder" : "Inbox";
-              const tooltipText = tab === "chats"
-                ? "Real-time inbox to chat with patients over SMS or WhatsApp."
-                : tab === "campaigns"
-                  ? "Send a message to many clients at once, on a schedule."
-                  : tab === "templates"
-                    ? "Build pre-approved message templates for WhatsApp."
-                    : "Configure the automated assistant to reply to common queries.";
-              return (
-                <div key={tab} className="flex items-center gap-1">
-                  <button onClick={() => handleTabChange(tab)}
-                    className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors capitalize ${activeTab === tab ? "bg-blue-600 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"}`}
-                    style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    {label}
-                  </button>
-                  <InfoTooltip text={tooltipText} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Main Content Area with Collapsible Left Navigation Sidebar */}
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex min-h-[calc(100vh-180px)] overflow-hidden">
+          <InboxNavSidebar
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            channelFilter={channelFilter}
+            setChannelFilter={setChannelFilter}
+          />
 
-        {/* ══════════════════════════════════════════════════════
-            TAB: CHATS INBOX
-        ══════════════════════════════════════════════════════ */}
-        {activeTab === "chats" && (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex h-[calc(100vh-250px)] overflow-hidden">
-            {/* Pane 0 — Nav Sidebar */}
-            {!navCollapsed && (
-              <InboxNavSidebar
-                channelFilter={channelFilter}
-                setChannelFilter={setChannelFilter}
-                viewFilter={viewFilter}
-                setViewFilter={setViewFilter}
-                onOpenSettings={() => handleTabChange("chatbot")}
-                onOpenBroadcasts={() => handleTabChange("campaigns")}
-              />
-            )}
-
-            {/* Pane 1 — List Pane */}
+          <div className="flex-1 min-w-0 bg-white p-4 overflow-y-auto">
+            {/* ══════════════════════════════════════════════════════
+                TAB: CHATS INBOX
+            ══════════════════════════════════════════════════════ */}
+            {activeTab === "chats" && (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex h-[calc(100vh-230px)] overflow-hidden">
+                {/* Pane 1 — List Pane */}
             <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
               {/* Header */}
               <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2">
@@ -1046,277 +1235,367 @@ export default function Chats() {
                         )}
                       </div>
                       <button type="button" onClick={handleSendMessage}
-                        className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-all shadow-sm flex-shrink-0">
+                        className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0"
+                      >
                         <Send className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
                 </>
               ) : (
-                <div className="flex-1 flex flex-col items-center justify-center p-8" style={{ backgroundColor: '#F8FAFC' }}>
-                  <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mb-4"><MessageSquare className="w-7 h-7 text-blue-600" /></div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>Select a conversation</h3>
-                  <p className="text-sm text-gray-500 max-w-xs text-center" style={{ fontFamily: "Outfit, sans-serif" }}>Choose a thread from the left to read and reply to messages.</p>
+                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Select a conversation to start chatting
                 </div>
               )}
             </div>
           </div>
         )}
+
 
         {/* ══════════════════════════════════════════════════════
             TAB: TEMPLATE BUILDER
         ══════════════════════════════════════════════════════ */}
-        {activeTab === "templates" && (
-          <div className="flex gap-6 min-h-[calc(100vh-250px)] items-start">
-            <div className="w-[320px] bg-white rounded-xl border border-gray-200 shadow-sm p-4 space-y-4 shrink-0 max-h-[calc(100vh-250px)] overflow-y-auto">
-              <CollapsibleSidebarSection title="Messages" count={globalTemplates.length} addLabel="New" onAddNew={handleCreateNewTemplate}>
-                {globalTemplates.length === 0 ? (
-                  <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 text-center text-gray-400">
-                    <MessageCircle className="w-8 h-8 mx-auto text-gray-300 mb-2" />
-                    <p className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>No templates saved yet.</p>
-                  </div>
-                ) : globalTemplates.map(tpl => {
-                  const isSelected = editingTemplateId === tpl.id;
-                  return (
-                    <div key={tpl.id} onClick={() => handleEditTemplate(tpl)}
-                      className={`p-3.5 border rounded-xl cursor-pointer hover:border-blue-400 transition-all ${isSelected ? "border-blue-600 bg-blue-50/10 shadow-sm" : "border-gray-200 bg-white"}`}>
-                      <div className="flex justify-between items-start mb-1.5">
-                        <h4 className="text-sm font-semibold text-gray-900 truncate mr-2" style={{ fontFamily: "DM Sans, sans-serif" }}>{tpl.name}</h4>
-                        <span className="text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase shrink-0">{tpl.category}</span>
-                      </div>
-                      <p className="text-xs font-mono text-gray-400 truncate mb-2">{tpl.identifier}</p>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
-                        <span style={{ fontFamily: "Outfit, sans-serif" }}>{tpl.language}</span>
-                        <div className="flex gap-1">
-                          <button onClick={e => { e.stopPropagation(); handleEditTemplate(tpl); }} className="p-1 hover:bg-gray-100 rounded"><Pencil className="w-3 h-3 text-gray-500" /></button>
-                          <button onClick={e => { e.stopPropagation(); handleDeleteTemplate(tpl.id); }} className="p-1 hover:bg-red-50 rounded"><Trash2 className="w-3 h-3 text-red-500" /></button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </CollapsibleSidebarSection>
-
-              <CollapsibleSidebarSection title="Campaigns" count={campaigns.length} addLabel="New" onAddNew={() => { setShowCampaignBuilderInTemplates(true); setShowBuilderForm(false); handleOpenCreate(); }}>
-                {campaigns.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-3" style={{ fontFamily: "Outfit, sans-serif" }}>No campaigns yet.</p>
-                ) : campaigns.map(c => (
-                  <div key={c.id} onClick={() => { setShowCampaignBuilderInTemplates(true); setShowBuilderForm(false); handleOpenEdit(c); }}
-                    className="flex items-center justify-between p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-400 transition-all">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{c.name}</p>
-                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border uppercase ${STATUS_COLOR[c.status]}`}>{c.status}</span>
-                    </div>
-                    <Pencil className="w-3.5 h-3.5 text-gray-400 shrink-0 ml-2" />
-                  </div>
-                ))}
-              </CollapsibleSidebarSection>
+        {activeTab === "templates" && templatesView === "table" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Templates</h2>
+                <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-full border border-blue-100">
+                  {globalTemplates.length} {globalTemplates.length === 1 ? "template" : "templates"}
+                </span>
+              </div>
+              <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
+                <Plus className="w-4 h-4" /> Create Template
+              </Button>
             </div>
 
-            <div className="flex-1 flex gap-6 items-start">
-              {showCampaignBuilderInTemplates && showCampaignBuilder ? (
-                <CampaignBuilderView
-                  campaignForm={campaignForm} setCampaignForm={setCampaignForm}
-                  campaignNodes={campaignNodes} setCampaignNodes={setCampaignNodes}
-                  editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId}
-                  editingCampaignId={editingCampaignId} globalTemplates={globalTemplates}
-                  handleAddNode={handleAddNode} handleSaveCampaign={handleSaveCampaign}
-                  onBack={() => { setShowCampaignBuilderInTemplates(false); setShowCampaignBuilder(false); }} />
-              ) : showBuilderForm ? (
-                <>
-                  <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
-                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                      <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingTemplateId ? "Edit Template" : "New WhatsApp Template"}</h3>
-                      <button type="button" onClick={() => setShowBuilderForm(false)}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Name *</label>
-                        <input type="text" required value={templateForm.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Appointment Reminder"
-                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Identifier *</label>
-                        <input type="text" required value={templateForm.identifier} onChange={e => setTemplateForm({ ...templateForm, identifier: e.target.value })} placeholder="appointment_reminder"
-                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Category *</label>
-                        <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Utility">Utility</SelectItem><SelectItem value="Authentication">Authentication</SelectItem></SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Language *</label>
-                        <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
-                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                          <SelectContent>{LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}</SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
-                        <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={val => setTemplateForm(prev => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
-                      </div>
-                      <textarea ref={textareaRef} required value={templateForm.bodyText} onChange={e => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
-                        placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}." rows={4}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
-                      <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
-                        className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          Buttons (Optional)
-                        </label>
-                        <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {templateForm.buttons.length}/3
-                        </span>
-                      </div>
-
-                      {templateForm.buttons.map((btn, index) => (
-                        <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/40 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold text-gray-500">Button {index + 1}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveButton(index)}
-                              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" /> Remove
-                            </button>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2">
-                            <select
-                              value={btn.type}
-                              onChange={e => handleButtonChange(index, "type", e.target.value)}
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
-                            >
-                              <option value="quick_reply">Quick Reply</option>
-                              <option value="call">Call Phone Number</option>
-                              <option value="url">Visit Website</option>
-                              <option value="template">Attach Template</option>
-                            </select>
-                            <input
-                              type="text"
-                              value={btn.label}
-                              onChange={e => handleButtonChange(index, "label", e.target.value)}
-                              placeholder="Button text..."
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                            />
-                          </div>
-
-                          {btn.type === "call" && (
-                            <input
-                              type="tel"
-                              value={btn.value || ""}
-                              onChange={e => handleButtonChange(index, "value", e.target.value)}
-                              placeholder="+1 555 123 4567"
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                            />
-                          )}
-                          {btn.type === "url" && (
-                            <input
-                              type="url"
-                              value={btn.value || ""}
-                              onChange={e => handleButtonChange(index, "value", e.target.value)}
-                              placeholder="https://..."
-                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
-                            />
-                          )}
-                          {btn.type === "template" && (
-                            globalTemplates.filter(t => t.identifier !== templateForm.identifier).length === 0 ? (
-                              <p className="text-xs text-gray-400 italic px-1 py-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                No other templates available yet to attach.
-                              </p>
-                            ) : (
-                              <select
-                                value={btn.value || ""}
-                                onChange={e => handleButtonChange(index, "value", e.target.value)}
-                                className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
-                              >
-                                <option value="">Select a template...</option>
-                                {globalTemplates
-                                  .filter(t => t.identifier !== templateForm.identifier)
-                                  .map(t => (
-                                    <option key={t.id} value={t.identifier}>{t.name}</option>
-                                  ))}
-                              </select>
-                            )
-                          )}
-                        </div>
+            {globalTemplates.length === 0 ? (
+              <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-16 text-center">
+                <FileText className="w-10 h-10 text-blue-300 mx-auto mb-4" />
+                <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
+                <p className="text-sm text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
+                <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
+                  <Plus className="w-4 h-4" /> Create Your First Template
+                </Button>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <table className="w-full">
+                  <thead style={{ backgroundColor: "#1F2937" }}>
+                    <tr>
+                      {["Name", "Identifier", "Category", "Language", "Actions"].map(col => (
+                        <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
                       ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {globalTemplates.map(tpl => (
+                      <tr key={tpl.id} className="hover:bg-blue-50/30 transition-colors">
+                        <td className="px-5 py-4">
+                          <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                            {tpl.name}
+                          </button>
+                        </td>
+                        <td className="px-4 py-4"><span className="text-xs font-mono text-gray-500">{tpl.identifier}</span></td>
+                        <td className="px-4 py-4"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">{tpl.category}</span></td>
+                        <td className="px-4 py-4"><span className="text-xs text-gray-500">{tpl.language}</span></td>
+                        <td className="px-5 py-4">
+                          <div className="flex items-center gap-2 justify-end">
+                            <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><Pencil className="w-4 h-4" /></button>
+                            <button onClick={() => handleDeleteTemplate(tpl.id)} className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
+        {activeTab === "templates" && templatesView === "builder" && (
+          <div className="flex gap-6 items-start">
+            <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingTemplateId ? "Edit Template" : "New WhatsApp Template"}</h3>
+                <button type="button" onClick={() => setTemplatesView("table")}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Name *</label>
+                  <input type="text" required value={templateForm.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Appointment Reminder"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Identifier *</label>
+                  <input type="text" required value={templateForm.identifier} onChange={e => setTemplateForm({ ...templateForm, identifier: e.target.value })} placeholder="appointment_reminder"
+                    className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Category *</label>
+                  <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Utility">Utility</SelectItem><SelectItem value="Authentication">Authentication</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Language *</label>
+                  <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>{LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
+                  <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={val => setTemplateForm(prev => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
+                </div>
+                <textarea ref={textareaRef} required value={templateForm.bodyText} onChange={e => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
+                  placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}." rows={4}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" style={{ fontFamily: "Outfit, sans-serif" }} />
+
+                {/* ── Variable Field Mapping panel ── */}
+                {(() => {
+                  const tokens = [...(templateForm.bodyText.matchAll(/\{\{([^}]+)\}\}/g))].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i);
+                  if (tokens.length === 0) return null;
+                  return (
+                    <div className="border border-blue-100 rounded-xl overflow-hidden mt-2">
                       <button
                         type="button"
-                        onClick={handleAddButton}
-                        disabled={templateForm.buttons.length >= 3}
-                        className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                        onClick={() => setShowVarMapping(v => !v)}
+                        className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-50 hover:bg-blue-100/60 transition-colors text-xs font-semibold text-blue-700"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
                       >
-                        <Plus className="w-3.5 h-3.5" /> Add Button
+                        <span>📌 Field Mapping — {tokens.length} variable{tokens.length !== 1 ? "s" : ""} detected</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${showVarMapping ? "rotate-180" : ""}`} />
+                      </button>
+                      {showVarMapping && (
+                        <div className="p-3 space-y-3 bg-white">
+                          <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Map each <code className="bg-gray-100 px-1 rounded">&#123;&#123;variable&#125;&#125;</code> to a static value, a MantraAssist field, or live availability.
+                          </p>
+                          {tokens.map(token => {
+                            const mapping = (templateForm.variableMappings || {})[token] || { source: "static" as const, staticValue: "", fieldKey: "" };
+                            const setMapping = (patch: Partial<typeof mapping>) =>
+                              setTemplateForm(prev => ({
+                                ...prev,
+                                variableMappings: {
+                                  ...(prev.variableMappings || {}),
+                                  [token]: { ...mapping, ...patch }
+                                }
+                              }));
+                            return (
+                              <div key={token} className="p-3 border border-gray-100 rounded-lg bg-gray-50 space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <code className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">&#123;&#123;{token}&#125;&#125;</code>
+                                  <div className="flex gap-1 ml-auto">
+                                    {(["static", "field", "availability"] as const).map(src => (
+                                      <button
+                                        key={src}
+                                        type="button"
+                                        onClick={() => setMapping({ source: src })}
+                                        className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors capitalize ${
+                                          mapping.source === src
+                                            ? "bg-blue-600 text-white border-blue-600"
+                                            : "bg-white text-gray-500 border-gray-200 hover:border-blue-400"
+                                        }`}
+                                      >
+                                        {src}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                                {mapping.source === "static" && (
+                                  <input
+                                    type="text"
+                                    value={mapping.staticValue || ""}
+                                    onChange={e => setMapping({ staticValue: e.target.value })}
+                                    placeholder="Static replacement value"
+                                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  />
+                                )}
+                                {mapping.source === "field" && (
+                                  <select
+                                    value={mapping.fieldKey || ""}
+                                    onChange={e => setMapping({ fieldKey: e.target.value })}
+                                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                  >
+                                    <option value="">Select a MantraAssist field…</option>
+                                    <optgroup label="Client">
+                                      <option value="client.name">Client Name</option>
+                                      <option value="client.email">Client Email</option>
+                                      <option value="client.phone">Client Phone</option>
+                                    </optgroup>
+                                    <optgroup label="Appointment">
+                                      <option value="appointment.date">Appointment Date</option>
+                                      <option value="appointment.time">Appointment Time</option>
+                                      <option value="appointment.service">Service Name</option>
+                                    </optgroup>
+                                    <optgroup label="Team Member">
+                                      <option value="teamMember.name">Provider Name</option>
+                                      <option value="teamMember.phone">Provider Phone</option>
+                                    </optgroup>
+                                  </select>
+                                )}
+                                {mapping.source === "availability" && (
+                                  <p className="text-[11px] text-gray-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                    Will resolve to the contact's next available slot at send time.
+                                  </p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
+                <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
+                  className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Buttons (Optional)
+                  </label>
+                  <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {templateForm.buttons.length}/3
+                  </span>
+                </div>
+
+                {templateForm.buttons.map((btn, index) => (
+                  <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/40 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-gray-500">Button {index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveButton(index)}
+                        className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Remove
                       </button>
                     </div>
 
-                    <div className="flex gap-3 pt-4 border-t border-gray-100 justify-end">
-                      <Button variant="outline" type="button" onClick={() => { setShowBuilderForm(false); setEditingTemplateId(null); }}>Cancel</Button>
-                      <Button variant="primary" type="submit">Save Template</Button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <select
+                        value={btn.type}
+                        onChange={e => handleButtonChange(index, "type", e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
+                      >
+                        <option value="quick_reply">Quick Reply</option>
+                        <option value="call">Call Phone Number</option>
+                        <option value="url">Visit Website</option>
+                        <option value="email">Send Email</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={btn.label}
+                        onChange={e => handleButtonChange(index, "label", e.target.value)}
+                        placeholder="Button text..."
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
+                      />
                     </div>
-                  </form>
-                  <div className="w-[280px] shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
-                    <div className="border-b border-gray-100 pb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Preview</span></div>
-                    <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[340px] flex flex-col">
-                      <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
-                        <p className="text-[10px] font-bold">Mantra Health</p>
-                      </div>
-                      <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
-                        <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
-                          <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
-                          {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
-                        </div>
-                        {templateForm.buttons.length > 0 && (
-                          <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden">
-                            {templateForm.buttons.map((btn, i) => (
-                              <div
-                                key={i}
-                                className={`px-3 py-2 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${i > 0 ? "border-t border-gray-100" : ""}`}
-                              >
-                                {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
-                                <span>{btn.label || "Button"}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+
+                    {btn.type === "call" && (
+                      <input
+                        type="tel"
+                        value={btn.value || ""}
+                        onChange={e => handleButtonChange(index, "value", e.target.value)}
+                        placeholder="+1 555 123 4567"
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
+                      />
+                    )}
+                    {btn.type === "url" && (
+                      <input
+                        type="url"
+                        value={btn.value || ""}
+                        onChange={e => handleButtonChange(index, "value", e.target.value)}
+                        placeholder="https://..."
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
+                      />
+                    )}
+                    {btn.type === "email" && (
+                      <input
+                        type="email"
+                        value={btn.value || ""}
+                        onChange={e => handleButtonChange(index, "value", e.target.value)}
+                        placeholder="support@example.com"
+                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
+                      />
+                    )}
                   </div>
-                </>
-              ) : (
-                <div className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center h-[calc(100vh-250px)] flex flex-col items-center justify-center">
-                  <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mb-4"><FileText className="w-7 h-7 text-blue-600" /></div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>Select or create a message</h3>
-                  <p className="text-sm text-gray-500 max-w-sm text-center mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Pick an existing template or campaign from the left, or create a new one.</p>
-                  <Button variant="primary" onClick={handleCreateNewTemplate}><Plus className="w-4 h-4" />Create Message</Button>
+                ))}
+
+                <button
+                  type="button"
+                  onClick={handleAddButton}
+                  disabled={templateForm.buttons.length >= 3}
+                  className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Button
+                </button>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t border-gray-100 justify-end">
+                <Button variant="outline" type="button" onClick={() => { setTemplatesView("table"); setEditingTemplateId(null); }}>Cancel</Button>
+                <Button variant="primary" type="submit">Save Template</Button>
+              </div>
+            </form>
+            <div className="w-[280px] shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
+              <div className="border-b border-gray-100 pb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Preview</span></div>
+              <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[340px] flex flex-col">
+                <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
+                  <p className="text-[10px] font-bold">Mantra Health</p>
                 </div>
-              )}
+                <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
+                  <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
+                    <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
+                    {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
+                  </div>
+                  {templateForm.buttons.length > 0 && (
+                    <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden">
+                      {templateForm.buttons.map((btn, i) => (
+                        <div
+                          key={i}
+                          className={`px-3 py-2 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${i > 0 ? "border-t border-gray-100" : ""}`}
+                        >
+                          {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
+                          <span>{btn.label || "Button"}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}
+
 
         {/* ══════════════════════════════════════════════════════
             TAB: CAMPAIGNS
         ══════════════════════════════════════════════════════ */}
         {activeTab === "campaigns" && (
-          <div className="space-y-4">
+          showCampaignBuilder ? (
+            <CampaignBuilderView
+              campaignForm={campaignForm} setCampaignForm={setCampaignForm}
+              campaignNodes={campaignNodes} setCampaignNodes={setCampaignNodes}
+              editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId}
+              editingCampaignId={editingCampaignId} globalTemplates={globalTemplates}
+              handleAddNode={handleAddNode} handleSaveCampaign={handleSaveCampaign}
+              onBack={() => setShowCampaignBuilder(false)} />
+          ) : (
+            <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>WhatsApp Campaigns</h2>
@@ -1381,6 +1660,7 @@ export default function Chats() {
               )}
             </div>
           </div>
+          )
         )}
 
 
@@ -1392,8 +1672,11 @@ export default function Chats() {
             campaigns={campaigns}
             employees={AVAILABLE_EMPLOYEES}
             templates={globalTemplates}
+            statusFilter={chatbotStatusFilter}
           />
         )}
+          </div>
+        </div>
       </div>
 
       {/* Campaign Row Actions Menu */}
@@ -1408,7 +1691,7 @@ export default function Chats() {
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
                 <Eye className="w-4 h-4" />View Overview
               </button>
-              <button onClick={() => { setOpenMenuCampaignId(null); setShowCampaignBuilderInTemplates(true); setShowBuilderForm(false); handleOpenEdit(campaign); handleTabChange("templates"); }}
+              <button onClick={() => { setOpenMenuCampaignId(null); handleOpenEdit(campaign); handleTabChange("campaigns"); }}
                 className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
                 <Pencil className="w-4 h-4" />Edit Campaign
               </button>
@@ -1493,7 +1776,7 @@ export default function Chats() {
             </div>
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
               <button onClick={() => setViewDrawerOpen(false)} className="text-sm text-gray-500 hover:text-gray-700 font-medium" style={{ fontFamily: "DM Sans, sans-serif" }}>Close</button>
-              <Button variant="primary" size="sm" onClick={() => { setViewDrawerOpen(false); setShowCampaignBuilderInTemplates(true); setShowBuilderForm(false); handleOpenEdit(viewingCampaign); handleTabChange("templates"); }}>
+              <Button variant="primary" size="sm" onClick={() => { setViewDrawerOpen(false); handleOpenEdit(viewingCampaign); handleTabChange("campaigns"); }}>
                 <Pencil className="w-4 h-4" />Edit Campaign
               </Button>
             </div>

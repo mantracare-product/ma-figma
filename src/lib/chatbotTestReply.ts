@@ -1,4 +1,4 @@
-import { Bot } from "../app/components/chats/ChatbotTab";
+import { Bot, getEffectiveFallbackResponse } from "../app/components/chats/ChatbotTab";
 import { getSavedFieldValue, resolveProviderName } from "./chatbotFlowEngine";
 
 export interface TestChatTurn {
@@ -6,7 +6,7 @@ export interface TestChatTurn {
   text: string;
   matchedReason?: string;
   isMockGenerated?: boolean;
-  buttons?: { label: string; nextNodeId: string | null }[];
+  buttons?: { label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }[];
   nodeId?: string; // tracks which node was active during this turn
 }
 
@@ -67,14 +67,7 @@ export async function generateTestBotReply(
     }
   }
 
-  // 3. Assign to Human keyword
-  if (bot.handoffEnabled && bot.handoffKeyword && lower.includes(bot.handoffKeyword.toLowerCase())) {
-    return {
-      text: "",
-      matchedHandoff: true,
-      matchedReason: `Matched handoff keyword '${bot.handoffKeyword}'`
-    };
-  }
+  // 3. (Removed: legacy handoffKeyword matching. Human handoff is now a flow node.)
 
   // 4. Business hours gate
   if (bot.businessHoursEnabled) {
@@ -103,19 +96,30 @@ export async function generateTestBotReply(
     };
   }
 
-  // 6. AI Fallback (bypasses rules)
-  if (!bot.aiObjective.trim()) {
+  // 6. Dynamic Fallback — reads from bot.fallbackResponse (text/question/template)
+  const fallback = getEffectiveFallbackResponse(bot);
+
+  if (fallback.type === "text") {
     return {
-      text: bot.fallbackMessage || "I'm not sure how to help with that yet.",
+      text: resolveTestVariables(fallback.text || "I'm not sure how to help with that yet.", history, bot),
       isMockGenerated: true,
-      matchedReason: "AI fallback response"
+      matchedReason: "Fallback text response"
     };
   }
-  
+
+  if (fallback.type === "template") {
+    return {
+      text: "",
+      matchedTemplateId: fallback.templateId,
+      matchedReason: "Fallback template response"
+    };
+  }
+
+  // fallback.type === "question" — return the question prompt as bot text (no flow node needed)
   return {
-    text: resolveTestVariables(bot.fallbackMessage || "Thanks for your message — a real reply would be generated here."),
+    text: resolveTestVariables(fallback.text || "Could you provide more details?", history, bot),
     isMockGenerated: true,
-    matchedReason: "AI response generated from bot script"
+    matchedReason: "Fallback question response"
   };
 }
 

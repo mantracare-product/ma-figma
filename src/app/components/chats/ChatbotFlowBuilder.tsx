@@ -44,6 +44,9 @@ import TestChatDrawer from "./TestChatDrawer";
 import ChatbotAdvanceSettingsDrawer from "./ChatbotAdvanceSettingsDrawer";
 import WhatsAppMessagePreview from "./WhatsAppMessagePreview";
 import VariablePickerButton from "../process/VariablePickerButton";
+import ButtonActionEditor from "../shared/ButtonActionEditor";
+import { ButtonAction } from "../../../lib/chatbotTypes";
+import VariableSelectorModal from "../process/VariableSelectorModal";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -56,11 +59,12 @@ export interface ChatbotFlowNode {
     | "template"
     | "condition"
     | "assignHuman"
-    | "assignTeam"
     | "updateChatStatus"
     | "setTags"
     | "timeDelay"
-    | "connectChatbot";
+    | "connectChatbot"
+    | "humanHandoff"
+    | "fieldUpdate";
   position: { x: number; y: number };
   data: Record<string, any>;
   connections: Array<{ toNodeId: string; fromPort?: string }>;
@@ -86,6 +90,7 @@ interface ChatbotFlowBuilderProps {
   bot: Bot;
   employees: { id: string; name: string }[];
   templates: WhatsappTemplate[];
+  allBots?: Bot[];
   onClose: () => void;
   onSave: (updatedBot: Bot) => void;
 }
@@ -131,14 +136,14 @@ const NODE_STYLE: Record<
     text: "text-violet-700 dark:text-violet-400",
     iconBg: "bg-violet-100"
   },
-  assignHuman: {
+  humanHandoff: {
     bg: "bg-indigo-50 dark:bg-indigo-950/20",
     border: "border-indigo-300",
     activeBorder: "border-indigo-500",
     text: "text-indigo-700 dark:text-indigo-400",
     iconBg: "bg-indigo-100"
   },
-  assignTeam: {
+  assignHuman: {
     bg: "bg-indigo-50 dark:bg-indigo-950/20",
     border: "border-indigo-300",
     activeBorder: "border-indigo-500",
@@ -172,6 +177,13 @@ const NODE_STYLE: Record<
     activeBorder: "border-indigo-500",
     text: "text-indigo-700 dark:text-indigo-400",
     iconBg: "bg-indigo-100"
+  },
+  fieldUpdate: {
+    bg: "bg-teal-50 dark:bg-teal-950/20",
+    border: "border-teal-300",
+    activeBorder: "border-teal-500",
+    text: "text-teal-700 dark:text-teal-400",
+    iconBg: "bg-teal-100"
   }
 };
 
@@ -197,12 +209,13 @@ const NODE_ICONS: Record<ChatbotFlowNode["type"], React.ReactNode> = {
   question: <HelpCircle className="w-4 h-4 text-blue-600" />,
   template: <FileText className="w-4 h-4 text-indigo-600" />,
   condition: <GitBranch className="w-4 h-4 text-violet-600" />,
+  humanHandoff: <UserCheck className="w-4 h-4 text-indigo-600" />,
   assignHuman: <UserCheck className="w-4 h-4 text-indigo-600" />,
-  assignTeam: <Users className="w-4 h-4 text-indigo-600" />,
   updateChatStatus: <RefreshCw className="w-4 h-4 text-purple-600" />,
   setTags: <Tag className="w-4 h-4 text-purple-600" />,
   timeDelay: <Clock className="w-4 h-4 text-slate-650" />,
-  connectChatbot: <BotIcon className="w-4 h-4 text-indigo-600" />
+  connectChatbot: <BotIcon className="w-4 h-4 text-indigo-600" />,
+  fieldUpdate: <Pencil className="w-4 h-4 text-teal-600" />
 };
 
 const NODE_LABELS: Record<ChatbotFlowNode["type"], string> = {
@@ -211,12 +224,13 @@ const NODE_LABELS: Record<ChatbotFlowNode["type"], string> = {
   question: "Ask a Question",
   template: "Send a Template",
   condition: "Set a Condition",
+  humanHandoff: "Human Handoff (Ask First)",
   assignHuman: "Assign to Human",
-  assignTeam: "Assign Team",
   updateChatStatus: "Update Chat Status",
   setTags: "Set Tags",
   timeDelay: "Time Delay",
-  connectChatbot: "Connect to Chatbot"
+  connectChatbot: "Connect to Chatbot",
+  fieldUpdate: "Update a Field"
 };
 
 const CHANNEL_CLASSES: Record<ChannelType, string> = {
@@ -279,10 +293,27 @@ function resolveDynamicSaveField(optionsSource: any): { fieldKey: string } | nul
   return null;
 }
 
+function getFieldLabel(key: string): string {
+  if (!key) return "None selected";
+  const selectFields = getSelectFields();
+  const match = selectFields.find(f => f.key === key);
+  if (match) return `${match.label} (${MODULE_LABELS[match.module] || match.module})`;
+  
+  const standard: Record<string, string> = {
+    "client.name": "Client Name",
+    "client.email": "Client Email",
+    "client.phone": "Client Phone",
+    "client.status": "Client Status",
+    "client.country": "Country",
+  };
+  return standard[key] || key;
+}
+
 export default function ChatbotFlowBuilder({
   bot,
   employees,
   templates,
+  allBots = [],
   onClose,
   onSave
 }: ChatbotFlowBuilderProps) {
@@ -314,12 +345,20 @@ export default function ChatbotFlowBuilder({
     templateRules: bot.templateRules || [],
     knowledgeBases: bot.knowledgeBases || [],
     aiModelTier: bot.aiModelTier || "standard",
-    aiVoiceStyle: bot.aiVoiceStyle || "neutral"
+    aiVoiceStyle: bot.aiVoiceStyle || "neutral",
+    siteId: bot.siteId,
+    allowedDomains: bot.allowedDomains || [],
+    linkedProcessId: bot.linkedProcessId || "",
   });
 
   // Textarea refs for VariablePickerButton cursor insertion
   const messageTextRef = useRef<HTMLTextAreaElement | null>(null);
   const questionTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const fieldValueRef = useRef<HTMLTextAreaElement | null>(null);
+  // Per-condition value input refs (keyed nodeId-conditionIdx)
+  const conditionValueRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const [fieldModalOpen, setFieldModalOpen] = useState(false);
 
   // Module dropdown portal (for Available option source)
   const [moduleDropdownOpen, setModuleDropdownOpen] = useState(false);
@@ -327,8 +366,11 @@ export default function ChatbotFlowBuilder({
   const moduleTriggerRef = useRef<HTMLButtonElement | null>(null);
   const moduleDropdownPanelRef = useRef<HTMLDivElement | null>(null);
 
-  // Other bots for handoff picker (from localStorage)
+  // Other bots for handoff picker (from props, fallback to localStorage)
   const otherBots = useMemo(() => {
+    if (allBots && allBots.length > 0) {
+      return allBots.filter(b => b.id !== bot.id);
+    }
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
@@ -337,7 +379,7 @@ export default function ChatbotFlowBuilder({
       }
     } catch {}
     return [];
-  }, [bot.id]);
+  }, [allBots, bot.id]);
 
   // Select-type custom fields (for Available source module dropdown)
   const selectFields = useMemo(() => getSelectFields(), []);
@@ -504,8 +546,8 @@ export default function ChatbotFlowBuilder({
       config = { conditions: [{ variable: "name", operator: "equals", value: "" }] };
     } else if (type === "assignHuman") {
       config = { employeeId: "" };
-    } else if (type === "assignTeam") {
-      config = { teamName: "" };
+    } else if (type === "fieldUpdate") {
+      config = { fieldKey: "", value: "" };
     } else if (type === "updateChatStatus") {
       config = { status: "Open" };
     } else if (type === "setTags") {
@@ -746,7 +788,8 @@ export default function ChatbotFlowBuilder({
         { type: "message" as const, label: "Send a Message", icon: <MessageCircle className="w-4 h-4" />, desc: "Compose Text, Image, Video replies" },
         { type: "question" as const, label: "Ask a Question", icon: <HelpCircle className="w-4 h-4" />, desc: "Collect free text responses or choices" },
         { type: "template" as const, label: "Send a Template", icon: <FileText className="w-4 h-4" />, desc: "Reference pre-approved global templates" },
-        { type: "condition" as const, label: "Set a Condition", icon: <GitBranch className="w-4 h-4" />, desc: "Split flow on criteria rules" }
+        { type: "condition" as const, label: "Set a Condition", icon: <GitBranch className="w-4 h-4" />, desc: "Split flow on criteria rules" },
+        { type: "connectChatbot" as const, label: "Connect to Chatbot", icon: <BotIcon className="w-4 h-4" />, desc: "Hand off the conversation to another bot" }
       ]
     },
     {
@@ -755,11 +798,10 @@ export default function ChatbotFlowBuilder({
       collapsible: true,
       nodes: [
         { type: "assignHuman" as const, label: "Assign to Human", icon: <UserCheck className="w-4 h-4" />, desc: "Escalate chat thread to human staff" },
-        { type: "assignTeam" as const, label: "Assign Team", icon: <Users className="w-4 h-4" />, desc: "Forward thread context to a specific team" },
+        { type: "fieldUpdate" as const, label: "Update a Field", icon: <Pencil className="w-4 h-4" />, desc: "Write a value into any client or process field" },
         { type: "updateChatStatus" as const, label: "Update Chat Status", icon: <RefreshCw className="w-4 h-4" />, desc: "Change context ticket category" },
         { type: "setTags" as const, label: "Set Tags", icon: <Tag className="w-4 h-4" />, desc: "Affix tags filters to caller metadata" },
-        { type: "timeDelay" as const, label: "Time Delay", icon: <Clock className="w-4 h-4" />, desc: "Pause flow progression for interval duration" },
-        { type: "connectChatbot" as const, label: "Connect to Chatbot", icon: <BotIcon className="w-4 h-4" />, desc: "Hand off the conversation to another bot" }
+        { type: "timeDelay" as const, label: "Time Delay", icon: <Clock className="w-4 h-4" />, desc: "Pause flow progression for interval duration" }
       ]
     }
   ];
@@ -1295,8 +1337,8 @@ export default function ChatbotFlowBuilder({
                               : node.type === "assignHuman"
                               ? employees.find((e) => e.id === node.config.employeeId)?.name ||
                                 "Unassigned"
-                              : node.type === "assignTeam"
-                              ? node.config.teamName || "Unassigned"
+                              : node.type === "fieldUpdate"
+                              ? `Update: ${getFieldLabel(node.config.fieldKey)}`
                               : node.type === "timeDelay"
                               ? `${node.config.duration} ${node.config.unit}`
                               : node.type === "connectChatbot"
@@ -1373,7 +1415,9 @@ export default function ChatbotFlowBuilder({
 
         {/* ── RIGHT CONFIG PANEL ── */}
         {configNode && (
-          <div className="w-80 bg-white border-l border-gray-200 flex flex-col shrink-0 overflow-hidden shadow-lg z-15">
+          <>
+            <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setConfigNode(null)} />
+            <div className="fixed top-0 right-0 h-full z-50 flex flex-col bg-white border-l border-gray-200 shadow-2xl overflow-hidden" style={{ width: "40vw" }}>
             {/* Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-150 flex-shrink-0 bg-slate-50">
               <div>
@@ -1395,163 +1439,30 @@ export default function ChatbotFlowBuilder({
             <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {/* ENTRY ROUTER CONFIG */}
               {configNode.type === "entryRouter" && (
-                <div className="space-y-6">
-                  {/* Greeting Prompts */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      Greeting Prompts
-                    </h3>
-                    
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-                        New Contact greeting
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={configNode.config.newContactPrompt ?? "Hi! How can I help you today?"}
-                        onChange={(e) =>
-                          updateNodeConfig(configNode.id, {
-                            newContactPrompt: e.target.value
-                          })
-                        }
-                        placeholder="Type new contact greeting..."
-                        className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-semibold text-gray-500 mb-1">
-                        Returning Contact Prompt Template
-                      </label>
-                      <textarea
-                        rows={3}
-                        value={configNode.config.returningContactPrompt ?? 'Welcome back! You\'re currently in "{{processName}}" — {{stageName}}.'}
-                        onChange={(e) =>
-                          updateNodeConfig(configNode.id, {
-                            returningContactPrompt: e.target.value
-                          })
-                        }
-                        placeholder="Use {{processName}} and {{stageName}} for dynamic inserts."
-                        className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Section A: Returning Clients */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      Returning Clients
-                    </h3>
-                    <p className="text-[11px] text-gray-400 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Configure how bot responds to returning contacts with active stages.
-                    </p>
-                    <label className="flex items-center justify-between bg-slate-50 border p-3 rounded-xl cursor-pointer">
-                      <span className="text-xs font-semibold text-gray-700">
-                        Suggest current stage
-                      </span>
-                      <input
-                        type="checkbox"
-                        checked={configNode.config.showReturningStage !== false}
-                        onChange={(e) =>
-                          updateNodeConfig(configNode.id, {
-                            showReturningStage: e.target.checked
-                          })
-                        }
-                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Direction
                     </label>
-                  </div>
-
-                  {/* Section B: Process Picker Order */}
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      Process Options List
-                    </h3>
                     <p className="text-[11px] text-gray-400 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Choose which processes are offered as buttons to new contacts. Drag handles to reorder.
+                      Inbound: bot responds when a contact messages first. Outbound: bot auto-initiates the conversation.
                     </p>
-
-                    <div className="space-y-2">
-                      {(configNode.config.processesOrder || availableProcesses).map(
-                        (procName: string, procIdx: number) => {
-                          const isExcluded = (configNode.config.excludedProcesses || []).includes(
-                            procName
-                          );
-                          return (
-                            <div
-                              key={procName}
-                              draggable
-                              onDragStart={(e) => {
-                                e.dataTransfer.setData("text/plain", procIdx.toString());
-                              }}
-                              onDragOver={(e) => {
-                                e.preventDefault();
-                              }}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                const dragIdxStr = e.dataTransfer.getData("text/plain");
-                                if (dragIdxStr === "") return;
-                                const dragIdx = parseInt(dragIdxStr, 10);
-                                if (dragIdx === procIdx) return;
-                                const list = [...(configNode.config.processesOrder || availableProcesses)];
-                                const [draggedItem] = list.splice(dragIdx, 1);
-                                list.splice(procIdx, 0, draggedItem);
-                                updateNodeConfig(configNode.id, { processesOrder: list });
-                              }}
-                              className="p-3 border rounded-xl bg-white text-xs hover:bg-slate-50/50 transition-colors cursor-grab active:cursor-grabbing space-y-2 shadow-sm"
-                            >
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <GripVertical className="w-3.5 h-3.5 text-gray-400 cursor-row-resize flex-shrink-0" />
-                                  <span className={isExcluded ? "text-gray-400 line-through font-medium" : "text-gray-750 font-semibold"}>
-                                    {procName}
-                                  </span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const excluded = configNode.config.excludedProcesses || [];
-                                    const updated = excluded.includes(procName)
-                                      ? excluded.filter((p: string) => p !== procName)
-                                      : [...excluded, procName];
-                                    updateNodeConfig(configNode.id, { excludedProcesses: updated });
-                                  }}
-                                  className={`text-[10px] px-2 py-0.5 rounded font-bold transition-all ${
-                                    isExcluded
-                                      ? "bg-slate-100 text-gray-400 hover:bg-slate-200"
-                                      : "bg-blue-50 text-blue-600 hover:bg-blue-100"
-                                  }`}
-                                >
-                                  {isExcluded ? "Show" : "Exclude"}
-                                </button>
-                              </div>
-
-                              {!isExcluded && (
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
-                                    Display Label for Option Button
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={configNode.config.processButtonLabels?.[procName] ?? ""}
-                                    onChange={(e) => {
-                                      const currentLabels = configNode.config.processButtonLabels || {};
-                                      updateNodeConfig(configNode.id, {
-                                        processButtonLabels: {
-                                          ...currentLabels,
-                                          [procName]: e.target.value
-                                        }
-                                      });
-                                    }}
-                                    placeholder={`Default: ${procName}`}
-                                    className="w-full px-2.5 py-1 border border-gray-200 rounded-lg text-xs bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          );
-                        }
-                      )}
+                    <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
+                      {(["inbound", "outbound"] as const).map((dir) => (
+                        <button
+                          key={dir}
+                          type="button"
+                          onClick={() => updateNodeConfig(configNode.id, { direction: dir })}
+                          className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all capitalize ${
+                            (configNode.config.direction ?? "inbound") === dir
+                              ? "bg-white text-gray-800 shadow-sm border border-gray-200"
+                              : "text-gray-500 hover:text-gray-700"
+                          }`}
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {dir}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1586,8 +1497,7 @@ export default function ChatbotFlowBuilder({
                         targetRef={messageTextRef}
                         value={configNode.config.text || ""}
                         onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
-                        label="{x}"
-                        moduleFilter={["client", "process"]}
+                        label="{ } Insert Variable"
                         mode="insert"
                       />
                     </div>
@@ -1663,7 +1573,7 @@ export default function ChatbotFlowBuilder({
                         targetRef={questionTextRef}
                         value={configNode.config.text || ""}
                         onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
-                        label="{x}"
+                        label="{ } Insert Variable"
                         moduleFilter={["client", "process"]}
                         mode="insert"
                       />
@@ -1683,9 +1593,12 @@ export default function ChatbotFlowBuilder({
                     <div className="space-y-3 pt-1">
                       {/* Segmented control */}
                       <div>
-                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                          Option Source
-                        </label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                            Option Source
+                          </label>
+                          <InfoTooltip text="Static lets you type manual choices. Available fetches options dynamically from real-time resources." />
+                        </div>
                         <div className="flex p-1 bg-slate-100 rounded-lg border border-slate-200">
                           {(["static", "available"] as const).map((m) => (
                             <button
@@ -1727,41 +1640,20 @@ export default function ChatbotFlowBuilder({
                         <>
                           {configNode.config.questionType === "buttons" && (
                             <div className="space-y-2">
-                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Button Choices</label>
-                              {(configNode.config.buttons || []).map((btn: string, idx: number) => (
-                                <div key={idx} className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    value={btn}
-                                    onChange={(e) => {
-                                      const list = [...configNode.config.buttons];
-                                      list[idx] = e.target.value;
-                                      updateNodeConfig(configNode.id, { buttons: list });
-                                    }}
-                                    placeholder={`Choice ${idx + 1}`}
-                                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const list = (configNode.config.buttons || []).filter((_: any, i: number) => i !== idx);
-                                      updateNodeConfig(configNode.id, { buttons: list });
-                                    }}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                              {(configNode.config.buttons || []).length < 3 && (
-                                <button
-                                  type="button"
-                                  onClick={() => updateNodeConfig(configNode.id, { buttons: [...(configNode.config.buttons || []), ""] })}
-                                  className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
-                                >
-                                  + Add Button Choice
-                                </button>
-                              )}
+                              <ButtonActionEditor
+                                buttons={(() => {
+                                  const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
+                                  return raw.map((b, i) =>
+                                    typeof b === "string"
+                                      ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
+                                      : { id: b.id || `btn-${i}`, ...b }
+                                  );
+                                })()}
+                                onChange={(actions: ButtonAction[]) => updateNodeConfig(configNode.id, { buttons: actions })}
+                                maxButtons={3}
+                                label="Button Choices"
+                                description="Configure quick reply choices or client actions. Call, URL, and Email buttons end the flow at this node."
+                              />
                             </div>
                           )}
 
@@ -1985,7 +1877,14 @@ export default function ChatbotFlowBuilder({
                             ? (configNode.config.optionsSource.module === "providerAvailability"
                                 ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM"]
                                 : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 3).map(o => o.label))
-                            : (configNode.config.buttons || []))
+                            : (() => {
+                                const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
+                                return raw.map((b, i) =>
+                                  typeof b === "string"
+                                    ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
+                                    : { id: b.id || `btn-${i}`, ...b }
+                                );
+                              })())
                         : undefined
                     }
                     listItems={
@@ -2071,9 +1970,12 @@ export default function ChatbotFlowBuilder({
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1">
-                          Operator
-                        </label>
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-[10px] font-bold text-gray-500">
+                            Operator
+                          </label>
+                          <InfoTooltip text="Choose how to compare the variable against the value (e.g. Contains matches partial text)." />
+                        </div>
                         <select
                           value={cond.operator || "equals"}
                           onChange={(e) => {
@@ -2093,10 +1995,24 @@ export default function ChatbotFlowBuilder({
 
                       {cond.operator !== "is_empty" && (
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-500 mb-1">
-                            Value
-                          </label>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-[10px] font-bold text-gray-500">
+                              Value
+                            </label>
+                            <VariablePickerButton
+                              targetRef={{ current: conditionValueRefs.current[`${configNode.id}-${idx}`] }}
+                              value={cond.value || ""}
+                              onChange={(v) => {
+                                const list = [...configNode.config.conditions];
+                                list[idx] = { ...list[idx], value: v };
+                                updateNodeConfig(configNode.id, { conditions: list });
+                              }}
+                              label="{ } Insert Variable"
+                              mode="insert"
+                            />
+                          </div>
                           <input
+                            ref={el => { conditionValueRefs.current[`${configNode.id}-${idx}`] = el; }}
                             type="text"
                             value={cond.value || ""}
                             onChange={(e) => {
@@ -2151,19 +2067,53 @@ export default function ChatbotFlowBuilder({
                 </div>
               )}
 
-              {/* ASSIGN TEAM CONFIG */}
-              {configNode.type === "assignTeam" && (
+              {/* FIELD UPDATE CONFIG */}
+              {configNode.type === "fieldUpdate" && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Team Name identifier
+                      Field to Update
                     </label>
-                    <input
-                      type="text"
-                      value={configNode.config.teamName || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { teamName: e.target.value })}
-                      placeholder="e.g. Billing department"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white"
+                    <div className="flex gap-2 items-center">
+                      <div className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs bg-gray-50 text-gray-700 min-h-[34px] flex items-center font-medium truncate">
+                        {getFieldLabel(configNode.config.fieldKey)}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setFieldModalOpen(true)}
+                        className="shrink-0 text-xs"
+                      >
+                        Select Field...
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Writes the value below into this field when the flow reaches this node.
+                    </p>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                        New Value
+                      </label>
+                      <VariablePickerButton
+                        targetRef={fieldValueRef}
+                        value={configNode.config.value || ""}
+                        onChange={(v) => updateNodeConfig(configNode.id, { value: v })}
+                        label="{ } Insert Variable"
+                        moduleFilter={["client", "process"]}
+                        mode="insert"
+                      />
+                    </div>
+                    <textarea
+                      ref={fieldValueRef}
+                      rows={2}
+                      value={configNode.config.value || ""}
+                      onChange={(e) => updateNodeConfig(configNode.id, { value: e.target.value })}
+                      placeholder="Static text or {{variable}} from prior question..."
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-teal-500 resize-none text-gray-700 bg-white"
                     />
                   </div>
                 </div>
@@ -2242,6 +2192,7 @@ export default function ChatbotFlowBuilder({
                         onChange={(e) => updateNodeConfig(configNode.id, { unit: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                       >
+                        <option>Second</option>
                         <option>Minute</option>
                         <option>Hour</option>
                         <option>Day</option>
@@ -2251,13 +2202,91 @@ export default function ChatbotFlowBuilder({
                 </div>
               )}
 
+              {/* HUMAN HANDOFF CONFIG */}
+              {configNode.type === "humanHandoff" && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                      Handoff Question
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={configNode.config.handoffQuestionText || ""}
+                      onChange={(e) => updateNodeConfig(configNode.id, { handoffQuestionText: e.target.value })}
+                      placeholder="Would you like to speak with a human agent?"
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white resize-none"
+                    />
+                  </div>
+                  <div className="p-3 border border-green-200 rounded-xl bg-green-50 space-y-2">
+                    <label className="block text-[10px] font-bold text-green-700 uppercase tracking-wider">✓ Yes Branch — Assign to Human</label>
+                    <select
+                      value={configNode.config.yesPersonId || ""}
+                      onChange={(e) => updateNodeConfig(configNode.id, { yesPersonId: e.target.value })}
+                      className="w-full px-3 py-2 border border-green-200 rounded-lg text-xs bg-white"
+                    >
+                      <option value="">Select team member…</option>
+                      {employees.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="p-3 border border-red-100 rounded-xl bg-red-50 space-y-2">
+                    <label className="block text-[10px] font-bold text-red-600 uppercase tracking-wider">✗ No Branch — Response</label>
+                    <select
+                      value={configNode.config.noResponse?.type || "message"}
+                      onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { type: e.target.value, text: "", templateId: "", targetBotId: "" } })}
+                      className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                    >
+                      <option value="message">Send a Message</option>
+                      <option value="template">Send a Template</option>
+                      <option value="chatbot">Trigger Another Chatbot</option>
+                    </select>
+                    {(configNode.config.noResponse?.type || "message") === "message" && (
+                      <textarea
+                        rows={2}
+                        value={configNode.config.noResponse?.text || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, type: "message", text: e.target.value } })}
+                        placeholder="Okay, let's continue here."
+                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white resize-none"
+                      />
+                    )}
+                    {(configNode.config.noResponse?.type) === "template" && (
+                      <select
+                        value={configNode.config.noResponse?.templateId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, templateId: e.target.value } })}
+                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                      >
+                        <option value="">Select template…</option>
+                        {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                    )}
+                    {(configNode.config.noResponse?.type) === "chatbot" && (
+                      <select
+                        value={configNode.config.noResponse?.targetBotId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, targetBotId: e.target.value } })}
+                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                      >
+                        <option value="">Select chatbot…</option>
+                        {otherBots.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-gray-400 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    The bot will ask the question above. If the contact replies Yes, the conversation is assigned to the selected person. If No, the configured response is sent.
+                  </p>
+                </div>
+              )}
+
               {/* CONNECT CHATBOT CONFIG */}
               {configNode.type === "connectChatbot" && (
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                      Target Chatbot
-                    </label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Target Chatbot
+                      </label>
+                      <InfoTooltip text="Hands off conversation to another bot. Note: flow engine simulation has limited support for multi-bot tracking in test drawer." />
+                    </div>
                     <select
                       value={configNode.config.targetBotId || ""}
                       onChange={(e) => updateNodeConfig(configNode.id, { targetBotId: e.target.value })}
@@ -2289,7 +2318,8 @@ export default function ChatbotFlowBuilder({
                 Done
               </Button>
             </div>
-          </div>
+            </div>
+          </>
         )}
 
       </div>
@@ -2312,6 +2342,18 @@ export default function ChatbotFlowBuilder({
         employees={employees}
         campaigns={[]}
         templates={templates}
+      />
+
+      <VariableSelectorModal
+        isOpen={fieldModalOpen}
+        onClose={() => setFieldModalOpen(false)}
+        mode="select"
+        onInsert={(variable) => {
+          if (configNode) {
+            const cleanToken = variable.replace(/^\{\{/, "").replace(/\}\}$/, "");
+            updateNodeConfig(configNode.id, { fieldKey: cleanToken });
+          }
+        }}
       />
     </div>
   );

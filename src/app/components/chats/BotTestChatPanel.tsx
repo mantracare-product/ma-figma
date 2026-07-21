@@ -1,12 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Send, RotateCcw, AlertTriangle } from "lucide-react";
+import { Send, RotateCcw, AlertTriangle, Clock } from "lucide-react";
 import { Bot } from "./ChatbotTab";
 import { TestChatTurn, resolveTestVariables } from "../../../lib/chatbotTestReply";
 import {
   executeEntryRouter,
   executeFlowNode,
   FlowStepResult,
-  answerFromKnowledgeBase
+  answerFromKnowledgeBase,
+  getDelayMs
 } from "../../../lib/chatbotFlowEngine";
 import { WhatsappTemplate } from "../../pages/Chats";
 import { useBusinessHours } from "../../../hooks/useBusinessHours";
@@ -19,6 +20,7 @@ interface BotTestChatPanelProps {
 }
 
 const MAX_TEST_MESSAGES = 20;
+const MAX_REAL_DELAY_MS = 3000; // clamp simulated waits to 3 s in test mode
 
 function resolveFieldLabel(fieldKey: string): string {
   try {
@@ -38,12 +40,15 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
   const [awaitingFreeText, setAwaitingFreeText] = useState(false);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [inputLocked, setInputLocked] = useState(false); // locked during delay simulation
   const [withinHours, setWithinHours] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // resetCounter drives the outbound auto-initiation useEffect
   const [resetCounter, setResetCounter] = useState(0);
   // activeBot starts as the prop bot, but switches when a handoff is triggered
   const [activeBot, setActiveBot] = useState<Bot>(bot);
+  // track if the current node is a humanHandoff node (for Yes/No branch routing)
+  const [pendingHandoffNodeId, setPendingHandoffNodeId] = useState<string | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const businessHours = useBusinessHours();
@@ -58,6 +63,29 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
     const entryNode = activeBot.flow?.nodes.find(n => n.type === "entryRouter");
     return (entryNode?.data?.direction ?? "inbound") as "inbound" | "outbound";
   }, [activeBot]);
+
+  /**
+   * If the step result has a delayMs, simulate the wait (clamped to MAX_REAL_DELAY_MS),
+   * show a system chip, lock input, wait, then unlock and continue to the next node.
+   */
+  async function handleDelay(result: FlowStepResult, updatedTurns: TestChatTurn[]): Promise<TestChatTurn[]> {
+    if (!result.delayMs) return updatedTurns;
+
+    const realWait = Math.min(result.delayMs, MAX_REAL_DELAY_MS);
+    const durationLabel = result.messageText.replace("[Flow Action: ", "").replace("]", "");
+
+    const delayChip: TestChatTurn = {
+      role: "system",
+      text: `⏱ Simulating delay: ${durationLabel} (capped at ${(realWait / 1000).toFixed(1)}s in Test Mode)`
+    };
+    const withChip = [...updatedTurns, delayChip];
+    setTurns(withChip);
+    setInputLocked(true);
+
+    await new Promise(r => setTimeout(r, realWait));
+    setInputLocked(false);
+    return withChip;
+  }
 
   function appendBotResult(result: FlowStepResult, updatedTurns?: TestChatTurn[]) {
     // ── Chatbot handoff detected ──
@@ -107,14 +135,21 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
       return;
     }
 
-    setTurns(prev => {
-      const base = updatedTurns ?? prev;
-      return [...base, {
-        role: "bot",
-        text: resolveTestVariables(result.messageText, base, activeBot),
-        buttons: result.buttons
-      }];
-    });
+    const base = updatedTurns ?? turns;
+
+    // ── Human handoff node: show the question with Yes/No buttons ──
+    if (result.assignHuman !== undefined) {
+      // This result came from a humanHandoff node — track it so we can branch on Yes/No
+      setPendingHandoffNodeId(result.nodeId);
+    } else {
+      setPendingHandoffNodeId(null);
+    }
+
+    setTurns([...base, {
+      role: "bot",
+      text: resolveTestVariables(result.messageText, base, activeBot),
+      buttons: result.buttons
+    }]);
     setCurrentNodeId(result.nodeId);
     setAwaitingFreeText(result.awaitingInput);
   }
@@ -126,7 +161,18 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
     try {
       const result = executeEntryRouter(activeBot, { history: [] });
       if (result) {
-        appendBotResult(result, []);
+        if (result.delayMs) {
+          const withDelay = await handleDelay(result, []);
+          // After delay, advance to the next node
+          const node = activeBot.flow?.nodes.find(n => n.id === result.nodeId);
+          const nextId = node?.connections?.[0]?.toNodeId ?? null;
+          if (nextId) {
+            const nextResult = executeFlowNode(activeBot, nextId, { history: withDelay });
+            if (nextResult) { appendBotResult(nextResult, withDelay); return; }
+          }
+        } else {
+          appendBotResult(result, []);
+        }
       } else {
         setTurns([{ role: "system", text: "⚠️ Outbound flow has no outgoing connections from the Entry Point — connect a node to it on the canvas." }]);
       }
@@ -151,14 +197,16 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
     setCurrentNodeId(null);
     setAwaitingFreeText(false);
     setError(null);
+    setInputLocked(false);
+    setPendingHandoffNodeId(null);
     setActiveBot(bot); // reset to original bot on restart
     setResetCounter(c => c + 1);
   };
 
   // ── Core send function ────────────────────────────────────────────────────
-  const send = async (overrideText?: string, resolvedNextNodeId?: string | null) => {
+  const send = async (overrideText?: string, resolvedNextNodeId?: string | null, btnActionType?: string, btnActionValue?: string) => {
     const text = overrideText ?? input;
-    if (!text.trim() || sending) return;
+    if (!text.trim() || sending || inputLocked) return;
     if (userTurnCount >= MAX_TEST_MESSAGES) {
       setError(`Test limit reached (${MAX_TEST_MESSAGES} messages). Reset to keep testing.`);
       return;
@@ -179,11 +227,103 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
     await new Promise(r => setTimeout(r, 200));
 
     try {
+      // ── HUMAN HANDOFF BRANCH: Yes / No routing ────────────────────────
+      if (pendingHandoffNodeId) {
+        const handoffNode = activeBot.flow?.nodes.find(n => n.id === pendingHandoffNodeId);
+        if (handoffNode?.type === "humanHandoff") {
+          setPendingHandoffNodeId(null);
+
+          if (text.trim().toLowerCase() === "yes") {
+            // Yes → assign to human
+            const personId = handoffNode.data?.yesPersonId || "";
+            const person = employees.find(e => e.id === personId);
+            const chip: TestChatTurn = {
+              role: "system",
+              text: person
+                ? `✅ Conversation assigned to ${person.name}`
+                : "✅ Conversation assigned to a human agent"
+            };
+            setTurns([...updatedTurns, chip]);
+            setCurrentNodeId(null);
+            setAwaitingFreeText(false);
+            return;
+          } else {
+            // No → execute handoffNoResponse (message / template / chatbot)
+            const noResponse = handoffNode.data?.noResponse;
+            if (noResponse) {
+              if (noResponse.type === "message") {
+                const botTurn: TestChatTurn = {
+                  role: "bot",
+                  text: resolveTestVariables(noResponse.text || "Okay, we'll continue here.", updatedTurns, activeBot)
+                };
+                setTurns([...updatedTurns, botTurn]);
+                setCurrentNodeId(null);
+                setAwaitingFreeText(false);
+                return;
+              }
+              if (noResponse.type === "template") {
+                const chip: TestChatTurn = {
+                  role: "system",
+                  text: `[Would send template: ${noResponse.templateId || "Unnamed template"}]`
+                };
+                setTurns([...updatedTurns, chip]);
+                setCurrentNodeId(null);
+                setAwaitingFreeText(false);
+                return;
+              }
+              if (noResponse.type === "chatbot" && noResponse.targetBotId) {
+                const fakeResult: FlowStepResult = {
+                  nodeId: handoffNode.id,
+                  messageText: "",
+                  awaitingInput: false,
+                  chatbotHandoff: { targetBotId: noResponse.targetBotId }
+                };
+                appendBotResult(fakeResult, updatedTurns);
+                return;
+              }
+            }
+            // fallback no-response
+            const botTurn: TestChatTurn = { role: "bot", text: "Alright, let's continue then." };
+            setTurns([...updatedTurns, botTurn]);
+            setCurrentNodeId(null);
+            setAwaitingFreeText(false);
+            return;
+          }
+        }
+      }
+
+      // ── TERMINAL BUTTON ACTION (call / url / email) ─────────────────
+      if (btnActionType && btnActionType !== "quick_reply") {
+        const labels: Record<string, string> = {
+          call: `📞 Dialing ${btnActionValue || "…"}`,
+          url: `🌐 Opening ${btnActionValue || "…"}`,
+          email: `✉️ Composing email to ${btnActionValue || "…"}`,
+        };
+        const chip: TestChatTurn = {
+          role: "system",
+          text: labels[btnActionType] ?? `[${btnActionType}: ${btnActionValue}]`
+        };
+        setTurns([...updatedTurns, chip]);
+        setCurrentNodeId(null);
+        setAwaitingFreeText(false);
+        return;
+      }
+
       // ── FIRST INBOUND MESSAGE: entry router hands off to first connected node ──
       if (turns.length === 0) {
         const result = executeEntryRouter(activeBot, { history: updatedTurns });
         if (result) {
-          appendBotResult(result, updatedTurns);
+          if (result.delayMs) {
+            const withDelay = await handleDelay(result, updatedTurns);
+            const node = activeBot.flow?.nodes.find(n => n.id === result.nodeId);
+            const nextId = node?.connections?.[0]?.toNodeId ?? null;
+            if (nextId) {
+              const nextResult = executeFlowNode(activeBot, nextId, { history: withDelay });
+              if (nextResult) { appendBotResult(nextResult, withDelay); return; }
+            }
+          } else {
+            appendBotResult(result, updatedTurns);
+          }
         } else {
           setTurns(prev => [...prev, {
             role: "system",
@@ -204,7 +344,17 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
         }
         const result = executeFlowNode(activeBot, resolvedNextNodeId, { history: updatedTurns });
         if (result) {
-          appendBotResult(result, updatedTurns);
+          if (result.delayMs) {
+            const withDelay = await handleDelay(result, updatedTurns);
+            const node = activeBot.flow?.nodes.find(n => n.id === result.nodeId);
+            const nextId = node?.connections?.[0]?.toNodeId ?? null;
+            if (nextId) {
+              const nextResult = executeFlowNode(activeBot, nextId, { history: withDelay });
+              if (nextResult) { appendBotResult(nextResult, withDelay); return; }
+            }
+          } else {
+            appendBotResult(result, updatedTurns);
+          }
         } else {
           setTurns(prev => [...prev, {
             role: "system",
@@ -230,8 +380,18 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
         if (nextId) {
           const result = executeFlowNode(activeBot, nextId, { history: updatedTurns });
           if (result) {
-            appendBotResult(result, updatedTurns);
-            return;
+            if (result.delayMs) {
+              const withDelay = await handleDelay(result, updatedTurns);
+              const nextNode = activeBot.flow?.nodes.find(n => n.id === result.nodeId);
+              const nextNextId = nextNode?.connections?.[0]?.toNodeId ?? null;
+              if (nextNextId) {
+                const nextResult = executeFlowNode(activeBot, nextNextId, { history: withDelay });
+                if (nextResult) { appendBotResult(nextResult, withDelay); return; }
+              }
+            } else {
+              appendBotResult(result, updatedTurns);
+              return;
+            }
           }
         }
       }
@@ -266,6 +426,7 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
   const isInheritedHours = (bot.businessHoursMode ?? "inherit") === "inherit";
   const orgHoursMissing = bot.businessHoursEnabled && isInheritedHours && !businessHours.configured;
   const direction = getEntryDirection();
+  const isDisabled = sending || inputLocked;
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -321,6 +482,8 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
             {turns.map((t, i) => {
               const isLatestBotTurn = t.role === "bot" && i === turns.length - 1;
               const isSystemInfo = t.role === "system" && t.text.startsWith("📝");
+              const isDelayChip = t.role === "system" && t.text.startsWith("⏱");
+              const isHandoffChip = t.role === "system" && (t.text.startsWith("→") || t.text.startsWith("✅") || t.text.startsWith("📞") || t.text.startsWith("🌐") || t.text.startsWith("✉️"));
               return (
                 <div key={i} className="space-y-1">
                   <div className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -332,28 +495,37 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
                             : t.role === "system"
                             ? isSystemInfo
                               ? "bg-green-50 border border-green-200 text-green-800 text-xs font-medium"
+                              : isDelayChip
+                              ? "bg-slate-100 border border-slate-300 text-slate-600 text-xs font-medium flex items-center gap-1.5"
+                              : isHandoffChip
+                              ? "bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium"
                               : "bg-slate-100 border border-slate-200 text-slate-700 italic text-xs"
                             : "bg-white rounded-tl-none text-gray-800 border border-gray-100"
                         }`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
+                        {isDelayChip && <Clock className="w-3 h-3 shrink-0 text-slate-500" />}
                         {t.text}
                       </div>
 
                       {/* WhatsApp-style buttons */}
                       {t.buttons && t.buttons.length > 0 && (
                         <div className={`bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5 ${!isLatestBotTurn ? "opacity-50" : ""}`}>
-                          {t.buttons.map((btn, bi) => (
-                            <button
-                              key={bi}
-                              type="button"
-                              disabled={!isLatestBotTurn || sending}
-                              onClick={() => send(btn.label, btn.nextNodeId)}
-                              className={`w-full px-3 py-2 text-xs font-semibold text-center text-blue-600 transition-colors ${bi > 0 ? "border-t border-gray-100" : ""} ${isLatestBotTurn ? "hover:bg-blue-50 cursor-pointer" : "cursor-not-allowed"}`}
-                            >
-                              {btn.label}
-                            </button>
-                          ))}
+                          {t.buttons.map((btn, bi) => {
+                            const isTerminal = btn.actionType && btn.actionType !== "quick_reply";
+                            return (
+                              <button
+                                key={bi}
+                                type="button"
+                                disabled={!isLatestBotTurn || isDisabled}
+                                onClick={() => send(btn.label, btn.nextNodeId, btn.actionType, (btn as any).actionValue)}
+                                className={`w-full px-3 py-2 text-xs font-semibold text-center text-blue-600 transition-colors flex items-center justify-center gap-1 ${bi > 0 ? "border-t border-gray-100" : ""} ${isLatestBotTurn && !isDisabled ? "hover:bg-blue-50 cursor-pointer" : "cursor-not-allowed"}`}
+                              >
+                                {btn.label}
+                                {isTerminal && <span className="text-[9px] text-gray-400 ml-1">↗</span>}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
                     </div>
@@ -382,6 +554,14 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
         </div>
       )}
 
+      {/* Input locked banner */}
+      {inputLocked && (
+        <div className="px-4 py-2 text-xs text-slate-600 bg-slate-50 border-t border-slate-200 flex-shrink-0 flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <Clock className="w-3.5 h-3.5 animate-spin" />
+          Simulating delay — input locked…
+        </div>
+      )}
+
       {/* Text input — hidden for outbound until flow has started */}
       <div className="bg-white px-4 py-3 flex items-center gap-2 border-t border-gray-200 flex-shrink-0">
         <button
@@ -400,20 +580,22 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
             if (e.key === "Enter") { e.preventDefault(); send(undefined, undefined); }
           }}
           placeholder={
-            awaitingFreeText
+            inputLocked
+              ? "Waiting for delay…"
+              : awaitingFreeText
               ? "Type your free-text response..."
               : direction === "outbound" && turns.length === 0
               ? "Flow initiating…"
               : "Type as a test customer…"
           }
-          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          disabled={sending || (direction === "outbound" && turns.length === 0 && !error)}
+          className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+          disabled={isDisabled || (direction === "outbound" && turns.length === 0 && !error)}
           style={{ fontFamily: "Outfit, sans-serif" }}
         />
         <button
           type="button"
           onClick={() => send(undefined, undefined)}
-          disabled={sending || !input.trim()}
+          disabled={isDisabled || !input.trim()}
           className="w-9 h-9 bg-blue-600 disabled:opacity-40 rounded-lg flex items-center justify-center text-white hover:bg-blue-700 transition-colors"
         >
           <Send className="w-4 h-4 text-white" />

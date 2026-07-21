@@ -8,6 +8,7 @@ interface VariableSelectorModalProps {
     isOpen: boolean;
     onClose: () => void;
     onInsert: (variable: string) => void;
+    mode?: "insert" | "select";
 }
 
 const MODULE_LABELS: Record<string, string> = {
@@ -22,7 +23,7 @@ const MODULE_LABELS: Record<string, string> = {
 
 const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember"];
 
-export default function VariableSelectorModal({ isOpen, onClose, onInsert }: VariableSelectorModalProps) {
+export default function VariableSelectorModal({ isOpen, onClose, onInsert, mode = "insert" }: VariableSelectorModalProps) {
     const { getAllFields } = useFieldRegistry();
     const [search, setSearch] = useState("");
     const [selected, setSelected] = useState<string | null>(null);
@@ -64,13 +65,13 @@ export default function VariableSelectorModal({ isOpen, onClose, onInsert }: Var
         <Modal
             isOpen={isOpen}
             onClose={() => { onClose(); setSelected(null); setSearch(""); }}
-            title="Insert Variable"
+            title={mode === "select" ? "Select Field" : "Insert Variable"}
             maxWidth="sm"
             footer={
                 <div className="flex items-center justify-end gap-3">
                     <Button variant="outline" onClick={onClose}>Cancel</Button>
                     <Button variant="primary" onClick={() => selected && handleInsert(selected)} disabled={!selected}>
-                        Insert
+                        {mode === "select" ? "Select" : "Insert"}
                     </Button>
                 </div>
             }

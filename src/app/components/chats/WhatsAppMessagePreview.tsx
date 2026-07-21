@@ -1,4 +1,6 @@
 import React from "react";
+import { Phone, ExternalLink, Mail } from "lucide-react";
+import { ButtonAction } from "../../../lib/chatbotTypes";
 
 interface WhatsAppMessagePreviewProps {
   botName: string;
@@ -7,8 +9,16 @@ interface WhatsAppMessagePreviewProps {
   mediaUrl?: string;
   caption?: string;
   fileName?: string;
-  buttons?: string[]; // Ask a Question "buttons" mode
+  /** Accepts either legacy plain string[] or new ButtonAction[] */
+  buttons?: Array<ButtonAction | string>;
   listItems?: string[]; // Ask a Question "list" mode
+}
+
+function getButtonIcon(actionType: ButtonAction["actionType"] | undefined) {
+  if (actionType === "call") return <Phone className="w-3 h-3 shrink-0" />;
+  if (actionType === "url") return <ExternalLink className="w-3 h-3 shrink-0" />;
+  if (actionType === "email") return <Mail className="w-3 h-3 shrink-0" />;
+  return null;
 }
 
 export default function WhatsAppMessagePreview({
@@ -21,7 +31,17 @@ export default function WhatsAppMessagePreview({
   buttons,
   listItems
 }: WhatsAppMessagePreviewProps) {
-  const options = buttons?.length ? buttons : listItems?.length ? listItems : [];
+  // Normalise buttons to a display list — support both plain strings and ButtonAction objects
+  const buttonItems: Array<{ label: string; actionType?: ButtonAction["actionType"] }> =
+    (buttons ?? []).map(b =>
+      typeof b === "string"
+        ? { label: b }
+        : { label: b.label, actionType: b.actionType }
+    );
+
+  const listLabels = listItems?.length ? listItems : [];
+  const hasButtons = buttonItems.length > 0;
+  const hasListItems = !hasButtons && listLabels.length > 0;
 
   return (
     <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[300px] flex flex-col">
@@ -49,16 +69,33 @@ export default function WhatsAppMessagePreview({
         </div>
 
         {/* WhatsApp-style buttons attached directly underneath */}
-        {options.length > 0 && (
+        {hasButtons && (
           <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden border-t border-gray-100 select-none">
-            {options.map((opt, i) => (
+            {buttonItems.map((btn, i) => (
               <div
                 key={i}
                 className={`px-3 py-2 text-[10px] font-bold text-center text-blue-600 flex items-center justify-center gap-1 ${
                   i > 0 ? "border-t border-gray-100" : ""
                 }`}
               >
-                <span>{opt || `Option ${i + 1}`}</span>
+                {getButtonIcon(btn.actionType)}
+                <span>{btn.label || `Option ${i + 1}`}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* List items */}
+        {hasListItems && (
+          <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden border-t border-gray-100 select-none">
+            {listLabels.map((item, i) => (
+              <div
+                key={i}
+                className={`px-3 py-2 text-[10px] font-bold text-center text-blue-600 flex items-center justify-center gap-1 ${
+                  i > 0 ? "border-t border-gray-100" : ""
+                }`}
+              >
+                <span>{item || `Option ${i + 1}`}</span>
               </div>
             ))}
           </div>

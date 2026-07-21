@@ -747,6 +747,9 @@ export default function Process() {
   const [smsConnectedAccount, setSmsConnectedAccount] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
   const [whatsappTemplateIdentifier, setWhatsappTemplateIdentifier] = useState("");
+  const [whatsappSource, setWhatsappSource] = useState<"template" | "campaign" | "chatbot">("template");
+  const [whatsappCampaignId, setWhatsappCampaignId] = useState<string>("");
+  const [whatsappChatbotId, setWhatsappChatbotId] = useState<string>("");
   const [emailSubject, setEmailSubject] = useState("");
   const [webhookHeaderTypes, setWebhookHeaderTypes] = useState<string[]>(["Static"]);
 
@@ -924,7 +927,7 @@ export default function Process() {
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
       ...CONDITION_FIELDS,
     ],
-    whatsapp: ["whatsappTemplate", "whatsappTemplateIdentifier", ...CONDITION_FIELDS],
+    whatsapp: ["whatsappSource", "whatsappTemplate", "whatsappTemplateIdentifier", "whatsappCampaignId", "whatsappChatbotId", ...CONDITION_FIELDS],
     sms: ["smsMessage", "smsConnectedAccount", ...CONDITION_FIELDS],
     email: [
       "emailConnectedAccount", "showCustomEmail", "emailSubject",
@@ -966,8 +969,11 @@ export default function Process() {
     callActionReason: () => callActionReason,
     callActionVoiceResponse: () => callActionVoiceResponse,
     callActionExtension: () => callActionExtension,
+    whatsappSource: () => whatsappSource,
     whatsappTemplate: () => whatsappTemplate,
     whatsappTemplateIdentifier: () => whatsappTemplateIdentifier,
+    whatsappCampaignId: () => whatsappCampaignId,
+    whatsappChatbotId: () => whatsappChatbotId,
     smsMessage: () => smsMessage,
     smsConnectedAccount: () => smsConnectedAccount,
     emailConnectedAccount: () => emailConnectedAccount,
@@ -1044,8 +1050,11 @@ export default function Process() {
     callActionReason: setCallActionReason,
     callActionVoiceResponse: setCallActionVoiceResponse,
     callActionExtension: setCallActionExtension,
+    whatsappSource: setWhatsappSource,
     whatsappTemplate: setWhatsappTemplate,
     whatsappTemplateIdentifier: setWhatsappTemplateIdentifier,
+    whatsappCampaignId: setWhatsappCampaignId,
+    whatsappChatbotId: setWhatsappChatbotId,
     smsMessage: setSmsMessage,
     smsConnectedAccount: setSmsConnectedAccount,
     emailConnectedAccount: setEmailConnectedAccount,
@@ -1164,6 +1173,9 @@ export default function Process() {
     setSmsConnectedAccount("");
     setWhatsappTemplate("");
     setWhatsappTemplateIdentifier("");
+    setWhatsappSource("template");
+    setWhatsappCampaignId("");
+    setWhatsappChatbotId("");
     setCrmName("Select CRM...");
     setCrmField("Select field...");
     setEhrName("Select EHR...");
