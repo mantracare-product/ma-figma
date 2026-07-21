@@ -42,16 +42,26 @@ import {
   UserCheck,
   Shield,
   Calendar,
-  Volume2,
-  Phone,
   AlertTriangle,
   PanelLeft,
+  FlaskConical,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
+import AssignChatbotModal from "../components/chats/AssignChatbotModal";
+import EnrollCampaignModal from "../components/chats/EnrollCampaignModal";
+import TestAsContactDrawer from "../components/chats/TestAsContactDrawer";
+import { Bot as BotType } from "../components/chats/ChatbotTab";
+import {
+  advanceCampaignStep,
+  activateBotOnConversation,
+  ConversationShape,
+  buildTemplateMessage,
+} from "../../lib/conversationBotRuntime";
+import { resolveTestVariables } from "../../lib/chatbotTestReply";
 import {
   Select,
   SelectContent,
@@ -71,6 +81,8 @@ interface Message {
   timestamp: string;
   sender: "contact" | "me";
   status?: "sent" | "delivered" | "read";
+  origin?: "human" | "bot" | "campaign" | "template" | "system";
+  buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
 }
 
 interface Conversation {
@@ -85,6 +97,19 @@ interface Conversation {
   messages: Message[];
   botStatus?: "active" | "paused" | "off";
   assignedPersonId?: string;
+  assignedBotId?: string;
+  botRuntime?: {
+    currentNodeId: string | null;
+    awaitingFreeText: boolean;
+    pendingHandoffNodeId: string | null;
+  };
+  campaignEnrollments?: Array<{
+    campaignId: string;
+    currentNodeIndex: number;
+    enrolledAt: string;
+    status: "active" | "completed" | "paused";
+    nextRunAt?: string;
+  }>;
 }
 
 export interface WhatsappTemplate {
@@ -728,6 +753,41 @@ export default function Chats() {
   const [showInlineSearch, setShowInlineSearch] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [showUseTemplateDropdown, setShowUseTemplateDropdown] = useState(false);
+  const [showComposerGearMenu, setShowComposerGearMenu] = useState(false);
+  const gearMenuRef = useRef<HTMLDivElement>(null);
+  const [showAssignBotModal, setShowAssignBotModal] = useState(false);
+  const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
+  const [showTestContactDrawer, setShowTestContactDrawer] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowComposerGearMenu(false);
+        setShowUseTemplateDropdown(false);
+      }
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) {
+        setShowComposerGearMenu(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // ── Campaign State ──
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
+    const stored = localStorage.getItem("whatsappCampaigns");
+    return stored ? JSON.parse(stored) : MOCK_CAMPAIGNS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("whatsappCampaigns", JSON.stringify(campaigns));
+  }, [campaigns]);
 
   useEffect(() => { localStorage.setItem("whatsappMockConversations", JSON.stringify(conversations)); }, [conversations]);
 
@@ -738,6 +798,62 @@ export default function Chats() {
       setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, unreadCount: 0 } : c));
     }
   }, [selectedConversationId]);
+
+  // ── Campaign Delay Scheduler Interval Loop ──
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setConversations((prev) => {
+        let changed = false;
+        const now = Date.now();
+
+        const updated = prev.map((c) => {
+          if (!c.campaignEnrollments || c.campaignEnrollments.length === 0) return c;
+          if (c.assignedPersonId) return c; // Pause campaign execution while human assigned
+
+          let convoChanged = false;
+          let newMsgs = [...c.messages];
+          let newEnrollments = c.campaignEnrollments.map((e) => {
+            if (e.status !== "active" || !e.nextRunAt) return e;
+            if (new Date(e.nextRunAt).getTime() <= now) {
+              convoChanged = true;
+              const camp = campaigns.find((cmp) => cmp.id === e.campaignId);
+              if (camp) {
+                const stepRes = advanceCampaignStep(c, camp, e.currentNodeIndex);
+                stepRes.newMessages.forEach((m) => {
+                  newMsgs.push({
+                    id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                    text: m.text,
+                    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                    sender: m.sender,
+                    origin: m.origin || "campaign",
+                  });
+                });
+                return stepRes.enrollmentPatch;
+              }
+            }
+            return e;
+          });
+
+          if (convoChanged) {
+            changed = true;
+            const lastText = newMsgs[newMsgs.length - 1]?.text || c.lastMessage;
+            return {
+              ...c,
+              messages: newMsgs,
+              lastMessage: lastText,
+              timestamp: "Just now",
+              campaignEnrollments: newEnrollments,
+            };
+          }
+          return c;
+        });
+
+        return changed ? updated : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [campaigns]);
 
   const handleMarkResolved = () => {
     if (!activeConversation) return;
@@ -752,6 +868,100 @@ export default function Chats() {
     const nextStatus = current === "active" ? "paused" : "active";
     setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: nextStatus } : c));
     toast.success(`Bot is now ${nextStatus}`);
+  };
+
+  const handleAssignBot = (bot: BotType) => {
+    if (!activeConversation) return;
+    const advanceRes = activateBotOnConversation(bot, activeConversation);
+    const botMsgs: Message[] = advanceRes.newMessages.map((m) => ({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text: m.text,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: m.sender,
+      origin: m.origin || "bot",
+      buttons: m.buttons,
+    }));
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConversationId
+          ? {
+              ...c,
+              assignedBotId: bot.id,
+              botStatus: "active",
+              assignedPersonId: "", // Clear human assignment on bot activation
+              messages: [...c.messages, ...botMsgs],
+              lastMessage: botMsgs.length > 0 ? botMsgs[botMsgs.length - 1].text : c.lastMessage,
+              timestamp: "Just now",
+              botRuntime: advanceRes.botRuntimePatch || {
+                currentNodeId: null,
+                awaitingFreeText: false,
+                pendingHandoffNodeId: null,
+              },
+            }
+          : c
+      )
+    );
+    toast.success(`Assigned chatbot "${bot.name}"`);
+  };
+
+  const handleEnrollCampaign = (campaign: Campaign) => {
+    if (!activeConversation) return;
+    const stepRes = advanceCampaignStep(activeConversation, campaign, 0);
+    const campMsgs: Message[] = stepRes.newMessages.map((m) => ({
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      text: m.text,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: m.sender,
+      origin: m.origin || "campaign",
+    }));
+
+    const existingEnrollments = activeConversation.campaignEnrollments || [];
+    const filteredEnrollments = existingEnrollments.filter((e) => e.campaignId !== campaign.id);
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConversationId
+          ? {
+              ...c,
+              messages: [...c.messages, ...campMsgs],
+              lastMessage: campMsgs.length > 0 ? campMsgs[campMsgs.length - 1].text : c.lastMessage,
+              timestamp: "Just now",
+              campaignEnrollments: [...filteredEnrollments, stepRes.enrollmentPatch],
+            }
+          : c
+      )
+    );
+    toast.success(`Enrolled contact in campaign "${campaign.name}"`);
+  };
+
+  const handleSendTemplateDirectly = (template: WhatsappTemplate) => {
+    if (!activeConversation) return;
+    const resolvedText = resolveTestVariables(template.bodyText || "");
+    const built = buildTemplateMessage(template, resolvedText);
+    const templateMsg: Message = {
+      id: `msg-${Date.now()}`,
+      text: built.text,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: "me",
+      origin: "template",
+      status: "read",
+      buttons: built.buttons,
+    };
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === selectedConversationId
+          ? {
+              ...c,
+              lastMessage: resolvedText,
+              timestamp: "Just now",
+              messages: [...c.messages, templateMsg],
+            }
+          : c
+      )
+    );
+    toast.success(`Template "${template.name}" sent`);
   };
 
   const handleSendMessage = () => {
@@ -847,15 +1057,6 @@ export default function Chats() {
     setEditingTemplateId(null);
   };
 
-  // ── Campaign State ──
-  const [campaigns, setCampaigns] = useState<Campaign[]>(() => {
-    const stored = localStorage.getItem("whatsappCampaigns");
-    return stored ? JSON.parse(stored) : MOCK_CAMPAIGNS;
-  });
-
-  useEffect(() => {
-    localStorage.setItem("whatsappCampaigns", JSON.stringify(campaigns));
-  }, [campaigns]);
   const [openMenuCampaignId, setOpenMenuCampaignId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
   const [viewDrawerOpen, setViewDrawerOpen] = useState(false);
@@ -1130,20 +1331,34 @@ export default function Chats() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      {(activeConversation.botStatus ?? "off") !== "off" && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={handleToggleBotStatus}
-                          className={(activeConversation.botStatus ?? "off") === "paused" ? "border-amber-500 text-amber-600 hover:text-amber-700 hover:bg-amber-50" : ""}
-                        >
-                          {(activeConversation.botStatus ?? "off") === "active" ? "Pause Bot" : "Resume Bot"}
-                        </Button>
-                      )}
-                      <Button variant="outline" size="sm" onClick={handleMarkResolved}
-                        className={activeConversation.status === "resolved" ? "border-green-500 text-green-600" : ""}>
-                        {activeConversation.status === "resolved" ? "Re-open" : "Mark Resolved"}
-                      </Button>
+                      {/* Read-only status chip */}
+                      {activeConversation.assignedBotId && (activeConversation.botStatus ?? "off") === "active" && !activeConversation.assignedPersonId && (() => {
+                        let botName = "Chatbot";
+                        try {
+                          const rawBots = localStorage.getItem("chatbotBots");
+                          if (rawBots) {
+                            const found = JSON.parse(rawBots).find((b: any) => b.id === activeConversation.assignedBotId);
+                            if (found?.name) botName = found.name;
+                          }
+                        } catch {}
+                        return (
+                          <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold">
+                            <Bot className="w-3.5 h-3.5 text-blue-600" />
+                            <span>🤖 {botName} active</span>
+                          </div>
+                        );
+                      })()}
+                      {activeConversation.assignedPersonId && (() => {
+                        let personName = "team member";
+                        const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                        if (emp?.name) personName = emp.name;
+                        return (
+                          <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold">
+                            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                            <span>👤 Assigned to {personName}</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -1182,6 +1397,23 @@ export default function Chats() {
                               style={{ fontFamily: "Outfit, sans-serif" }}>
                               <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                             </div>
+                            {msg.buttons && msg.buttons.length > 0 && (
+                              <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5">
+                                {msg.buttons.map((btn, bi) => (
+                                  <div
+                                    key={bi}
+                                    className={`px-3 py-2 text-xs font-semibold text-center text-blue-600 ${
+                                      bi > 0 ? "border-t border-gray-100" : ""
+                                    }`}
+                                  >
+                                    {btn.label}{" "}
+                                    {btn.actionType && btn.actionType !== "quick_reply" && (
+                                      <span className="text-[9px] text-gray-400 ml-1">↗</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                             <div className={`flex items-center gap-1 text-[10px] text-gray-400 px-1 ${isMe ? "justify-end" : "justify-start"}`}>
                               <span>{msg.timestamp}</span>
                               {isMe && (msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3 text-gray-400" />)}
@@ -1196,46 +1428,217 @@ export default function Chats() {
                   <div className="p-3 border-t border-gray-200 bg-white">
                     <div className="flex gap-2 items-center">
                       <button type="button" onClick={() => { const i = document.createElement("input"); i.type = "file"; i.click(); }}
-                        className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-all flex-shrink-0">
+                        className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-all flex-shrink-0"
+                        title="Attach file">
                         <Paperclip className="w-4 h-4" />
                       </button>
-                      <div className="relative flex-1">
-                        <input type="text" value={composerText} onChange={e => setComposerText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                          placeholder="Type a message..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-24"
-                          style={{ fontFamily: "Outfit, sans-serif" }} />
-                        {activeConversation.channel === "whatsapp" && (
-                          <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                            <button type="button" onClick={() => setShowUseTemplateDropdown(!showUseTemplateDropdown)}
-                              className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-1 rounded-md" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                              Template
+
+                      {/* Gear Menu Trigger and Upward Dropdowns */}
+                      <div className="relative flex-shrink-0" ref={gearMenuRef}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowComposerGearMenu((v) => !v);
+                            setShowUseTemplateDropdown(false);
+                          }}
+                          className={`p-2 rounded-lg transition-all flex-shrink-0 ${
+                            showComposerGearMenu
+                              ? "bg-gray-200 text-gray-800"
+                              : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                          }`}
+                          title="Conversation Actions"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+
+                        {/* Upward-expanding Gear Menu */}
+                        {showComposerGearMenu && (
+                          <div className="absolute bottom-full mb-2 left-0 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 text-xs font-medium text-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                            {/* 1. Templates */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu(false);
+                                setShowUseTemplateDropdown(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                            >
+                              <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>Templates</span>
                             </button>
-                            {showUseTemplateDropdown && (
-                              <div className="absolute right-0 bottom-full mb-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                                <div className="p-2.5 bg-gray-50 flex items-center justify-between">
-                                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Select Template</span>
-                                  <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400" /></button>
-                                </div>
-                                <div className="max-h-52 overflow-y-auto py-1">
-                                  {globalTemplates.length === 0
-                                    ? <div className="p-4 text-center text-xs text-gray-500">No templates yet.</div>
-                                    : globalTemplates.map(t => (
-                                      <button key={t.id} onClick={() => { setComposerText(t.bodyText); setShowUseTemplateDropdown(false); }}
-                                        className="w-full text-left px-3 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors flex justify-between items-center"
-                                        style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        <span className="font-medium truncate mr-2">{t.name}</span>
-                                        <span className="text-[9px] text-gray-400 shrink-0 font-semibold">{t.category}</span>
-                                      </button>
-                                    ))
-                                  }
-                                </div>
-                              </div>
+
+                            {/* 2. Assign Chatbot */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu(false);
+                                setShowAssignBotModal(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                            >
+                              <Bot className="w-4 h-4 text-blue-600 shrink-0" />
+                              <span>Assign Chatbot</span>
+                            </button>
+
+                            {/* 3. Enroll in Campaign */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu(false);
+                                setShowEnrollCampaignModal(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                            >
+                              <Zap className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span>Enroll in Campaign</span>
+                            </button>
+
+                            {/* 4. Take Over from Bot */}
+                            {(() => {
+                              const isBotActive =
+                                activeConversation.assignedBotId &&
+                                (activeConversation.botStatus ?? "off") === "active" &&
+                                !activeConversation.assignedPersonId;
+                              return (
+                                <button
+                                  type="button"
+                                  disabled={!isBotActive}
+                                  onClick={() => {
+                                    setShowComposerGearMenu(false);
+                                    setConversations((prev) =>
+                                      prev.map((c) =>
+                                        c.id === selectedConversationId
+                                          ? { ...c, botStatus: "paused", assignedPersonId: "1" }
+                                          : c
+                                      )
+                                    );
+                                    toast.success("Bot paused. You took over the conversation.");
+                                  }}
+                                  className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
+                                    isBotActive
+                                      ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                      : "opacity-40 cursor-not-allowed text-gray-400"
+                                  }`}
+                                >
+                                  <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                                  <span>Take Over from Bot</span>
+                                </button>
+                              );
+                            })()}
+
+                            <div className="my-1 border-t border-gray-100" />
+
+                            {/* 5. Test (DEV-only) */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu(false);
+                                setShowTestContactDrawer(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
+                            >
+                              <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
+                              <span>Test</span>
+                              <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
+                            </button>
+
+                            {/* 6. Pause / Resume Bot */}
+                            {(activeConversation.botStatus ?? "off") !== "off" && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowComposerGearMenu(false);
+                                  handleToggleBotStatus();
+                                }}
+                                className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
+                                  (activeConversation.botStatus ?? "off") === "paused"
+                                    ? "hover:bg-amber-50 text-amber-700 font-semibold"
+                                    : "hover:bg-gray-50 text-gray-700"
+                                }`}
+                              >
+                                {(activeConversation.botStatus ?? "off") === "active" ? (
+                                  <>
+                                    <Pause className="w-4 h-4 text-amber-600 shrink-0" />
+                                    <span>Pause Bot</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Play className="w-4 h-4 text-emerald-600 shrink-0" />
+                                    <span>Resume Bot</span>
+                                  </>
+                                )}
+                              </button>
                             )}
+
+                            {/* 7. Mark Resolved / Re-open */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu(false);
+                                handleMarkResolved();
+                              }}
+                              className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
+                                activeConversation.status === "resolved"
+                                  ? "hover:bg-green-50 text-green-700 font-semibold"
+                                  : "hover:bg-gray-50 text-gray-700"
+                              }`}
+                            >
+                              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                              <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Upward-expanding Template Picker Menu */}
+                        {showUseTemplateDropdown && (
+                          <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                            <div className="p-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
+                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Select Template</span>
+                              <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
+                            </div>
+                            <div className="max-h-56 overflow-y-auto py-1">
+                              {globalTemplates.length === 0 ? (
+                                <div className="p-4 text-center text-xs text-gray-500">No templates yet. Create one in Templates tab.</div>
+                              ) : (
+                                globalTemplates.map((t) => (
+                                  <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
+                                    <button
+                                      onClick={() => {
+                                        setComposerText(t.bodyText);
+                                        setShowUseTemplateDropdown(false);
+                                      }}
+                                      className="flex-1 text-left text-gray-700 font-medium truncate mr-2 group-hover:text-blue-600"
+                                      title="Insert text into composer"
+                                    >
+                                      {t.name}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        handleSendTemplateDirectly(t);
+                                        setShowUseTemplateDropdown(false);
+                                      }}
+                                      className="px-2 py-1 text-[10px] font-bold bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shrink-0"
+                                      title="Send template directly with buttons"
+                                    >
+                                      Send
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
+
+                      <div className="relative flex-1">
+                        <input type="text" value={composerText} onChange={e => setComposerText(e.target.value)}
+                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                          placeholder="Type a message..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          style={{ fontFamily: "Outfit, sans-serif" }} />
+                      </div>
+
                       <button type="button" onClick={handleSendMessage}
-                        className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0"
+                        className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
                       >
                         <Send className="w-4 h-4" />
                       </button>
@@ -1783,6 +2186,41 @@ export default function Chats() {
           </div>
         </>
       )}
+
+      {/* Modals & Live Simulator Drawer */}
+      <AssignChatbotModal
+        isOpen={showAssignBotModal}
+        onClose={() => setShowAssignBotModal(false)}
+        channel={activeConversation?.channel || "whatsapp"}
+        assignedPersonId={activeConversation?.assignedPersonId}
+        assignedBotId={activeConversation?.assignedBotId}
+        onAssign={handleAssignBot}
+      />
+
+      <EnrollCampaignModal
+        isOpen={showEnrollCampaignModal}
+        onClose={() => setShowEnrollCampaignModal(false)}
+        onEnroll={handleEnrollCampaign}
+      />
+
+      <TestAsContactDrawer
+        isOpen={showTestContactDrawer}
+        onClose={() => setShowTestContactDrawer(false)}
+        conversation={activeConversation || null}
+        bot={(() => {
+          if (!activeConversation?.assignedBotId) return undefined;
+          try {
+            const raw = localStorage.getItem("chatbotBots");
+            if (raw) {
+              return JSON.parse(raw).find((b: any) => b.id === activeConversation.assignedBotId);
+            }
+          } catch {}
+          return undefined;
+        })()}
+        onUpdateConversation={(updated) => {
+          setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
+        }}
+      />
 
       <HowItWorksModal
         isOpen={showHelp}

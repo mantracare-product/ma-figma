@@ -3,6 +3,9 @@ import { getLiveTeamMembers, SYSTEM_SEEDS } from "../app/context/FieldRegistryCo
 import { availableProcesses } from "../app/components/ui/ProcessStageSelect";
 import { TestChatTurn } from "./chatbotTestReply";
 import { ButtonAction } from "./chatbotTypes";
+import { buildTemplateMessage } from "./conversationBotRuntime";
+import { WhatsappTemplate } from "../app/pages/Chats";
+import { resolveTestVariables } from "./chatbotTestReply";
 
 export interface FetchedOption {
   id: string;
@@ -248,12 +251,31 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
         awaitingInput: false,
       };
 
-    case "template":
+    case "template": {
+      const templateId = node.data?.templateId;
+      let msgText = `[Would send template: ${templateId ?? "Unnamed template"}]`;
+      let templateButtons: any = undefined;
+      if (templateId) {
+        try {
+          const rawTemplates = localStorage.getItem("whatsappGlobalTemplates");
+          if (rawTemplates) {
+            const templates = JSON.parse(rawTemplates) as WhatsappTemplate[];
+            const tmpl = templates.find((t) => t.id === templateId || t.identifier === templateId);
+            if (tmpl) {
+              const tmplMsg = buildTemplateMessage(tmpl, resolveTestVariables(tmpl.bodyText || ""));
+              msgText = tmplMsg.text;
+              templateButtons = tmplMsg.buttons;
+            }
+          }
+        } catch {}
+      }
       return {
         nodeId: node.id,
-        messageText: `[Would send template: ${node.data?.templateId ?? "Unnamed template"}]`,
+        messageText: msgText,
+        buttons: templateButtons,
         awaitingInput: false,
       };
+    }
 
     case "question": {
       let choices: FetchedOption[] = [];

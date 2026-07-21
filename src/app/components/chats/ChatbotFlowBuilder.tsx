@@ -607,10 +607,10 @@ export default function ChatbotFlowBuilder({
 
       if (qType === "buttons") {
         const buttons = node.config.buttons || [];
-        return buttons.map((b: string, i: number) => ({
-          port: `choice-${i}`,
-          label: b || `Button ${i + 1}`
-        }));
+        return buttons.map((b: any, i: number) => {
+          const label = typeof b === "string" ? b : (b?.label || `Button ${i + 1}`);
+          return { port: `choice-${i}`, label };
+        });
       }
       if (qType === "list") {
         const items = node.config.listItems || [];

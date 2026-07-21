@@ -12,6 +12,7 @@ interface WhatsAppMessagePreviewProps {
   /** Accepts either legacy plain string[] or new ButtonAction[] */
   buttons?: Array<ButtonAction | string>;
   listItems?: string[]; // Ask a Question "list" mode
+  flipped?: boolean;
 }
 
 function getButtonIcon(actionType: ButtonAction["actionType"] | undefined) {
@@ -29,7 +30,8 @@ export default function WhatsAppMessagePreview({
   caption,
   fileName,
   buttons,
-  listItems
+  listItems,
+  flipped = false,
 }: WhatsAppMessagePreviewProps) {
   // Normalise buttons to a display list — support both plain strings and ButtonAction objects
   const buttonItems: Array<{ label: string; actionType?: ButtonAction["actionType"] }> =
@@ -55,7 +57,9 @@ export default function WhatsAppMessagePreview({
 
       {/* Message Area */}
       <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
-        <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1.5 select-none relative">
+        <div className={`rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] space-y-1.5 select-none relative ${
+          flipped ? "bg-[#DCF8C6] ml-auto rounded-tr-none" : "bg-white rounded-tl-none"
+        }`}>
           {messageType !== "text" && mediaUrl && (
             <div className="rounded bg-gray-100 border border-gray-200 px-2 py-3 text-center text-[9px] text-gray-500 font-mono">
               {messageType === "image" ? "🖼️" : messageType === "video" ? "🎬" : messageType === "audio" ? "🎵" : "📄"}{" "}

@@ -3,7 +3,7 @@ import { Plus, Trash2, Phone, ExternalLink, Mail, MessageSquare } from "lucide-r
 import { ButtonAction } from "../../../lib/chatbotTypes";
 
 interface ButtonActionEditorProps {
-  buttons: ButtonAction[];
+  buttons: Array<ButtonAction | string>;
   onChange: (buttons: ButtonAction[]) => void;
   maxButtons?: number;
   label?: string;
@@ -18,23 +18,29 @@ export default function ButtonActionEditor({
   description = "Configure quick reply choices or client actions (call, link, email)."
 }: ButtonActionEditorProps) {
 
+  const safeButtons: ButtonAction[] = buttons.map((b, i) =>
+    typeof b === "string"
+      ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
+      : { id: b?.id || `btn-${i}`, label: b?.label || "", actionType: b?.actionType || "quick_reply", value: b?.value || "" }
+  );
+
   const handleAdd = () => {
-    if (buttons.length >= maxButtons) return;
+    if (safeButtons.length >= maxButtons) return;
     const newBtn: ButtonAction = {
       id: `btn-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       label: "",
       actionType: "quick_reply",
       value: ""
     };
-    onChange([...buttons, newBtn]);
+    onChange([...safeButtons, newBtn]);
   };
 
   const handleRemove = (index: number) => {
-    onChange(buttons.filter((_, i) => i !== index));
+    onChange(safeButtons.filter((_, i) => i !== index));
   };
 
   const handleChange = (index: number, patch: Partial<ButtonAction>) => {
-    const updated = buttons.map((btn, i) => {
+    const updated = safeButtons.map((btn, i) => {
       if (i !== index) return btn;
       const next = { ...btn, ...patch };
       // Reset value if actionType changes to quick_reply
@@ -57,13 +63,13 @@ export default function ButtonActionEditor({
             {description && <p className="text-[11px] text-gray-500">{description}</p>}
           </div>
           <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-            {buttons.length}/{maxButtons}
+            {safeButtons.length}/{maxButtons}
           </span>
         </div>
       )}
 
       <div className="space-y-2">
-        {buttons.map((btn, idx) => (
+        {safeButtons.map((btn, idx) => (
           <div key={btn.id || idx} className="p-3 border border-gray-200 rounded-lg bg-gray-50/50 space-y-2">
             <div className="flex items-center gap-2">
               <input
@@ -136,7 +142,7 @@ export default function ButtonActionEditor({
         ))}
       </div>
 
-      {buttons.length < maxButtons && (
+      {safeButtons.length < maxButtons && (
         <button
           type="button"
           onClick={handleAdd}
