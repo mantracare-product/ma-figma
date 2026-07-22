@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Bot } from "./ChatbotTab";
+import { Bot, SEED_BOTS, sanitizeBot } from "./ChatbotTab";
 import { X, Bot as BotIcon, AlertTriangle, Check, UserCheck } from "lucide-react";
 import { Button } from "../ui/Button";
+import { getStoredBots, CHATBOT_BOTS_EVENT } from "../../../lib/useChatbotBots";
 
 interface AssignChatbotModalProps {
   isOpen: boolean;
@@ -32,25 +33,18 @@ export default function AssignChatbotModal({
       return;
     }
 
-    // Load bots from localStorage
-    try {
-      const raw = localStorage.getItem("chatbotBots");
-      if (raw) {
-        const sanitizeBot = (b: Bot): Bot => ({
-          ...b,
-          channels: (b.channels || []).filter((c) => c !== "sms"),
-        });
-        const all = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
-        const filtered = all.filter(
-          (b) => b.active && Array.isArray(b.channels) && b.channels.includes(channel)
-        );
-        setBots(filtered);
-      } else {
-        setBots([]);
-      }
-    } catch {
-      setBots([]);
-    }
+    const loadBots = () => {
+      const allBots = getStoredBots();
+      const filtered = allBots.filter(
+        (b) => b.active && Array.isArray(b.channels) && b.channels.includes(channel)
+      );
+      setBots(filtered);
+    };
+
+    loadBots();
+
+    window.addEventListener(CHATBOT_BOTS_EVENT, loadBots);
+    window.addEventListener("storage", loadBots);
 
     if (assignedPersonId) {
       try {
@@ -61,6 +55,11 @@ export default function AssignChatbotModal({
         }
       } catch {}
     }
+
+    return () => {
+      window.removeEventListener(CHATBOT_BOTS_EVENT, loadBots);
+      window.removeEventListener("storage", loadBots);
+    };
   }, [isOpen, channel, assignedPersonId]);
 
   if (!isOpen) return null;

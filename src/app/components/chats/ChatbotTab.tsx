@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Search, Plus, Trash2, Pencil, Bot } from "lucide-react";
+import { Search, Plus, Trash2, Pencil, Bot, LibraryBig } from "lucide-react";
 
 import { Campaign, WhatsappTemplate, EscalationRule, TemplateRule } from "../../pages/Chats";
 import ChatbotFlowBuilder, { ChatbotFlowNode } from "./ChatbotFlowBuilder";
 import { DynamicResponse, HandoffNoResponse, ButtonAction } from "../../../lib/chatbotTypes";
+import ChatbotLibraryDrawer from "./ChatbotLibraryDrawer";
+import { cloneLibraryBotNodes, LibraryBot } from "../../../lib/chatbotLibrary";
+import { useChatbotBots } from "../../../lib/useChatbotBots";
 
 export type ChannelType = "whatsapp" | "sms" | "website";
 
@@ -79,7 +82,7 @@ export const sanitizeBot = (b: Bot): Bot => ({
   channels: (b.channels || []).filter((c) => c !== "sms"),
 });
 
-const SEED_BOTS: Bot[] = [
+export const SEED_BOTS: Bot[] = [
   {
     id: "bot-1",
     name: "WhatsApp Bot",
@@ -174,16 +177,60 @@ const CHANNEL_LABELS: Record<ChannelType, string> = {
 import { availableProcesses } from "../ui/ProcessStageSelect";
 
 export default function ChatbotTab({ campaigns, employees, templates = [], statusFilter = "all" }: ChatbotTabProps) {
-  const [bots, setBots] = useState<Bot[]>(() => {
-    const stored = localStorage.getItem("chatbotBots");
-    return stored ? JSON.parse(stored).map(sanitizeBot) : SEED_BOTS.map(sanitizeBot);
-  });
-  const [flowBuilderBotId, setFlowBuilderBotId] = useState<string | null>(null);
+  const [bots, setBots] = useChatbotBots();
   const [botSearchQuery, setBotSearchQuery] = useState("");
+  const [flowBuilderBotId, setFlowBuilderBotId] = useState<string | null>(null);
+  const [showChatbotLibrary, setShowChatbotLibrary] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem("chatbotBots", JSON.stringify(bots));
-  }, [bots]);
+  const handleUseLibraryBot = (libBot: LibraryBot) => {
+    setShowChatbotLibrary(false);
+    let botName = libBot.name;
+    if (bots.some(b => b.name.toLowerCase() === botName.toLowerCase())) {
+      botName = `${libBot.name} (Copy)`;
+    }
+
+    const newNodes = cloneLibraryBotNodes(libBot.flow.nodes);
+    const newId = `bot-${Date.now()}`;
+
+    const newBot: Bot = {
+      id: newId,
+      name: botName,
+      description: libBot.description,
+      channels: (libBot.channels || ["whatsapp"]).filter(c => c !== "sms"),
+      active: true,
+      greetingMessage: "Hello! Welcome to our automated chatbot.",
+      aiObjective: "Assist contacts with their inquiries",
+      businessHoursEnabled: false,
+      afterHoursPersonId: "",
+      offlineMessage: "Our clinic is currently closed.",
+      handoffEnabled: true,
+      appointmentBookingEnabled: false,
+      appointmentCampaignId: "",
+      appointmentPersonId: "",
+      escalationRules: [],
+      aiModelTier: "standard",
+      aiVoiceStyle: "professional",
+      siteId: `site-${Math.random().toString(36).slice(2, 9)}`,
+      allowedDomains: ["*"],
+      widgetName: botName,
+      widgetAvatarUrl: "",
+      flow: { nodes: newNodes },
+      // Initialize required missing fields with defaults
+      fallbackMessage: "I'm sorry, I didn't quite get that.",
+      widgetPrimaryColor: "#3B82F6",
+      launcherStyle: "icon",
+      widgetPosition: "bottom-right",
+      widgetSize: "standard",
+      proactiveTrigger: "off",
+      proactiveDelaySeconds: 5,
+      soundOnNewMessage: true,
+      mobileBehavior: "floating"
+    } as Bot;
+
+    setBots(prev => [...prev, newBot]);
+    setFlowBuilderBotId(newId);
+    toast.success(`"${botName}" added from library — review and save to activate`);
+  };
 
   const handleCreateBot = () => {
     const newId = `bot_${Date.now()}`;
@@ -294,6 +341,16 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 />
               </div>
+              {/* Browse Library Button */}
+              <button
+                type="button"
+                onClick={() => setShowChatbotLibrary(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-50 transition-all shadow-xs cursor-pointer"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                <LibraryBig className="w-4 h-4 text-gray-500" />
+                Browse Library
+              </button>
               {/* Create Chatbot Button */}
               <button
                 type="button"
@@ -307,54 +364,66 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
             </div>
           </div>
 
-          {/* Bots Table */}
-          {bots.length === 0 ? (
-            /* Empty state */
-            <div className="flex-1 flex flex-col items-center justify-center py-20 bg-white rounded-2xl border border-gray-200 shadow-sm">
-              <div className="w-20 h-20 rounded-full bg-blue-50 flex items-center justify-center mb-5 shadow-inner">
-                <Bot className="w-10 h-10 text-blue-400" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                No chatbots yet
-              </h3>
-              <p className="text-sm text-gray-500 max-w-xs text-center mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Build your first automated chatbot to handle inbound messages across WhatsApp and your website.
-              </p>
-              <button
-                type="button"
-                onClick={handleCreateBot}
-                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                <Plus className="w-4 h-4" />
-                Create Your First Chatbot
-              </button>
-            </div>
-          ) : (
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <table className="w-full">
-                {/* Table Header */}
-                <thead style={{ backgroundColor: "#1F2937" }}>
+          {/* Bots Table — Always Rendered */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <table className="w-full">
+              {/* Table Header */}
+              <thead style={{ backgroundColor: "#1F2937" }}>
+                <tr>
+                  <th className="text-left px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
+                    Bot Name
+                  </th>
+                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
+                    Channels
+                  </th>
+                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
+                    Flow Nodes
+                  </th>
+                  <th className="text-right px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {bots.length === 0 ? (
                   <tr>
-                    <th className="text-left px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Bot Name
-                    </th>
-                    <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Channels
-                    </th>
-                    <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="text-left px-4 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Flow Nodes
-                    </th>
-                    <th className="text-right px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <td colSpan={5} className="py-16 text-center bg-white">
+                      <div className="w-16 h-16 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4 shadow-inner">
+                        <Bot className="w-8 h-8 text-blue-400" />
+                      </div>
+                      <h3 className="text-lg font-bold text-gray-900 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                        No chatbots yet
+                      </h3>
+                      <p className="text-xs text-gray-500 max-w-xs mx-auto mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Build your first automated chatbot to handle inbound messages across WhatsApp and your website.
+                      </p>
+                      <div className="flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowChatbotLibrary(true)}
+                          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-50 transition-all shadow-xs cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <LibraryBig className="w-4 h-4 text-gray-500" />
+                          Browse Chatbot Library
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCreateBot}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all shadow-sm cursor-pointer"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <Plus className="w-4 h-4" />
+                          Create Your First Chatbot
+                        </button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {bots
+                ) : (
+                  bots
                     .filter(b => {
                       const matchesSearch = !botSearchQuery ||
                         b.name.toLowerCase().includes(botSearchQuery.toLowerCase()) ||
@@ -472,11 +541,14 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                           </td>
                         </tr>
                       );
-                    })}
-                </tbody>
-              </table>
+                    })
+                  )
+                }
+              </tbody>
+            </table>
 
-              {/* Table Footer: count */}
+            {/* Table Footer: count */}
+            {bots.length > 0 && (
               <div className="px-5 py-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
                 <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
                   {bots.length} {bots.length === 1 ? "bot" : "bots"} total
@@ -485,10 +557,16 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                   Multiple bots can share channels — no priority restriction
                 </span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
+
+      <ChatbotLibraryDrawer
+        isOpen={showChatbotLibrary}
+        onClose={() => setShowChatbotLibrary(false)}
+        onSelectBot={handleUseLibraryBot}
+      />
     </>
   );
 }

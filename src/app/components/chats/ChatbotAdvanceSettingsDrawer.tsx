@@ -208,7 +208,7 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                   className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-850 focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">Select template...</option>
-                  {templates.filter(t => t.approvalStatus === "approved").map(t => (
+                  {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => (
                     <option key={t.id} value={t.identifier || t.id}>{t.name} ({t.category})</option>
                   ))}
                 </select>
@@ -330,7 +330,7 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                         className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white text-gray-850"
                       >
                         <option value="">Select template...</option>
-                        {templates.filter(t => t.approvalStatus === "approved").map(t => (
+                        {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => (
                           <option key={t.id} value={t.identifier || t.id}>{t.name} ({t.category})</option>
                         ))}
                       </select>

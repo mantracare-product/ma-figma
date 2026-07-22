@@ -1949,7 +1949,7 @@ const sanitizeBot = (b: Bot): Bot => ({
                       className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                     >
                       <option value="">Select template...</option>
-                      {templates.filter(t => t.approvalStatus === "approved").map((tpl) => (
+                      {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((tpl) => (
                         <option key={tpl.id} value={tpl.id}>
                           {tpl.name}
                         </option>
@@ -2292,7 +2292,7 @@ const sanitizeBot = (b: Bot): Bot => ({
                         className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
                       >
                         <option value="">Select template…</option>
-                        {templates.filter(t => t.approvalStatus === "approved").map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     )}
                     {(configNode.config.noResponse?.type) === "chatbot" && (

@@ -49,7 +49,11 @@ import {
   Share2,
   Copy,
   Upload,
+  LibraryBig,
 } from "lucide-react";
+import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
+import { LibraryTemplate } from "../../lib/templateLibrary";
+import { useWhatsappTemplates } from "../../lib/useWhatsappTemplates";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
@@ -58,6 +62,7 @@ import { Tooltip } from "../components/ui/Tooltip";
 import AssignChatbotModal from "../components/chats/AssignChatbotModal";
 import EnrollCampaignModal from "../components/chats/EnrollCampaignModal";
 import CampaignShareModal from "../components/chats/CampaignShareModal";
+import { getClientList } from "../../lib/getClientList";
 import TestAsContactDrawer from "../components/chats/TestAsContactDrawer";
 import RequestTemplateApprovalModal from "../components/chats/RequestTemplateApprovalModal";
 import { Bot as BotType } from "../components/chats/ChatbotTab";
@@ -626,10 +631,10 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
                           onChange={e => updateNode({ templateIdentifier: e.target.value })}
                           className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-750">
                           <option value="">Select template…</option>
-                          {globalTemplates.filter(t => t.approvalStatus === "approved").length === 0 && (
+                          {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").length === 0 && (
                             <option disabled value="">No approved templates yet</option>
                           )}
-                          {globalTemplates.filter(t => t.approvalStatus === "approved").map(t => (
+                          {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => (
                             <option key={t.id} value={t.identifier || t.id}>{t.name} ({t.category})</option>
                           ))}
                         </select>
@@ -1019,21 +1024,58 @@ export default function Chats() {
   });
 
   // ── Templates State ──
-  const [globalTemplates, setGlobalTemplates] = useState<WhatsappTemplate[]>(() => {
-    const stored = localStorage.getItem("whatsappGlobalTemplates");
-    return stored ? JSON.parse(stored) : [];
-  });
+  const [globalTemplates, setGlobalTemplates] = useWhatsappTemplates();
   const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
   const [templatesView, setTemplatesView] = useState<"table" | "builder">("table");
   const [showVarMapping, setShowVarMapping] = useState(false);
+  const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
   const [templateForm, setTemplateForm] = useState<Omit<WhatsappTemplate, "id" | "createdAt">>({
     name: "", identifier: "", category: "Marketing", language: "English",
     header: { type: "none", content: "" }, bodyText: "", footerText: "", buttons: [], variableMappings: {},
     headerType: "none", headerText: "", headerMediaUrl: "", headerFileName: "",
   });
 
+  const handleUseLibraryTemplate = (tpl: LibraryTemplate) => {
+    setShowTemplateLibrary(false);
+    const newId = `tpl-${Date.now()}`;
+    const sanitizedIdentifier = tpl.name.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_");
+    const identifier = `${sanitizedIdentifier}_copy`;
 
-  useEffect(() => { localStorage.setItem("whatsappGlobalTemplates", JSON.stringify(globalTemplates)); }, [globalTemplates]);
+    const newTemplate: WhatsappTemplate = {
+      id: newId,
+      name: `${tpl.name} (Copy)`,
+      identifier,
+      category: tpl.category,
+      language: tpl.language || "English",
+      header: {
+        type: tpl.headerType === "image" ? "image" : tpl.headerText ? "text" : "none",
+        content: tpl.headerText || ""
+      },
+      headerType: tpl.headerType || "none",
+      headerText: tpl.headerText || "",
+      bodyText: tpl.bodyText,
+      footerText: tpl.footerText || "",
+      buttons: tpl.buttons || [],
+      variableMappings: tpl.variableMappings || {},
+      createdAt: new Date().toISOString(),
+      // Library templates are pre-vetted — mark approved immediately so they
+      // appear in all pickers (template node, message composer) without waiting
+      // for manual Meta submission.
+      approvalStatus: "approved",
+      metaTemplateId: `LIB_${Date.now()}`,
+      submittedAt: new Date().toISOString(),
+      reviewedAt: new Date().toISOString(),
+    };
+
+    // Persist immediately — same key used everywhere
+    setGlobalTemplates(prev => [...prev, newTemplate]);
+
+    // Open in edit mode so user can customise further
+    handleEditTemplate(newTemplate);
+    setTemplatesView("builder");
+    setShowVarMapping(false);
+    toast.success(`"${tpl.name}" cloned from library and ready to use`);
+  };
 
   const handleNameChange = (nameVal: string) => {
     const identifierVal = nameVal.toLowerCase().trim().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_");
@@ -1164,15 +1206,14 @@ export default function Chats() {
   };
 
   const handleTemplateApprovalSubmit = (templateId: string, patch: Partial<WhatsappTemplate>) => {
-    setGlobalTemplates(prev => prev.map(t => t.id === templateId ? { ...t, ...patch } : t));
-    toast.success("Template submitted for approval");
-    // Simulate Meta review: auto-approve after 5 seconds
-    setTimeout(() => {
-      setGlobalTemplates(prev => prev.map(t =>
-        t.id === templateId ? { ...t, approvalStatus: "approved", reviewedAt: new Date().toISOString() } : t
-      ));
-      toast.success("✅ Template approved by Meta");
-    }, 5000);
+    const approvedPatch: Partial<WhatsappTemplate> = {
+      ...patch,
+      approvalStatus: "approved",
+      reviewedAt: new Date().toISOString(),
+    };
+    setGlobalTemplates(prev => prev.map(t => t.id === templateId ? { ...t, ...approvedPatch } : t));
+    const targetTpl = globalTemplates.find(t => t.id === templateId);
+    toast.success(`"${targetTpl?.name || "Template"}" approved and ready to use`);
   };
 
   const handleToggleCampaign = (id: string) => {
@@ -1277,22 +1318,15 @@ export default function Chats() {
         };
       };
 
-      // 1. Process clientIds
+      // 1. Process clientIds via shared getClientList — same data source as CampaignShareModal
+      const allClients = getClientList();
       payload.clientIds.forEach(clientId => {
-        let clientName = clientId;
-        let clientPhone = "+1 (555) 000-0000";
-        try {
-          const rawClients = sessionStorage.getItem("clients") || localStorage.getItem("clients");
-          if (rawClients) {
-            const clients = JSON.parse(rawClients) as any[];
-            const found = clients.find((c: any) => String(c.id) === clientId || c.name === clientId);
-            if (found) {
-              clientName = found.name || found.contactName || clientId;
-              clientPhone = found.phoneNumber || found.phone || "+1 (555) 000-0000";
-            }
-          }
-        } catch {}
-
+        const found = allClients.find(c => c.id === clientId);
+        const clientName = found?.name || clientId;
+        // Never fall back to a shared default phone — use a per-client unique fallback
+        const clientPhone = (found?.phoneNumber && found.phoneNumber.trim() !== "")
+          ? found.phoneNumber
+          : `unresolved-${clientId}`;
         processRecipient(clientName, clientPhone);
       });
 
@@ -1315,6 +1349,11 @@ export default function Chats() {
               audienceClientIds: payload.clientIds,
               audienceManualRecipients: payload.manualRecipients,
               audience: `${payload.audienceName} (${totalRecipients})`,
+              // Increment sent & delivered (demo flow mirrors them)
+              sent: (c.sent || 0) + totalRecipients,
+              delivered: (c.delivered || 0) + totalRecipients,
+              // Sharing a draft campaign activates it (Launch button is removed)
+              status: c.status === "draft" ? "active" : c.status,
             }
           : c
       )
@@ -1666,7 +1705,7 @@ export default function Chats() {
                                   >
                                     &lt;
                                   </button>
-                                  <span>Assign to Agent</span>
+                                  <span>Assign Responsible</span>
                                 </div>
                                 <div className="max-h-56 overflow-y-auto py-1">
                                   {AVAILABLE_EMPLOYEES.map(emp => (
@@ -1744,7 +1783,7 @@ export default function Chats() {
                                   <span>Enroll in Campaign</span>
                                 </button>
 
-                                {/* 4. Assign to Agent */}
+                                {/* 4. Assign Responsible */}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -1753,7 +1792,7 @@ export default function Chats() {
                                   className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
                                 >
                                   <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                                  <span>Assign to Agent</span>
+                                  <span>Assign Responsible</span>
                                 </button>
 
                                 <div className="my-1 border-t border-gray-100" />
@@ -1862,10 +1901,10 @@ export default function Chats() {
                               <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
                             </div>
                             <div className="max-h-56 overflow-y-auto py-1">
-                              {globalTemplates.filter(t => t.approvalStatus === "approved").length === 0 ? (
-                                <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first.</div>
+                              {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").length === 0 ? (
+                                <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first, or clone one from the Template Library.</div>
                               ) : (
-                                globalTemplates.filter(t => t.approvalStatus === "approved").map((t) => (
+                                globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((t) => (
                                   <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
                                     <button
                                       onClick={() => {
@@ -1932,32 +1971,45 @@ export default function Chats() {
                   {globalTemplates.length} {globalTemplates.length === 1 ? "template" : "templates"}
                 </span>
               </div>
-              <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                <Plus className="w-4 h-4" /> Create Template
-              </Button>
-            </div>
-
-            {globalTemplates.length === 0 ? (
-              <div className="bg-white border-2 border-dashed border-gray-200 rounded-xl p-16 text-center">
-                <FileText className="w-10 h-10 text-blue-300 mx-auto mb-4" />
-                <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
-                <p className="text-sm text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
+                  <LibraryBig className="w-4 h-4" /> Browse Library
+                </Button>
                 <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                  <Plus className="w-4 h-4" /> Create Your First Template
+                  <Plus className="w-4 h-4" /> Create Template
                 </Button>
               </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <table className="w-full">
-                  <thead style={{ backgroundColor: "#1F2937" }}>
+            </div>
+
+            {/* Templates Table — always rendered */}
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <table className="w-full">
+                <thead style={{ backgroundColor: "#1F2937" }}>
+                  <tr>
+                    {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
+                      <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {globalTemplates.length === 0 ? (
                     <tr>
-                      {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
-                        <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
-                      ))}
+                      <td colSpan={6} className="py-16 text-center bg-white">
+                        <FileText className="w-8 h-8 mx-auto text-blue-300 mb-3" />
+                        <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
+                        <p className="text-xs text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
+                        <div className="flex items-center justify-center gap-3">
+                          <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
+                            <LibraryBig className="w-4 h-4" /> Browse Template Library
+                          </Button>
+                          <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
+                            <Plus className="w-4 h-4" /> Create Your First Template
+                          </Button>
+                        </div>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {globalTemplates.map(tpl => (
+                  ) : (
+                    globalTemplates.map(tpl => (
                       <tr key={tpl.id} className="hover:bg-blue-50/30 transition-colors">
                         <td className="px-5 py-4">
                           <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
@@ -1991,11 +2043,11 @@ export default function Chats() {
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -2590,12 +2642,6 @@ export default function Chats() {
                     {campaign.status === "active" ? "Pause" : "Resume"}
                   </button>
                 )}
-                {campaign.status === "draft" && (
-                  <button onClick={() => { setCampaigns(prev => prev.map(c => c.id === campaign.id ? { ...c, status: "active" } : c)); toast.success("Campaign launched!"); setOpenMenuCampaignId(null); }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-green-50 hover:text-green-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <Play className="w-4 h-4" />Launch
-                  </button>
-                )}
                 <button onClick={() => { handleDeleteCampaign(campaign.id); setOpenMenuCampaignId(null); }}
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Trash2 className="w-4 h-4" />Delete
@@ -2716,6 +2762,12 @@ export default function Chats() {
         campaign={sharingCampaign}
         initialSelectedIds={sharingCampaign?.audienceClientIds || []}
         onShare={(payload) => sharingCampaign && handleShareCampaign(sharingCampaign, payload)}
+      />
+
+      <TemplateLibraryDrawer
+        isOpen={showTemplateLibrary}
+        onClose={() => setShowTemplateLibrary(false)}
+        onSelectTemplate={handleUseLibraryTemplate}
       />
 
       <RequestTemplateApprovalModal

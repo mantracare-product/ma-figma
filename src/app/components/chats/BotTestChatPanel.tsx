@@ -245,7 +245,7 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
               role: "system",
               text: person
                 ? `✅ Conversation assigned to ${person.name}`
-                : "✅ Conversation assigned to a human agent"
+                : "✅ Conversation assigned to a team member"
             };
             setTurns([...updatedTurns, chip]);
             setCurrentNodeId(null);

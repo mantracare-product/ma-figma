@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { InfoTooltip } from "../help/InfoTooltip";
+import { getStoredBots } from "../../../lib/useChatbotBots";
+import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -75,14 +77,9 @@ export default function StepParametersFields({
   useEffect(() => {
     if (stepKey === "whatsapp" || stepKey === "send-whatsapp") {
       try {
-        setWhatsappTemplates(JSON.parse(localStorage.getItem("whatsappGlobalTemplates") || "[]"));
+        setWhatsappTemplates(getStoredTemplates());
         setWhatsappCampaigns(JSON.parse(localStorage.getItem("whatsappCampaigns") || "[]"));
-        const rawBots = JSON.parse(localStorage.getItem("chatbotBots") || "[]");
-        const sanitizedBots = rawBots.map((b: any) => ({
-          ...b,
-          channels: (b.channels || []).filter((c: string) => c !== "sms"),
-        }));
-        setWhatsappChatbots(sanitizedBots);
+        setWhatsappChatbots(getStoredBots());
       } catch (e) {
         console.error(e);
       }

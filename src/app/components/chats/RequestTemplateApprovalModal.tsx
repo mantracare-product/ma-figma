@@ -48,9 +48,10 @@ export default function RequestTemplateApprovalModal({
 
   const handleSubmit = () => {
     const patch: Partial<WhatsappTemplate> = {
-      approvalStatus: "pending",
+      approvalStatus: "approved",
       metaTemplateId,
       submittedAt: new Date().toISOString(),
+      reviewedAt: new Date().toISOString(),
     };
     onSubmit(template.id, patch);
     onClose();
@@ -129,12 +130,12 @@ export default function RequestTemplateApprovalModal({
           </div>
 
           {/* Category + Submission Note */}
-          <div className="p-3.5 bg-amber-50 border border-amber-100 rounded-xl space-y-1">
-            <p className="text-xs font-semibold text-amber-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+          <div className="p-3.5 bg-green-50 border border-green-100 rounded-xl space-y-1">
+            <p className="text-xs font-semibold text-green-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
               Category: {template.category}
             </p>
-            <p className="text-[11px] text-amber-700 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Submitting will send this template for Meta's review. Approval typically takes 24–48 hours. You'll see the status update in the Templates table.
+            <p className="text-[11px] text-green-700 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Submitting will immediately approve this template for use across broadcast campaigns, chatbot flows, and direct inbox messages.
             </p>
           </div>
 
