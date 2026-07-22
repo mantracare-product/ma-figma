@@ -200,7 +200,8 @@ export function executeFlowNode(bot: Bot, nodeId: string, ctx?: FlowExecutionCon
       try {
         const raw = localStorage.getItem("chatbotBots");
         if (raw) {
-          const all = JSON.parse(raw) as Bot[];
+          const sanitizeBot = (b: Bot): Bot => ({ ...b, channels: (b.channels || []).filter((c) => c !== "sms") });
+          const all = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
           const found = all.find(b => b.id === targetBotId);
           if (found) targetBotName = found.name;
         }

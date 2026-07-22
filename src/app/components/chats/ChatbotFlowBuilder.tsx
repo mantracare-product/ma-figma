@@ -319,9 +319,16 @@ export default function ChatbotFlowBuilder({
 }: ChatbotFlowBuilderProps) {
   // ── States ────────────────────────────────────────────────────────────────
 
+const sanitizeBot = (b: Bot): Bot => ({
+  ...b,
+  channels: (b.channels || []).filter((c) => c !== "sms"),
+});
+
   const [botName, setBotName] = useState(bot.name || "Untitled Bot");
   const [isEditingName, setIsEditingName] = useState(false);
-  const [activeChannels, setActiveChannels] = useState<ChannelType[]>(bot.channels || []);
+  const [activeChannels, setActiveChannels] = useState<ChannelType[]>(
+    (bot.channels || []).filter((c) => c !== "sms")
+  );
   const [botActive, setBotActive] = useState(bot.active);
 
   // Drawer visibility
@@ -369,12 +376,12 @@ export default function ChatbotFlowBuilder({
   // Other bots for handoff picker (from props, fallback to localStorage)
   const otherBots = useMemo(() => {
     if (allBots && allBots.length > 0) {
-      return allBots.filter(b => b.id !== bot.id);
+      return allBots.map(sanitizeBot).filter(b => b.id !== bot.id);
     }
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
-        const all = JSON.parse(raw) as { id: string; name: string }[];
+        const all = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
         return all.filter(b => b.id !== bot.id);
       }
     } catch {}
@@ -812,7 +819,7 @@ export default function ChatbotFlowBuilder({
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
-        allBots = JSON.parse(raw);
+        allBots = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
       }
     } catch {}
 
@@ -945,7 +952,7 @@ export default function ChatbotFlowBuilder({
 
           {/* Channels selection row */}
           <div className="flex items-center gap-2 border-l pl-4 border-gray-200">
-            {(["whatsapp", "sms", "website"] as const).map((ch) => {
+            {(["whatsapp", "website"] as const).map((ch) => {
               const isActive = activeChannels.includes(ch);
               return (
                 <button
@@ -1444,26 +1451,54 @@ export default function ChatbotFlowBuilder({
                     <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
                       Direction
                     </label>
-                    <p className="text-[11px] text-gray-400 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Inbound: bot responds when a contact messages first. Outbound: bot auto-initiates the conversation.
-                    </p>
-                    <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
-                      {(["inbound", "outbound"] as const).map((dir) => (
-                        <button
-                          key={dir}
-                          type="button"
-                          onClick={() => updateNodeConfig(configNode.id, { direction: dir })}
-                          className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-all capitalize ${
-                            (configNode.config.direction ?? "inbound") === dir
-                              ? "bg-white text-gray-800 shadow-sm border border-gray-200"
-                              : "text-gray-500 hover:text-gray-700"
-                          }`}
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {dir}
-                        </button>
-                      ))}
-                    </div>
+                    {(() => {
+                      const directionOptions = [
+                        {
+                          value: "inbound" as const,
+                          title: "Trigger when message is received",
+                          desc: "Bot responds when a contact messages first.",
+                        },
+                        {
+                          value: "outbound" as const,
+                          title: "Trigger when message needs to be sent",
+                          desc: "Bot auto-initiates the conversation.",
+                        },
+                      ];
+                      return (
+                        <div className="grid grid-cols-2 gap-3">
+                          {directionOptions.map((opt) => {
+                            const isActive = (configNode.config.direction ?? "inbound") === opt.value;
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => updateNodeConfig(configNode.id, { direction: opt.value })}
+                                className={`text-left p-4 rounded-xl border-2 transition-all ${
+                                  isActive
+                                    ? "border-amber-500 bg-amber-50 shadow-sm"
+                                    : "border-gray-200 bg-white hover:border-gray-300"
+                                }`}
+                              >
+                                <p
+                                  className={`text-sm font-bold leading-snug ${
+                                    isActive ? "text-amber-700" : "text-gray-800"
+                                  }`}
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                >
+                                  {opt.title}
+                                </p>
+                                <p
+                                  className="text-[11px] text-gray-500 mt-1 leading-relaxed"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  {opt.desc}
+                                </p>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

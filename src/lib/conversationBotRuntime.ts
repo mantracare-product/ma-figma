@@ -397,7 +397,8 @@ function processFlowStepResult(result: FlowStepResult, bot: Bot, turns: TestChat
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
-        const all = JSON.parse(raw) as Bot[];
+        const sanitizeBot = (b: Bot): Bot => ({ ...b, channels: (b.channels || []).filter((c) => c !== "sms") });
+        const all = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
         const found = all.find((b) => b.id === targetBotId);
         if (found) {
           targetBot = found;
@@ -573,7 +574,8 @@ export function advanceCampaignStep(
       try {
         const rawBots = localStorage.getItem("chatbotBots");
         if (rawBots) {
-          const bots = JSON.parse(rawBots) as Bot[];
+          const sanitizeBot = (b: Bot): Bot => ({ ...b, channels: (b.channels || []).filter((c) => c !== "sms") });
+          const bots = (JSON.parse(rawBots) as Bot[]).map(sanitizeBot);
           const targetBot = bots.find((b) => b.id === (node as any).chatbotId);
           if (targetBot) {
             const botAct = activateBotOnConversation(targetBot, conversation);

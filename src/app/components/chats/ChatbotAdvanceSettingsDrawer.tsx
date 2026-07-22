@@ -61,7 +61,11 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
-        setAvailableBots(JSON.parse(raw));
+        const sanitizeBot = (b: Bot): Bot => ({
+          ...b,
+          channels: (b.channels || []).filter((c) => c !== "sms"),
+        });
+        setAvailableBots((JSON.parse(raw) as Bot[]).map(sanitizeBot));
       }
     } catch {}
   }, [isOpen]);

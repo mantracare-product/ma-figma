@@ -17,6 +17,7 @@ interface CampaignShareModalProps {
   initialSelectedIds?: string[];
   onShare: (payload: {
     channel: "whatsapp" | "sms";
+    audienceName: string;
     clientIds: string[];
     manualRecipients: { name?: string; phone: string }[];
   }) => void;
@@ -32,6 +33,7 @@ export default function CampaignShareModal({
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [allClients, setAllClients] = useState<ClientItem[]>([]);
+  const [audienceName, setAudienceName] = useState<string>("");
   
   const [selectedChannel, setSelectedChannel] = useState<"whatsapp" | "sms">("whatsapp");
   const [activeSubTab, setActiveSubTab] = useState<"clients" | "manual">("clients");
@@ -40,12 +42,19 @@ export default function CampaignShareModal({
   const [manualName, setManualName] = useState("");
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !campaign) return;
     setSelectedIds(initialSelectedIds);
+    setAudienceName(campaign.audienceName || `${campaign.name} Audience`);
     setSearch("");
     setSelectedChannel("whatsapp");
     setActiveSubTab("clients");
-    setManualNumbers([]);
+    setManualNumbers(
+      (campaign.audienceManualRecipients || []).map((m, i) => ({
+        id: `manual-prefill-${i}`,
+        name: m.name,
+        phone: m.phone,
+      }))
+    );
     setManualPhone("");
     setManualName("");
 
@@ -131,8 +140,10 @@ export default function CampaignShareModal({
   };
 
   const handleConfirm = () => {
+    if (!audienceName.trim() || totalCount === 0) return;
     onShare({
       channel: selectedChannel,
+      audienceName: audienceName.trim(),
       clientIds: selectedIds,
       manualRecipients: manualNumbers.map(m => ({ name: m.name, phone: m.phone })),
     });
@@ -174,7 +185,7 @@ export default function CampaignShareModal({
           </button>
         </div>
 
-        {/* Configuration Controls (Channel selector and Sub-tabs) */}
+        {/* Configuration Controls (Channel selector, Audience Name, and Sub-tabs) */}
         <div className="space-y-4 flex-shrink-0 px-6 pt-5">
           <div className="space-y-1.5">
             <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block" style={{ fontFamily: "DM Sans, sans-serif" }}>
@@ -200,6 +211,26 @@ export default function CampaignShareModal({
                 );
               })}
             </div>
+          </div>
+
+          {/* Audience Name Field */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider block" style={{ fontFamily: "DM Sans, sans-serif" }}>
+              Audience Name
+            </label>
+            <input
+              type="text"
+              value={audienceName}
+              onChange={e => setAudienceName(e.target.value)}
+              placeholder="e.g. Recent Patients, VIP Clients, Follow-up List"
+              className="w-full px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+            {!audienceName.trim() && (
+              <p className="text-[11px] text-amber-600 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Give this audience a name so it's easy to identify later
+              </p>
+            )}
           </div>
         </div>
 
@@ -398,7 +429,7 @@ export default function CampaignShareModal({
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={totalCount === 0}
+            disabled={totalCount === 0 || !audienceName.trim()}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-xl disabled:opacity-40 transition-colors shadow-2xs cursor-pointer"
           >
             Share Campaign ({totalCount})

@@ -175,6 +175,7 @@ export interface Campaign {
   name: string;
   status: "draft" | "active" | "paused" | "completed";
   audience: string;
+  audienceName?: string;
   sent: number;
   delivered: number;
   opened: number;
@@ -182,6 +183,7 @@ export interface Campaign {
   createdAt: string;
   nodes: CampaignNode[];
   audienceClientIds?: string[];
+  audienceManualRecipients?: { name?: string; phone: string }[];
 }
 
 
@@ -291,6 +293,7 @@ const MOCK_CAMPAIGNS: Campaign[] = [
     name: "Post-Visit Follow-up",
     status: "active",
     audience: "Patients visited in last 7 days",
+    audienceName: "Post-Visit Patients",
     sent: 342,
     delivered: 330,
     opened: 210,
@@ -308,6 +311,7 @@ const MOCK_CAMPAIGNS: Campaign[] = [
     name: "Appointment Reminder Series",
     status: "active",
     audience: "Upcoming appointments (next 48h)",
+    audienceName: "Scheduled Patients",
     sent: 156,
     delivered: 154,
     opened: 148,
@@ -325,6 +329,7 @@ const MOCK_CAMPAIGNS: Campaign[] = [
     name: "New Lead Nurture",
     status: "draft",
     audience: "New leads (last 30 days)",
+    audienceName: "New Leads List",
     sent: 0,
     delivered: 0,
     opened: 0,
@@ -476,7 +481,8 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
     try {
       const raw = localStorage.getItem("chatbotBots");
       if (raw) {
-        setAvailableBots(JSON.parse(raw));
+        const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
+        setAvailableBots(JSON.parse(raw).map(sanitizeBot));
       }
     } catch {}
   }, []);
@@ -1216,6 +1222,7 @@ export default function Chats() {
       channel: "whatsapp" | "sms";
       clientIds: string[];
       manualRecipients: { name?: string; phone: string }[];
+      audienceName?: string;
     }
   ) => {
     const totalRecipients = payload.clientIds.length + payload.manualRecipients.length;
@@ -1304,8 +1311,10 @@ export default function Chats() {
         c.id === campaign.id
           ? {
               ...c,
+              audienceName: payload.audienceName,
               audienceClientIds: payload.clientIds,
-              audience: `${totalRecipients} recipient${totalRecipients !== 1 ? "s" : ""}`
+              audienceManualRecipients: payload.manualRecipients,
+              audience: `${payload.audienceName} (${totalRecipients})`,
             }
           : c
       )
@@ -2440,8 +2449,8 @@ export default function Chats() {
                 <table className="w-full">
                   <thead>
                     <tr className="border-b border-gray-100" style={{ backgroundColor: '#1F2937' }}>
-                      {["Campaign Name", "Status", "Audience", "Sent", "Delivered", "Opened", "Clicked", "Created", "Actions"].map(col => (
-                        <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
+                      {["Campaign Name", "Status", "Audience", "Sent", "Created", "Actions"].map(col => (
+                        <th key={col} className={`px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider ${col === "Actions" ? "text-center" : ""}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
                       ))}
                     </tr>
                   </thead>
@@ -2451,21 +2460,27 @@ export default function Chats() {
                         <td className="px-4 py-3"><p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{campaign.name}</p></td>
                         <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>{campaign.status}</span></td>
                         <td className="px-4 py-3">
-                          {campaign.audienceClientIds?.length ? (
-                            <button
-                              onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
-                              className="text-xs text-purple-700 font-semibold hover:underline"
-                              title="Click to manage audience"
-                            >
-                              {campaign.audienceClientIds.length} client{campaign.audienceClientIds.length !== 1 ? "s" : ""}
-                            </button>
-                          ) : (
-                            <p className="text-xs text-gray-500 max-w-[160px] truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{campaign.audience}</p>
-                          )}
+                          {(() => {
+                            const clientCount = campaign.audienceClientIds?.length ?? 0;
+                            const manualCount = campaign.audienceManualRecipients?.length ?? 0;
+                            const totalCount = clientCount + manualCount;
+                            const displayName = campaign.audienceName || campaign.audience;
+
+                            if (displayName) {
+                              return (
+                                <button
+                                  onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
+                                  className="text-xs text-purple-700 font-semibold hover:underline text-left block"
+                                  title="Click to manage audience"
+                                >
+                                  {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
+                                </button>
+                              );
+                            }
+                            return <span className="text-gray-400 italic text-xs">No audience selected</span>;
+                          })()}
                         </td>
-                        {[campaign.sent, campaign.delivered, campaign.opened, campaign.clicked].map((val, i) => (
-                          <td key={i} className="px-4 py-3 text-center"><p className="text-sm font-bold text-gray-900">{val.toLocaleString()}</p></td>
-                        ))}
+                        <td className="px-4 py-3"><p className="text-sm font-bold text-gray-900">{campaign.sent.toLocaleString()}</p></td>
                         <td className="px-4 py-3"><p className="text-xs text-gray-400">{campaign.createdAt}</p></td>
                         <td className="px-4 py-3">
                           <div className="flex justify-center">
@@ -2683,7 +2698,9 @@ export default function Chats() {
           try {
             const raw = localStorage.getItem("chatbotBots");
             if (raw) {
-              return JSON.parse(raw).find((b: any) => b.id === activeConversation.assignedBotId);
+              const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
+              const bots = JSON.parse(raw).map(sanitizeBot);
+              return bots.find((b: any) => b.id === activeConversation.assignedBotId);
             }
           } catch {}
           return undefined;

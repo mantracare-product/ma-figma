@@ -74,12 +74,17 @@ interface ChatbotTabProps {
   statusFilter?: "all" | "active" | "inactive";
 }
 
+export const sanitizeBot = (b: Bot): Bot => ({
+  ...b,
+  channels: (b.channels || []).filter((c) => c !== "sms"),
+});
+
 const SEED_BOTS: Bot[] = [
   {
     id: "bot-1",
-    name: "WhatsApp & SMS Bot",
-    description: "Automated assistant for WhatsApp and SMS customer service.",
-    channels: ["whatsapp", "sms"],
+    name: "WhatsApp Bot",
+    description: "Automated assistant for WhatsApp customer service.",
+    channels: ["whatsapp"],
     active: true,
     greetingMessage: "Hello! 👋 Welcome to Mantra Health. How can I help you today?",
     aiObjective: "You are a helpful AI assistant for Mantra Health. Your goal is to answer patient questions, help schedule appointments, and provide information about our services. Always be empathetic, concise, and professional. Escalate to a human when the patient asks for one.",
@@ -171,7 +176,7 @@ import { availableProcesses } from "../ui/ProcessStageSelect";
 export default function ChatbotTab({ campaigns, employees, templates = [], statusFilter = "all" }: ChatbotTabProps) {
   const [bots, setBots] = useState<Bot[]>(() => {
     const stored = localStorage.getItem("chatbotBots");
-    return stored ? JSON.parse(stored) : SEED_BOTS;
+    return stored ? JSON.parse(stored).map(sanitizeBot) : SEED_BOTS.map(sanitizeBot);
   });
   const [flowBuilderBotId, setFlowBuilderBotId] = useState<string | null>(null);
   const [botSearchQuery, setBotSearchQuery] = useState("");
@@ -313,7 +318,7 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                 No chatbots yet
               </h3>
               <p className="text-sm text-gray-500 max-w-xs text-center mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Build your first automated chatbot to handle inbound messages across WhatsApp, SMS, and your website.
+                Build your first automated chatbot to handle inbound messages across WhatsApp and your website.
               </p>
               <button
                 type="button"
@@ -359,6 +364,7 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                     })
                     .map((bot) => {
                       const nodeCount = bot.flow?.nodes?.length ?? 0;
+                      const displayChannels = (bot.channels || []).filter(ch => ch !== "sms");
                       return (
                         <tr
                           key={bot.id}
@@ -390,10 +396,10 @@ export default function ChatbotTab({ campaigns, employees, templates = [], statu
                           {/* Channels */}
                           <td className="px-4 py-4">
                             <div className="flex flex-wrap gap-1.5">
-                              {bot.channels.length === 0 ? (
+                              {displayChannels.length === 0 ? (
                                 <span className="text-xs text-gray-400 italic">No channels</span>
                               ) : (
-                                bot.channels.map(ch => (
+                                displayChannels.map(ch => (
                                   <span
                                     key={ch}
                                     className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${CHANNEL_CLASSES[ch]}`}

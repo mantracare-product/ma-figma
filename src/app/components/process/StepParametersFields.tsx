@@ -77,7 +77,12 @@ export default function StepParametersFields({
       try {
         setWhatsappTemplates(JSON.parse(localStorage.getItem("whatsappGlobalTemplates") || "[]"));
         setWhatsappCampaigns(JSON.parse(localStorage.getItem("whatsappCampaigns") || "[]"));
-        setWhatsappChatbots(JSON.parse(localStorage.getItem("chatbotBots") || "[]"));
+        const rawBots = JSON.parse(localStorage.getItem("chatbotBots") || "[]");
+        const sanitizedBots = rawBots.map((b: any) => ({
+          ...b,
+          channels: (b.channels || []).filter((c: string) => c !== "sms"),
+        }));
+        setWhatsappChatbots(sanitizedBots);
       } catch (e) {
         console.error(e);
       }
