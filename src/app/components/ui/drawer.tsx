@@ -275,6 +275,7 @@ function DrawerDescription({
 
 export {
   Drawer,
+  CustomSideDrawer,
   DrawerPortal,
   DrawerOverlay,
   DrawerTrigger,

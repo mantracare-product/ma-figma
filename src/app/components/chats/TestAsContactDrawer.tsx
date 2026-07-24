@@ -1,26 +1,25 @@
 import React, { useState, useRef, useEffect } from "react";
 import { X, Send, RotateCcw, FlaskConical, Clock } from "lucide-react";
-import { Bot } from "./ChatbotTab";
+import type { WorkflowStep } from "../../types/workflow";
 import {
-  ConversationShape,
-  advanceBotForInboundMessage,
-  RuntimeMessage,
-} from "../../../lib/conversationBotRuntime";
+  ChatConversationShape,
+  advanceProcessForInboundMessage,
+} from "../../../lib/processChatRuntime";
 import { generateId } from "../../../lib/ids";
 
 interface TestAsContactDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  conversation: ConversationShape | null;
-  bot: Bot | undefined;
-  onUpdateConversation: (updated: ConversationShape) => void;
+  conversation: ChatConversationShape | null;
+  steps?: WorkflowStep[];
+  onUpdateConversation: (updated: ChatConversationShape) => void;
 }
 
 export default function TestAsContactDrawer({
   isOpen,
   onClose,
   conversation,
-  bot,
+  steps = [],
   onUpdateConversation,
 }: TestAsContactDrawerProps) {
   const [input, setInput] = useState("");
@@ -34,20 +33,9 @@ export default function TestAsContactDrawer({
 
   if (!isOpen || !conversation) return null;
 
-  /** Helper: map a RuntimeMessage to a ConversationShape message row */
-  const makeMsg = (m: RuntimeMessage): ConversationShape["messages"][number] => ({
-    id: generateId("msg"),
-    text: m.text,
-    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    sender: m.sender,
-    origin: m.origin,
-    buttons: m.buttons,
-    header: m.header,
-  });
-
   const handleSendMessage = async (
     textToSend?: string,
-    nextNodeId?: string | null,
+    nextStepId?: string | null,
     actionType?: string,
     actionValue?: string,
   ) => {
@@ -56,11 +44,16 @@ export default function TestAsContactDrawer({
     if (!textToSend) setInput("");
 
     // 1. Append contact message
-    const contactMsg = makeMsg({ text, sender: "contact", origin: "human" });
-    contactMsg.status = "delivered";
+    const contactMsg = {
+      id: generateId("msg"),
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: "contact" as const,
+      status: "delivered" as const,
+    };
 
     const updatedMessages = [...conversation.messages, contactMsg];
-    let currentConvo: ConversationShape = {
+    let currentConvo: ChatConversationShape = {
       ...conversation,
       messages: updatedMessages,
       lastMessage: text,
@@ -69,67 +62,43 @@ export default function TestAsContactDrawer({
     };
     onUpdateConversation(currentConvo);
 
-    // 2. Call the flow engine — passes nextNodeId so button taps navigate correctly
-    const advanceResult = advanceBotForInboundMessage(
+    // 2. Call process chat runtime engine
+    const advanceResult = advanceProcessForInboundMessage(
       currentConvo,
-      bot,
+      steps,
       text,
-      nextNodeId,
+      nextStepId,
       actionType,
       actionValue,
     );
 
-    // 3. Append initial bot output messages (may include a delay chip)
-    const initialBotMsgs = advanceResult.newMessages.map(makeMsg);
+    const initialBotMsgs = advanceResult.newMessages;
     let finalMessages = [...currentConvo.messages, ...initialBotMsgs];
 
-    let finalConvo: ConversationShape = {
+    let finalConvo: ChatConversationShape = {
       ...currentConvo,
       messages: finalMessages,
       lastMessage: initialBotMsgs.length > 0 ? initialBotMsgs[initialBotMsgs.length - 1].text : text,
       timestamp: "Just now",
-      botRuntime: advanceResult.botRuntimePatch || currentConvo.botRuntime,
+      chatRuntime: advanceResult.runtimePatch || currentConvo.chatRuntime,
       assignedPersonId: advanceResult.assignedPersonIdPatch !== undefined
         ? advanceResult.assignedPersonIdPatch
         : currentConvo.assignedPersonId,
-      botStatus: advanceResult.botStatusPatch !== undefined
-        ? advanceResult.botStatusPatch
-        : currentConvo.botStatus,
-      assignedBotId: advanceResult.assignedBotIdPatch !== undefined
-        ? advanceResult.assignedBotIdPatch
-        : currentConvo.assignedBotId,
+      automationStatus: advanceResult.automationStatusPatch !== undefined
+        ? advanceResult.automationStatusPatch
+        : currentConvo.automationStatus,
     };
     onUpdateConversation(finalConvo);
-
-    // 4. Handle time-delay node: wait, then append post-delay messages
-    if (advanceResult.delayMs && advanceResult.postDelayMessages?.length) {
-      setSimulatingDelay(true);
-      const clampedDelay = Math.min(advanceResult.delayMs, 3000);
-      await new Promise(r => setTimeout(r, clampedDelay));
-      setSimulatingDelay(false);
-
-      const postDelayMsgs = advanceResult.postDelayMessages.map(makeMsg);
-      finalMessages = [...finalConvo.messages, ...postDelayMsgs];
-      const lastPost = postDelayMsgs[postDelayMsgs.length - 1];
-
-      finalConvo = {
-        ...finalConvo,
-        messages: finalMessages,
-        lastMessage: lastPost?.text ?? finalConvo.lastMessage,
-        botRuntime: advanceResult.postDelayBotRuntimePatch || finalConvo.botRuntime,
-      };
-      onUpdateConversation(finalConvo);
-    }
   };
 
   /** Called when the user taps a WhatsApp-style button */
   const handleButtonClick = (
     btnLabel: string,
-    nextNodeId: string | null,
+    nextStepId: string | null,
     actionType?: string,
     actionValue?: string,
   ) => {
-    handleSendMessage(btnLabel, nextNodeId, actionType, actionValue);
+    handleSendMessage(btnLabel, nextStepId, actionType, actionValue);
   };
 
   const handleResetConversation = () => {
@@ -138,12 +107,12 @@ export default function TestAsContactDrawer({
       setTimeout(() => setConfirmReset(false), 4000);
       return;
     }
-    const resetConvo: ConversationShape = {
+    const resetConvo: ChatConversationShape = {
       ...conversation,
       messages: [],
       lastMessage: "Conversation reset by tester",
       timestamp: "Just now",
-      botRuntime: { currentNodeId: null, awaitingFreeText: false, pendingHandoffNodeId: null },
+      chatRuntime: { currentStepId: null, awaitingFreeText: false, pendingHandoffStepId: null },
     };
     onUpdateConversation(resetConvo);
     setConfirmReset(false);
@@ -179,7 +148,6 @@ export default function TestAsContactDrawer({
               <p className="text-xs text-muted-foreground">
                 Testing as: <strong className="text-foreground">{conversation.contactName}</strong>{" "}
                 ({conversation.channel})
-                {bot && <span className="ml-1 text-purple-600">· {bot.name}</span>}
               </p>
             </div>
           </div>
@@ -293,7 +261,7 @@ export default function TestAsContactDrawer({
                               onClick={() =>
                                 handleButtonClick(
                                   btn.label,
-                                  btn.nextNodeId,
+                                  btn.nextStepId ?? btn.nextNodeId ?? null,
                                   btn.actionType,
                                   btn.actionValue,
                                 )

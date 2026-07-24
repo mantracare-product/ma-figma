@@ -147,17 +147,6 @@ export default function InboxNavSidebar({
           >
             <FileText className="w-5 h-5" />
           </button>
-
-          <button
-            type="button"
-            onClick={() => handleTopLevelClick("chatbot")}
-            className={`p-2.5 rounded-lg transition-colors relative ${
-              activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
-            }`}
-            title="Chatbot"
-          >
-            <Bot className="w-5 h-5" />
-          </button>
         </div>
       </div>
     );
@@ -239,19 +228,6 @@ export default function InboxNavSidebar({
         >
           <FileText className="w-4 h-4 text-indigo-600" />
           <span>Templates</span>
-        </button>
-
-        {/* 4. CHATBOT */}
-        <button
-          type="button"
-          onClick={() => handleTopLevelClick("chatbot")}
-          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
-          }`}
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          <Bot className="w-4 h-4 text-purple-600" />
-          <span>Chatbot</span>
         </button>
       </div>
     </div>

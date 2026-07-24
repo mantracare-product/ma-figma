@@ -91,7 +91,7 @@ interface FlowBuilderTabProps {
   currentProcessId?: string;
   workflowSteps?: WorkflowStep[];
   onWorkflowStepsChange?: (steps: WorkflowStep[]) => void;
-  stepAllowedTriggers?: Record<string, Array<"stage" | "incall" | "postcall">>;
+  stepAllowedTriggers?: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">>;
 }
 
 // ─── Node Library Definition ──────────────────────────────────────────────────
@@ -243,6 +243,16 @@ const PORT_COLOR: Record<string, string> = {
   "branch-2": "#a855f7",
   "branch-3": "#a855f7",
   "branch-4": "#a855f7",
+  "choice-0": "#a855f7",
+  "choice-1": "#a855f7",
+  "choice-2": "#a855f7",
+  "choice-3": "#a855f7",
+  "choice-4": "#a855f7",
+  "choice-5": "#a855f7",
+  "choice-6": "#a855f7",
+  "choice-7": "#a855f7",
+  "choice-8": "#a855f7",
+  "choice-9": "#a855f7",
 };
 
 const PORT_LABEL: Record<string, string> = {
@@ -273,7 +283,7 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
 
 const FALLBACK_NODE_TYPE: NodeType = "wait";
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage"|"incall"|"postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -312,7 +322,7 @@ export default function FlowBuilderTab({
   stepAllowedTriggers = {},
 }: FlowBuilderTabProps) {
   // Drawer execution/timing controls (seeded on openConfig)
-  const [drawerTrigger, setDrawerTrigger] = useState<"stage" | "incall" | "postcall">("stage");
+  const [drawerTrigger, setDrawerTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
   const [drawerExecType, setDrawerExecType] = useState<"wait" | "parallel">("wait");
   const [drawerDelayValue, setDrawerDelayValue] = useState<number>(0);
   const [drawerDelayUnit, setDrawerDelayUnit] = useState<string>("Minute");
@@ -397,17 +407,20 @@ export default function FlowBuilderTab({
               !n.id.startsWith("cond-") && !n.id.startsWith("parallel-") && !n.id.startsWith("wait-"))
       );
 
-      const lanes: Record<"stage" | "incall" | "postcall", WorkflowStep[]> = {
+      const lanes: Record<"stage" | "incall" | "inchat" | "postcall", WorkflowStep[]> = {
         stage: [],
         incall: [],
+        inchat: [],
         postcall: [],
       };
       workflowSteps.forEach(step => {
-        lanes[step.trigger ?? "stage"].push(step);
+        const trg = (step.trigger ?? "stage") as "stage" | "incall" | "inchat" | "postcall";
+        if (lanes[trg]) lanes[trg].push(step);
+        else lanes.stage.push(step);
       });
 
       const generatedNodes: FlowNode[] = [];
-      const laneOrder: Array<"stage" | "incall" | "postcall"> = ["stage", "incall", "postcall"];
+      const laneOrder: Array<"stage" | "incall" | "inchat" | "postcall"> = ["stage", "incall", "inchat", "postcall"];
 
       laneOrder.forEach((laneKey, laneIndex) => {
         const stepsInLane = lanes[laneKey];
@@ -661,17 +674,20 @@ export default function FlowBuilderTab({
       // 1. Keep manual (user-drawn) connections starting with "conn-"
       const manualConnections = prevConnections.filter(c => c.id.startsWith("conn-"));
 
-      const lanes: Record<"stage" | "incall" | "postcall", WorkflowStep[]> = {
+      const lanes: Record<"stage" | "incall" | "inchat" | "postcall", WorkflowStep[]> = {
         stage: [],
         incall: [],
+        inchat: [],
         postcall: [],
       };
       workflowSteps.forEach(step => {
-        lanes[step.trigger ?? "stage"].push(step);
+        const trg = (step.trigger ?? "stage") as "stage" | "incall" | "inchat" | "postcall";
+        if (lanes[trg]) lanes[trg].push(step);
+        else lanes.stage.push(step);
       });
 
       const parallelGroups: ParallelGroup[] = [];
-      (["stage", "incall", "postcall"] as const).forEach(laneKey => {
+      (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
         const stepsInLane = lanes[laneKey];
         let currentGroup: WorkflowStep[] = [];
         stepsInLane.forEach(step => {
@@ -975,7 +991,7 @@ export default function FlowBuilderTab({
 
     const stepKey = NODE_TYPE_TO_STEP_KEY[type];
     if (stepKey && onWorkflowStepsChange) {
-      const allowed: Array<"stage" | "incall" | "postcall"> = stepAllowedTriggers[stepKey] ?? ["stage", "incall", "postcall"];
+      const allowed: Array<"stage" | "incall" | "inchat" | "postcall"> = stepAllowedTriggers[stepKey] ?? ["stage", "incall", "inchat", "postcall"];
       const catalogEntry = NODE_CATEGORIES
         .flatMap(c => c.nodes)
         .find(n => n.type === type);
@@ -1061,6 +1077,22 @@ export default function FlowBuilderTab({
       const count = node.config.branchCount || 2;
       return Array.from({ length: count }, (_, i) => ({ port: `branch-${i}`, label: `Branch ${i + 1}` }));
     }
+    // WhatsApp question-type step gets one port per button/list item
+    if (node.type === "send-whatsapp" && node.config?.messageSource === "question") {
+      const qType = node.config?.questionType || "buttons";
+      if (qType === "buttons") {
+        const buttons = node.config?.questionButtons || [];
+        return buttons.length > 0
+          ? buttons.map((b: any, i: number) => ({ port: `choice-${i}`, label: b.label || `Button ${i + 1}` }))
+          : [{ port: "default", label: "" }];
+      }
+      if (qType === "list") {
+        const items = node.config?.questionListItems || [];
+        return items.length > 0
+          ? items.map((item: string, i: number) => ({ port: `choice-${i}`, label: item || `Item ${i + 1}` }))
+          : [{ port: "default", label: "" }];
+      }
+    }
     if (node.type === "end" || node.type === "start") return [{ port: "default", label: "" }];
     return [{ port: "default", label: "" }];
   };
@@ -1103,16 +1135,31 @@ export default function FlowBuilderTab({
     else if (fromId.startsWith("parallel-")) sourceStepId = fromId.replace("parallel-", "");
 
     if (onWorkflowStepsChange) {
-      // Store the actual sourceStepId directly (individual parallel members store their own id)
+      const sourceStep = workflowSteps.find(s => s.id === sourceStepId);
       const targetStep = workflowSteps.find(s => s.id === targetStepId);
+      let updatedSteps = [...workflowSteps];
       if (targetStep) {
-        const updatedSteps = workflowSteps.map(step =>
+        updatedSteps = updatedSteps.map(step =>
           step.id === targetStep.id
             ? { ...step, connectAfterId: sourceStepId }
             : step
         );
-        onWorkflowStepsChange(updatedSteps);
       }
+      if (sourceStep && fromPort !== "default") {
+        updatedSteps = updatedSteps.map(step =>
+          step.id === sourceStep.id
+            ? {
+                ...step,
+                portConnections: { ...(step.portConnections || {}), [fromPort]: targetStepId },
+                params: {
+                  ...(step.params || {}),
+                  portConnections: { ...(step.params?.portConnections || {}), [fromPort]: targetStepId }
+                }
+              }
+            : step
+        );
+      }
+      onWorkflowStepsChange(updatedSteps);
     }
   };
 
@@ -1167,28 +1214,32 @@ export default function FlowBuilderTab({
     if (draggingId) {
       const draggedNode = nodes.find(n => n.id === draggingId);
       if (draggedNode && draggedNode.config?.autoGenerated && onWorkflowStepsChange) {
-        const getLaneKeyFromX = (x: number): "stage" | "incall" | "postcall" => {
-          const distStage = Math.abs(x - BASE_X);
-          const distInCall = Math.abs(x - (BASE_X + LANE_X_SPACING));
-          const distPostCall = Math.abs(x - (BASE_X + 2 * LANE_X_SPACING));
-          if (distStage <= distInCall && distStage <= distPostCall) return "stage";
-          if (distInCall <= distStage && distInCall <= distPostCall) return "incall";
-          return "postcall";
+        const getLaneKeyFromX = (x: number): "stage" | "incall" | "inchat" | "postcall" => {
+          const positions: Array<["stage" | "incall" | "inchat" | "postcall", number]> = [
+            ["stage", BASE_X],
+            ["incall", BASE_X + LANE_X_SPACING],
+            ["inchat", BASE_X + 2 * LANE_X_SPACING],
+            ["postcall", BASE_X + 3 * LANE_X_SPACING],
+          ];
+          return positions.reduce((closest, [key, px]) =>
+            Math.abs(x - px) < Math.abs(x - positions.find(p => p[0] === closest)![1]) ? key : closest
+          , positions[0][0]);
         };
 
         const autoNodes = nodes.filter(n => n.config?.autoGenerated && !n.config?.syntheticFor);
         const nodesWithLanes = autoNodes.map(n => {
-          const lane: "stage" | "incall" | "postcall" =
+          const lane: "stage" | "incall" | "inchat" | "postcall" =
             n.id === draggingId
               ? getLaneKeyFromX(n.x)
-              : ((n.config?.lane as "stage" | "incall" | "postcall" | undefined) ?? "stage");
+              : ((n.config?.lane as "stage" | "incall" | "inchat" | "postcall" | undefined) ?? "stage");
           return { ...n, lane };
         });
 
         // Group by lane
-        const lanes: Record<"stage" | "incall" | "postcall", typeof nodesWithLanes> = {
+        const lanes: Record<"stage" | "incall" | "inchat" | "postcall", typeof nodesWithLanes> = {
           stage: [],
           incall: [],
+          inchat: [],
           postcall: [],
         };
         nodesWithLanes.forEach(n => {
@@ -1198,7 +1249,7 @@ export default function FlowBuilderTab({
         // Rebuild workflowSteps list
         const newWorkflowSteps: WorkflowStep[] = [];
         
-        (["stage", "incall", "postcall"] as const).forEach(laneKey => {
+        (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
           // Sort nodes in this lane by y coordinate
           const sorted = [...lanes[laneKey]].sort((a, b) => a.y - b.y);
           
@@ -1573,7 +1624,7 @@ export default function FlowBuilderTab({
             </svg>
 
             {/* Lane Legends */}
-            {(["stage", "incall", "postcall"] as const).map((laneKey, laneIndex) => (
+            {(["stage", "incall", "inchat", "postcall"] as const).map((laneKey, laneIndex) => (
               <div
                 key={laneKey}
                 style={{
@@ -1590,7 +1641,7 @@ export default function FlowBuilderTab({
                   color: "#94A3B8",
                 }}
               >
-                {laneKey === "stage" ? "On Stage Entry" : laneKey === "incall" ? "In Call" : "Post Call"}
+                {laneKey === "stage" ? "On Stage Entry" : laneKey === "incall" ? "In Call" : laneKey === "inchat" ? "In Chat" : "Post Call"}
               </div>
             ))}
 
@@ -1675,6 +1726,14 @@ export default function FlowBuilderTab({
                         )}
                         {node.type === "send-sms" && node.config.smsMessage && (
                           <p className="text-[10px] text-muted-foreground truncate">{node.config.smsMessage}</p>
+                        )}
+                        {node.type === "send-whatsapp" && node.config.messageSource === "question" && (
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {node.config.questionType === "buttons" ? `${(node.config.questionButtons || []).length} buttons` : `${(node.config.questionListItems || []).length} list items`}
+                          </p>
+                        )}
+                        {node.type === "send-whatsapp" && node.config.messageSource === "text" && node.config.chatMessageText && (
+                          <p className="text-[10px] text-muted-foreground truncate">{node.config.chatMessageText}</p>
                         )}
                         {(node.type === "call-transfer" || node.type === "call-transfer-human") && node.config.callActionPhoneNumber && (
                           <p className="text-[10px] text-muted-foreground truncate">{node.config.callActionCountryCode} {node.config.callActionPhoneNumber}</p>

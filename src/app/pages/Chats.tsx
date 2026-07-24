@@ -93,7 +93,7 @@ interface Message {
   sender: "contact" | "me";
   status?: "sent" | "delivered" | "read";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
-  buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+  buttons?: Array<{ label: string; nextNodeId: string | null; nextStepId?: string | null; actionType?: string; actionValue?: string }>;
   header?: {
     type?: "none" | "text" | "image" | "video" | "document";
     text?: string;
@@ -2728,21 +2728,16 @@ export default function Chats() {
       <TestAsContactDrawer
         isOpen={showTestContactDrawer}
         onClose={() => setShowTestContactDrawer(false)}
-        conversation={activeConversation || null}
-        bot={(() => {
-          if (!activeConversation?.assignedBotId) return undefined;
+        conversation={(activeConversation as any) || null}
+        steps={(() => {
           try {
-            const raw = localStorage.getItem("chatbotBots");
-            if (raw) {
-              const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
-              const bots = JSON.parse(raw).map(sanitizeBot);
-              return bots.find((b: any) => b.id === activeConversation.assignedBotId);
-            }
-          } catch { }
-          return undefined;
+            const raw = localStorage.getItem("workflowSteps");
+            if (raw) return JSON.parse(raw);
+          } catch {}
+          return [];
         })()}
         onUpdateConversation={(updated) => {
-          setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
+          setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as unknown as Conversation) : c)));
         }}
       />
 

@@ -411,20 +411,20 @@ const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
   ],
 };
 
-const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall">> = {
-  "whatsapp": ["stage", "incall", "postcall"],
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">> = {
+  "whatsapp": ["stage", "incall", "inchat", "postcall"],
   "sms": ["stage", "incall", "postcall"],
   "email": ["stage", "incall", "postcall"],
-  "processmovement": ["postcall"],
-  "endworkflow": ["stage", "postcall"],
-  "fieldupdate": ["stage", "postcall"],
-  "assignhuman": ["stage", "postcall"],
+  "processmovement": ["postcall", "inchat"],
+  "endworkflow": ["stage", "postcall", "inchat"],
+  "fieldupdate": ["stage", "postcall", "inchat"],
+  "assignhuman": ["stage", "postcall", "inchat"],
   "crmupdate": ["stage", "postcall"],
   "ehrupdate": ["stage", "postcall"],
   "wh_trigger": ["stage", "postcall"],
   "webhook_trigger": ["stage", "postcall"],
-  "collectinformation": ["stage", "postcall"],
-  "scheduleappointment": ["postcall"],
+  "collectinformation": ["stage", "postcall", "inchat"],
+  "scheduleappointment": ["postcall", "inchat"],
   "smartcallanalysis": ["stage", "postcall"],
   "greetingphrase": ["incall"],
   "bypasstohuman": ["incall"],
@@ -438,7 +438,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -855,7 +855,7 @@ export default function Process() {
   const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
-  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "postcall">("stage");
+  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");

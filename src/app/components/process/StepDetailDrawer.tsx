@@ -9,11 +9,11 @@ export interface StepDetailDrawerProps {
   isOpen: boolean;
   step: WorkflowStep | null;
   isCreatingNewStep: boolean;
-  stepAllowedTriggers: Record<string, Array<"stage" | "incall" | "postcall">>;
+  stepAllowedTriggers: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">>;
   processes: any[];
 
-  stepTrigger: "stage" | "incall" | "postcall";
-  onStepTriggerChange: (t: "stage" | "incall" | "postcall") => void;
+  stepTrigger: "stage" | "incall" | "inchat" | "postcall";
+  onStepTriggerChange: (t: "stage" | "incall" | "inchat" | "postcall") => void;
 
   executionType: "wait" | "parallel";
   onExecutionTypeChange: (t: "wait" | "parallel") => void;
@@ -64,11 +64,12 @@ export default function StepDetailDrawer({
   if (!isOpen || !step) return null;
 
   const allowedTriggers =
-    stepAllowedTriggers[step.stepKey ?? ""] ?? ["stage", "incall", "postcall"];
+    stepAllowedTriggers[step.stepKey ?? ""] ?? ["stage", "incall", "inchat", "postcall"];
   const visibleButtons = (
     [
       { key: "stage" as const, label: "On Entering Stage" },
       { key: "incall" as const, label: "In Call" },
+      { key: "inchat" as const, label: "In Chat" },
       { key: "postcall" as const, label: "Post Call" },
     ] as const
   ).filter((t) => allowedTriggers.includes(t.key));
@@ -78,6 +79,8 @@ export default function StepDetailDrawer({
       ? "Runs in sequence as part of this stage's step order, with an optional delay."
       : stepTrigger === "incall"
       ? "Fires the moment the AI decides to take this action mid-conversation."
+      : stepTrigger === "inchat"
+      ? "Fires during active WhatsApp / chat conversations."
       : "Fires automatically once the call has ended.";
 
   const isSingle = visibleButtons.length === 1;
@@ -194,31 +197,7 @@ export default function StepDetailDrawer({
             </div>
 
             {/* Column 2 — Execution */}
-            {stepTrigger === "stage" ? (
-              <div className="w-[140px] flex-shrink-0">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <label
-                    className="text-sm font-semibold"
-                    style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Execution
-                  </label>
-                  <InfoTooltip text="Wait runs this step only after the previous one finishes. Parallel runs it at the same time as other steps." />
-                </div>
-                <button
-                  onClick={() => setExecutionTimingModalOpen(true)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-md border border-border bg-white hover:bg-muted/20 transition-colors text-left"
-                >
-                  <span
-                    className="text-sm truncate"
-                    style={{ color: "#020817", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    {executionType === "wait" ? "Wait" : "In Parallel"}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
-                </button>
-              </div>
-            ) : stepTrigger === "postcall" ? (
+            {stepTrigger === "stage" || stepTrigger === "postcall" || stepTrigger === "inchat" ? (
               <div className="w-[140px] flex-shrink-0">
                 <div className="flex items-center gap-1.5 mb-2">
                   <label
@@ -266,7 +245,7 @@ export default function StepDetailDrawer({
             ) : null}
 
             {/* Column 3 — Delay */}
-            {(stepTrigger === "stage" || stepTrigger === "postcall") && (
+            {(stepTrigger === "stage" || stepTrigger === "postcall" || stepTrigger === "inchat") && (
               <div className="w-[150px] flex-shrink-0">
                 <div className="flex items-center gap-1.5 mb-2">
                   <label
@@ -308,7 +287,7 @@ export default function StepDetailDrawer({
           </div>
 
           {/* Connect After dropdown */}
-          {(stepTrigger === "stage" || stepTrigger === "postcall") && executionType === "wait" && (
+          {(stepTrigger === "stage" || stepTrigger === "postcall" || stepTrigger === "inchat") && executionType === "wait" && (
             <div className="w-full">
               <div className="flex items-center gap-1.5 mb-2">
                 <label

@@ -9,6 +9,7 @@ import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButto
 import { InfoTooltip } from "../help/InfoTooltip";
 import { getStoredBots } from "../../../lib/useChatbotBots";
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
+import { ButtonChoiceEditor, ListChoiceEditor } from "./ChoiceEditors";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -138,9 +139,14 @@ export default function StepParametersFields({
   const callActionVoiceResponse = params.callActionVoiceResponse ?? "";
 
   const whatsappTemplate = params.whatsappTemplate ?? "";
-  const whatsappSource = params.whatsappSource ?? "template";
+  const whatsappSource = params.whatsappSource ?? (stepTrigger === "inchat" ? "text" : "template");
   const whatsappCampaignId = params.whatsappCampaignId ?? "";
   const whatsappChatbotId = params.whatsappChatbotId ?? "";
+  const chatMessageText = params.chatMessageText ?? "";
+  const questionType = params.questionType ?? "buttons";
+  const questionButtons = params.questionButtons ?? [];
+  const questionListItems = params.questionListItems ?? [];
+  const saveResponseField = params.saveResponseField ?? "";
   const smsMessage = params.smsMessage ?? "";
   const smsConnectedAccount = params.smsConnectedAccount ?? "";
   const emailConnectedAccount = params.emailConnectedAccount ?? "";
@@ -258,7 +264,7 @@ export default function StepParametersFields({
                 This step will only execute when all specified conditions are met.
               </p>
 
-              {stepTrigger === "incall" ? (
+              {(stepTrigger === "incall" || stepTrigger === "inchat") ? (
                 <div className="space-y-4">
                   {/* Field Conditions */}
                   <div className="rounded-lg border border-border overflow-hidden bg-white">
@@ -732,30 +738,45 @@ export default function StepParametersFields({
             {(stepKey === "whatsapp" || stepKey === "send-whatsapp") && (
               <div className="space-y-4">
                 {renderField(
-                  "Select Source",
+                  "Message Source",
                   <div className="inline-flex rounded-md border border-border overflow-hidden bg-white">
                     {[
+                      { v: "text", l: "Text" },
                       { v: "template", l: "Template" },
-                      { v: "campaign", l: "Campaign" },
-                      { v: "chatbot", l: "Chatbot" }
+                      { v: "question", l: "Question" },
                     ].map(opt => (
                       <button
                         key={opt.v}
                         type="button"
-                        onClick={() => {
-                          if (opt.v === "template") {
-                            onChange({ whatsappSource: "template", whatsappCampaignId: "", whatsappChatbotId: "" });
-                          } else if (opt.v === "campaign") {
-                            onChange({ whatsappSource: "campaign", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappChatbotId: "" });
-                          } else if (opt.v === "chatbot") {
-                            onChange({ whatsappSource: "chatbot", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappCampaignId: "" });
-                          }
-                        }}
+                        onClick={() => onChange({ whatsappSource: opt.v })}
                         className={`px-3 py-1.5 text-xs font-semibold ${whatsappSource === opt.v ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
                       >
                         {opt.l}
                       </button>
                     ))}
+                  </div>
+                )}
+
+                {whatsappSource === "text" && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-semibold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>Message</label>
+                      <VariablePickerButton
+                        targetRef={smsMessageRef}
+                        value={chatMessageText}
+                        onChange={v => onChange({ chatMessageText: v })}
+                        label="{ } Insert Variable"
+                      />
+                    </div>
+                    <textarea
+                      ref={smsMessageRef}
+                      rows={4}
+                      value={chatMessageText}
+                      onChange={e => onChange({ chatMessageText: e.target.value })}
+                      placeholder="Type the message the AI sends in chat..."
+                      className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
                   </div>
                 )}
 
@@ -805,64 +826,67 @@ export default function StepParametersFields({
                   </>
                 )}
 
-                {whatsappSource === "campaign" && (
-                  whatsappCampaigns.length === 0 ? (
-                    <div className="space-y-1.5">
-                      <label className="block text-sm font-semibold text-[#020817]">Campaign</label>
-                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                        <span>No campaigns yet — create one in Chats → Campaigns</span>
-                        <Link to="/chats?tab=campaigns" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                          Manage Campaigns →
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    renderField(
-                      "Campaign",
-                      <select
-                        value={whatsappCampaignId}
-                        onChange={e => onChange({ whatsappCampaignId: e.target.value })}
-                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                      >
-                        <option value="">Select Campaign...</option>
-                        {whatsappCampaigns.map(c => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
+                {whatsappSource === "question" && (
+                  <div className="space-y-4">
+                    {renderField(
+                      "Question Prompt",
+                      <textarea
+                        rows={2}
+                        value={chatMessageText}
+                        onChange={e => onChange({ chatMessageText: e.target.value })}
+                        placeholder="e.g. What would you like help with today?"
+                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    )}
+                    {renderField(
+                      "Choice Type",
+                      <div className="flex gap-2">
+                        {["buttons", "list"].map(t => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => onChange({ questionType: t })}
+                            className={`flex-1 py-2 rounded-lg border text-sm font-semibold transition-colors ${
+                              questionType === t ? "bg-blue-600 text-white border-blue-600" : "bg-white text-gray-500 border-border hover:border-gray-400"
+                            }`}
+                          >
+                            {t === "buttons" ? "Buttons (max 3)" : "List (max 10)"}
+                          </button>
                         ))}
-                      </select>
-                    )
-                  )
-                )}
+                      </div>
+                    )}
 
-                {whatsappSource === "chatbot" && (
-                  whatsappChatbots.length === 0 ? (
-                    <div className="space-y-1.5">
-                      <label className="block text-sm font-semibold text-[#020817]">Chatbot</label>
-                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                        <span>No chatbots yet — create one in Chats → Chatbot</span>
-                        <Link to="/chats?tab=chatbot" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                          Manage Chatbots →
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    renderField(
-                      "Chatbot",
+                    {questionType === "buttons" ? (
+                      <ButtonChoiceEditor
+                        buttons={questionButtons}
+                        onChange={(btns: any[]) => onChange({ questionButtons: btns })}
+                        maxButtons={3}
+                      />
+                    ) : (
+                      <ListChoiceEditor
+                        items={questionListItems}
+                        onChange={(items: string[]) => onChange({ questionListItems: items })}
+                        maxItems={10}
+                      />
+                    )}
+
+                    {renderField(
+                      "Save Response To",
                       <select
-                        value={whatsappChatbotId}
-                        onChange={e => onChange({ whatsappChatbotId: e.target.value })}
-                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
+                        value={saveResponseField}
+                        onChange={e => onChange({ saveResponseField: e.target.value })}
+                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white"
                       >
-                        <option value="">Select Chatbot...</option>
-                        {whatsappChatbots.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
+                        <option value="">Don't save</option>
+                        {FETCH_FIELD_SOURCES.flatMap((s: any) => s.fields.map((f: any) => (
+                          <option key={`${s.value}.${f.value}`} value={`${s.value}.${f.value}`}>
+                            {s.label} — {f.label}
                           </option>
-                        ))}
+                        )))}
                       </select>
-                    )
-                  )
+                    )}
+                  </div>
                 )}
               </div>
             )}
