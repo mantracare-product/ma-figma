@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
+import { CustomSideDrawer } from "../components/ui/drawer";
 import { toast } from "sonner";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
@@ -44,6 +45,12 @@ interface Appointment {
   status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
   notes?: string;
   rating?: number; // 1-5 stars for completed appointments
+  // Extended fields (additive)
+  title?: string;
+  description?: string;
+  tags?: string[];
+  processId?: string;
+  stageId?: string;
 }
 
 interface Employee {
@@ -58,6 +65,15 @@ interface Service {
   duration: number;
   price: number;
 }
+
+// Process → Stage mapping
+const processStages: Record<string, string[]> = {
+  "Patient Intake": ["Initial Contact", "Insurance Verification", "Intake Form", "Scheduled"],
+  "Appointment Scheduling": ["Requested", "Provider Assigned", "Confirmed", "Reminder Sent"],
+  "Follow-up Calls": ["Pending Call", "Called – No Answer", "Called – Reached", "Follow-up Complete"],
+  "Billing Support": ["Invoice Sent", "Payment Pending", "Disputed", "Resolved"],
+  "Insurance Verification": ["Submitted", "Under Review", "Approved", "Denied"],
+};
 
 export default function Appointments() {
   // Mock data
@@ -191,8 +207,7 @@ export default function Appointments() {
   }, [apptVisibleFieldKeys]);
 
 
-  // Booking workflow state
-  const [bookingStep, setBookingStep] = useState(1);
+  // Booking workflow state (single-page form)
   const [selectedClient, setSelectedClient] = useState<any | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<Employee | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => {
@@ -202,8 +217,16 @@ export default function Appointments() {
     const day = String(today.getDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
   });
-  const [selectedTime, setSelectedTime] = useState("");
   const [sessionType, setSessionType] = useState<"video" | "inPerson">("video");
+  // New flat form fields
+  const [bookingTitle, setBookingTitle] = useState("");
+  const [bookingDescription, setBookingDescription] = useState("");
+  const [bookingNote, setBookingNote] = useState("");
+  const [bookingTags, setBookingTags] = useState("");
+  const [bookingProcessId, setBookingProcessId] = useState("");
+  const [bookingStageId, setBookingStageId] = useState("");
+  const [bookingStartHour, setBookingStartHour] = useState(9);
+  const [bookingStartMinute, setBookingStartMinute] = useState(0);
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -384,10 +407,14 @@ export default function Appointments() {
   };
 
   const handleBookingComplete = () => {
-    if (!selectedClient || !selectedProvider || !selectedDate || !selectedTime) {
-      toast.error("Please complete all booking steps");
+    if (!selectedClient || !selectedProvider || !selectedDate || !bookingTitle.trim()) {
+      toast.error("Please fill in all required fields");
       return;
     }
+
+    const startHH = String(bookingStartHour).padStart(2, "0");
+    const startMM = String(bookingStartMinute).padStart(2, "0");
+    const timeStr = `${startHH}:${startMM}`;
 
     const newAppointment: Appointment = {
       id: Math.max(...appointments.map((a) => a.id)) + 1,
@@ -397,23 +424,36 @@ export default function Appointments() {
       employeeId: selectedProvider.id,
       serviceId: 1,
       date: selectedDate,
-      time: selectedTime,
+      time: timeStr,
       duration: 60,
       status: "scheduled",
-      notes: `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
+      notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
+      title: bookingTitle.trim(),
+      description: bookingDescription.trim() || undefined,
+      tags: bookingTags ? bookingTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
+      processId: bookingProcessId || undefined,
+      stageId: bookingStageId || undefined,
     };
 
     setAppointments([...appointments, newAppointment]);
-    setBookingStep(5);
+    setShowAddModal(false);
+    resetBookingWorkflow();
+    toast.success("Appointment scheduled successfully!");
   };
 
   const resetBookingWorkflow = () => {
-    setBookingStep(1);
     setSelectedClient(null);
     setSelectedProvider(devUserRole === "provider" ? currentProviderUser : null);
     setSelectedDate(formatDate(new Date()));
-    setSelectedTime("");
     setSessionType("video");
+    setBookingTitle("");
+    setBookingDescription("");
+    setBookingNote("");
+    setBookingTags("");
+    setBookingProcessId("");
+    setBookingStageId("");
+    setBookingStartHour(9);
+    setBookingStartMinute(0);
 
     // Reset client filters and search
     setClientSearchQuery("");
@@ -2348,596 +2388,331 @@ export default function Appointments() {
       </div>
 
 
-      {/* Multi-Step Booking Modal */}
-      <Modal
+      {/* Schedule Appointment Drawer — single-page form */}
+      <CustomSideDrawer
         isOpen={showAddModal}
         onClose={() => {
           setShowAddModal(false);
           resetBookingWorkflow();
         }}
+        maxWidth="sm:max-w-[480px]"
         title={
-          bookingStep === 1 ? "Choose Client" :
-            bookingStep === 2 ? "Choose Provider" :
-              bookingStep === 3 ? "Select Date & Time" :
-                bookingStep === 4 ? "Confirm Booking" :
-                  ""
+          <div>
+            <p className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Schedule Appointment
+            </p>
+            <p className="text-sm text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Create a new appointment with a client
+            </p>
+          </div>
         }
-        maxWidth="md-plus"
         footer={
-          bookingStep === 5 ? (
-            <div className="w-full">
-              <Button
-                variant="primary"
-                onClick={() => {
-                  setShowAddModal(false);
-                  resetBookingWorkflow();
-                  toast.success("Appointment booked successfully!");
+          (() => {
+            const isValid = !!(bookingTitle.trim() && selectedProvider && selectedClient && selectedDate);
+            return (
+              <button
+                onClick={handleBookingComplete}
+                disabled={!isValid}
+                className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
+                style={{
+                  fontFamily: "Outfit, sans-serif",
+                  backgroundColor: isValid ? "#1e293b" : "#E5E7EB",
+                  color: isValid ? "#ffffff" : "#9CA3AF",
+                  cursor: isValid ? "pointer" : "not-allowed",
+                  border: "none",
                 }}
-                className="w-full py-3 rounded-xl font-semibold"
               >
-                Done
-              </Button>
-            </div>
-          ) : bookingStep === 4 ? (
-            <div className="w-full flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setBookingStep(3)}
-                className="flex-1 py-3 rounded-xl font-semibold"
-              >
-                Back
-              </Button>
-              <Button variant="primary" onClick={handleBookingComplete} className="flex-1 py-3 rounded-xl font-semibold">
-                Confirm Booking
-              </Button>
-            </div>
-          ) : bookingStep === 3 ? (
-            <div className="w-full flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setBookingStep(devUserRole === "provider" ? 1 : 2)}
-                className="flex-1 py-3 rounded-xl font-semibold"
-              >
-                Back
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => setBookingStep(4)}
-                disabled={!selectedTime}
-                className="flex-1 py-3 rounded-xl font-semibold"
-              >
-                Continue
-              </Button>
-            </div>
-          ) : bookingStep === 2 ? (
-            <div className="w-full flex gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setBookingStep(1)}
-                className="flex-1 py-3 rounded-xl font-semibold"
-              >
-                Back
-              </Button>
-              <Button
-                variant="primary"
-                onClick={() => setBookingStep(3)}
-                disabled={!selectedProvider}
-                className="flex-1 py-3 rounded-xl font-semibold"
-              >
-                Continue
-              </Button>
-            </div>
-          ) : (
-            <div className="w-full">
-              <Button
-                variant="primary"
-                onClick={() => setBookingStep(devUserRole === "provider" ? 3 : 2)}
-                disabled={!selectedClient}
-                className="w-full py-3 rounded-xl font-semibold"
-              >
-                Continue
-              </Button>
-            </div>
-          )
+                Schedule Appointment
+              </button>
+            );
+          })()
         }
       >
-        {/* Step 1: Choose Client */}
-        {bookingStep === 1 && (
-          <div>
-            <p className="text-sm text-muted-foreground mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Select a client to book an appointment
-            </p>
+        {/* Single-page booking form */}
+        {(() => {
+          const endHour = (bookingStartHour + 1) % 24;
+          const endMin = bookingStartMinute;
+          const startHHMM = `${String(bookingStartHour).padStart(2, "0")}:${String(bookingStartMinute).padStart(2, "0")}`;
+          const endHHMM = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
+          const fmtDate = (hhmm: string) => {
+            if (!selectedDate) return "";
+            const d = new Date(`${selectedDate}T${hhmm}`);
+            return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) +
+              " at " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+          };
 
-            {/* Search bar with filter */}
-            <div className="mb-4 relative">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by name, email, or phone..."
-                    value={clientSearchQuery}
-                    onChange={(e) => setClientSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-                <button
-                  onClick={() => setShowClientFilters(!showClientFilters)}
-                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${showClientFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Filter className="w-4 h-4" />
-                  Filters
-                </button>
-              </div>
+          const inputCls = "w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white";
+          const labelCls = "block text-xs font-semibold text-slate-700 mb-1.5";
 
-              {/* Filter dropdown */}
-              {showClientFilters && (
-                <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-white border border-slate-200 rounded-xl shadow-lg z-10 space-y-4">
-                  {/* Status filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Status
-                    </label>
-                    <select
-                      value={clientStatusFilter}
-                      onChange={(e) => setClientStatusFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
+          return (
+            <div className="space-y-5">
 
-                  {/* Process filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Process
-                    </label>
-                    <div className="space-y-2">
-                      {["Patient Intake", "Appointment Scheduling", "Follow-up Calls", "Billing Support", "Insurance Verification"].map((process) => (
-                        <label key={process} className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={clientProcessFilter.includes(process)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setClientProcessFilter([...clientProcessFilter, process]);
-                              } else {
-                                setClientProcessFilter(clientProcessFilter.filter((p) => p !== process));
-                              }
-                            }}
-                            className="w-4 h-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
-                          />
-                          <span className="text-sm text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            {process}
-                          </span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Responsible Person filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Responsible Person
-                    </label>
-                    <select
-                      value={clientResponsibleFilter}
-                      onChange={(e) => setClientResponsibleFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.name}>{emp.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Clear filters button */}
-                  <button
-                    onClick={() => {
-                      setClientStatusFilter("all");
-                      setClientProcessFilter([]);
-                      setClientResponsibleFilter("all");
-                      setClientSearchQuery("");
-                    }}
-                    className="w-full px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Clear All Filters
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {filteredClients.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    No clients found matching your search and filters
-                  </p>
-                </div>
-              ) : (
-                filteredClients.map((client) => (
-                  <div
-                    key={client.id}
-                    onClick={() => setSelectedClient(client)}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedClient?.id === client.id
-                        ? "border-cyan-500 bg-cyan-50/50 shadow-sm"
-                        : "border-slate-200 bg-white hover:border-cyan-300 hover:shadow-sm"
-                      }`}
-                  >
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <span className="text-sm font-bold text-white" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        {client.avatar}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold truncate" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                        {client.name}
-                      </h4>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 2: Choose Provider */}
-        {bookingStep === 2 && devUserRole === "admin" && (
-          <div>
-            <p className="text-sm text-muted-foreground mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Select a healthcare provider
-            </p>
-
-            {/* Search bar with filter */}
-            <div className="mb-4 relative">
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by name..."
-                    value={providerSearchQuery}
-                    onChange={(e) => setProviderSearchQuery(e.target.value)}
-                    className="w-full pl-10 pr-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-                <button
-                  onClick={() => setShowProviderFilters(!showProviderFilters)}
-                  className={`px-3.5 py-2.5 border rounded-lg flex items-center gap-2 text-sm font-medium transition-colors ${showProviderFilters ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Filter className="w-4 h-4" />
-                  Filters
-                </button>
-              </div>
-
-              {/* Filter dropdown */}
-              {showProviderFilters && (
-                <div className="absolute top-full left-0 right-0 mt-2 p-4 bg-white border border-slate-200 rounded-xl shadow-lg z-10 space-y-4">
-                  {/* Availability filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Availability
-                    </label>
-                    <select
-                      value={providerAvailabilityFilter}
-                      onChange={(e) => setProviderAvailabilityFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All</option>
-                      <option value="Available">Available</option>
-                      <option value="Unavailable">Unavailable</option>
-                    </select>
-                  </div>
-
-                  {/* Specialty/Role filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Specialty / Role
-                    </label>
-                    <select
-                      value={providerSpecialtyFilter}
-                      onChange={(e) => setProviderSpecialtyFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All</option>
-                      <option value="Doctor">Doctor</option>
-                      <option value="Nurse">Nurse</option>
-                      <option value="Specialist">Specialist</option>
-                      <option value="Therapist">Therapist</option>
-                    </select>
-                  </div>
-
-                  {/* Location filter */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Location / Branch
-                    </label>
-                    <select
-                      value={providerLocationFilter}
-                      onChange={(e) => setProviderLocationFilter(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All</option>
-                      <option value="Main Office">Main Office</option>
-                      <option value="Downtown Branch">Downtown Branch</option>
-                      <option value="Westside Clinic">Westside Clinic</option>
-                      <option value="Eastside Clinic">Eastside Clinic</option>
-                    </select>
-                  </div>
-
-                  {/* Clear filters button */}
-                  <button
-                    onClick={() => {
-                      setProviderAvailabilityFilter("all");
-                      setProviderSpecialtyFilter("all");
-                      setProviderLocationFilter("all");
-                      setProviderSearchQuery("");
-                    }}
-                    className="w-full px-3 py-2 text-sm font-medium text-slate-600 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Clear All Filters
-                  </button>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-              {filteredProviders.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-sm text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    No providers found matching your search and filters
-                  </p>
-                </div>
-              ) : (
-                filteredProviders.map((employee) => (
-                  <div
-                    key={employee.id}
-                    onClick={() => setSelectedProvider(employee)}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${selectedProvider?.id === employee.id
-                        ? "border-cyan-500 bg-cyan-50/50 shadow-sm"
-                        : "border-slate-200 bg-white hover:border-cyan-300 hover:shadow-sm"
-                      }`}
-                  >
-                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center flex-shrink-0 shadow-sm">
-                      <User className="w-5 h-5 text-white" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="text-sm font-bold truncate" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                        {employee.name}
-                      </h4>
-                      <p className="text-xs text-slate-600 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Healthcare Professional
-                      </p>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Step 3: Select Date, Time & Type */}
-        {bookingStep === 3 && (
-          <div className="space-y-6">
-            {/* Date Selection */}
-            <div>
-              <h3 className="text-base font-bold mb-4" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                What day works best for you?
-              </h3>
-              <div className="flex gap-2 overflow-x-auto pb-2">
-                {(() => {
-                  const dates = [];
-                  const today = new Date();
-                  for (let i = 0; i < 7; i++) {
-                    const date = new Date(today);
-                    date.setDate(today.getDate() + i);
-                    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-                    const dayName = date.toLocaleDateString("en-US", { weekday: "short" });
-                    const dayNum = date.getDate();
-                    const monthName = date.toLocaleDateString("en-US", { month: "short" });
-                    const isSelected = selectedDate === dateStr;
-
-                    dates.push(
-                      <button
-                        key={dateStr}
-                        onClick={() => setSelectedDate(dateStr)}
-                        className={`flex-shrink-0 flex flex-col items-center justify-center px-4 py-3 rounded-xl transition-all ${isSelected
-                            ? "bg-cyan-500 text-white"
-                            : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-                          }`}
-                        style={{ minWidth: "70px" }}
-                      >
-                        <span className="text-xs font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {dayName}
-                        </span>
-                        <span className="text-2xl font-bold mb-0.5" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {dayNum}
-                        </span>
-                        <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {monthName}
-                        </span>
-                      </button>
-                    );
-                  }
-                  return dates;
-                })()}
-              </div>
-            </div>
-
-            {/* Time Slots */}
-            <div>
-              <h3 className="text-base font-bold mb-4" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                What time works?
-              </h3>
-              <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto pr-1">
-                {timeSlots.map((time) => {
-                  const isSelected = selectedTime === time;
-                  return (
-                    <button
-                      key={time}
-                      onClick={() => setSelectedTime(time)}
-                      className={`py-2.5 px-3 rounded-xl font-medium text-sm transition-all ${isSelected
-                          ? "bg-cyan-500 text-white"
-                          : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                        }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      {time}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Session Type Toggle */}
-            <div>
-              <div className="flex items-center mb-4">
-                <h3 className="text-base font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                  Session type:
-                </h3>
-                <InfoTooltip text="Determines whether the client gets a video link or an in-office reminder." />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setSessionType("video")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${sessionType === "video"
-                      ? "bg-cyan-500 text-white"
-                      : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Video
-                </button>
-                <button
-                  onClick={() => setSessionType("inPerson")}
-                  className={`flex-1 py-3 px-4 rounded-xl font-medium text-sm transition-all ${sessionType === "inPerson"
-                      ? "bg-cyan-500 text-white"
-                      : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                    }`}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  In-Person
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Confirm Booking */}
-        {bookingStep === 4 && (
-          <div>
-            <p className="text-sm text-slate-600 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Please review your appointment details
-            </p>
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-5 space-y-4 border border-slate-200">
-              <div className="pb-3 border-b border-slate-200">
-                <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Client</p>
-                <p className="text-sm font-bold mb-0.5" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                  {selectedClient?.name}
-                </p>
-                <p className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>{selectedClient?.email}</p>
-              </div>
-
-              <div className="pb-3 border-b border-slate-200">
-                <p className="text-xs font-semibold text-slate-500 mb-2 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Provider</p>
-                <p className="text-sm font-bold mb-0.5" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                  {selectedProvider?.name}
-                </p>
-                <p className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>{selectedProvider?.email}</p>
-              </div>
-
+              {/* ① Title */}
               <div>
-                <p className="text-xs font-semibold text-slate-500 mb-3 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Session Details</p>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>Date</p>
-                    <p className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                        month: "short",
-                        day: "numeric"
-                      })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>Time</p>
-                    <p className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>{selectedTime}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-500 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>Type</p>
-                    <p className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {sessionType === "video" ? "Video" : "In-Person"}
-                    </p>
-                  </div>
+                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Title <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g., Follow-up consultation"
+                  value={bookingTitle}
+                  onChange={(e) => setBookingTitle(e.target.value)}
+                  className={inputCls}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                />
+              </div>
+
+              {/* ② Description */}
+              <div>
+                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Description
+                </label>
+                <textarea
+                  placeholder="Add appointment details..."
+                  value={bookingDescription}
+                  onChange={(e) => setBookingDescription(e.target.value)}
+                  rows={3}
+                  className={inputCls + " resize-none"}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                />
+              </div>
+
+              {/* ③ Schedule For / Schedule With */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Schedule For <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedProvider?.id ?? ""}
+                    onChange={(e) => {
+                      const emp = employees.find((x) => x.id === Number(e.target.value));
+                      setSelectedProvider(emp || null);
+                    }}
+                    className={inputCls}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="">Select a user</option>
+                    {employees.map((emp) => (
+                      <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Schedule With <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={selectedClient?.id ?? ""}
+                    onChange={(e) => {
+                      const cl = clients.find((x) => x.id === Number(e.target.value));
+                      setSelectedClient(cl || null);
+                    }}
+                    className={inputCls}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="">Select a client</option>
+                    {clients.map((cl) => (
+                      <option key={cl.id} value={cl.id}>{cl.name}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Step 5: Appointment Confirmed */}
-        {bookingStep === 5 && (
-          <div className="text-center py-8">
-            <div className="w-20 h-20 bg-gradient-to-br from-green-400 to-emerald-500 rounded-full flex items-center justify-center mx-auto mb-5 shadow-lg">
-              <CheckCircle className="w-10 h-10 text-white" />
-            </div>
-            <h3 className="text-2xl font-bold mb-2" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-              Appointment Confirmed!
-            </h3>
-            <p className="text-sm text-slate-600 mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Your appointment has been successfully scheduled
-            </p>
-
-            <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 rounded-2xl p-5 text-left border border-slate-200">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between py-2 border-b border-slate-200">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Client</span>
-                  <span className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>{selectedClient?.name}</span>
+              {/* ④ Process / Stage */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Select Process
+                  </label>
+                  <select
+                    value={bookingProcessId}
+                    onChange={(e) => {
+                      setBookingProcessId(e.target.value);
+                      setBookingStageId("");
+                    }}
+                    className={inputCls}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="">Select a process</option>
+                    {Object.keys(processStages).map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex items-center justify-between py-2 border-b border-slate-200">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Provider</span>
-                  <span className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>{selectedProvider?.name}</span>
-                </div>
-                <div className="flex items-center justify-between py-2 border-b border-slate-200">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Date</span>
-                  <span className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                    {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric"
-                    })}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between py-2 border-b border-slate-200">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Time</span>
-                  <span className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>{selectedTime}</span>
-                </div>
-                <div className="flex items-center justify-between py-2">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</span>
-                  <span className="text-sm font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                    {sessionType === "video" ? "Video Call" : "In-Person"}
-                  </span>
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Select Stage
+                  </label>
+                  <select
+                    value={bookingStageId}
+                    onChange={(e) => setBookingStageId(e.target.value)}
+                    disabled={!bookingProcessId}
+                    className={inputCls + (!bookingProcessId ? " opacity-50 cursor-not-allowed" : "")}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <option value="">Select a stage</option>
+                    {(processStages[bookingProcessId] || []).map((s) => (
+                      <option key={s} value={s}>{s}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
+              {/* ⑤ Date / Note */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className={inputCls}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Note
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Quick note..."
+                    value={bookingNote}
+                    onChange={(e) => setBookingNote(e.target.value)}
+                    className={inputCls}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  />
+                </div>
+              </div>
+
+              {/* ⑥ Times in client timezone */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p
+                  className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-3"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Times in client timezone
+                </p>
+                {!selectedClient ? (
+                  <p
+                    className="text-center text-sm py-2"
+                    style={{ color: "#1A73E8", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Select a client to enable time selection
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Start */}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>Start</p>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          min={0}
+                          max={23}
+                          value={bookingStartHour}
+                          onChange={(e) => setBookingStartHour(Math.min(23, Math.max(0, Number(e.target.value))))}
+                          className="w-12 text-center border border-slate-200 rounded-lg py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        />
+                        <span className="text-slate-400 font-bold text-sm">:</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={59}
+                          value={bookingStartMinute}
+                          onChange={(e) => setBookingStartMinute(Math.min(59, Math.max(0, Number(e.target.value))))}
+                          className="w-12 text-center border border-slate-200 rounded-lg py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        />
+                      </div>
+                      {selectedDate && (
+                        <p className="text-[11px] text-slate-400 mt-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {fmtDate(startHHMM)}
+                        </p>
+                      )}
+                    </div>
+                    {/* End (auto = start + 60 min) */}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>End</p>
+                      <div className="flex items-center gap-1">
+                        <div
+                          className="w-12 text-center border border-slate-100 rounded-lg py-1.5 text-sm font-semibold text-slate-400 bg-slate-100"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {String(endHour).padStart(2, "0")}
+                        </div>
+                        <span className="text-slate-400 font-bold text-sm">:</span>
+                        <div
+                          className="w-12 text-center border border-slate-100 rounded-lg py-1.5 text-sm font-semibold text-slate-400 bg-slate-100"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {String(endMin).padStart(2, "0")}
+                        </div>
+                      </div>
+                      {selectedDate && (
+                        <p className="text-[11px] text-slate-400 mt-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {fmtDate(endHHMM)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ⑦ Session Type */}
+              <div>
+                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Session Type
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setSessionType("video")}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                      sessionType === "video"
+                        ? "bg-cyan-500 text-white"
+                        : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Video
+                  </button>
+                  <button
+                    onClick={() => setSessionType("inPerson")}
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                      sessionType === "inPerson"
+                        ? "bg-cyan-500 text-white"
+                        : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
+                    }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    In-Person
+                  </button>
+                </div>
+              </div>
+
+              {/* ⑧ Tags */}
+              <div>
+                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Tags
+                </label>
+                <input
+                  type="text"
+                  placeholder="Comma-separated tags, e.g., follow-up, urgent"
+                  value={bookingTags}
+                  onChange={(e) => setBookingTags(e.target.value)}
+                  className={inputCls}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                />
+              </div>
+
             </div>
-          </div>
-        )}
-      </Modal>
+          );
+        })()}
+      </CustomSideDrawer>
 
       {/* Edit Appointment Modal */}
       <Modal
