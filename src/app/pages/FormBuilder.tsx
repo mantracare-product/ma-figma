@@ -158,8 +158,7 @@ export default function FormBuilder() {
     existingFields: true,
   });
 
-  // State for CreateFieldModal (unified; replaces inline panel + inline flow)
-  const [showCreateFieldModal, setShowCreateFieldModal] = useState(false);
+  // State for SelectFieldsModal
   const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
 
   const toggleSidebarSection = (section: string) => {
@@ -2219,22 +2218,14 @@ export default function FormBuilder() {
                     </button>
 
                     {sidebarSections.existingFields && (
-                      <div className="px-3 pt-3 pb-3 space-y-2">
+                      <div className="px-3 pt-3 pb-3">
                         <button
                           onClick={() => setShowSelectFieldModal(true)}
                           className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-blue-300 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/50 transition-colors cursor-pointer"
                           style={{ fontFamily: 'Outfit, sans-serif' }}
                         >
                           <Sliders className="w-3.5 h-3.5" />
-                          Select System Field
-                        </button>
-                        <button
-                          onClick={() => setShowCreateFieldModal(true)}
-                          className="w-full flex items-center justify-center gap-1.5 py-2 border border-dashed border-purple-300 rounded-lg text-xs font-semibold text-purple-600 hover:bg-purple-50/50 transition-colors cursor-pointer"
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Create Custom Field
+                          Select
                         </button>
                       </div>
                     )}
@@ -2298,20 +2289,7 @@ export default function FormBuilder() {
           </div>
         </div>
       </div>
-      {/* Unified Create Custom Field Modal (no lockModule — asks for module) */}
-      {showCreateFieldModal && (
-        <CreateFieldModal
-          sourceFormId={formId}
-          onClose={() => setShowCreateFieldModal(false)}
-          onCreated={(field) => {
-            // Call addFormFieldFromDefinition directly with the returned FieldDefinition
-            // so we bypass the async React context state-update delay that would
-            // cause getAllFields() to still return the OLD list inside handleAddRegistryField.
-            addFormFieldFromDefinition(field, "custom");
-            setShowCreateFieldModal(false);
-          }}
-        />
-      )}
+
       {showSelectFieldModal && (
         <SelectFieldsModal
           initiallySelected={formFields.filter(f => f.sourceFieldKey).map(f => f.sourceFieldKey!)}

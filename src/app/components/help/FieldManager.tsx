@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Search, X, Info, ChevronDown } from "lucide-react";
+import { Search, X, Info, ChevronDown, Plus } from "lucide-react";
 import { useFieldRegistry, FieldDefinition, FieldModule, FieldInputType } from "../../context/FieldRegistryContext";
 import { toast } from "sonner";
 
@@ -168,7 +168,7 @@ export function CreateFieldModal({
         <div className="p-5 border-b border-gray-100 flex items-start justify-between gap-3">
           <div>
             <h3 className="font-bold text-lg text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              Create Custom Field
+              Create Custom Field {lockModule ? `— ${MODULE_LABELS[selectedModule]}` : ""}
             </h3>
             <p className="text-xs text-gray-400 mt-0.5 leading-snug" style={{ fontFamily: "Outfit, sans-serif" }}>
               This field will be available to select on every{" "}
@@ -373,6 +373,7 @@ export function SelectFieldsModal({
   const { getAllFields } = useFieldRegistry();
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(() => initiallySelected);
+  const [createFieldModalOpenFor, setCreateFieldModalOpenFor] = useState<FieldModule | null>(null);
 
   // Determine which modules to render
   const targetModules: Exclude<FieldModule, "deal">[] = (onlyModules
@@ -402,7 +403,7 @@ export function SelectFieldsModal({
     );
     return {
       module,
-      label: MODULE_LABELS[module] || module,
+      label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
       fields,
     };
   }).filter(g => g.fields.length > 0);
@@ -480,36 +481,48 @@ export function SelectFieldsModal({
                 </button>
 
                 {!isCollapsed && (
-                  <div className="p-3 grid grid-cols-2 gap-2">
-                    {group.fields.map(f => {
-                      const isChecked = selectedFieldsForModal.includes(f.key);
-                      return (
-                        <label
-                          key={`${group.module}-${f.key}`}
-                          className="flex items-center gap-2.5 p-2 hover:bg-blue-50/30 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100/50"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedFieldsForModal([...selectedFieldsForModal, f.key]);
-                              } else {
-                                setSelectedFieldsForModal(selectedFieldsForModal.filter(k => k !== f.key));
-                              }
-                            }}
-                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                            style={{ accentColor: "#1E88E5" }}
-                          />
-                          <div className="flex flex-col min-w-0">
-                            <span className="text-xs font-semibold text-gray-700 truncate">{f.label}</span>
-                            <span className="text-[9px] text-gray-400 truncate capitalize">
-                              {f.source === "system" ? "system" : f.inputType}
-                            </span>
-                          </div>
-                        </label>
-                      );
-                    })}
+                  <div className="p-3 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      {group.fields.map(f => {
+                        const isChecked = selectedFieldsForModal.includes(f.key);
+                        return (
+                          <label
+                            key={`${group.module}-${f.key}`}
+                            className="flex items-center gap-2.5 p-2 hover:bg-blue-50/30 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-gray-100/50"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedFieldsForModal([...selectedFieldsForModal, f.key]);
+                                } else {
+                                  setSelectedFieldsForModal(selectedFieldsForModal.filter(k => k !== f.key));
+                                }
+                              }}
+                              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                              style={{ accentColor: "#1E88E5" }}
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="text-xs font-semibold text-gray-700 truncate">{f.label}</span>
+                              <span className="text-[9px] text-gray-400 truncate capitalize">
+                                {f.source === "system" ? "system" : f.inputType}
+                              </span>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="pt-2 border-t border-gray-100 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setCreateFieldModalOpenFor(group.module as FieldModule)}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50/80 rounded-md border border-dashed border-blue-200 transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Create Field
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -546,6 +559,17 @@ export function SelectFieldsModal({
           </div>
         </div>
       </div>
+
+      {createFieldModalOpenFor && (
+        <CreateFieldModal
+          lockModule={createFieldModalOpenFor}
+          onClose={() => setCreateFieldModalOpenFor(null)}
+          onCreated={(newField) => {
+            setSelectedFieldsForModal(prev => [...prev, newField.key]);
+            setCreateFieldModalOpenFor(null);
+          }}
+        />
+      )}
     </>
   );
 }

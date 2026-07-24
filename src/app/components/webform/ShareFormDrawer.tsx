@@ -548,11 +548,10 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
                 <button
                   type="button"
                   onClick={() => setSendMode("manual")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    sendMode === "manual"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sendMode === "manual"
                       ? "bg-blue-600 text-white"
                       : "bg-white border border-border text-[#64748B] hover:bg-gray-50"
-                  }`}
+                    }`}
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   Select Manually
@@ -560,11 +559,10 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
                 <button
                   type="button"
                   onClick={() => setSendMode("conditions")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                    sendMode === "conditions"
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${sendMode === "conditions"
                       ? "bg-blue-600 text-white"
                       : "bg-white border border-border text-[#64748B] hover:bg-gray-50"
-                  }`}
+                    }`}
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   Apply Conditions
@@ -580,7 +578,7 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
             ) : (
               <ShareConditionsEditor
                 enabled={true}
-                onEnabledChange={() => {}}
+                onEnabledChange={() => { }}
                 conditions={conditions}
                 onConditionsChange={setConditions}
                 showToggle={false}
@@ -597,9 +595,8 @@ export default function ShareFormDrawer({ target, onClose, onSend }: ShareFormDr
                   key={ch}
                   disabled={creatingTemplate}
                   onClick={() => setChannel(ch)}
-                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 ${
-                    channel === ch ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
-                  }`}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-40 ${channel === ch ? "bg-black text-white" : "bg-white text-[#64748B] hover:bg-gray-50"
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {CHANNEL_CONFIG[ch].icon}

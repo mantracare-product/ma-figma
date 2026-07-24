@@ -489,7 +489,7 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
         const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
         setAvailableBots(JSON.parse(raw).map(sanitizeBot));
       }
-    } catch {}
+    } catch { }
   }, []);
 
   return (
@@ -525,8 +525,8 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
                           {node.messageMode === "template"
                             ? `Template: ${globalTemplates.find(t => t.identifier === node.templateIdentifier || t.id === node.templateIdentifier)?.name || node.templateIdentifier || "—"}`
                             : node.messageMode === "chatbot"
-                            ? `Chatbot: ${availableBots.find(b => b.id === node.targetBotId)?.name || "—"}`
-                            : node.content || "—"}
+                              ? `Chatbot: ${availableBots.find(b => b.id === node.targetBotId)?.name || "—"}`
+                              : node.content || "—"}
                         </p>
                       )}
                       {node.type === "delay" && node.delayValue && (
@@ -566,7 +566,7 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
           </div>
         </div>
       </div>
-      
+
       <div className="w-[360px] shrink-0 space-y-4">
         {editingNodeId && (() => {
           const node = campaignNodes.find(n => n.id === editingNodeId);
@@ -593,9 +593,8 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
                     <div className="flex p-1 bg-slate-100 rounded-lg">
                       {(["text", "template", "chatbot"] as const).map(m => (
                         <button key={m} type="button" onClick={() => updateNode({ messageMode: m })}
-                          className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all capitalize cursor-pointer ${
-                            (node.messageMode ?? "text") === m ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500 hover:text-gray-700"
-                          }`}>
+                          className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all capitalize cursor-pointer ${(node.messageMode ?? "text") === m ? "bg-white shadow text-blue-600 font-bold" : "text-gray-500 hover:text-gray-700"
+                            }`}>
                           {m === "text" ? "Message" : m === "template" ? "Template" : "Chatbot"}
                         </button>
                       ))}
@@ -927,19 +926,19 @@ export default function Chats() {
       prev.map((c) =>
         c.id === selectedConversationId
           ? {
-              ...c,
-              assignedBotId: bot.id,
-              botStatus: "active",
-              assignedPersonId: "", // Clear human assignment on bot activation
-              messages: [...c.messages, ...botMsgs],
-              lastMessage: botMsgs.length > 0 ? botMsgs[botMsgs.length - 1].text : c.lastMessage,
-              timestamp: "Just now",
-              botRuntime: advanceRes.botRuntimePatch || {
-                currentNodeId: null,
-                awaitingFreeText: false,
-                pendingHandoffNodeId: null,
-              },
-            }
+            ...c,
+            assignedBotId: bot.id,
+            botStatus: "active",
+            assignedPersonId: "", // Clear human assignment on bot activation
+            messages: [...c.messages, ...botMsgs],
+            lastMessage: botMsgs.length > 0 ? botMsgs[botMsgs.length - 1].text : c.lastMessage,
+            timestamp: "Just now",
+            botRuntime: advanceRes.botRuntimePatch || {
+              currentNodeId: null,
+              awaitingFreeText: false,
+              pendingHandoffNodeId: null,
+            },
+          }
           : c
       )
     );
@@ -964,12 +963,12 @@ export default function Chats() {
       prev.map((c) =>
         c.id === selectedConversationId
           ? {
-              ...c,
-              messages: [...c.messages, ...campMsgs],
-              lastMessage: campMsgs.length > 0 ? campMsgs[campMsgs.length - 1].text : c.lastMessage,
-              timestamp: "Just now",
-              campaignEnrollments: [...filteredEnrollments, stepRes.enrollmentPatch],
-            }
+            ...c,
+            messages: [...c.messages, ...campMsgs],
+            lastMessage: campMsgs.length > 0 ? campMsgs[campMsgs.length - 1].text : c.lastMessage,
+            timestamp: "Just now",
+            campaignEnrollments: [...filteredEnrollments, stepRes.enrollmentPatch],
+          }
           : c
       )
     );
@@ -994,11 +993,11 @@ export default function Chats() {
       prev.map((c) =>
         c.id === selectedConversationId
           ? {
-              ...c,
-              lastMessage: resolvedText,
-              timestamp: "Just now",
-              messages: [...c.messages, templateMsg],
-            }
+            ...c,
+            lastMessage: resolvedText,
+            timestamp: "Just now",
+            messages: [...c.messages, templateMsg],
+          }
           : c
       )
     );
@@ -1018,8 +1017,8 @@ export default function Chats() {
     const matchesChannel = channelFilter === null ? false : channelFilter === "all" ? true : c.channel === channelFilter;
     const matchesView =
       viewFilter === "all" ? true :
-      viewFilter === "unread" ? c.unreadCount > 0 :
-      c.status === viewFilter;
+        viewFilter === "unread" ? c.unreadCount > 0 :
+          c.status === viewFilter;
     return matchesSearch && matchesChannel && matchesView;
   });
 
@@ -1344,17 +1343,17 @@ export default function Chats() {
       prev.map(c =>
         c.id === campaign.id
           ? {
-              ...c,
-              audienceName: payload.audienceName,
-              audienceClientIds: payload.clientIds,
-              audienceManualRecipients: payload.manualRecipients,
-              audience: `${payload.audienceName} (${totalRecipients})`,
-              // Increment sent & delivered (demo flow mirrors them)
-              sent: (c.sent || 0) + totalRecipients,
-              delivered: (c.delivered || 0) + totalRecipients,
-              // Sharing a draft campaign activates it (Launch button is removed)
-              status: c.status === "draft" ? "active" : c.status,
-            }
+            ...c,
+            audienceName: payload.audienceName,
+            audienceClientIds: payload.clientIds,
+            audienceManualRecipients: payload.manualRecipients,
+            audience: `${payload.audienceName} (${totalRecipients})`,
+            // Increment sent & delivered (demo flow mirrors them)
+            sent: (c.sent || 0) + totalRecipients,
+            delivered: (c.delivered || 0) + totalRecipients,
+            // Sharing a draft campaign activates it (Launch button is removed)
+            status: c.status === "draft" ? "active" : c.status,
+          }
           : c
       )
     );
@@ -1430,1143 +1429,1134 @@ export default function Chats() {
             {activeTab === "chats" && (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex h-[calc(100vh-230px)] overflow-hidden">
                 {/* Pane 1 — List Pane */}
-            <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
-              {/* Header */}
-              <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button type="button" onClick={() => setNavCollapsed(v => !v)}
-                      className="p-1 hover:bg-gray-100 rounded text-gray-400 shrink-0"
-                      title={navCollapsed ? "Show sidebar" : "Hide sidebar"}>
-                      <PanelLeft className="w-4 h-4" />
-                    </button>
-                    <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : "All chats"}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button type="button" onClick={() => setShowInlineSearch(v => !v)}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
-                      <Search className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-                <p className="text-[11px] text-gray-400 pl-7" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  {filteredConversations.length} Chats · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
-                </p>
-                {showInlineSearch && (
-                  <div className="relative pt-1">
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)} autoFocus
-                      placeholder="Search conversations..."
-                      className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      style={{ fontFamily: "Outfit, sans-serif" }} />
-                  </div>
-                )}
-                {/* View filter pills */}
-                <div className="flex gap-1.5 pt-1">
-                  {(["all", "open", "unread", "resolved"] as const).map(v => (
-                    <button key={v} onClick={() => setViewFilter(v)}
-                      className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${
-                        viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                      }`}
-                      style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : "Resolved"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              {/* Conversation List */}
-              <div className="flex-1 overflow-y-auto">
-                {channelFilter === null ? (
-                  <div className="p-10 flex flex-col items-center text-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                      <MessageCircle className="w-6 h-6 text-gray-400" />
-                    </div>
-                    <p className="text-sm font-semibold text-gray-600" style={{ fontFamily: "DM Sans, sans-serif" }}>Select a channel</p>
-                    <p className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>Choose WhatsApp, SMS, or Website from the sidebar to view conversations.</p>
-                  </div>
-                ) : filteredConversations.length === 0 ? (
-                  <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
-                ) : filteredConversations.map(conv => {
-                  const isSelected = conv.id === selectedConversationId;
-                  const hasHuman = !!conv.assignedPersonId;
-                  const isBotActive = !hasHuman && conv.botStatus === "active";
-                  const isBotPausedOrHuman = hasHuman || conv.botStatus === "paused";
-                  const statusDotColor = isBotActive ? "bg-blue-500" : isBotPausedOrHuman ? "bg-amber-500" : "bg-gray-400";
-                  const statusDotTitle = isBotActive ? "Bot: Active" : isBotPausedOrHuman ? "Bot Paused / Assigned" : "Bot Off";
-                  const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find(e => e.id === conv.assignedPersonId) : null;
-
-                  return (
-                    <div key={conv.id} onClick={() => setSelectedConversationId(conv.id)}
-                      className={`flex items-start gap-3 p-4 cursor-pointer hover:bg-blue-50/30 transition-all border-l-2 border-b border-gray-100 ${isSelected ? "bg-blue-50 border-l-blue-600" : "border-l-transparent bg-white"}`}>
-                      <div className="relative flex-shrink-0">
-                        <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"}`}>
-                          {getInitials(conv.contactName)}
-                        </div>
-                        <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm" style={{ width: '18px', height: '18px' }}>
-                          {conv.channel === "whatsapp" ? <MessageCircle className="w-3 h-3 text-[#25D366]" /> :
-                           conv.channel === "sms" ? <MessageSquare className="w-3 h-3 text-blue-600" /> :
-                           <Globe className="w-3 h-3 text-purple-600" />}
-                        </span>
+                <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
+                  {/* Header */}
+                  <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button type="button" onClick={() => setNavCollapsed(v => !v)}
+                          className="p-1 hover:bg-gray-100 rounded text-gray-400 shrink-0"
+                          title={navCollapsed ? "Show sidebar" : "Hide sidebar"}>
+                          <PanelLeft className="w-4 h-4" />
+                        </button>
+                        <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : "All chats"}
+                        </h3>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColor}`} title={statusDotTitle} />
-                          <h4 className={`text-sm font-semibold truncate ${isSelected ? "text-blue-700" : "text-gray-900"}`} style={{ fontFamily: "DM Sans, sans-serif" }}>{conv.contactName}</h4>
-                          {assignedPerson && (
-                            <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
-                              👤 {getInitials(assignedPerson.name)}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-gray-400 flex-shrink-0 ml-auto" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.timestamp}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.lastMessage}</p>
-                        {conv.status === "resolved" && (
-                          <span className="inline-block mt-1 text-[9px] font-semibold text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-full">Resolved</span>
-                        )}
-                      </div>
-                      {conv.unreadCount > 0 && (
-                        <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{conv.unreadCount}</span>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Right Pane — Chat Window */}
-            <div className="flex-1 flex flex-col h-full bg-white">
-              {activeConversation ? (
-                <>
-                  {/* Chat Header */}
-                  <div className="px-6 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
-                        {getInitials(activeConversation.contactName)}
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                            !!activeConversation.assignedPersonId ? "bg-amber-500" :
-                            activeConversation.botStatus === "active" ? "bg-blue-500" :
-                            activeConversation.botStatus === "paused" ? "bg-amber-500" :
-                            "bg-gray-400"
-                          }`} title={`Status dot`} />
-                          <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
-                          {activeConversation.assignedPersonId && (() => {
-                            const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                            return emp ? (
-                              <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-2 py-0.5 rounded-full">
-                                Assigned to {emp.name}
-                              </span>
-                            ) : null;
-                          })()}
-                        </div>
-                        <p className="text-xs text-gray-400 font-mono">{activeConversation.phoneNumber}</p>
-                      </div>
-                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${CHANNEL_CLASSES[activeConversation.channel]}`}>
-                        {CHANNEL_LABELS[activeConversation.channel]}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Unified Read-only status chip */}
-                      {(() => {
-                        const isHumanAssigned = !!activeConversation.assignedPersonId;
-                        const isBotActive = !isHumanAssigned && activeConversation.botStatus === "active";
-                        if (isBotActive) {
-                          return (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <Bot className="w-3.5 h-3.5 text-blue-600" />
-                              <span>🤖 Bot Active</span>
-                            </div>
-                          );
-                        } else if (isHumanAssigned) {
-                          const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                          const name = emp ? emp.name : "Agent";
-                          return (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-                              <span>👤 Bot Paused / Assigned to {name}</span>
-                            </div>
-                          );
-                        } else {
-                          return (
-                            <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
-                              <span>⚪ Unassigned (Bot Off)</span>
-                            </div>
-                          );
-                        }
-                      })()}
-                    </div>
-                  </div>
-
-                  {/* Hand-off / Paused Bot warning banner */}
-                  {activeConversation.assignedPersonId && (() => {
-                    const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                    const name = emp ? emp.name : "Agent";
-                    return (
-                      <div className="bg-amber-50 border-b border-amber-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-xs text-amber-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        <div className="flex items-center gap-1.5 font-medium">
-                          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                          <span>Bot is paused. Conversation is assigned to <strong>{name}</strong>.</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "active", assignedPersonId: "" } : c));
-                            toast.success("Bot resumed and human assignment cleared");
-                          }}
-                          className="text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-md transition-colors"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          Resume Bot
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button type="button" onClick={() => setShowInlineSearch(v => !v)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
+                          <Search className="w-4 h-4" />
                         </button>
                       </div>
-                    );
-                  })()}
+                    </div>
+                    <p className="text-[11px] text-gray-400 pl-7" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {filteredConversations.length} Chats · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
+                    </p>
+                    {showInlineSearch && (
+                      <div className="relative pt-1">
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        <input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)} autoFocus
+                          placeholder="Search conversations..."
+                          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                          style={{ fontFamily: "Outfit, sans-serif" }} />
+                      </div>
+                    )}
+                    {/* View filter pills */}
+                    <div className="flex gap-1.5 pt-1">
+                      {(["all", "open", "unread", "resolved"] as const).map(v => (
+                        <button key={v} onClick={() => setViewFilter(v)}
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                            }`}
+                          style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : "Resolved"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Conversation List */}
+                  <div className="flex-1 overflow-y-auto">
+                    {channelFilter === null ? (
+                      <div className="p-10 flex flex-col items-center text-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                          <MessageCircle className="w-6 h-6 text-gray-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-gray-600" style={{ fontFamily: "DM Sans, sans-serif" }}>Select a channel</p>
+                        <p className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>Choose WhatsApp, SMS, or Website from the sidebar to view conversations.</p>
+                      </div>
+                    ) : filteredConversations.length === 0 ? (
+                      <div className="p-8 text-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>No conversations found.</div>
+                    ) : filteredConversations.map(conv => {
+                      const isSelected = conv.id === selectedConversationId;
+                      const hasHuman = !!conv.assignedPersonId;
+                      const isBotActive = !hasHuman && conv.botStatus === "active";
+                      const isBotPausedOrHuman = hasHuman || conv.botStatus === "paused";
+                      const statusDotColor = isBotActive ? "bg-blue-500" : isBotPausedOrHuman ? "bg-amber-500" : "bg-gray-400";
+                      const statusDotTitle = isBotActive ? "Bot: Active" : isBotPausedOrHuman ? "Bot Paused / Assigned" : "Bot Off";
+                      const assignedPerson = conv.assignedPersonId ? AVAILABLE_EMPLOYEES.find(e => e.id === conv.assignedPersonId) : null;
 
-                  {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{ backgroundColor: '#F1F5F9' }}>
-                    {activeConversation.messages.map(msg => {
-                      const isMe = msg.sender === "me";
                       return (
-                        <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                          <div className="max-w-[68%] space-y-1">
-                            <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? "bg-blue-600 text-white rounded-tr-none" : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"}`}
-                              style={{ fontFamily: "Outfit, sans-serif" }}>
-                              <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                        <div key={conv.id} onClick={() => setSelectedConversationId(conv.id)}
+                          className={`flex items-start gap-3 p-4 cursor-pointer hover:bg-blue-50/30 transition-all border-l-2 border-b border-gray-100 ${isSelected ? "bg-blue-50 border-l-blue-600" : "border-l-transparent bg-white"}`}>
+                          <div className="relative flex-shrink-0">
+                            <div className={`w-10 h-10 rounded-full font-bold flex items-center justify-center text-sm ${isSelected ? "bg-blue-600 text-white" : "bg-blue-100 text-blue-700"}`}>
+                              {getInitials(conv.contactName)}
                             </div>
-                            {msg.buttons && msg.buttons.length > 0 && (
-                              <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5">
-                                {msg.buttons.map((btn, bi) => (
-                                  <div
-                                    key={bi}
-                                    className={`px-3 py-2 text-xs font-semibold text-center text-blue-600 ${
-                                      bi > 0 ? "border-t border-gray-100" : ""
-                                    }`}
-                                  >
-                                    {btn.label}{" "}
-                                    {btn.actionType && btn.actionType !== "quick_reply" && (
-                                      <span className="text-[9px] text-gray-400 ml-1">↗</span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <div className={`flex items-center gap-1 text-[10px] text-gray-400 px-1 ${isMe ? "justify-end" : "justify-start"}`}>
-                              <span>{msg.timestamp}</span>
-                              {isMe && (msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3 text-gray-400" />)}
-                            </div>
+                            <span className="absolute -bottom-1 -right-1 w-4.5 h-4.5 rounded-full bg-white border border-gray-100 flex items-center justify-center shadow-sm" style={{ width: '18px', height: '18px' }}>
+                              {conv.channel === "whatsapp" ? <MessageCircle className="w-3 h-3 text-[#25D366]" /> :
+                                conv.channel === "sms" ? <MessageSquare className="w-3 h-3 text-blue-600" /> :
+                                  <Globe className="w-3 h-3 text-purple-600" />}
+                            </span>
                           </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-0.5">
+                              <span className={`w-2 h-2 rounded-full shrink-0 ${statusDotColor}`} title={statusDotTitle} />
+                              <h4 className={`text-sm font-semibold truncate ${isSelected ? "text-blue-700" : "text-gray-900"}`} style={{ fontFamily: "DM Sans, sans-serif" }}>{conv.contactName}</h4>
+                              {assignedPerson && (
+                                <span className="text-[9px] text-gray-500 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+                                  👤 {getInitials(assignedPerson.name)}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-gray-400 flex-shrink-0 ml-auto" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.timestamp}</span>
+                            </div>
+                            <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{conv.lastMessage}</p>
+                            {conv.status === "resolved" && (
+                              <span className="inline-block mt-1 text-[9px] font-semibold text-green-600 bg-green-50 border border-green-100 px-1.5 py-0.5 rounded-full">Resolved</span>
+                            )}
+                          </div>
+                          {conv.unreadCount > 0 && (
+                            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{conv.unreadCount}</span>
+                          )}
                         </div>
                       );
                     })}
                   </div>
-
-                  {/* Composer */}
-                  <div className="p-3 border-t border-gray-200 bg-white">
-                    <div className="flex gap-2 items-center">
-                      <button type="button" onClick={() => { const i = document.createElement("input"); i.type = "file"; i.click(); }}
-                        className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-all flex-shrink-0"
-                        title="Attach file">
-                        <Paperclip className="w-4 h-4" />
-                      </button>
-
-                      {/* Gear Menu Trigger and Upward Dropdowns */}
-                      <div className="relative flex-shrink-0" ref={gearMenuRef}>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowComposerGearMenu((v) => !v);
-                            setShowUseTemplateDropdown(false);
-                          }}
-                          className={`p-2 rounded-lg transition-all flex-shrink-0 ${
-                            showComposerGearMenu
-                              ? "bg-gray-200 text-gray-800"
-                              : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                          }`}
-                          title="Conversation Actions"
-                        >
-                          <Settings className="w-4 h-4" />
-                        </button>
-
-                        {/* Upward-expanding Gear Menu */}
-                        {showComposerGearMenu && (
-                          <div className="absolute bottom-full mb-2 left-0 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 text-xs font-medium text-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                            {assignAgentMenuOpen ? (
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 font-bold text-gray-900 bg-gray-50 text-[10px] uppercase tracking-wider">
-                                  <button
-                                    type="button"
-                                    onClick={() => setAssignAgentMenuOpen(false)}
-                                    className="p-1 -ml-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors text-xs font-bold font-mono"
-                                  >
-                                    &lt;
-                                  </button>
-                                  <span>Assign Responsible</span>
-                                </div>
-                                <div className="max-h-56 overflow-y-auto py-1">
-                                  {AVAILABLE_EMPLOYEES.map(emp => (
-                                    <button
-                                      key={emp.id}
-                                      type="button"
-                                      onClick={() => {
-                                        setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "paused", assignedPersonId: emp.id } : c));
-                                        toast.success(`Assigned to ${emp.name}. Bot paused.`);
-                                        setShowComposerGearMenu(false);
-                                        setAssignAgentMenuOpen(false);
-                                      }}
-                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors ${
-                                        activeConversation.assignedPersonId === emp.id ? "bg-amber-50 text-amber-900 font-semibold" : "text-gray-700"
-                                      }`}
-                                    >
-                                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConversation.assignedPersonId === emp.id ? "bg-amber-500" : "bg-gray-300"}`} />
-                                      <span>{emp.name}</span>
-                                    </button>
-                                  ))}
-                                  {activeConversation.assignedPersonId && (
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, assignedPersonId: "" } : c));
-                                        toast.success(`Cleared assignment`);
-                                        setShowComposerGearMenu(false);
-                                        setAssignAgentMenuOpen(false);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left font-semibold border-t border-gray-100 transition-colors"
-                                    >
-                                      <span>Clear Assignment</span>
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ) : (
-                              <>
-                                {/* 1. Templates */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowComposerGearMenu(false);
-                                    setShowUseTemplateDropdown(true);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                >
-                                  <FileText className="w-4 h-4 text-amber-600 shrink-0" />
-                                  <span>Templates</span>
-                                </button>
-
-                                {/* 2. Assign Chatbot */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowComposerGearMenu(false);
-                                    setShowAssignBotModal(true);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                >
-                                  <Bot className="w-4 h-4 text-blue-600 shrink-0" />
-                                  <span>Assign Chatbot</span>
-                                </button>
-
-                                {/* 3. Enroll in Campaign */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowComposerGearMenu(false);
-                                    setShowEnrollCampaignModal(true);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                >
-                                  <Zap className="w-4 h-4 text-purple-600 shrink-0" />
-                                  <span>Enroll in Campaign</span>
-                                </button>
-
-                                {/* 4. Assign Responsible */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setAssignAgentMenuOpen(true);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                >
-                                  <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                                  <span>Assign Responsible</span>
-                                </button>
-
-                                <div className="my-1 border-t border-gray-100" />
-
-                                {/* 5. Take Over from Bot */}
-                                {(() => {
-                                  const isBotActive =
-                                    activeConversation.assignedBotId &&
-                                    (activeConversation.botStatus ?? "off") === "active" &&
-                                    !activeConversation.assignedPersonId;
-                                  return (
-                                    <button
-                                      type="button"
-                                      disabled={!isBotActive}
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        setConversations((prev) =>
-                                          prev.map((c) =>
-                                            c.id === selectedConversationId
-                                              ? { ...c, botStatus: "paused", assignedPersonId: "1" }
-                                              : c
-                                          )
-                                        );
-                                        toast.success("Bot paused. You took over the conversation.");
-                                      }}
-                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                        isBotActive
-                                          ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
-                                          : "opacity-40 cursor-not-allowed text-gray-400"
-                                      }`}
-                                    >
-                                      <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                                      <span>Take Over from Bot</span>
-                                    </button>
-                                  );
-                                })()}
-
-                                {/* 6. Test (DEV-only) */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowComposerGearMenu(false);
-                                    setShowTestContactDrawer(true);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
-                                >
-                                  <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
-                                  <span>Test</span>
-                                  <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
-                                </button>
-
-                                {/* 7. Pause / Resume Bot */}
-                                {(activeConversation.botStatus ?? "off") !== "off" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setShowComposerGearMenu(false);
-                                      handleToggleBotStatus();
-                                    }}
-                                    className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                      (activeConversation.botStatus ?? "off") === "paused"
-                                        ? "hover:bg-amber-50 text-amber-700 font-semibold"
-                                        : "hover:bg-gray-50 text-gray-700"
-                                    }`}
-                                  >
-                                    {(activeConversation.botStatus ?? "off") === "active" ? (
-                                      <>
-                                        <Pause className="w-4 h-4 text-amber-600 shrink-0" />
-                                        <span>Pause Bot</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Play className="w-4 h-4 text-emerald-600 shrink-0" />
-                                        <span>Resume Bot</span>
-                                      </>
-                                    )}
-                                  </button>
-                                )}
-
-                                {/* 8. Mark Resolved / Re-open */}
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setShowComposerGearMenu(false);
-                                    handleMarkResolved();
-                                  }}
-                                  className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${
-                                    activeConversation.status === "resolved"
-                                      ? "hover:bg-green-50 text-green-700 font-semibold"
-                                      : "hover:bg-gray-50 text-gray-700"
-                                  }`}
-                                >
-                                  <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                                  <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Upward-expanding Template Picker Menu */}
-                        {showUseTemplateDropdown && (
-                          <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-                            <div className="p-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
-                              <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Select Template</span>
-                              <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
-                            </div>
-                            <div className="max-h-56 overflow-y-auto py-1">
-                              {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").length === 0 ? (
-                                <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first, or clone one from the Template Library.</div>
-                              ) : (
-                                globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((t) => (
-                                  <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
-                                    <button
-                                      onClick={() => {
-                                        setComposerText(t.bodyText);
-                                        setShowUseTemplateDropdown(false);
-                                      }}
-                                      className="flex-1 text-left text-gray-700 font-medium truncate mr-2 group-hover:text-blue-600"
-                                      title="Insert text into composer"
-                                    >
-                                      {t.name}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        handleSendTemplateDirectly(t);
-                                        setShowUseTemplateDropdown(false);
-                                      }}
-                                      className="px-2 py-1 text-[10px] font-bold bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shrink-0"
-                                      title="Send template directly with buttons"
-                                    >
-                                      Send
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="relative flex-1">
-                        <input type="text" value={composerText} onChange={e => setComposerText(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                          placeholder="Type a message..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          style={{ fontFamily: "Outfit, sans-serif" }} />
-                      </div>
-
-                      <button type="button" onClick={handleSendMessage}
-                        className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
-                      >
-                        <Send className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="flex-1 flex items-center justify-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Select a conversation to start chatting
                 </div>
-              )}
-            </div>
-          </div>
-        )}
 
-
-        {/* ══════════════════════════════════════════════════════
-            TAB: TEMPLATE BUILDER
-        ══════════════════════════════════════════════════════ */}
-        {activeTab === "templates" && templatesView === "table" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Templates</h2>
-                <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-full border border-blue-100">
-                  {globalTemplates.length} {globalTemplates.length === 1 ? "template" : "templates"}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
-                  <LibraryBig className="w-4 h-4" /> Browse Library
-                </Button>
-                <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                  <Plus className="w-4 h-4" /> Create Template
-                </Button>
-              </div>
-            </div>
-
-            {/* Templates Table — always rendered */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead style={{ backgroundColor: "#1F2937" }}>
-                  <tr>
-                    {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
-                      <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {globalTemplates.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-16 text-center bg-white">
-                        <FileText className="w-8 h-8 mx-auto text-blue-300 mb-3" />
-                        <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
-                        <p className="text-xs text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
-                        <div className="flex items-center justify-center gap-3">
-                          <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
-                            <LibraryBig className="w-4 h-4" /> Browse Template Library
-                          </Button>
-                          <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
-                            <Plus className="w-4 h-4" /> Create Your First Template
-                          </Button>
+                {/* Right Pane — Chat Window */}
+                <div className="flex-1 flex flex-col h-full bg-white">
+                  {activeConversation ? (
+                    <>
+                      {/* Chat Header */}
+                      <div className="px-6 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
+                            {getInitials(activeConversation.contactName)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${!!activeConversation.assignedPersonId ? "bg-amber-500" :
+                                  activeConversation.botStatus === "active" ? "bg-blue-500" :
+                                    activeConversation.botStatus === "paused" ? "bg-amber-500" :
+                                      "bg-gray-400"
+                                }`} title={`Status dot`} />
+                              <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
+                              {activeConversation.assignedPersonId && (() => {
+                                const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                                return emp ? (
+                                  <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-2 py-0.5 rounded-full">
+                                    Assigned to {emp.name}
+                                  </span>
+                                ) : null;
+                              })()}
+                            </div>
+                            <p className="text-xs text-gray-400 font-mono">{activeConversation.phoneNumber}</p>
+                          </div>
+                          <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${CHANNEL_CLASSES[activeConversation.channel]}`}>
+                            {CHANNEL_LABELS[activeConversation.channel]}
+                          </span>
                         </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    globalTemplates.map(tpl => (
-                      <tr key={tpl.id} className="hover:bg-blue-50/30 transition-colors">
-                        <td className="px-5 py-4">
-                          <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                            {tpl.name}
-                          </button>
-                        </td>
-                        <td className="px-4 py-4"><span className="text-xs font-mono text-gray-500">{tpl.identifier}</span></td>
-                        <td className="px-4 py-4"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">{tpl.category}</span></td>
-                        {/* STATUS column */}
-                        <td className="px-4 py-4">
-                          {(!tpl.approvalStatus || tpl.approvalStatus === "pending") && (
-                            <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
-                          )}
-                          {tpl.approvalStatus === "approved" && (
-                            <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
-                          )}
-                          {tpl.approvalStatus === "denied" && (
-                            <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-4"><span className="text-xs text-gray-500">{tpl.language}</span></td>
-                        <td className="px-5 py-4">
-                          <div className="flex justify-end">
-                            <button
-                              ref={el => { templateTriggerRefs.current[tpl.id] = el; }}
-                              onClick={() => openMenuTemplateId === tpl.id ? setOpenMenuTemplateId(null) : openTemplateMenu(tpl.id)}
-                              className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-          {activeTab === "templates" && templatesView === "builder" && (() => {
-            // ── Drag-and-drop state for media header upload (scoped to builder render) ──
-            const mediaTypes = ["image", "video", "document"] as const;
-            const acceptForHeaderType =
-              templateForm.headerType === "image" ? ".png,.jpg,.jpeg"
-              : templateForm.headerType === "video" ? ".mp4"
-              : ".pdf,.doc,.docx";
-
-            const handleFileDrop = (file: File) => {
-              const objectUrl = URL.createObjectURL(file);
-              setTemplateForm(prev => ({ ...prev, headerMediaUrl: objectUrl, headerFileName: file.name }));
-            };
-
-            return (
-          <div className="flex gap-6 items-start">
-            <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-3">
-                <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingTemplateId ? "Edit Template" : "New WhatsApp Template"}</h3>
-                <button type="button" onClick={() => setTemplatesView("table")}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Name *</label>
-                  <input type="text" required value={templateForm.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Appointment Reminder"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Identifier *</label>
-                  <input type="text" required value={templateForm.identifier} onChange={e => setTemplateForm({ ...templateForm, identifier: e.target.value })} placeholder="appointment_reminder"
-                    className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Category *</label>
-                  <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Utility">Utility</SelectItem><SelectItem value="Authentication">Authentication</SelectItem></SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Language *</label>
-                  <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
-                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                    <SelectContent>{LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              {/* ── HEADER (moved above Body) ── */}
-              <div className="border border-gray-100 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                  <label className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Header <span className="text-xs text-gray-400 font-normal">(Optional)</span>
-                  </label>
-                  <div className="flex gap-1 text-[11px]">
-                    {(["none", "text", "image", "video", "document"] as const).map(ht => (
-                      <button
-                        key={ht}
-                        type="button"
-                        onClick={() => setTemplateForm(prev => ({ ...prev, headerType: ht, headerText: ht === "text" ? prev.headerText || "" : "", headerMediaUrl: ht !== "text" && ht !== "none" ? "" : "", headerFileName: "" }))}
-                        className={`px-2 py-0.5 rounded-full border capitalize transition-colors ${templateForm.headerType === ht ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300"}`}
-                      >
-                        {ht}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {templateForm.headerType && templateForm.headerType !== "none" && (
-                  <div className="p-4 space-y-3 bg-white">
-                    {templateForm.headerType === "text" ? (
-                      <div>
-                        <label className="text-xs font-semibold text-gray-600 mb-1 block">Header Text</label>
-                        <input
-                          type="text"
-                          value={templateForm.headerText || ""}
-                          onChange={e => setTemplateForm(prev => ({ ...prev, headerText: e.target.value }))}
-                          placeholder="Bold headline text..."
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          style={{ fontFamily: "Outfit, sans-serif" }}
-                        />
+                        <div className="flex items-center gap-2">
+                          {/* Unified Read-only status chip */}
+                          {(() => {
+                            const isHumanAssigned = !!activeConversation.assignedPersonId;
+                            const isBotActive = !isHumanAssigned && activeConversation.botStatus === "active";
+                            if (isBotActive) {
+                              return (
+                                <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <Bot className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>🤖 Bot Active</span>
+                                </div>
+                              );
+                            } else if (isHumanAssigned) {
+                              const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                              const name = emp ? emp.name : "Agent";
+                              return (
+                                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                                  <span>👤 Bot Paused / Assigned to {name}</span>
+                                </div>
+                              );
+                            } else {
+                              return (
+                                <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
+                                  <span>⚪ Unassigned (Bot Off)</span>
+                                </div>
+                              );
+                            }
+                          })()}
+                        </div>
                       </div>
-                    ) : (
-                      <div className="space-y-2">
-                        {/* File uploaded — show chip */}
-                        {templateForm.headerMediaUrl ? (
-                          <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
-                            <FileText className="w-5 h-5 text-blue-500 shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-xs font-semibold text-blue-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {templateForm.headerFileName || "Uploaded file"}
-                              </p>
-                              <p className="text-[10px] text-blue-500" style={{ fontFamily: "Outfit, sans-serif" }}>Stored as local object URL</p>
+
+                      {/* Hand-off / Paused Bot warning banner */}
+                      {activeConversation.assignedPersonId && (() => {
+                        const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
+                        const name = emp ? emp.name : "Agent";
+                        return (
+                          <div className="bg-amber-50 border-b border-amber-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-xs text-amber-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <div className="flex items-center gap-1.5 font-medium">
+                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                              <span>Bot is paused. Conversation is assigned to <strong>{name}</strong>.</span>
                             </div>
                             <button
                               type="button"
-                              onClick={() => setTemplateForm(prev => ({ ...prev, headerMediaUrl: "", headerFileName: "" }))}
-                              className="p-1 text-blue-400 hover:text-red-500 transition-colors"
+                              onClick={() => {
+                                setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "active", assignedPersonId: "" } : c));
+                                toast.success("Bot resumed and human assignment cleared");
+                              }}
+                              className="text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-md transition-colors"
+                              style={{ fontFamily: "DM Sans, sans-serif" }}
                             >
-                              <Trash2 className="w-4 h-4" />
+                              Resume Bot
                             </button>
                           </div>
-                        ) : (
-                          /* Drag-and-drop upload zone */
-                          <div
-                            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
-                            onDragLeave={e => { e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50'); }}
-                            onDrop={e => {
-                              e.preventDefault();
-                              e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
-                              const file = e.dataTransfer.files[0];
-                              if (file) handleFileDrop(file);
-                            }}
-                            className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center transition-all hover:border-blue-400"
-                          >
-                            <input
-                              type="file"
-                              accept={acceptForHeaderType}
-                              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f); }}
-                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                            />
-                            <div className="flex flex-col items-center gap-2 pointer-events-none">
-                              <Upload className="w-8 h-8 text-gray-400" />
-                              <p className="text-sm font-medium text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                <span className="text-blue-600">Click to upload</span> or drag and drop
-                              </p>
-                              <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {templateForm.headerType === "image" ? "PNG, JPG up to 5MB" : templateForm.headerType === "video" ? "MP4 up to 16MB" : "PDF up to 100MB"}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+                        );
+                      })()}
 
-              {/* ── Body Text ── */}
-              <div className="space-y-2">
-                <div className="flex justify-between items-center">
-                  <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
-                  <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={val => setTemplateForm(prev => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
-                </div>
-                <textarea ref={textareaRef} required value={templateForm.bodyText} onChange={e => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
-                  placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}." rows={4}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" style={{ fontFamily: "Outfit, sans-serif" }} />
-
-                {/* ── Variable Field Mapping panel ── */}
-                {(() => {
-                  const tokens = [...(templateForm.bodyText.matchAll(/\{\{([^}]+)\}\}/g))].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i);
-                  if (tokens.length === 0) return null;
-                  return (
-                    <div className="border border-blue-100 rounded-xl overflow-hidden mt-2">
-                      <button
-                        type="button"
-                        onClick={() => setShowVarMapping(v => !v)}
-                        className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-50 hover:bg-blue-100/60 transition-colors text-xs font-semibold text-blue-700"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        <span>📌 Field Mapping — {tokens.length} variable{tokens.length !== 1 ? "s" : ""} detected</span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${showVarMapping ? "rotate-180" : ""}`} />
-                      </button>
-                      {showVarMapping && (
-                        <div className="p-3 space-y-3 bg-white">
-                          <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            Map each <code className="bg-gray-100 px-1 rounded">&#123;&#123;variable&#125;&#125;</code> to a static value, a MantraAssist field, or live availability.
-                          </p>
-                          {tokens.map(token => {
-                            const mapping = (templateForm.variableMappings || {})[token] || { source: "static" as const, staticValue: "", fieldKey: "" };
-                            const setMapping = (patch: Partial<typeof mapping>) =>
-                              setTemplateForm(prev => ({
-                                ...prev,
-                                variableMappings: {
-                                  ...(prev.variableMappings || {}),
-                                  [token]: { ...mapping, ...patch }
-                                }
-                              }));
-                            return (
-                              <div key={token} className="p-3 border border-gray-100 rounded-lg bg-gray-50 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <code className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">&#123;&#123;{token}&#125;&#125;</code>
-                                  <div className="flex gap-1 ml-auto">
-                                    {(["static", "field", "availability"] as const).map(src => (
-                                      <button
-                                        key={src}
-                                        type="button"
-                                        onClick={() => setMapping({ source: src })}
-                                        className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors capitalize ${
-                                          mapping.source === src
-                                            ? "bg-blue-600 text-white border-blue-600"
-                                            : "bg-white text-gray-500 border-gray-200 hover:border-blue-400"
-                                        }`}
+                      {/* Messages */}
+                      <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{ backgroundColor: '#F1F5F9' }}>
+                        {activeConversation.messages.map(msg => {
+                          const isMe = msg.sender === "me";
+                          return (
+                            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
+                              <div className="max-w-[68%] space-y-1">
+                                <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? "bg-blue-600 text-white rounded-tr-none" : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"}`}
+                                  style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                </div>
+                                {msg.buttons && msg.buttons.length > 0 && (
+                                  <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5">
+                                    {msg.buttons.map((btn, bi) => (
+                                      <div
+                                        key={bi}
+                                        className={`px-3 py-2 text-xs font-semibold text-center text-blue-600 ${bi > 0 ? "border-t border-gray-100" : ""
+                                          }`}
                                       >
-                                        {src}
-                                      </button>
+                                        {btn.label}{" "}
+                                        {btn.actionType && btn.actionType !== "quick_reply" && (
+                                          <span className="text-[9px] text-gray-400 ml-1">↗</span>
+                                        )}
+                                      </div>
                                     ))}
                                   </div>
+                                )}
+                                <div className={`flex items-center gap-1 text-[10px] text-gray-400 px-1 ${isMe ? "justify-end" : "justify-start"}`}>
+                                  <span>{msg.timestamp}</span>
+                                  {isMe && (msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3 text-gray-400" />)}
                                 </div>
-                                {mapping.source === "static" && (
-                                  <input
-                                    type="text"
-                                    value={mapping.staticValue || ""}
-                                    onChange={e => setMapping({ staticValue: e.target.value })}
-                                    placeholder="Static replacement value"
-                                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  />
-                                )}
-                                {mapping.source === "field" && (
-                                  <select
-                                    value={mapping.fieldKey || ""}
-                                    onChange={e => setMapping({ fieldKey: e.target.value })}
-                                    className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                  >
-                                    <option value="">Select a MantraAssist field…</option>
-                                    <optgroup label="Client">
-                                      <option value="client.name">Client Name</option>
-                                      <option value="client.email">Client Email</option>
-                                      <option value="client.phone">Client Phone</option>
-                                    </optgroup>
-                                    <optgroup label="Appointment">
-                                      <option value="appointment.date">Appointment Date</option>
-                                      <option value="appointment.time">Appointment Time</option>
-                                      <option value="appointment.service">Service Name</option>
-                                    </optgroup>
-                                    <optgroup label="Team Member">
-                                      <option value="teamMember.name">Provider Name</option>
-                                      <option value="teamMember.phone">Provider Phone</option>
-                                    </optgroup>
-                                  </select>
-                                )}
-                                {mapping.source === "availability" && (
-                                  <p className="text-[11px] text-gray-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                    Will resolve to the contact's next available slot at send time.
-                                  </p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Composer */}
+                      <div className="p-3 border-t border-gray-200 bg-white">
+                        <div className="flex gap-2 items-center">
+                          <button type="button" onClick={() => { const i = document.createElement("input"); i.type = "file"; i.click(); }}
+                            className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-all flex-shrink-0"
+                            title="Attach file">
+                            <Paperclip className="w-4 h-4" />
+                          </button>
+
+                          {/* Gear Menu Trigger and Upward Dropdowns */}
+                          <div className="relative flex-shrink-0" ref={gearMenuRef}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowComposerGearMenu((v) => !v);
+                                setShowUseTemplateDropdown(false);
+                              }}
+                              className={`p-2 rounded-lg transition-all flex-shrink-0 ${showComposerGearMenu
+                                  ? "bg-gray-200 text-gray-800"
+                                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                                }`}
+                              title="Conversation Actions"
+                            >
+                              <Settings className="w-4 h-4" />
+                            </button>
+
+                            {/* Upward-expanding Gear Menu */}
+                            {showComposerGearMenu && (
+                              <div className="absolute bottom-full mb-2 left-0 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 text-xs font-medium text-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                                {assignAgentMenuOpen ? (
+                                  <div className="flex flex-col">
+                                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 font-bold text-gray-900 bg-gray-50 text-[10px] uppercase tracking-wider">
+                                      <button
+                                        type="button"
+                                        onClick={() => setAssignAgentMenuOpen(false)}
+                                        className="p-1 -ml-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors text-xs font-bold font-mono"
+                                      >
+                                        &lt;
+                                      </button>
+                                      <span>Assign Responsible</span>
+                                    </div>
+                                    <div className="max-h-56 overflow-y-auto py-1">
+                                      {AVAILABLE_EMPLOYEES.map(emp => (
+                                        <button
+                                          key={emp.id}
+                                          type="button"
+                                          onClick={() => {
+                                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "paused", assignedPersonId: emp.id } : c));
+                                            toast.success(`Assigned to ${emp.name}. Bot paused.`);
+                                            setShowComposerGearMenu(false);
+                                            setAssignAgentMenuOpen(false);
+                                          }}
+                                          className={`w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors ${activeConversation.assignedPersonId === emp.id ? "bg-amber-50 text-amber-900 font-semibold" : "text-gray-700"
+                                            }`}
+                                        >
+                                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConversation.assignedPersonId === emp.id ? "bg-amber-500" : "bg-gray-300"}`} />
+                                          <span>{emp.name}</span>
+                                        </button>
+                                      ))}
+                                      {activeConversation.assignedPersonId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, assignedPersonId: "" } : c));
+                                            toast.success(`Cleared assignment`);
+                                            setShowComposerGearMenu(false);
+                                            setAssignAgentMenuOpen(false);
+                                          }}
+                                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left font-semibold border-t border-gray-100 transition-colors"
+                                        >
+                                          <span>Clear Assignment</span>
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <>
+                                    {/* 1. Templates */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        setShowUseTemplateDropdown(true);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                    >
+                                      <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                                      <span>Templates</span>
+                                    </button>
+
+                                    {/* 2. Assign Chatbot */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        setShowAssignBotModal(true);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                    >
+                                      <Bot className="w-4 h-4 text-blue-600 shrink-0" />
+                                      <span>Assign Chatbot</span>
+                                    </button>
+
+                                    {/* 3. Enroll in Campaign */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        setShowEnrollCampaignModal(true);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                    >
+                                      <Zap className="w-4 h-4 text-purple-600 shrink-0" />
+                                      <span>Enroll in Campaign</span>
+                                    </button>
+
+                                    {/* 4. Assign Responsible */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setAssignAgentMenuOpen(true);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                    >
+                                      <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span>Assign Responsible</span>
+                                    </button>
+
+                                    <div className="my-1 border-t border-gray-100" />
+
+                                    {/* 5. Take Over from Bot */}
+                                    {(() => {
+                                      const isBotActive =
+                                        activeConversation.assignedBotId &&
+                                        (activeConversation.botStatus ?? "off") === "active" &&
+                                        !activeConversation.assignedPersonId;
+                                      return (
+                                        <button
+                                          type="button"
+                                          disabled={!isBotActive}
+                                          onClick={() => {
+                                            setShowComposerGearMenu(false);
+                                            setConversations((prev) =>
+                                              prev.map((c) =>
+                                                c.id === selectedConversationId
+                                                  ? { ...c, botStatus: "paused", assignedPersonId: "1" }
+                                                  : c
+                                              )
+                                            );
+                                            toast.success("Bot paused. You took over the conversation.");
+                                          }}
+                                          className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${isBotActive
+                                              ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                              : "opacity-40 cursor-not-allowed text-gray-400"
+                                            }`}
+                                        >
+                                          <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                                          <span>Take Over from Bot</span>
+                                        </button>
+                                      );
+                                    })()}
+
+                                    {/* 6. Test (DEV-only) */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        setShowTestContactDrawer(true);
+                                      }}
+                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
+                                    >
+                                      <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
+                                      <span>Test</span>
+                                      <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
+                                    </button>
+
+                                    {/* 7. Pause / Resume Bot */}
+                                    {(activeConversation.botStatus ?? "off") !== "off" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowComposerGearMenu(false);
+                                          handleToggleBotStatus();
+                                        }}
+                                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${(activeConversation.botStatus ?? "off") === "paused"
+                                            ? "hover:bg-amber-50 text-amber-700 font-semibold"
+                                            : "hover:bg-gray-50 text-gray-700"
+                                          }`}
+                                      >
+                                        {(activeConversation.botStatus ?? "off") === "active" ? (
+                                          <>
+                                            <Pause className="w-4 h-4 text-amber-600 shrink-0" />
+                                            <span>Pause Bot</span>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <Play className="w-4 h-4 text-emerald-600 shrink-0" />
+                                            <span>Resume Bot</span>
+                                          </>
+                                        )}
+                                      </button>
+                                    )}
+
+                                    {/* 8. Mark Resolved / Re-open */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setShowComposerGearMenu(false);
+                                        handleMarkResolved();
+                                      }}
+                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${activeConversation.status === "resolved"
+                                          ? "hover:bg-green-50 text-green-700 font-semibold"
+                                          : "hover:bg-gray-50 text-gray-700"
+                                        }`}
+                                    >
+                                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                                      <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
+                                    </button>
+                                  </>
                                 )}
                               </div>
-                            );
-                          })}
+                            )}
+
+                            {/* Upward-expanding Template Picker Menu */}
+                            {showUseTemplateDropdown && (
+                              <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
+                                <div className="p-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
+                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Select Template</span>
+                                  <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
+                                </div>
+                                <div className="max-h-56 overflow-y-auto py-1">
+                                  {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").length === 0 ? (
+                                    <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first, or clone one from the Template Library.</div>
+                                  ) : (
+                                    globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((t) => (
+                                      <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
+                                        <button
+                                          onClick={() => {
+                                            setComposerText(t.bodyText);
+                                            setShowUseTemplateDropdown(false);
+                                          }}
+                                          className="flex-1 text-left text-gray-700 font-medium truncate mr-2 group-hover:text-blue-600"
+                                          title="Insert text into composer"
+                                        >
+                                          {t.name}
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            handleSendTemplateDirectly(t);
+                                            setShowUseTemplateDropdown(false);
+                                          }}
+                                          className="px-2 py-1 text-[10px] font-bold bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shrink-0"
+                                          title="Send template directly with buttons"
+                                        >
+                                          Send
+                                        </button>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="relative flex-1">
+                            <input type="text" value={composerText} onChange={e => setComposerText(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
+                              placeholder="Type a message..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              style={{ fontFamily: "Outfit, sans-serif" }} />
+                          </div>
+
+                          <button type="button" onClick={handleSendMessage}
+                            className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
+                          >
+                            <Send className="w-4 h-4" />
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* ── Header section removed from here (moved above Body) ── */}
-
-              <div>
-                <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
-                <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
-                  className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    Buttons (Optional)
-                  </label>
-                  <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    {templateForm.buttons.length}/3
-                  </span>
-                </div>
-
-                {templateForm.buttons.map((btn, index) => (
-                  <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/40 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-gray-500">Button {index + 1}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveButton(index)}
-                        className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" /> Remove
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <select
-                        value={btn.type}
-                        onChange={e => handleButtonChange(index, "type", e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
-                      >
-                        <option value="quick_reply">Quick Reply</option>
-                        <option value="call">Call Phone Number</option>
-                        <option value="url">Visit Website</option>
-                        <option value="email">Send Email</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={btn.label}
-                        onChange={e => handleButtonChange(index, "label", e.target.value)}
-                        placeholder="Button text..."
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                      />
-                    </div>
-
-                    {btn.type === "call" && (
-                      <input
-                        type="tel"
-                        value={btn.value || ""}
-                        onChange={e => handleButtonChange(index, "value", e.target.value)}
-                        placeholder="+1 555 123 4567"
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
-                      />
-                    )}
-                    {btn.type === "url" && (
-                      <input
-                        type="url"
-                        value={btn.value || ""}
-                        onChange={e => handleButtonChange(index, "value", e.target.value)}
-                        placeholder="https://..."
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
-                      />
-                    )}
-                    {btn.type === "email" && (
-                      <input
-                        type="email"
-                        value={btn.value || ""}
-                        onChange={e => handleButtonChange(index, "value", e.target.value)}
-                        placeholder="support@example.com"
-                        className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
-                      />
-                    )}
-                  </div>
-                ))}
-
-                <button
-                  type="button"
-                  onClick={handleAddButton}
-                  disabled={templateForm.buttons.length >= 3}
-                  className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add Button
-                </button>
-              </div>
-
-              <div className="flex gap-3 pt-4 border-t border-gray-100 justify-end">
-                <Button variant="outline" type="button" onClick={() => { setTemplatesView("table"); setEditingTemplateId(null); }}>Cancel</Button>
-                <Button variant="primary" type="submit">Save Template</Button>
-              </div>
-            </form>
-            <div className="w-[280px] shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
-              <div className="border-b border-gray-100 pb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Preview</span></div>
-              <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[340px] flex flex-col">
-                <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
-                  <p className="text-[10px] font-bold">Mantra Health</p>
-                </div>
-                <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
-                  <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
-                    {/* Header preview */}
-                    {templateForm.headerType === "text" && templateForm.headerText && (
-                      <p className="font-bold text-[11px] text-gray-900 leading-tight">{templateForm.headerText}</p>
-                    )}
-                    {templateForm.headerType === "image" && templateForm.headerMediaUrl && (
-                      templateForm.headerMediaUrl.startsWith("blob:") ? (
-                        <img src={templateForm.headerMediaUrl} alt="Header preview" className="w-full rounded object-cover max-h-20" />
-                      ) : (
-                        <div className="w-full h-14 bg-gray-100 rounded flex items-center justify-center">
-                          <ImageIcon className="w-5 h-5 text-gray-400" />
-                        </div>
-                      )
-                    )}
-                    {templateForm.headerType === "video" && (
-                      <div className="w-full h-14 bg-gray-900 rounded flex items-center justify-center gap-1.5">
-                        <Play className="w-5 h-5 text-white" />
-                        <span className="text-[9px] text-white font-medium">Video</span>
                       </div>
-                    )}
-                    {templateForm.headerType === "document" && (
-                      <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1">
-                        <FileText className="w-4 h-4 text-red-500" />
-                        <span className="text-[9px] text-gray-700 font-medium truncate">{templateForm.headerFileName || "document.pdf"}</span>
-                      </div>
-                    )}
-                    <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
-                    {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
-                  </div>
-                  {templateForm.buttons.length > 0 && (
-                    <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden">
-                      {templateForm.buttons.map((btn, i) => (
-                        <div
-                          key={i}
-                          className={`px-3 py-2 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${i > 0 ? "border-t border-gray-100" : ""}`}
-                        >
-                          {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
-                          <span>{btn.label || "Button"}</span>
-                        </div>
-                      ))}
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Select a conversation to start chatting
                     </div>
                   )}
                 </div>
               </div>
-            </div>
-          </div>
-        );
-      })()}
+            )}
 
 
-        {/* ══════════════════════════════════════════════════════
-            TAB: CAMPAIGNS
+            {/* ══════════════════════════════════════════════════════
+            TAB: TEMPLATE BUILDER
         ══════════════════════════════════════════════════════ */}
-        {activeTab === "campaigns" && (
-          showCampaignBuilder ? (
-            <CampaignBuilderView
-              campaignForm={campaignForm} setCampaignForm={setCampaignForm}
-              campaignNodes={campaignNodes} setCampaignNodes={setCampaignNodes}
-              editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId}
-              editingCampaignId={editingCampaignId} globalTemplates={globalTemplates}
-              handleAddNode={handleAddNode} handleSaveCampaign={handleSaveCampaign}
-              onBack={() => setShowCampaignBuilder(false)} />
-          ) : (
-            <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>WhatsApp Campaigns</h2>
-                <p className="text-sm text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Create and track automated marketing flows</p>
-              </div>
-              <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" /> New Campaign</Button>
-            </div>
-            <div className="grid grid-cols-4 gap-4">
-              {[
-                { label: "Total Campaigns", value: campaigns.length, icon: <Zap className="w-5 h-5 text-blue-600" />, bg: "bg-blue-50" },
-                { label: "Active", value: campaigns.filter(c => c.status === "active").length, icon: <Play className="w-5 h-5 text-green-600" />, bg: "bg-green-50" },
-                { label: "Total Sent", value: campaigns.reduce((a, c) => a + c.sent, 0).toLocaleString(), icon: <Send className="w-5 h-5 text-purple-600" />, bg: "bg-purple-50" },
-                { label: "Avg. Open Rate", value: (() => { const s = campaigns.filter(c => c.sent > 0); return s.length ? Math.round(s.reduce((a, c) => a + c.opened / c.sent, 0) / s.length * 100) + "%" : "—"; })(), icon: <TrendingUp className="w-5 h-5 text-orange-600" />, bg: "bg-orange-50" },
-              ].map(card => (
-                <div key={card.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${card.bg}`}>{card.icon}</div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{card.value}</p>
-                    <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{card.label}</p>
+            {activeTab === "templates" && templatesView === "table" && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>Templates</h2>
+                    <span className="bg-blue-50 text-blue-600 text-xs font-semibold px-2.5 py-1 rounded-full border border-blue-100">
+                      {globalTemplates.length} {globalTemplates.length === 1 ? "template" : "templates"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
+                      <LibraryBig className="w-4 h-4" /> Browse Library
+                    </Button>
+                    <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
+                      <Plus className="w-4 h-4" /> Create Template
+                    </Button>
                   </div>
                 </div>
-              ))}
-            </div>
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              {campaigns.length === 0 ? (
-                <div className="p-16 text-center">
-                  <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4"><Zap className="w-7 h-7 text-blue-600" /></div>
-                  <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No campaigns yet</h3>
-                  <p className="text-sm text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Create your first campaign to start nurturing leads on WhatsApp.</p>
-                  <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" />New Campaign</Button>
-                </div>
-              ) : (
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-100" style={{ backgroundColor: '#1F2937' }}>
-                      {["Campaign Name", "Status", "Audience", "Sent", "Created", "Actions"].map(col => (
-                        <th key={col} className={`px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider ${col === "Actions" ? "text-center" : ""}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {campaigns.map(campaign => (
-                      <tr key={campaign.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-4 py-3"><p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{campaign.name}</p></td>
-                        <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>{campaign.status}</span></td>
-                        <td className="px-4 py-3">
-                          {(() => {
-                            const clientCount = campaign.audienceClientIds?.length ?? 0;
-                            const manualCount = campaign.audienceManualRecipients?.length ?? 0;
-                            const totalCount = clientCount + manualCount;
-                            const displayName = campaign.audienceName || campaign.audience;
 
-                            if (displayName) {
-                              return (
+                {/* Templates Table — always rendered */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                  <table className="w-full">
+                    <thead style={{ backgroundColor: "#1F2937" }}>
+                      <tr>
+                        {["Name", "Identifier", "Category", "Status", "Language", "Actions"].map(col => (
+                          <th key={col} className={`px-5 py-3 text-[11px] font-bold text-white uppercase tracking-wider ${col === "Actions" ? "text-right" : "text-left"}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {globalTemplates.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="py-16 text-center bg-white">
+                            <FileText className="w-8 h-8 mx-auto text-blue-300 mb-3" />
+                            <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No templates yet</h3>
+                            <p className="text-xs text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>Build a pre-approved WhatsApp message template to reuse in campaigns and chatbot flows.</p>
+                            <div className="flex items-center justify-center gap-3">
+                              <Button variant="outline" onClick={() => setShowTemplateLibrary(true)}>
+                                <LibraryBig className="w-4 h-4" /> Browse Template Library
+                              </Button>
+                              <Button variant="primary" onClick={() => { handleCreateNewTemplate(); setTemplatesView("builder"); }}>
+                                <Plus className="w-4 h-4" /> Create Your First Template
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        globalTemplates.map(tpl => (
+                          <tr key={tpl.id} className="hover:bg-blue-50/30 transition-colors">
+                            <td className="px-5 py-4">
+                              <button onClick={() => { handleEditTemplate(tpl); setTemplatesView("builder"); }} className="text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                {tpl.name}
+                              </button>
+                            </td>
+                            <td className="px-4 py-4"><span className="text-xs font-mono text-gray-500">{tpl.identifier}</span></td>
+                            <td className="px-4 py-4"><span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100 rounded-full px-2 py-0.5 uppercase">{tpl.category}</span></td>
+                            {/* STATUS column */}
+                            <td className="px-4 py-4">
+                              {(!tpl.approvalStatus || tpl.approvalStatus === "pending") && (
+                                <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 uppercase">Pending</span>
+                              )}
+                              {tpl.approvalStatus === "approved" && (
+                                <span className="text-[10px] font-bold bg-green-50 text-green-700 border border-green-100 rounded-full px-2 py-0.5 uppercase">Approved</span>
+                              )}
+                              {tpl.approvalStatus === "denied" && (
+                                <span title={tpl.rejectionReason || "Denied by Meta"} className="text-[10px] font-bold bg-red-50 text-red-700 border border-red-100 rounded-full px-2 py-0.5 uppercase cursor-help">Denied</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4"><span className="text-xs text-gray-500">{tpl.language}</span></td>
+                            <td className="px-5 py-4">
+                              <div className="flex justify-end">
                                 <button
-                                  onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
-                                  className="text-xs text-purple-700 font-semibold hover:underline text-left block"
-                                  title="Click to manage audience"
+                                  ref={el => { templateTriggerRefs.current[tpl.id] = el; }}
+                                  onClick={() => openMenuTemplateId === tpl.id ? setOpenMenuTemplateId(null) : openTemplateMenu(tpl.id)}
+                                  className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
                                 >
-                                  {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
+                                  <MoreVertical className="w-4 h-4" />
                                 </button>
-                              );
-                            }
-                            return <span className="text-gray-400 italic text-xs">No audience selected</span>;
-                          })()}
-                        </td>
-                        <td className="px-4 py-3"><p className="text-sm font-bold text-gray-900">{campaign.sent.toLocaleString()}</p></td>
-                        <td className="px-4 py-3"><p className="text-xs text-gray-400">{campaign.createdAt}</p></td>
-                        <td className="px-4 py-3">
-                          <div className="flex justify-center">
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {activeTab === "templates" && templatesView === "builder" && (() => {
+              // ── Drag-and-drop state for media header upload (scoped to builder render) ──
+              const mediaTypes = ["image", "video", "document"] as const;
+              const acceptForHeaderType =
+                templateForm.headerType === "image" ? ".png,.jpg,.jpeg"
+                  : templateForm.headerType === "video" ? ".mp4"
+                    : ".pdf,.doc,.docx";
+
+              const handleFileDrop = (file: File) => {
+                const objectUrl = URL.createObjectURL(file);
+                setTemplateForm(prev => ({ ...prev, headerMediaUrl: objectUrl, headerFileName: file.name }));
+              };
+
+              return (
+                <div className="flex gap-6 items-start">
+                  <form onSubmit={handleSaveTemplate} className="flex-1 bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6 max-h-[calc(100vh-250px)] overflow-y-auto">
+                    <div className="flex justify-between items-center border-b border-gray-100 pb-3">
+                      <h3 className="text-lg font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{editingTemplateId ? "Edit Template" : "New WhatsApp Template"}</h3>
+                      <button type="button" onClick={() => setTemplatesView("table")}><X className="w-5 h-5 text-gray-400 hover:text-gray-600" /></button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Name *</label>
+                        <input type="text" required value={templateForm.name} onChange={e => handleNameChange(e.target.value)} placeholder="e.g. Appointment Reminder"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Template Identifier *</label>
+                        <input type="text" required value={templateForm.identifier} onChange={e => setTemplateForm({ ...templateForm, identifier: e.target.value })} placeholder="appointment_reminder"
+                          className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Category *</label>
+                        <Select value={templateForm.category} onValueChange={(val: any) => setTemplateForm({ ...templateForm, category: val })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="Marketing">Marketing</SelectItem><SelectItem value="Utility">Utility</SelectItem><SelectItem value="Authentication">Authentication</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Language *</label>
+                        <Select value={templateForm.language} onValueChange={(val: any) => setTemplateForm({ ...templateForm, language: val })}>
+                          <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                          <SelectContent>{LANGUAGES.map(lang => <SelectItem key={lang} value={lang}>{lang}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* ── HEADER (moved above Body) ── */}
+                    <div className="border border-gray-100 rounded-xl overflow-hidden">
+                      <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                        <label className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Header <span className="text-xs text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <div className="flex gap-1 text-[11px]">
+                          {(["none", "text", "image", "video", "document"] as const).map(ht => (
                             <button
-                              ref={el => { campaignTriggerRefs.current[campaign.id] = el; }}
-                              onClick={() => openMenuCampaignId === campaign.id ? setOpenMenuCampaignId(null) : openCampaignMenu(campaign.id)}
-                              className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
+                              key={ht}
+                              type="button"
+                              onClick={() => setTemplateForm(prev => ({ ...prev, headerType: ht, headerText: ht === "text" ? prev.headerText || "" : "", headerMediaUrl: ht !== "text" && ht !== "none" ? "" : "", headerFileName: "" }))}
+                              className={`px-2 py-0.5 rounded-full border capitalize transition-colors ${templateForm.headerType === ht ? "bg-blue-600 text-white border-blue-600" : "bg-white border-gray-200 text-gray-500 hover:border-blue-300"}`}
                             >
-                              <MoreVertical className="w-4 h-4" />
+                              {ht}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {templateForm.headerType && templateForm.headerType !== "none" && (
+                        <div className="p-4 space-y-3 bg-white">
+                          {templateForm.headerType === "text" ? (
+                            <div>
+                              <label className="text-xs font-semibold text-gray-600 mb-1 block">Header Text</label>
+                              <input
+                                type="text"
+                                value={templateForm.headerText || ""}
+                                onChange={e => setTemplateForm(prev => ({ ...prev, headerText: e.target.value }))}
+                                placeholder="Bold headline text..."
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {/* File uploaded — show chip */}
+                              {templateForm.headerMediaUrl ? (
+                                <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                                  <FileText className="w-5 h-5 text-blue-500 shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-semibold text-blue-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                      {templateForm.headerFileName || "Uploaded file"}
+                                    </p>
+                                    <p className="text-[10px] text-blue-500" style={{ fontFamily: "Outfit, sans-serif" }}>Stored as local object URL</p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setTemplateForm(prev => ({ ...prev, headerMediaUrl: "", headerFileName: "" }))}
+                                    className="p-1 text-blue-400 hover:text-red-500 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                /* Drag-and-drop upload zone */
+                                <div
+                                  onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-blue-500', 'bg-blue-50'); }}
+                                  onDragLeave={e => { e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50'); }}
+                                  onDrop={e => {
+                                    e.preventDefault();
+                                    e.currentTarget.classList.remove('border-blue-500', 'bg-blue-50');
+                                    const file = e.dataTransfer.files[0];
+                                    if (file) handleFileDrop(file);
+                                  }}
+                                  className="relative border-2 border-dashed border-gray-300 rounded-xl p-8 text-center transition-all hover:border-blue-400"
+                                >
+                                  <input
+                                    type="file"
+                                    accept={acceptForHeaderType}
+                                    onChange={e => { const f = e.target.files?.[0]; if (f) handleFileDrop(f); }}
+                                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                  />
+                                  <div className="flex flex-col items-center gap-2 pointer-events-none">
+                                    <Upload className="w-8 h-8 text-gray-400" />
+                                    <p className="text-sm font-medium text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                      <span className="text-blue-600">Click to upload</span> or drag and drop
+                                    </p>
+                                    <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                      {templateForm.headerType === "image" ? "PNG, JPG up to 5MB" : templateForm.headerType === "video" ? "MP4 up to 16MB" : "PDF up to 100MB"}
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Body Text ── */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Body Text *</label>
+                        <VariablePickerButton targetRef={textareaRef} value={templateForm.bodyText} onChange={val => setTemplateForm(prev => ({ ...prev, bodyText: val }))} label="{ } Insert Variable" />
+                      </div>
+                      <textarea ref={textareaRef} required value={templateForm.bodyText} onChange={e => setTemplateForm({ ...templateForm, bodyText: e.target.value })}
+                        placeholder="Hello {{contact_name}}, your appointment is confirmed for {{appointment_date}}." rows={4}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y" style={{ fontFamily: "Outfit, sans-serif" }} />
+
+                      {/* ── Variable Field Mapping panel ── */}
+                      {(() => {
+                        const tokens = [...(templateForm.bodyText.matchAll(/\{\{([^}]+)\}\}/g))].map(m => m[1].trim()).filter((v, i, a) => a.indexOf(v) === i);
+                        if (tokens.length === 0) return null;
+                        return (
+                          <div className="border border-blue-100 rounded-xl overflow-hidden mt-2">
+                            <button
+                              type="button"
+                              onClick={() => setShowVarMapping(v => !v)}
+                              className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-50 hover:bg-blue-100/60 transition-colors text-xs font-semibold text-blue-700"
+                              style={{ fontFamily: "DM Sans, sans-serif" }}
+                            >
+                              <span>📌 Field Mapping — {tokens.length} variable{tokens.length !== 1 ? "s" : ""} detected</span>
+                              <ChevronDown className={`w-4 h-4 transition-transform ${showVarMapping ? "rotate-180" : ""}`} />
+                            </button>
+                            {showVarMapping && (
+                              <div className="p-3 space-y-3 bg-white">
+                                <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  Map each <code className="bg-gray-100 px-1 rounded">&#123;&#123;variable&#125;&#125;</code> to a static value, a MantraAssist field, or live availability.
+                                </p>
+                                {tokens.map(token => {
+                                  const mapping = (templateForm.variableMappings || {})[token] || { source: "static" as const, staticValue: "", fieldKey: "" };
+                                  const setMapping = (patch: Partial<typeof mapping>) =>
+                                    setTemplateForm(prev => ({
+                                      ...prev,
+                                      variableMappings: {
+                                        ...(prev.variableMappings || {}),
+                                        [token]: { ...mapping, ...patch }
+                                      }
+                                    }));
+                                  return (
+                                    <div key={token} className="p-3 border border-gray-100 rounded-lg bg-gray-50 space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <code className="text-[11px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">&#123;&#123;{token}&#125;&#125;</code>
+                                        <div className="flex gap-1 ml-auto">
+                                          {(["static", "field", "availability"] as const).map(src => (
+                                            <button
+                                              key={src}
+                                              type="button"
+                                              onClick={() => setMapping({ source: src })}
+                                              className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold transition-colors capitalize ${mapping.source === src
+                                                  ? "bg-blue-600 text-white border-blue-600"
+                                                  : "bg-white text-gray-500 border-gray-200 hover:border-blue-400"
+                                                }`}
+                                            >
+                                              {src}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      {mapping.source === "static" && (
+                                        <input
+                                          type="text"
+                                          value={mapping.staticValue || ""}
+                                          onChange={e => setMapping({ staticValue: e.target.value })}
+                                          placeholder="Static replacement value"
+                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                          style={{ fontFamily: "Outfit, sans-serif" }}
+                                        />
+                                      )}
+                                      {mapping.source === "field" && (
+                                        <select
+                                          value={mapping.fieldKey || ""}
+                                          onChange={e => setMapping({ fieldKey: e.target.value })}
+                                          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                        >
+                                          <option value="">Select a MantraAssist field…</option>
+                                          <optgroup label="Client">
+                                            <option value="client.name">Client Name</option>
+                                            <option value="client.email">Client Email</option>
+                                            <option value="client.phone">Client Phone</option>
+                                          </optgroup>
+                                          <optgroup label="Appointment">
+                                            <option value="appointment.date">Appointment Date</option>
+                                            <option value="appointment.time">Appointment Time</option>
+                                            <option value="appointment.service">Service Name</option>
+                                          </optgroup>
+                                          <optgroup label="Team Member">
+                                            <option value="teamMember.name">Provider Name</option>
+                                            <option value="teamMember.phone">Provider Phone</option>
+                                          </optgroup>
+                                        </select>
+                                      )}
+                                      {mapping.source === "availability" && (
+                                        <p className="text-[11px] text-gray-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                          Will resolve to the contact's next available slot at send time.
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* ── Header section removed from here (moved above Body) ── */}
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-2" style={{ fontFamily: "DM Sans, sans-serif" }}>Footer Text (Optional)</label>
+                      <input type="text" value={templateForm.footerText} onChange={e => setTemplateForm({ ...templateForm, footerText: e.target.value })} placeholder="e.g. Reply STOP to opt out"
+                        className="w-full px-4 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" style={{ fontFamily: "Outfit, sans-serif" }} />
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-sm font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          Buttons (Optional)
+                        </label>
+                        <span className="text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {templateForm.buttons.length}/3
+                        </span>
+                      </div>
+
+                      {templateForm.buttons.map((btn, index) => (
+                        <div key={index} className="p-3 border border-gray-200 rounded-xl bg-gray-50/40 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-500">Button {index + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveButton(index)}
+                              className="text-xs text-red-500 hover:text-red-600 flex items-center gap-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Remove
                             </button>
                           </div>
-                        </td>
-                      </tr>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <select
+                              value={btn.type}
+                              onChange={e => handleButtonChange(index, "type", e.target.value)}
+                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg bg-white"
+                            >
+                              <option value="quick_reply">Quick Reply</option>
+                              <option value="call">Call Phone Number</option>
+                              <option value="url">Visit Website</option>
+                              <option value="email">Send Email</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={btn.label}
+                              onChange={e => handleButtonChange(index, "label", e.target.value)}
+                              placeholder="Button text..."
+                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
+                            />
+                          </div>
+
+                          {btn.type === "call" && (
+                            <input
+                              type="tel"
+                              value={btn.value || ""}
+                              onChange={e => handleButtonChange(index, "value", e.target.value)}
+                              placeholder="+1 555 123 4567"
+                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg"
+                            />
+                          )}
+                          {btn.type === "url" && (
+                            <input
+                              type="url"
+                              value={btn.value || ""}
+                              onChange={e => handleButtonChange(index, "value", e.target.value)}
+                              placeholder="https://..."
+                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
+                            />
+                          )}
+                          {btn.type === "email" && (
+                            <input
+                              type="email"
+                              value={btn.value || ""}
+                              onChange={e => handleButtonChange(index, "value", e.target.value)}
+                              placeholder="support@example.com"
+                              className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg font-mono"
+                            />
+                          )}
+                        </div>
+                      ))}
+
+                      <button
+                        type="button"
+                        onClick={handleAddButton}
+                        disabled={templateForm.buttons.length >= 3}
+                        className="w-full py-2 text-xs font-semibold border border-dashed border-gray-300 text-blue-600 rounded-lg hover:bg-blue-50/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Button
+                      </button>
+                    </div>
+
+                    <div className="flex gap-3 pt-4 border-t border-gray-100 justify-end">
+                      <Button variant="outline" type="button" onClick={() => { setTemplatesView("table"); setEditingTemplateId(null); }}>Cancel</Button>
+                      <Button variant="primary" type="submit">Save Template</Button>
+                    </div>
+                  </form>
+                  <div className="w-[280px] shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-3">
+                    <div className="border-b border-gray-100 pb-2"><span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Live Preview</span></div>
+                    <div className="rounded-2xl border-4 border-gray-800 overflow-hidden shadow-inner bg-[#E5DDD5] h-[340px] flex flex-col">
+                      <div className="bg-[#075E54] text-white p-2.5 flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center font-bold text-[10px]">WA</div>
+                        <p className="text-[10px] font-bold">Mantra Health</p>
+                      </div>
+                      <div className="flex-1 p-3 overflow-y-auto flex flex-col justify-end">
+                        <div className="bg-white rounded-lg shadow-sm p-2 text-[11px] text-gray-800 max-w-[90%] rounded-tl-none space-y-1 select-none">
+                          {/* Header preview */}
+                          {templateForm.headerType === "text" && templateForm.headerText && (
+                            <p className="font-bold text-[11px] text-gray-900 leading-tight">{templateForm.headerText}</p>
+                          )}
+                          {templateForm.headerType === "image" && templateForm.headerMediaUrl && (
+                            templateForm.headerMediaUrl.startsWith("blob:") ? (
+                              <img src={templateForm.headerMediaUrl} alt="Header preview" className="w-full rounded object-cover max-h-20" />
+                            ) : (
+                              <div className="w-full h-14 bg-gray-100 rounded flex items-center justify-center">
+                                <ImageIcon className="w-5 h-5 text-gray-400" />
+                              </div>
+                            )
+                          )}
+                          {templateForm.headerType === "video" && (
+                            <div className="w-full h-14 bg-gray-900 rounded flex items-center justify-center gap-1.5">
+                              <Play className="w-5 h-5 text-white" />
+                              <span className="text-[9px] text-white font-medium">Video</span>
+                            </div>
+                          )}
+                          {templateForm.headerType === "document" && (
+                            <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1">
+                              <FileText className="w-4 h-4 text-red-500" />
+                              <span className="text-[9px] text-gray-700 font-medium truncate">{templateForm.headerFileName || "document.pdf"}</span>
+                            </div>
+                          )}
+                          <p className="whitespace-pre-wrap leading-tight text-gray-700">{templateForm.bodyText || "Template body goes here..."}</p>
+                          {templateForm.footerText && <p className="text-[9px] text-gray-400">{templateForm.footerText}</p>}
+                        </div>
+                        {templateForm.buttons.length > 0 && (
+                          <div className="bg-white rounded-b-lg shadow-sm max-w-[90%] mt-0.5 overflow-hidden">
+                            {templateForm.buttons.map((btn, i) => (
+                              <div
+                                key={i}
+                                className={`px-3 py-2 text-[10px] font-semibold text-center text-blue-600 flex items-center justify-center gap-1 ${i > 0 ? "border-t border-gray-100" : ""}`}
+                              >
+                                {btn.type === "template" && <Link2 className="w-3 h-3 shrink-0" />}
+                                <span>{btn.label || "Button"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+
+            {/* ══════════════════════════════════════════════════════
+            TAB: CAMPAIGNS
+        ══════════════════════════════════════════════════════ */}
+            {activeTab === "campaigns" && (
+              showCampaignBuilder ? (
+                <CampaignBuilderView
+                  campaignForm={campaignForm} setCampaignForm={setCampaignForm}
+                  campaignNodes={campaignNodes} setCampaignNodes={setCampaignNodes}
+                  editingNodeId={editingNodeId} setEditingNodeId={setEditingNodeId}
+                  editingCampaignId={editingCampaignId} globalTemplates={globalTemplates}
+                  handleAddNode={handleAddNode} handleSaveCampaign={handleSaveCampaign}
+                  onBack={() => setShowCampaignBuilder(false)} />
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>WhatsApp Campaigns</h2>
+                      <p className="text-sm text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Create and track automated marketing flows</p>
+                    </div>
+                    <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" /> New Campaign</Button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-4">
+                    {[
+                      { label: "Total Campaigns", value: campaigns.length, icon: <Zap className="w-5 h-5 text-blue-600" />, bg: "bg-blue-50" },
+                      { label: "Active", value: campaigns.filter(c => c.status === "active").length, icon: <Play className="w-5 h-5 text-green-600" />, bg: "bg-green-50" },
+                      { label: "Total Sent", value: campaigns.reduce((a, c) => a + c.sent, 0).toLocaleString(), icon: <Send className="w-5 h-5 text-purple-600" />, bg: "bg-purple-50" },
+                      { label: "Avg. Open Rate", value: (() => { const s = campaigns.filter(c => c.sent > 0); return s.length ? Math.round(s.reduce((a, c) => a + c.opened / c.sent, 0) / s.length * 100) + "%" : "—"; })(), icon: <TrendingUp className="w-5 h-5 text-orange-600" />, bg: "bg-orange-50" },
+                    ].map(card => (
+                      <div key={card.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex items-center gap-4">
+                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${card.bg}`}>{card.icon}</div>
+                        <div>
+                          <p className="text-2xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{card.value}</p>
+                          <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{card.label}</p>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-          )
-        )}
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                    {campaigns.length === 0 ? (
+                      <div className="p-16 text-center">
+                        <div className="w-14 h-14 rounded-full bg-blue-50 flex items-center justify-center mx-auto mb-4"><Zap className="w-7 h-7 text-blue-600" /></div>
+                        <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>No campaigns yet</h3>
+                        <p className="text-sm text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>Create your first campaign to start nurturing leads on WhatsApp.</p>
+                        <Button variant="primary" onClick={handleNewCampaignFromAnywhere}><Plus className="w-4 h-4" />New Campaign</Button>
+                      </div>
+                    ) : (
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-gray-100" style={{ backgroundColor: '#1F2937' }}>
+                            {["Campaign Name", "Status", "Audience", "Sent", "Created", "Actions"].map(col => (
+                              <th key={col} className={`px-4 py-3 text-left text-xs font-semibold text-white uppercase tracking-wider ${col === "Actions" ? "text-center" : ""}`} style={{ fontFamily: "Outfit, sans-serif" }}>{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {campaigns.map(campaign => (
+                            <tr key={campaign.id} className="hover:bg-gray-50/50 transition-colors">
+                              <td className="px-4 py-3"><p className="text-sm font-semibold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{campaign.name}</p></td>
+                              <td className="px-4 py-3"><span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_COLOR[campaign.status]}`}>{campaign.status}</span></td>
+                              <td className="px-4 py-3">
+                                {(() => {
+                                  const clientCount = campaign.audienceClientIds?.length ?? 0;
+                                  const manualCount = campaign.audienceManualRecipients?.length ?? 0;
+                                  const totalCount = clientCount + manualCount;
+                                  const displayName = campaign.audienceName || campaign.audience;
+
+                                  if (displayName) {
+                                    return (
+                                      <button
+                                        onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
+                                        className="text-xs text-purple-700 font-semibold hover:underline text-left block"
+                                        title="Click to manage audience"
+                                      >
+                                        {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
+                                      </button>
+                                    );
+                                  }
+                                  return <span className="text-gray-400 italic text-xs">No audience selected</span>;
+                                })()}
+                              </td>
+                              <td className="px-4 py-3"><p className="text-sm font-bold text-gray-900">{campaign.sent.toLocaleString()}</p></td>
+                              <td className="px-4 py-3"><p className="text-xs text-gray-400">{campaign.createdAt}</p></td>
+                              <td className="px-4 py-3">
+                                <div className="flex justify-center">
+                                  <button
+                                    ref={el => { campaignTriggerRefs.current[campaign.id] = el; }}
+                                    onClick={() => openMenuCampaignId === campaign.id ? setOpenMenuCampaignId(null) : openCampaignMenu(campaign.id)}
+                                    className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
+                                  >
+                                    <MoreVertical className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              )
+            )}
 
 
-        {/* ══════════════════════════════════════════════════════
+            {/* ══════════════════════════════════════════════════════
             TAB: CHATBOT — Managed by ChatbotTab component
         ══════════════════════════════════════════════════════ */}
-        {activeTab === "chatbot" && (
-          <ChatbotTab
-            campaigns={campaigns}
-            employees={AVAILABLE_EMPLOYEES}
-            templates={globalTemplates}
-            statusFilter={chatbotStatusFilter}
-          />
-        )}
+            {activeTab === "chatbot" && (
+              <ChatbotTab
+                campaigns={campaigns}
+                employees={AVAILABLE_EMPLOYEES}
+                templates={globalTemplates}
+                statusFilter={chatbotStatusFilter}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -2748,7 +2738,7 @@ export default function Chats() {
               const bots = JSON.parse(raw).map(sanitizeBot);
               return bots.find((b: any) => b.id === activeConversation.assignedBotId);
             }
-          } catch {}
+          } catch { }
           return undefined;
         })()}
         onUpdateConversation={(updated) => {

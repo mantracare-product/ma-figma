@@ -67,7 +67,7 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
         });
         setAvailableBots((JSON.parse(raw) as Bot[]).map(sanitizeBot));
       }
-    } catch {}
+    } catch { }
   }, [isOpen]);
 
   if (!isOpen) return null;
@@ -111,7 +111,7 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
           {/* 1. Dynamic Fallback Message */}
           <Row icon={<AlertTriangle className="w-4 h-4 text-yellow-600" />} title="Fallback Response" defaultOpen>
             <p className="text-xs text-gray-500">Sent when no flow node matches and Knowledge Base has no answer either.</p>
-            
+
             {/* Segmented Control for Response Type */}
             <div className="flex gap-1.5 p-1 bg-gray-100 rounded-lg">
               {(["text", "question", "template"] as const).map(t => (
@@ -119,9 +119,8 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                   key={t}
                   type="button"
                   onClick={() => updateFallback({ type: t })}
-                  className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all capitalize ${
-                    fallback.type === t ? "bg-blue-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"
-                  }`}
+                  className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all capitalize ${fallback.type === t ? "bg-blue-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"
+                    }`}
                   style={{ fontFamily: "DM Sans, sans-serif" }}
                 >
                   {t}
@@ -165,9 +164,8 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                         key={qt}
                         type="button"
                         onClick={() => updateFallback({ questionType: qt })}
-                        className={`text-xs px-2.5 py-1 rounded-md transition-colors capitalize ${
-                          (fallback.questionType || "open") === qt ? "bg-blue-600 text-white font-medium" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                        }`}
+                        className={`text-xs px-2.5 py-1 rounded-md transition-colors capitalize ${(fallback.questionType || "open") === qt ? "bg-blue-600 text-white font-medium" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
                       >
                         {qt}
                       </button>
@@ -304,9 +302,8 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                           key={t}
                           type="button"
                           onClick={() => updateHandoffNo({ type: t })}
-                          className={`flex-1 py-1 text-[11px] font-semibold rounded-md transition-all ${
-                            handoffNo.type === t ? "bg-red-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"
-                          }`}
+                          className={`flex-1 py-1 text-[11px] font-semibold rounded-md transition-all ${handoffNo.type === t ? "bg-red-600 text-white shadow-xs" : "text-gray-600 hover:text-gray-900"
+                            }`}
                         >
                           {t === "triggerChatbot" ? "Chatbot" : t.charAt(0).toUpperCase() + t.slice(1)}
                         </button>
@@ -364,7 +361,7 @@ export default function ChatbotAdvanceSettingsDrawer({ isOpen, onClose, bot, onC
                   <CopySnippetButton snippet={`<script\n  src="https://app.example.com/widget.js"\n  data-site-id="${bot.siteId || ""}"\n  defer\n></script>`} />
                 </div>
                 <pre className="w-full bg-gray-50 border border-gray-200 rounded-lg px-3 py-2.5 text-[11px] font-mono text-gray-700 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-{`<script\n  src="https://app.example.com/widget.js"\n  data-site-id="${bot.siteId || "—"}"\n  defer\n></script>`}
+                  {`<script\n  src="https://app.example.com/widget.js"\n  data-site-id="${bot.siteId || "—"}"\n  defer\n></script>`}
                 </pre>
                 <p className="text-[10px] text-gray-400 mt-1.5 leading-normal">
                   Paste this snippet before the closing <code className="font-mono">&lt;/body&gt;</code> tag on any page where you want the chat widget to appear.

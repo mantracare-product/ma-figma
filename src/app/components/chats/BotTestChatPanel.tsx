@@ -29,7 +29,7 @@ function resolveFieldLabel(fieldKey: string): string {
       const field = source.fields.find((f: any) => f.value === fieldKey);
       if (field) return `${source.label} › ${field.label}`;
     }
-  } catch {}
+  } catch { }
   return fieldKey;
 }
 
@@ -104,7 +104,7 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
           const found = all.find(b => b.id === targetBotId);
           if (found) { targetBot = found; targetBotName = found.name; }
         }
-      } catch {}
+      } catch { }
 
       const handoffChip: TestChatTurn = { role: "system", text: `→ Handed off to "${targetBotName}"` };
       setTurns(prev => {
@@ -191,8 +191,8 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
     if (getEntryDirection() === "outbound") {
       initiateOutbound();
     }
-  // resetCounter resets turns to [] before this effect fires
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // resetCounter resets turns to [] before this effect fires
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetCounter]);
 
   // ── Reset ─────────────────────────────────────────────────────────────────
@@ -493,19 +493,18 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
                   <div className={`flex ${t.role === "user" ? "justify-end" : "justify-start"}`}>
                     <div className="max-w-[85%]">
                       <div
-                        className={`rounded-xl shadow-sm px-3.5 py-2 text-sm leading-relaxed ${
-                          t.role === "user"
-                            ? "bg-blue-600 text-white rounded-tr-none"
-                            : t.role === "system"
+                        className={`rounded-xl shadow-sm px-3.5 py-2 text-sm leading-relaxed ${t.role === "user"
+                          ? "bg-blue-600 text-white rounded-tr-none"
+                          : t.role === "system"
                             ? isSystemInfo
                               ? "bg-green-50 border border-green-200 text-green-800 text-xs font-medium"
                               : isDelayChip
-                              ? "bg-slate-100 border border-slate-300 text-slate-600 text-xs font-medium flex items-center gap-1.5"
-                              : isHandoffChip
-                              ? "bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium"
-                              : "bg-slate-100 border border-slate-200 text-slate-700 italic text-xs"
+                                ? "bg-slate-100 border border-slate-300 text-slate-600 text-xs font-medium flex items-center gap-1.5"
+                                : isHandoffChip
+                                  ? "bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium"
+                                  : "bg-slate-100 border border-slate-200 text-slate-700 italic text-xs"
                             : "bg-white rounded-tl-none text-gray-800 border border-gray-100"
-                        }`}
+                          }`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
                         {isDelayChip && <Clock className="w-3 h-3 shrink-0 text-slate-500" />}
@@ -587,10 +586,10 @@ export default function BotTestChatPanel({ bot, employees, templates }: BotTestC
             inputLocked
               ? "Waiting for delay…"
               : awaitingFreeText
-              ? "Type your free-text response..."
-              : direction === "outbound" && turns.length === 0
-              ? "Flow initiating…"
-              : "Type as a test customer…"
+                ? "Type your free-text response..."
+                : direction === "outbound" && turns.length === 0
+                  ? "Flow initiating…"
+                  : "Type as a test customer…"
           }
           className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           disabled={isDisabled || (direction === "outbound" && turns.length === 0 && !error)}

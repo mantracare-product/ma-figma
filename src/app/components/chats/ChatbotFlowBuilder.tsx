@@ -53,18 +53,18 @@ import VariableSelectorModal from "../process/VariableSelectorModal";
 export interface ChatbotFlowNode {
   id: string;
   type:
-    | "entryRouter"
-    | "message"
-    | "question"
-    | "template"
-    | "condition"
-    | "assignHuman"
-    | "updateChatStatus"
-    | "setTags"
-    | "timeDelay"
-    | "connectChatbot"
-    | "humanHandoff"
-    | "fieldUpdate";
+  | "entryRouter"
+  | "message"
+  | "question"
+  | "template"
+  | "condition"
+  | "assignHuman"
+  | "updateChatStatus"
+  | "setTags"
+  | "timeDelay"
+  | "connectChatbot"
+  | "humanHandoff"
+  | "fieldUpdate";
   position: { x: number; y: number };
   data: Record<string, any>;
   connections: Array<{ toNodeId: string; fromPort?: string }>;
@@ -249,17 +249,17 @@ const CHANNEL_LABELS: Record<ChannelType, string> = {
 
 const LIVE_REGISTRIES = [
   { value: "teamMembers", label: "Team Members" },
-  { value: "services",    label: "Services" },
-  { value: "processes",   label: "Processes" },
+  { value: "services", label: "Services" },
+  { value: "processes", label: "Processes" },
   { value: "providerAvailability", label: "Provider Availability (Real-Time)" }
 ];
 
 const MODULE_LABELS: Record<string, string> = {
-  client:       "Client Fields",
-  process:      "Process Fields",
-  appointment:  "Appointment Fields",
-  call:         "Call Fields",
-  service:      "Service Fields",
+  client: "Client Fields",
+  process: "Process Fields",
+  appointment: "Appointment Fields",
+  call: "Call Fields",
+  service: "Service Fields",
   organization: "Organization Fields"
 };
 
@@ -282,7 +282,7 @@ function getSelectFields(): { key: string; label: string; module: string }[] {
       }
       return result;
     }
-  } catch {}
+  } catch { }
   return [];
 }
 
@@ -298,7 +298,7 @@ function getFieldLabel(key: string): string {
   const selectFields = getSelectFields();
   const match = selectFields.find(f => f.key === key);
   if (match) return `${match.label} (${MODULE_LABELS[match.module] || match.module})`;
-  
+
   const standard: Record<string, string> = {
     "client.name": "Client Name",
     "client.email": "Client Email",
@@ -319,10 +319,10 @@ export default function ChatbotFlowBuilder({
 }: ChatbotFlowBuilderProps) {
   // ── States ────────────────────────────────────────────────────────────────
 
-const sanitizeBot = (b: Bot): Bot => ({
-  ...b,
-  channels: (b.channels || []).filter((c) => c !== "sms"),
-});
+  const sanitizeBot = (b: Bot): Bot => ({
+    ...b,
+    channels: (b.channels || []).filter((c) => c !== "sms"),
+  });
 
   const [botName, setBotName] = useState(bot.name || "Untitled Bot");
   const [isEditingName, setIsEditingName] = useState(false);
@@ -384,7 +384,7 @@ const sanitizeBot = (b: Bot): Bot => ({
         const all = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
         return all.filter(b => b.id !== bot.id);
       }
-    } catch {}
+    } catch { }
     return [];
   }, [allBots, bot.id]);
 
@@ -821,7 +821,7 @@ const sanitizeBot = (b: Bot): Bot => ({
       if (raw) {
         allBots = (JSON.parse(raw) as Bot[]).map(sanitizeBot);
       }
-    } catch {}
+    } catch { }
 
     for (const node of nodes) {
       if (node.type === "connectChatbot") {
@@ -963,11 +963,10 @@ const sanitizeBot = (b: Bot): Bot => ({
                       prev.includes(ch) ? prev.filter((c) => c !== ch) : [...prev, ch]
                     );
                   }}
-                  className={`px-3 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${
-                    isActive
+                  className={`px-3 py-1 text-xs font-semibold rounded-full border transition-all cursor-pointer ${isActive
                       ? CHANNEL_CLASSES[ch] + " border-transparent scale-[1.02] shadow-sm font-bold"
                       : "bg-white border-gray-200 text-gray-400 hover:bg-gray-50"
-                  }`}
+                    }`}
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   {isActive ? "✓ " : ""}
@@ -1165,9 +1164,8 @@ const sanitizeBot = (b: Bot): Bot => ({
             <button
               onClick={() => setIsHandToolActive(!isHandToolActive)}
               title="Hand Tool (Hold Space)"
-              className={`p-1.5 rounded transition-colors cursor-pointer ${
-                isHandToolActive ? "bg-blue-50 text-blue-600" : "hover:bg-gray-150"
-              }`}
+              className={`p-1.5 rounded transition-colors cursor-pointer ${isHandToolActive ? "bg-blue-50 text-blue-600" : "hover:bg-gray-150"
+                }`}
             >
               <Hand className="w-4 h-4 text-gray-600" />
             </button>
@@ -1176,9 +1174,8 @@ const sanitizeBot = (b: Bot): Bot => ({
           {/* Actual Canvas */}
           <div
             ref={canvasRef}
-            className={`flex-1 relative overflow-hidden bg-[#F8FAFC] select-none ${
-              isHandToolActive || isSpacePressed ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
-            }`}
+            className={`flex-1 relative overflow-hidden bg-[#F8FAFC] select-none ${isHandToolActive || isSpacePressed ? (isPanning ? "cursor-grabbing" : "cursor-grab") : "cursor-default"
+              }`}
             style={{
               background: "radial-gradient(circle, #e2e8f0 1px, transparent 1px) 0 0 / 20px 20px"
             }}
@@ -1306,13 +1303,11 @@ const sanitizeBot = (b: Bot): Bot => ({
 
                     {/* Node Card */}
                     <div
-                      className={`rounded-xl border-[2px] bg-white shadow-sm transition-all select-none cursor-move ${
-                        isEntry ? "border-[3px] " + style.border : style.border
-                      } ${
-                        isSelected
+                      className={`rounded-xl border-[2px] bg-white shadow-sm transition-all select-none cursor-move ${isEntry ? "border-[3px] " + style.border : style.border
+                        } ${isSelected
                           ? `ring-2 ring-blue-500 ring-offset-2 ${style.activeBorder}`
                           : "hover:shadow-md"
-                      }`}
+                        }`}
                       style={{ minHeight: NODE_H }}
                     >
                       <div className="px-3 py-2.5 flex items-center gap-2.5">
@@ -1335,22 +1330,22 @@ const sanitizeBot = (b: Bot): Bot => ({
                             {node.type === "message"
                               ? getCleanedTitle(node.config.text)
                               : node.type === "question"
-                              ? getCleanedTitle(node.config.text)
-                              : node.type === "template"
-                              ? templates.find((t) => t.id === node.config.templateId)?.name ||
-                                "Template message"
-                              : node.type === "condition"
-                              ? `${node.config.conditions?.length || 0} Criteria`
-                              : node.type === "assignHuman"
-                              ? employees.find((e) => e.id === node.config.employeeId)?.name ||
-                                "Unassigned"
-                              : node.type === "fieldUpdate"
-                              ? `Update: ${getFieldLabel(node.config.fieldKey)}`
-                              : node.type === "timeDelay"
-                              ? `${node.config.duration} ${node.config.unit}`
-                              : node.type === "connectChatbot"
-                              ? `Handoff: ${otherBots.find(b => b.id === node.config.targetBotId)?.name || "Unassigned"}`
-                              : "Double-click to set params"}
+                                ? getCleanedTitle(node.config.text)
+                                : node.type === "template"
+                                  ? templates.find((t) => t.id === node.config.templateId)?.name ||
+                                  "Template message"
+                                  : node.type === "condition"
+                                    ? `${node.config.conditions?.length || 0} Criteria`
+                                    : node.type === "assignHuman"
+                                      ? employees.find((e) => e.id === node.config.employeeId)?.name ||
+                                      "Unassigned"
+                                      : node.type === "fieldUpdate"
+                                        ? `Update: ${getFieldLabel(node.config.fieldKey)}`
+                                        : node.type === "timeDelay"
+                                          ? `${node.config.duration} ${node.config.unit}`
+                                          : node.type === "connectChatbot"
+                                            ? `Handoff: ${otherBots.find(b => b.id === node.config.targetBotId)?.name || "Unassigned"}`
+                                            : "Double-click to set params"}
                           </p>
                         </div>
 
@@ -1425,934 +1420,931 @@ const sanitizeBot = (b: Bot): Bot => ({
           <>
             <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setConfigNode(null)} />
             <div className="fixed top-0 right-0 h-full z-50 flex flex-col bg-white border-l border-gray-200 shadow-2xl overflow-hidden" style={{ width: "40vw" }}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-150 flex-shrink-0 bg-slate-50">
-              <div>
-                <p className="text-sm font-bold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Configure Step
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{configNode.label}</p>
+              {/* Header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-150 flex-shrink-0 bg-slate-50">
+                <div>
+                  <p className="text-sm font-bold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Configure Step
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{configNode.label}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setConfigNode(null)}
+                  className="p-1 rounded hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setConfigNode(null)}
-                className="p-1 rounded hover:bg-gray-200 transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
 
-            {/* Config Body */}
-            <div className="flex-1 overflow-y-auto p-5 space-y-5">
-              {/* ENTRY ROUTER CONFIG */}
-              {configNode.type === "entryRouter" && (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                      Direction
-                    </label>
-                    {(() => {
-                      const directionOptions = [
-                        {
-                          value: "inbound" as const,
-                          title: "Trigger when message is received",
-                          desc: "Bot responds when a contact messages first.",
-                        },
-                        {
-                          value: "outbound" as const,
-                          title: "Trigger when message needs to be sent",
-                          desc: "Bot auto-initiates the conversation.",
-                        },
-                      ];
-                      return (
-                        <div className="grid grid-cols-2 gap-3">
-                          {directionOptions.map((opt) => {
-                            const isActive = (configNode.config.direction ?? "inbound") === opt.value;
-                            return (
-                              <button
-                                key={opt.value}
-                                type="button"
-                                onClick={() => updateNodeConfig(configNode.id, { direction: opt.value })}
-                                className={`text-left p-4 rounded-xl border-2 transition-all ${
-                                  isActive
-                                    ? "border-amber-500 bg-amber-50 shadow-sm"
-                                    : "border-gray-200 bg-white hover:border-gray-300"
-                                }`}
-                              >
-                                <p
-                                  className={`text-sm font-bold leading-snug ${
-                                    isActive ? "text-amber-700" : "text-gray-800"
-                                  }`}
-                                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                                >
-                                  {opt.title}
-                                </p>
-                                <p
-                                  className="text-[11px] text-gray-500 mt-1 leading-relaxed"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  {opt.desc}
-                                </p>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* SEND MESSAGE CONFIG */}
-              {configNode.type === "message" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Message Type
-                    </label>
-                    <select
-                      value={configNode.config.messageType || "text"}
-                      onChange={(e) => updateNodeConfig(configNode.id, { messageType: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option value="text">Text Message</option>
-                      <option value="image">Image Attachment</option>
-                      <option value="video">Video Attachment</option>
-                      <option value="audio">Audio Attachment</option>
-                      <option value="document">Document Attachment</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        {configNode.config.messageType === "text" ? "Message Body Text" : "Caption / Body Text"}
-                      </label>
-                      <VariablePickerButton
-                        targetRef={messageTextRef}
-                        value={configNode.config.text || ""}
-                        onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
-                        label="{ } Insert Variable"
-                        mode="insert"
-                      />
-                    </div>
-                    <textarea
-                      ref={messageTextRef}
-                      rows={4}
-                      value={configNode.config.text || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { text: e.target.value })}
-                      placeholder="Type chatbot reply..."
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
-                    />
-                  </div>
-
-                  {configNode.config.messageType !== "text" && (
+              {/* Config Body */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {/* ENTRY ROUTER CONFIG */}
+                {configNode.type === "entryRouter" && (
+                  <div className="space-y-4">
                     <div className="space-y-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Media Asset URL
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                        Direction
                       </label>
-                      <input
-                        type="url"
-                        value={configNode.config.mediaUrl || ""}
-                        onChange={(e) => updateNodeConfig(configNode.id, { mediaUrl: e.target.value })}
-                        placeholder="https://example.com/file.jpg"
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white"
-                      />
-                      {configNode.config.messageType === "document" && (
-                        <input
-                          type="text"
-                          value={configNode.config.fileName || ""}
-                          onChange={(e) => updateNodeConfig(configNode.id, { fileName: e.target.value })}
-                          placeholder="File display name (e.g. Invoice.pdf)"
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white"
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* Live WhatsApp-style preview */}
-                  <WhatsAppMessagePreview
-                    botName={botName}
-                    messageType={configNode.config.messageType || "text"}
-                    text={configNode.config.text || ""}
-                    mediaUrl={configNode.config.mediaUrl}
-                    fileName={configNode.config.fileName}
-                  />
-                </div>
-              )}
-
-              {/* ASK QUESTION CONFIG */}
-              {configNode.type === "question" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Question Type
-                    </label>
-                    <select
-                      value={configNode.config.questionType || "open"}
-                      onChange={(e) => updateNodeConfig(configNode.id, { questionType: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option value="open">Open Question (free text)</option>
-                      <option value="buttons">Buttons (max 3 choices)</option>
-                      <option value="list">List (max 10 choices)</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        Question Prompt Text
-                      </label>
-                      <VariablePickerButton
-                        targetRef={questionTextRef}
-                        value={configNode.config.text || ""}
-                        onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
-                        label="{ } Insert Variable"
-                        moduleFilter={["client", "process"]}
-                        mode="insert"
-                      />
-                    </div>
-                    <textarea
-                      ref={questionTextRef}
-                      rows={3}
-                      value={configNode.config.text || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { text: e.target.value })}
-                      placeholder="Type question prompt..."
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
-                    />
-                  </div>
-
-                  {/* ── Option Source (buttons & list only) ─────────────────── */}
-                  {(configNode.config.questionType === "buttons" || configNode.config.questionType === "list") && (
-                    <div className="space-y-3 pt-1">
-                      {/* Segmented control */}
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                            Option Source
-                          </label>
-                          <InfoTooltip text="Static lets you type manual choices. Available fetches options dynamically from real-time resources." />
-                        </div>
-                        <div className="flex p-1 bg-slate-100 rounded-lg border border-slate-200">
-                          {(["static", "available"] as const).map((m) => (
-                            <button
-                              key={m}
-                              type="button"
-                              onClick={() => {
-                                if (m === "static") {
-                                  updateNodeConfig(configNode.id, { optionsSource: { mode: "static" } });
-                                } else {
-                                  const mod = "teamMembers";
-                                  const opts = getDynamicOptions(mod);
-                                  const labels = opts.map(o => o.label);
-                                  const isBtn = configNode.config.questionType === "buttons";
-                                  const nextSource = { mode: "available", module: mod };
-                                  const resolvedSave = resolveDynamicSaveField(nextSource);
-                                  updateNodeConfig(configNode.id, {
-                                    optionsSource: nextSource,
-                                    saveResponseField: resolvedSave?.fieldKey,
-                                    buttons: isBtn ? labels.slice(0, 3) : undefined,
-                                    listItems: !isBtn ? labels.slice(0, 10) : undefined
-                                  });
-                                }
-                              }}
-                              className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer capitalize ${
-                                (m === "static" && (!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static")) ||
-                                (m !== "static" && configNode.config.optionsSource?.mode === m)
-                                  ? "bg-white text-gray-800 shadow-sm border border-gray-200"
-                                  : "text-gray-500 hover:text-gray-700"
-                              }`}
-                            >
-                              {m}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* ── STATIC: manual text editors ── */}
-                      {(!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static") && (
-                        <>
-                          {configNode.config.questionType === "buttons" && (
-                            <div className="space-y-2">
-                              <ButtonActionEditor
-                                buttons={(() => {
-                                  const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
-                                  return raw.map((b, i) =>
-                                    typeof b === "string"
-                                      ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
-                                      : { id: b.id || `btn-${i}`, ...b }
-                                  );
-                                })()}
-                                onChange={(actions: ButtonAction[]) => updateNodeConfig(configNode.id, { buttons: actions })}
-                                maxButtons={3}
-                                label="Button Choices"
-                                description="Configure quick reply choices or client actions. Call, URL, and Email buttons end the flow at this node."
-                              />
-                            </div>
-                          )}
-
-                          {configNode.config.questionType === "list" && (
-                            <div className="space-y-2">
-                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">List Options</label>
-                              {(configNode.config.listItems || []).map((item: string, idx: number) => (
-                                <div key={idx} className="flex gap-2">
-                                  <input
-                                    type="text"
-                                    value={item}
-                                    onChange={(e) => {
-                                      const list = [...configNode.config.listItems];
-                                      list[idx] = e.target.value;
-                                      updateNodeConfig(configNode.id, { listItems: list });
-                                    }}
-                                    placeholder={`Item ${idx + 1}`}
-                                    className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const list = (configNode.config.listItems || []).filter((_: any, i: number) => i !== idx);
-                                      updateNodeConfig(configNode.id, { listItems: list });
-                                    }}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded animate-none cursor-pointer"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              ))}
-                              {(configNode.config.listItems || []).length < 10 && (
-                                <button
-                                  type="button"
-                                  onClick={() => updateNodeConfig(configNode.id, { listItems: [...(configNode.config.listItems || []), ""] })}
-                                  className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
-                                >
-                                  + Add List Option
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      )}
-
-                      {/* ── AVAILABLE: registry + custom field picker + preview ── */}
-                      {configNode.config.optionsSource?.mode === "available" && (() => {
-                        const currentModule = configNode.config.optionsSource?.module || "teamMembers";
-
-                        const getSelectedLabel = () => {
-                          const reg = LIVE_REGISTRIES.find(r => r.value === currentModule);
-                          if (reg) return reg.label;
-                          const sf = selectFields.find(f => f.key === currentModule);
-                          if (sf) return `${sf.label} (${MODULE_LABELS[sf.module] ?? sf.module})`;
-                          return currentModule;
-                        };
-
-                        const customFieldGroups = (["client", "process", "appointment", "call", "service", "organization"] as const)
-                          .map(mod => ({ mod, label: MODULE_LABELS[mod], fields: selectFields.filter(f => f.module === mod) }))
-                          .filter(g => g.fields.length > 0);
-
+                      {(() => {
+                        const directionOptions = [
+                          {
+                            value: "inbound" as const,
+                            title: "Trigger when message is received",
+                            desc: "Bot responds when a contact messages first.",
+                          },
+                          {
+                            value: "outbound" as const,
+                            title: "Trigger when message needs to be sent",
+                            desc: "Bot auto-initiates the conversation.",
+                          },
+                        ];
                         return (
-                          <div className="space-y-3 p-3 bg-slate-50 border border-gray-200 rounded-xl">
-                            {/* Source Module selector */}
-                            <div>
-                              <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                                Source Module
-                              </label>
-                              <div className="relative">
+                          <div className="grid grid-cols-2 gap-3">
+                            {directionOptions.map((opt) => {
+                              const isActive = (configNode.config.direction ?? "inbound") === opt.value;
+                              return (
                                 <button
-                                  ref={moduleTriggerRef}
+                                  key={opt.value}
                                   type="button"
-                                  onClick={() => {
-                                    if (moduleDropdownOpen) {
-                                      setModuleDropdownOpen(false);
-                                    } else {
-                                      const rect = moduleTriggerRef.current?.getBoundingClientRect();
-                                      if (rect) {
-                                        setModuleDropdownPos({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
-                                        setModuleDropdownOpen(true);
-                                      }
-                                    }
-                                  }}
-                                  className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 flex items-center justify-between shadow-sm hover:border-gray-300 transition-colors"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                  onClick={() => updateNodeConfig(configNode.id, { direction: opt.value })}
+                                  className={`text-left p-4 rounded-xl border-2 transition-all ${isActive
+                                      ? "border-amber-500 bg-amber-50 shadow-sm"
+                                      : "border-gray-200 bg-white hover:border-gray-300"
+                                    }`}
                                 >
-                                  <span className="font-medium text-gray-700">{getSelectedLabel()}</span>
-                                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                                  <p
+                                    className={`text-sm font-bold leading-snug ${isActive ? "text-amber-700" : "text-gray-800"
+                                      }`}
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  >
+                                    {opt.title}
+                                  </p>
+                                  <p
+                                    className="text-[11px] text-gray-500 mt-1 leading-relaxed"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    {opt.desc}
+                                  </p>
                                 </button>
-
-                                {moduleDropdownOpen && moduleDropdownPos && createPortal(
-                                  <>
-                                    <div className="fixed inset-0 cursor-default" style={{ zIndex: 9998 }} onClick={() => setModuleDropdownOpen(false)} />
-                                    <div
-                                      ref={moduleDropdownPanelRef}
-                                      className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden"
-                                      style={{ position: "absolute", top: moduleDropdownPos.top + 4, left: moduleDropdownPos.left, width: moduleDropdownPos.width, maxHeight: 280, zIndex: 9999, overflowY: "auto" }}
-                                    >
-                                      {/* Live Registries */}
-                                      <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-b border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                        Live Registries
-                                      </div>
-                                      {LIVE_REGISTRIES.map(item => (
-                                        <button
-                                          key={item.value}
-                                          type="button"
-                                          onClick={() => {
-                                            const isBtn = configNode.config.questionType === "buttons";
-                                            const nextSource = { mode: "available", module: item.value };
-                                            const resolvedSave = resolveDynamicSaveField(nextSource);
-                                            const opts = getDynamicOptions(item.value);
-                                            const labels = opts.map(o => o.label);
-                                            updateNodeConfig(configNode.id, {
-                                              optionsSource: nextSource,
-                                              saveResponseField: resolvedSave?.fieldKey,
-                                              buttons: isBtn ? labels.slice(0, 3) : undefined,
-                                              listItems: !isBtn ? labels.slice(0, 10) : undefined
-                                            });
-                                            setModuleDropdownOpen(false);
-                                          }}
-                                          className={`w-full text-left px-4 py-1.5 text-xs font-medium transition-colors ${currentModule === item.value ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
-                                          style={{ fontFamily: "Outfit, sans-serif" }}
-                                        >
-                                          {item.label}
-                                        </button>
-                                      ))}
-
-                                      {/* Custom Fields */}
-                                      {customFieldGroups.length > 0 && (
-                                        <>
-                                          <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-y border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                            Custom Fields
-                                          </div>
-                                          {customFieldGroups.map(g => (
-                                            <div key={g.mod}>
-                                              <div className="px-5 py-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>{g.label}</div>
-                                              {g.fields.map(field => (
-                                                <button
-                                                  key={field.key}
-                                                  type="button"
-                                                  onClick={() => {
-                                                    const isBtn = configNode.config.questionType === "buttons";
-                                                    const nextSource = { mode: "available", module: field.key };
-                                                    const resolvedSave = resolveDynamicSaveField(nextSource);
-                                                    const opts = getDynamicOptions(field.key);
-                                                    const labels = opts.map(o => o.label);
-                                                    updateNodeConfig(configNode.id, {
-                                                      optionsSource: nextSource,
-                                                      saveResponseField: resolvedSave?.fieldKey,
-                                                      buttons: isBtn ? labels.slice(0, 3) : undefined,
-                                                      listItems: !isBtn ? labels.slice(0, 10) : undefined
-                                                    });
-                                                    setModuleDropdownOpen(false);
-                                                  }}
-                                                  className={`w-full text-left px-6 py-1.5 text-xs transition-colors ${currentModule === field.key ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
-                                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                                >
-                                                  {field.label}
-                                                </button>
-                                              ))}
-                                            </div>
-                                          ))}
-                                        </>
-                                      )}
-                                    </div>
-                                  </>,
-                                  document.body
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Source Preview or Explainer */}
-                            {currentModule === "providerAvailability" ? (
-                              <div className="space-y-2 pt-1">
-                                <label className="block text-[10px] font-bold text-gray-450 uppercase tracking-wider mb-1">
-                                  Provider Availability
-                                </label>
-                                <p className="text-[11px] text-gray-500 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  Fetches this provider's live availability at conversation time.
-                                </p>
-                                {!nodes.some(n =>
-                                  n.id !== configNode.id &&
-                                  n.type === "question" &&
-                                  (n.config?.optionsSource?.module === "teamMembers" || n.config?.saveResponseField === "client.responsible")
-                                ) && (
-                                  <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800 font-medium leading-relaxed">
-                                    ⚠️ No team member question found earlier in this flow — add one that saves to a Team Member field before this step.
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
-                                  Source Preview
-                                </label>
-                                <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border rounded-lg max-h-28 overflow-y-auto">
-                                  {(() => {
-                                    const opts = getDynamicOptions(currentModule);
-                                    return opts.length > 0
-                                      ? opts.map((opt, i) => (
-                                          <span key={i} className="text-[10px] font-medium bg-slate-100 border px-2 py-0.5 rounded text-gray-600">{opt.label}</span>
-                                        ))
-                                      : <span className="text-xs text-gray-400 italic">No options found</span>;
-                                  })()}
-                                </div>
-                              </div>
-                            )}
+                              );
+                            })}
                           </div>
                         );
                       })()}
                     </div>
-                  )}
-
-                  {/* Live WhatsApp-style preview for question node */}
-                  <WhatsAppMessagePreview
-                    botName={botName}
-                    text={configNode.config.text || ""}
-                    buttons={
-                      configNode.config.questionType === "buttons"
-                        ? (configNode.config.optionsSource?.mode === "available"
-                            ? (configNode.config.optionsSource.module === "providerAvailability"
-                                ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM"]
-                                : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 3).map(o => o.label))
-                            : (() => {
-                                const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
-                                return raw.map((b, i) =>
-                                  typeof b === "string"
-                                    ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
-                                    : { id: b.id || `btn-${i}`, ...b }
-                                );
-                              })())
-                        : undefined
-                    }
-                    listItems={
-                      configNode.config.questionType === "list"
-                        ? (configNode.config.optionsSource?.mode === "available"
-                            ? (configNode.config.optionsSource.module === "providerAvailability"
-                                ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM", "Wed at 3:30 PM"]
-                                : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 10).map(o => o.label))
-                            : (configNode.config.listItems || []))
-                        : undefined
-                    }
-                  />
-                </div>
-              )}
-
-
-              {/* WHATSAPP TEMPLATE CONFIG */}
-              {configNode.type === "template" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Choose Global Template
-                    </label>
-                    <select
-                      value={configNode.config.templateId || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { templateId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option value="">Select template...</option>
-                      {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name}
-                        </option>
-                      ))}
-                    </select>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* SET CONDITION CONFIG */}
-              {configNode.type === "condition" && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-xs font-bold text-gray-650 uppercase tracking-wider">
-                      IF Condition Block
-                    </label>
-                  </div>
-
-                  {(configNode.config.conditions || []).map((cond: any, idx: number) => (
-                    <div key={idx} className="p-3 border rounded-xl bg-slate-50 space-y-2 relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const list = (configNode.config.conditions || []).filter(
-                            (_: any, i: number) => i !== idx
-                          );
-                          updateNodeConfig(configNode.id, { conditions: list });
-                        }}
-                        className="absolute top-2 right-2 text-gray-400 hover:text-red-500 rounded p-1 hover:bg-red-50"
+                {/* SEND MESSAGE CONFIG */}
+                {configNode.type === "message" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Message Type
+                      </label>
+                      <select
+                        value={configNode.config.messageType || "text"}
+                        onChange={(e) => updateNodeConfig(configNode.id, { messageType: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                       >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
+                        <option value="text">Text Message</option>
+                        <option value="image">Image Attachment</option>
+                        <option value="video">Video Attachment</option>
+                        <option value="audio">Audio Attachment</option>
+                        <option value="document">Document Attachment</option>
+                      </select>
+                    </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-gray-500 mb-1">
-                          Variable
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                          {configNode.config.messageType === "text" ? "Message Body Text" : "Caption / Body Text"}
                         </label>
-                        <select
-                          value={cond.variable || "name"}
-                          onChange={(e) => {
-                            const list = [...configNode.config.conditions];
-                            list[idx] = { ...list[idx], variable: e.target.value };
-                            updateNodeConfig(configNode.id, { conditions: list });
-                          }}
-                          className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs"
-                        >
-                          <option value="name">Client Name</option>
-                          <option value="email">Client Email</option>
-                          <option value="phone">Client Phone</option>
-                          <option value="status">Client Status</option>
-                          <option value="country">Country</option>
-                        </select>
+                        <VariablePickerButton
+                          targetRef={messageTextRef}
+                          value={configNode.config.text || ""}
+                          onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
+                          label="{ } Insert Variable"
+                          mode="insert"
+                        />
                       </div>
+                      <textarea
+                        ref={messageTextRef}
+                        rows={4}
+                        value={configNode.config.text || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { text: e.target.value })}
+                        placeholder="Type chatbot reply..."
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
+                      />
+                    </div>
 
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="block text-[10px] font-bold text-gray-500">
-                            Operator
-                          </label>
-                          <InfoTooltip text="Choose how to compare the variable against the value (e.g. Contains matches partial text)." />
+                    {configNode.config.messageType !== "text" && (
+                      <div className="space-y-2">
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                          Media Asset URL
+                        </label>
+                        <input
+                          type="url"
+                          value={configNode.config.mediaUrl || ""}
+                          onChange={(e) => updateNodeConfig(configNode.id, { mediaUrl: e.target.value })}
+                          placeholder="https://example.com/file.jpg"
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white"
+                        />
+                        {configNode.config.messageType === "document" && (
+                          <input
+                            type="text"
+                            value={configNode.config.fileName || ""}
+                            onChange={(e) => updateNodeConfig(configNode.id, { fileName: e.target.value })}
+                            placeholder="File display name (e.g. Invoice.pdf)"
+                            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs text-gray-700 bg-white"
+                          />
+                        )}
+                      </div>
+                    )}
+
+                    {/* Live WhatsApp-style preview */}
+                    <WhatsAppMessagePreview
+                      botName={botName}
+                      messageType={configNode.config.messageType || "text"}
+                      text={configNode.config.text || ""}
+                      mediaUrl={configNode.config.mediaUrl}
+                      fileName={configNode.config.fileName}
+                    />
+                  </div>
+                )}
+
+                {/* ASK QUESTION CONFIG */}
+                {configNode.type === "question" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Question Type
+                      </label>
+                      <select
+                        value={configNode.config.questionType || "open"}
+                        onChange={(e) => updateNodeConfig(configNode.id, { questionType: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                      >
+                        <option value="open">Open Question (free text)</option>
+                        <option value="buttons">Buttons (max 3 choices)</option>
+                        <option value="list">List (max 10 choices)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                          Question Prompt Text
+                        </label>
+                        <VariablePickerButton
+                          targetRef={questionTextRef}
+                          value={configNode.config.text || ""}
+                          onChange={(v) => updateNodeConfig(configNode.id, { text: v })}
+                          label="{ } Insert Variable"
+                          moduleFilter={["client", "process"]}
+                          mode="insert"
+                        />
+                      </div>
+                      <textarea
+                        ref={questionTextRef}
+                        rows={3}
+                        value={configNode.config.text || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { text: e.target.value })}
+                        placeholder="Type question prompt..."
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 resize-none text-gray-700 bg-white"
+                      />
+                    </div>
+
+                    {/* ── Option Source (buttons & list only) ─────────────────── */}
+                    {(configNode.config.questionType === "buttons" || configNode.config.questionType === "list") && (
+                      <div className="space-y-3 pt-1">
+                        {/* Segmented control */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                              Option Source
+                            </label>
+                            <InfoTooltip text="Static lets you type manual choices. Available fetches options dynamically from real-time resources." />
+                          </div>
+                          <div className="flex p-1 bg-slate-100 rounded-lg border border-slate-200">
+                            {(["static", "available"] as const).map((m) => (
+                              <button
+                                key={m}
+                                type="button"
+                                onClick={() => {
+                                  if (m === "static") {
+                                    updateNodeConfig(configNode.id, { optionsSource: { mode: "static" } });
+                                  } else {
+                                    const mod = "teamMembers";
+                                    const opts = getDynamicOptions(mod);
+                                    const labels = opts.map(o => o.label);
+                                    const isBtn = configNode.config.questionType === "buttons";
+                                    const nextSource = { mode: "available", module: mod };
+                                    const resolvedSave = resolveDynamicSaveField(nextSource);
+                                    updateNodeConfig(configNode.id, {
+                                      optionsSource: nextSource,
+                                      saveResponseField: resolvedSave?.fieldKey,
+                                      buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                      listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                    });
+                                  }
+                                }}
+                                className={`flex-1 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer capitalize ${(m === "static" && (!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static")) ||
+                                    (m !== "static" && configNode.config.optionsSource?.mode === m)
+                                    ? "bg-white text-gray-800 shadow-sm border border-gray-200"
+                                    : "text-gray-500 hover:text-gray-700"
+                                  }`}
+                              >
+                                {m}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <select
-                          value={cond.operator || "equals"}
-                          onChange={(e) => {
-                            const list = [...configNode.config.conditions];
-                            list[idx] = { ...list[idx], operator: e.target.value };
+
+                        {/* ── STATIC: manual text editors ── */}
+                        {(!configNode.config.optionsSource || configNode.config.optionsSource?.mode === "static") && (
+                          <>
+                            {configNode.config.questionType === "buttons" && (
+                              <div className="space-y-2">
+                                <ButtonActionEditor
+                                  buttons={(() => {
+                                    const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
+                                    return raw.map((b, i) =>
+                                      typeof b === "string"
+                                        ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
+                                        : { id: b.id || `btn-${i}`, ...b }
+                                    );
+                                  })()}
+                                  onChange={(actions: ButtonAction[]) => updateNodeConfig(configNode.id, { buttons: actions })}
+                                  maxButtons={3}
+                                  label="Button Choices"
+                                  description="Configure quick reply choices or client actions. Call, URL, and Email buttons end the flow at this node."
+                                />
+                              </div>
+                            )}
+
+                            {configNode.config.questionType === "list" && (
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">List Options</label>
+                                {(configNode.config.listItems || []).map((item: string, idx: number) => (
+                                  <div key={idx} className="flex gap-2">
+                                    <input
+                                      type="text"
+                                      value={item}
+                                      onChange={(e) => {
+                                        const list = [...configNode.config.listItems];
+                                        list[idx] = e.target.value;
+                                        updateNodeConfig(configNode.id, { listItems: list });
+                                      }}
+                                      placeholder={`Item ${idx + 1}`}
+                                      className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-white"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const list = (configNode.config.listItems || []).filter((_: any, i: number) => i !== idx);
+                                        updateNodeConfig(configNode.id, { listItems: list });
+                                      }}
+                                      className="p-1.5 text-red-500 hover:bg-red-50 rounded animate-none cursor-pointer"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))}
+                                {(configNode.config.listItems || []).length < 10 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => updateNodeConfig(configNode.id, { listItems: [...(configNode.config.listItems || []), ""] })}
+                                    className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
+                                  >
+                                    + Add List Option
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {/* ── AVAILABLE: registry + custom field picker + preview ── */}
+                        {configNode.config.optionsSource?.mode === "available" && (() => {
+                          const currentModule = configNode.config.optionsSource?.module || "teamMembers";
+
+                          const getSelectedLabel = () => {
+                            const reg = LIVE_REGISTRIES.find(r => r.value === currentModule);
+                            if (reg) return reg.label;
+                            const sf = selectFields.find(f => f.key === currentModule);
+                            if (sf) return `${sf.label} (${MODULE_LABELS[sf.module] ?? sf.module})`;
+                            return currentModule;
+                          };
+
+                          const customFieldGroups = (["client", "process", "appointment", "call", "service", "organization"] as const)
+                            .map(mod => ({ mod, label: MODULE_LABELS[mod], fields: selectFields.filter(f => f.module === mod) }))
+                            .filter(g => g.fields.length > 0);
+
+                          return (
+                            <div className="space-y-3 p-3 bg-slate-50 border border-gray-200 rounded-xl">
+                              {/* Source Module selector */}
+                              <div>
+                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
+                                  Source Module
+                                </label>
+                                <div className="relative">
+                                  <button
+                                    ref={moduleTriggerRef}
+                                    type="button"
+                                    onClick={() => {
+                                      if (moduleDropdownOpen) {
+                                        setModuleDropdownOpen(false);
+                                      } else {
+                                        const rect = moduleTriggerRef.current?.getBoundingClientRect();
+                                        if (rect) {
+                                          setModuleDropdownPos({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX, width: rect.width });
+                                          setModuleDropdownOpen(true);
+                                        }
+                                      }
+                                    }}
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 flex items-center justify-between shadow-sm hover:border-gray-300 transition-colors"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <span className="font-medium text-gray-700">{getSelectedLabel()}</span>
+                                    <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                                  </button>
+
+                                  {moduleDropdownOpen && moduleDropdownPos && createPortal(
+                                    <>
+                                      <div className="fixed inset-0 cursor-default" style={{ zIndex: 9998 }} onClick={() => setModuleDropdownOpen(false)} />
+                                      <div
+                                        ref={moduleDropdownPanelRef}
+                                        className="bg-white rounded-xl shadow-[0px_8px_32px_rgba(0,0,0,0.12)] border border-gray-200 overflow-hidden"
+                                        style={{ position: "absolute", top: moduleDropdownPos.top + 4, left: moduleDropdownPos.left, width: moduleDropdownPos.width, maxHeight: 280, zIndex: 9999, overflowY: "auto" }}
+                                      >
+                                        {/* Live Registries */}
+                                        <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-b border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                          Live Registries
+                                        </div>
+                                        {LIVE_REGISTRIES.map(item => (
+                                          <button
+                                            key={item.value}
+                                            type="button"
+                                            onClick={() => {
+                                              const isBtn = configNode.config.questionType === "buttons";
+                                              const nextSource = { mode: "available", module: item.value };
+                                              const resolvedSave = resolveDynamicSaveField(nextSource);
+                                              const opts = getDynamicOptions(item.value);
+                                              const labels = opts.map(o => o.label);
+                                              updateNodeConfig(configNode.id, {
+                                                optionsSource: nextSource,
+                                                saveResponseField: resolvedSave?.fieldKey,
+                                                buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                                listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                              });
+                                              setModuleDropdownOpen(false);
+                                            }}
+                                            className={`w-full text-left px-4 py-1.5 text-xs font-medium transition-colors ${currentModule === item.value ? "bg-blue-50 text-blue-600" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
+                                            style={{ fontFamily: "Outfit, sans-serif" }}
+                                          >
+                                            {item.label}
+                                          </button>
+                                        ))}
+
+                                        {/* Custom Fields */}
+                                        {customFieldGroups.length > 0 && (
+                                          <>
+                                            <div className="px-3 py-1.5 text-[10px] font-bold text-gray-500 bg-gray-50 border-y border-gray-100 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                              Custom Fields
+                                            </div>
+                                            {customFieldGroups.map(g => (
+                                              <div key={g.mod}>
+                                                <div className="px-5 py-1 text-[9px] font-bold text-gray-400 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>{g.label}</div>
+                                                {g.fields.map(field => (
+                                                  <button
+                                                    key={field.key}
+                                                    type="button"
+                                                    onClick={() => {
+                                                      const isBtn = configNode.config.questionType === "buttons";
+                                                      const nextSource = { mode: "available", module: field.key };
+                                                      const resolvedSave = resolveDynamicSaveField(nextSource);
+                                                      const opts = getDynamicOptions(field.key);
+                                                      const labels = opts.map(o => o.label);
+                                                      updateNodeConfig(configNode.id, {
+                                                        optionsSource: nextSource,
+                                                        saveResponseField: resolvedSave?.fieldKey,
+                                                        buttons: isBtn ? labels.slice(0, 3) : undefined,
+                                                        listItems: !isBtn ? labels.slice(0, 10) : undefined
+                                                      });
+                                                      setModuleDropdownOpen(false);
+                                                    }}
+                                                    className={`w-full text-left px-6 py-1.5 text-xs transition-colors ${currentModule === field.key ? "bg-blue-50 text-blue-600 font-bold" : "text-gray-700 hover:bg-blue-50 hover:text-blue-600"}`}
+                                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                                  >
+                                                    {field.label}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            ))}
+                                          </>
+                                        )}
+                                      </div>
+                                    </>,
+                                    document.body
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Source Preview or Explainer */}
+                              {currentModule === "providerAvailability" ? (
+                                <div className="space-y-2 pt-1">
+                                  <label className="block text-[10px] font-bold text-gray-450 uppercase tracking-wider mb-1">
+                                    Provider Availability
+                                  </label>
+                                  <p className="text-[11px] text-gray-500 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                    Fetches this provider's live availability at conversation time.
+                                  </p>
+                                  {!nodes.some(n =>
+                                    n.id !== configNode.id &&
+                                    n.type === "question" &&
+                                    (n.config?.optionsSource?.module === "teamMembers" || n.config?.saveResponseField === "client.responsible")
+                                  ) && (
+                                      <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg text-[10px] text-amber-800 font-medium leading-relaxed">
+                                        ⚠️ No team member question found earlier in this flow — add one that saves to a Team Member field before this step.
+                                      </div>
+                                    )}
+                                </div>
+                              ) : (
+                                <div>
+                                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">
+                                    Source Preview
+                                  </label>
+                                  <div className="flex flex-wrap gap-1.5 p-2.5 bg-white border rounded-lg max-h-28 overflow-y-auto">
+                                    {(() => {
+                                      const opts = getDynamicOptions(currentModule);
+                                      return opts.length > 0
+                                        ? opts.map((opt, i) => (
+                                          <span key={i} className="text-[10px] font-medium bg-slate-100 border px-2 py-0.5 rounded text-gray-600">{opt.label}</span>
+                                        ))
+                                        : <span className="text-xs text-gray-400 italic">No options found</span>;
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Live WhatsApp-style preview for question node */}
+                    <WhatsAppMessagePreview
+                      botName={botName}
+                      text={configNode.config.text || ""}
+                      buttons={
+                        configNode.config.questionType === "buttons"
+                          ? (configNode.config.optionsSource?.mode === "available"
+                            ? (configNode.config.optionsSource.module === "providerAvailability"
+                              ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM"]
+                              : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 3).map(o => o.label))
+                            : (() => {
+                              const raw: Array<ButtonAction | string> = configNode.config.buttons || [];
+                              return raw.map((b, i) =>
+                                typeof b === "string"
+                                  ? { id: `btn-${i}`, label: b, actionType: "quick_reply" as const, value: "" }
+                                  : { id: b.id || `btn-${i}`, ...b }
+                              );
+                            })())
+                          : undefined
+                      }
+                      listItems={
+                        configNode.config.questionType === "list"
+                          ? (configNode.config.optionsSource?.mode === "available"
+                            ? (configNode.config.optionsSource.module === "providerAvailability"
+                              ? ["Mon at 9:00 AM", "Mon at 10:30 AM", "Tue at 1:00 PM", "Wed at 3:30 PM"]
+                              : getDynamicOptions(configNode.config.optionsSource.module).slice(0, 10).map(o => o.label))
+                            : (configNode.config.listItems || []))
+                          : undefined
+                      }
+                    />
+                  </div>
+                )}
+
+
+                {/* WHATSAPP TEMPLATE CONFIG */}
+                {configNode.type === "template" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Choose Global Template
+                      </label>
+                      <select
+                        value={configNode.config.templateId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { templateId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                      >
+                        <option value="">Select template...</option>
+                        {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((tpl) => (
+                          <option key={tpl.id} value={tpl.id}>
+                            {tpl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* SET CONDITION CONFIG */}
+                {configNode.type === "condition" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-bold text-gray-650 uppercase tracking-wider">
+                        IF Condition Block
+                      </label>
+                    </div>
+
+                    {(configNode.config.conditions || []).map((cond: any, idx: number) => (
+                      <div key={idx} className="p-3 border rounded-xl bg-slate-50 space-y-2 relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const list = (configNode.config.conditions || []).filter(
+                              (_: any, i: number) => i !== idx
+                            );
                             updateNodeConfig(configNode.id, { conditions: list });
                           }}
-                          className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs"
+                          className="absolute top-2 right-2 text-gray-400 hover:text-red-500 rounded p-1 hover:bg-red-50"
                         >
-                          <option value="equals">Equals</option>
-                          <option value="contains">Contains</option>
-                          <option value="starts_with">Starts With</option>
-                          <option value="ends_with">Ends With</option>
-                          <option value="is_empty">Is Empty</option>
-                        </select>
-                      </div>
+                          <X className="w-3.5 h-3.5" />
+                        </button>
 
-                      {cond.operator !== "is_empty" && (
+                        <div>
+                          <label className="block text-[10px] font-bold text-gray-500 mb-1">
+                            Variable
+                          </label>
+                          <select
+                            value={cond.variable || "name"}
+                            onChange={(e) => {
+                              const list = [...configNode.config.conditions];
+                              list[idx] = { ...list[idx], variable: e.target.value };
+                              updateNodeConfig(configNode.id, { conditions: list });
+                            }}
+                            className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs"
+                          >
+                            <option value="name">Client Name</option>
+                            <option value="email">Client Email</option>
+                            <option value="phone">Client Phone</option>
+                            <option value="status">Client Status</option>
+                            <option value="country">Country</option>
+                          </select>
+                        </div>
+
                         <div>
                           <div className="flex items-center justify-between mb-1">
                             <label className="block text-[10px] font-bold text-gray-500">
-                              Value
+                              Operator
                             </label>
-                            <VariablePickerButton
-                              targetRef={{ current: conditionValueRefs.current[`${configNode.id}-${idx}`] }}
-                              value={cond.value || ""}
-                              onChange={(v) => {
-                                const list = [...configNode.config.conditions];
-                                list[idx] = { ...list[idx], value: v };
-                                updateNodeConfig(configNode.id, { conditions: list });
-                              }}
-                              label="{ } Insert Variable"
-                              mode="insert"
-                            />
+                            <InfoTooltip text="Choose how to compare the variable against the value (e.g. Contains matches partial text)." />
                           </div>
-                          <input
-                            ref={el => { conditionValueRefs.current[`${configNode.id}-${idx}`] = el; }}
-                            type="text"
-                            value={cond.value || ""}
+                          <select
+                            value={cond.operator || "equals"}
                             onChange={(e) => {
                               const list = [...configNode.config.conditions];
-                              list[idx] = { ...list[idx], value: e.target.value };
+                              list[idx] = { ...list[idx], operator: e.target.value };
                               updateNodeConfig(configNode.id, { conditions: list });
                             }}
-                            placeholder="criteria filter..."
                             className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs"
-                          />
+                          >
+                            <option value="equals">Equals</option>
+                            <option value="contains">Contains</option>
+                            <option value="starts_with">Starts With</option>
+                            <option value="ends_with">Ends With</option>
+                            <option value="is_empty">Is Empty</option>
+                          </select>
                         </div>
-                      )}
-                    </div>
-                  ))}
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const list = [
-                        ...(configNode.config.conditions || []),
-                        { variable: "name", operator: "equals", value: "" }
-                      ];
-                      updateNodeConfig(configNode.id, { conditions: list });
-                    }}
-                    className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
-                  >
-                    + Add criteria rule
-                  </button>
-                </div>
-              )}
-
-              {/* ASSIGN HUMAN CONFIG */}
-              {configNode.type === "assignHuman" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Assign routed contacts to
-                    </label>
-                    <select
-                      value={configNode.config.employeeId || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { employeeId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option value="">Select team member...</option>
-                      {employees.map((emp) => (
-                        <option key={emp.id} value={emp.id}>
-                          {emp.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* FIELD UPDATE CONFIG */}
-              {configNode.type === "fieldUpdate" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Field to Update
-                    </label>
-                    <div className="flex gap-2 items-center">
-                      <div className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs bg-gray-50 text-gray-700 min-h-[34px] flex items-center font-medium truncate">
-                        {getFieldLabel(configNode.config.fieldKey)}
+                        {cond.operator !== "is_empty" && (
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="block text-[10px] font-bold text-gray-500">
+                                Value
+                              </label>
+                              <VariablePickerButton
+                                targetRef={{ current: conditionValueRefs.current[`${configNode.id}-${idx}`] }}
+                                value={cond.value || ""}
+                                onChange={(v) => {
+                                  const list = [...configNode.config.conditions];
+                                  list[idx] = { ...list[idx], value: v };
+                                  updateNodeConfig(configNode.id, { conditions: list });
+                                }}
+                                label="{ } Insert Variable"
+                                mode="insert"
+                              />
+                            </div>
+                            <input
+                              ref={el => { conditionValueRefs.current[`${configNode.id}-${idx}`] = el; }}
+                              type="text"
+                              value={cond.value || ""}
+                              onChange={(e) => {
+                                const list = [...configNode.config.conditions];
+                                list[idx] = { ...list[idx], value: e.target.value };
+                                updateNodeConfig(configNode.id, { conditions: list });
+                              }}
+                              placeholder="criteria filter..."
+                              className="w-full px-2 py-1 bg-white border border-gray-200 rounded text-xs"
+                            />
+                          </div>
+                        )}
                       </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setFieldModalOpen(true)}
-                        className="shrink-0 text-xs"
-                      >
-                        Select Field...
-                      </Button>
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Writes the value below into this field when the flow reaches this node.
-                    </p>
-                  </div>
+                    ))}
 
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
-                        New Value
-                      </label>
-                      <VariablePickerButton
-                        targetRef={fieldValueRef}
-                        value={configNode.config.value || ""}
-                        onChange={(v) => updateNodeConfig(configNode.id, { value: v })}
-                        label="{ } Insert Variable"
-                        moduleFilter={["client", "process"]}
-                        mode="insert"
-                      />
-                    </div>
-                    <textarea
-                      ref={fieldValueRef}
-                      rows={2}
-                      value={configNode.config.value || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { value: e.target.value })}
-                      placeholder="Static text or {{variable}} from prior question..."
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-teal-500 resize-none text-gray-700 bg-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* UPDATE CHAT STATUS CONFIG */}
-              {configNode.type === "updateChatStatus" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      New status category
-                    </label>
-                    <select
-                      value={configNode.config.status || "Open"}
-                      onChange={(e) => updateNodeConfig(configNode.id, { status: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option>Open</option>
-                      <option>Resolved</option>
-                      <option>Pending</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* SET TAGS CONFIG */}
-              {configNode.type === "setTags" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Tag Chips list
-                    </label>
-                    <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
-                      Comma separated tags to affix onto target contact records.
-                    </p>
-                    <input
-                      type="text"
-                      value={(configNode.config.tags || []).join(", ")}
-                      onChange={(e) => {
-                        const splitted = e.target.value.split(",").map((s) => s.trim());
-                        updateNodeConfig(configNode.id, { tags: splitted });
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const list = [
+                          ...(configNode.config.conditions || []),
+                          { variable: "name", operator: "equals", value: "" }
+                        ];
+                        updateNodeConfig(configNode.id, { conditions: list });
                       }}
-                      placeholder="Support, VIP, High Priority"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
-                    />
+                      className="w-full py-1.5 border border-dashed text-[11px] font-bold text-blue-600 rounded-lg hover:bg-blue-50/50"
+                    >
+                      + Add criteria rule
+                    </button>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* TIME DELAY CONFIG */}
-              {configNode.type === "timeDelay" && (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-3">
+                {/* ASSIGN HUMAN CONFIG */}
+                {configNode.type === "assignHuman" && (
+                  <div className="space-y-4">
                     <div>
                       <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                        Duration
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={configNode.config.duration || 1}
-                        onChange={(e) =>
-                          updateNodeConfig(configNode.id, {
-                            duration: parseInt(e.target.value) || 1
-                          })
-                        }
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                        Unit
+                        Assign routed contacts to
                       </label>
                       <select
-                        value={configNode.config.unit || "Minute"}
-                        onChange={(e) => updateNodeConfig(configNode.id, { unit: e.target.value })}
+                        value={configNode.config.employeeId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { employeeId: e.target.value })}
                         className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
                       >
-                        <option>Second</option>
-                        <option>Minute</option>
-                        <option>Hour</option>
-                        <option>Day</option>
+                        <option value="">Select team member...</option>
+                        {employees.map((emp) => (
+                          <option key={emp.id} value={emp.id}>
+                            {emp.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* HUMAN HANDOFF CONFIG */}
-              {configNode.type === "humanHandoff" && (
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
-                      Handoff Question
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={configNode.config.handoffQuestionText || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { handoffQuestionText: e.target.value })}
-                      placeholder="Would you like to speak with a human agent?"
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white resize-none"
-                    />
+                {/* FIELD UPDATE CONFIG */}
+                {configNode.type === "fieldUpdate" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Field to Update
+                      </label>
+                      <div className="flex gap-2 items-center">
+                        <div className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-xs bg-gray-50 text-gray-700 min-h-[34px] flex items-center font-medium truncate">
+                          {getFieldLabel(configNode.config.fieldKey)}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setFieldModalOpen(true)}
+                          className="shrink-0 text-xs"
+                        >
+                          Select Field...
+                        </Button>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Writes the value below into this field when the flow reaches this node.
+                      </p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider">
+                          New Value
+                        </label>
+                        <VariablePickerButton
+                          targetRef={fieldValueRef}
+                          value={configNode.config.value || ""}
+                          onChange={(v) => updateNodeConfig(configNode.id, { value: v })}
+                          label="{ } Insert Variable"
+                          moduleFilter={["client", "process"]}
+                          mode="insert"
+                        />
+                      </div>
+                      <textarea
+                        ref={fieldValueRef}
+                        rows={2}
+                        value={configNode.config.value || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { value: e.target.value })}
+                        placeholder="Static text or {{variable}} from prior question..."
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-teal-500 resize-none text-gray-700 bg-white"
+                      />
+                    </div>
                   </div>
-                  <div className="p-3 border border-green-200 rounded-xl bg-green-50 space-y-2">
-                    <label className="block text-[10px] font-bold text-green-700 uppercase tracking-wider">✓ Yes Branch — Assign to Human</label>
-                    <select
-                      value={configNode.config.yesPersonId || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { yesPersonId: e.target.value })}
-                      className="w-full px-3 py-2 border border-green-200 rounded-lg text-xs bg-white"
-                    >
-                      <option value="">Select team member…</option>
-                      {employees.map(emp => (
-                        <option key={emp.id} value={emp.id}>{emp.name}</option>
-                      ))}
-                    </select>
+                )}
+
+                {/* UPDATE CHAT STATUS CONFIG */}
+                {configNode.type === "updateChatStatus" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        New status category
+                      </label>
+                      <select
+                        value={configNode.config.status || "Open"}
+                        onChange={(e) => updateNodeConfig(configNode.id, { status: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                      >
+                        <option>Open</option>
+                        <option>Resolved</option>
+                        <option>Pending</option>
+                      </select>
+                    </div>
                   </div>
-                  <div className="p-3 border border-red-100 rounded-xl bg-red-50 space-y-2">
-                    <label className="block text-[10px] font-bold text-red-600 uppercase tracking-wider">✗ No Branch — Response</label>
-                    <select
-                      value={configNode.config.noResponse?.type || "message"}
-                      onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { type: e.target.value, text: "", templateId: "", targetBotId: "" } })}
-                      className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
-                    >
-                      <option value="message">Send a Message</option>
-                      <option value="template">Send a Template</option>
-                      <option value="chatbot">Trigger Another Chatbot</option>
-                    </select>
-                    {(configNode.config.noResponse?.type || "message") === "message" && (
+                )}
+
+                {/* SET TAGS CONFIG */}
+                {configNode.type === "setTags" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Tag Chips list
+                      </label>
+                      <p className="text-[10px] text-gray-400 mb-2 leading-relaxed">
+                        Comma separated tags to affix onto target contact records.
+                      </p>
+                      <input
+                        type="text"
+                        value={(configNode.config.tags || []).join(", ")}
+                        onChange={(e) => {
+                          const splitted = e.target.value.split(",").map((s) => s.trim());
+                          updateNodeConfig(configNode.id, { tags: splitted });
+                        }}
+                        placeholder="Support, VIP, High Priority"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white text-gray-800"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* TIME DELAY CONFIG */}
+                {configNode.type === "timeDelay" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                          Duration
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={configNode.config.duration || 1}
+                          onChange={(e) =>
+                            updateNodeConfig(configNode.id, {
+                              duration: parseInt(e.target.value) || 1
+                            })
+                          }
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                          Unit
+                        </label>
+                        <select
+                          value={configNode.config.unit || "Minute"}
+                          onChange={(e) => updateNodeConfig(configNode.id, { unit: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                        >
+                          <option>Second</option>
+                          <option>Minute</option>
+                          <option>Hour</option>
+                          <option>Day</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* HUMAN HANDOFF CONFIG */}
+                {configNode.type === "humanHandoff" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-600 uppercase tracking-wider mb-2">
+                        Handoff Question
+                      </label>
                       <textarea
                         rows={2}
-                        value={configNode.config.noResponse?.text || ""}
-                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, type: "message", text: e.target.value } })}
-                        placeholder="Okay, let's continue here."
-                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white resize-none"
+                        value={configNode.config.handoffQuestionText || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { handoffQuestionText: e.target.value })}
+                        placeholder="Would you like to speak with a human agent?"
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xs bg-white resize-none"
                       />
-                    )}
-                    {(configNode.config.noResponse?.type) === "template" && (
-                      <select
-                        value={configNode.config.noResponse?.templateId || ""}
-                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, templateId: e.target.value } })}
-                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
-                      >
-                        <option value="">Select template…</option>
-                        {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                    )}
-                    {(configNode.config.noResponse?.type) === "chatbot" && (
-                      <select
-                        value={configNode.config.noResponse?.targetBotId || ""}
-                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, targetBotId: e.target.value } })}
-                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
-                      >
-                        <option value="">Select chatbot…</option>
-                        {otherBots.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
-                      </select>
-                    )}
-                  </div>
-                  <p className="text-[10px] text-gray-400 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    The bot will ask the question above. If the contact replies Yes, the conversation is assigned to the selected person. If No, the configured response is sent.
-                  </p>
-                </div>
-              )}
-
-              {/* CONNECT CHATBOT CONFIG */}
-              {configNode.type === "connectChatbot" && (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
-                        Target Chatbot
-                      </label>
-                      <InfoTooltip text="Hands off conversation to another bot. Note: flow engine simulation has limited support for multi-bot tracking in test drawer." />
                     </div>
-                    <select
-                      value={configNode.config.targetBotId || ""}
-                      onChange={(e) => updateNodeConfig(configNode.id, { targetBotId: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
-                    >
-                      <option value="">Choose target bot...</option>
-                      {otherBots.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-[10px] text-gray-400 mt-2 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      The conversation will continue entirely inside the selected bot — nothing after this step will run.
+                    <div className="p-3 border border-green-200 rounded-xl bg-green-50 space-y-2">
+                      <label className="block text-[10px] font-bold text-green-700 uppercase tracking-wider">✓ Yes Branch — Assign to Human</label>
+                      <select
+                        value={configNode.config.yesPersonId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { yesPersonId: e.target.value })}
+                        className="w-full px-3 py-2 border border-green-200 rounded-lg text-xs bg-white"
+                      >
+                        <option value="">Select team member…</option>
+                        {employees.map(emp => (
+                          <option key={emp.id} value={emp.id}>{emp.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="p-3 border border-red-100 rounded-xl bg-red-50 space-y-2">
+                      <label className="block text-[10px] font-bold text-red-600 uppercase tracking-wider">✗ No Branch — Response</label>
+                      <select
+                        value={configNode.config.noResponse?.type || "message"}
+                        onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { type: e.target.value, text: "", templateId: "", targetBotId: "" } })}
+                        className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                      >
+                        <option value="message">Send a Message</option>
+                        <option value="template">Send a Template</option>
+                        <option value="chatbot">Trigger Another Chatbot</option>
+                      </select>
+                      {(configNode.config.noResponse?.type || "message") === "message" && (
+                        <textarea
+                          rows={2}
+                          value={configNode.config.noResponse?.text || ""}
+                          onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, type: "message", text: e.target.value } })}
+                          placeholder="Okay, let's continue here."
+                          className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white resize-none"
+                        />
+                      )}
+                      {(configNode.config.noResponse?.type) === "template" && (
+                        <select
+                          value={configNode.config.noResponse?.templateId || ""}
+                          onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, templateId: e.target.value } })}
+                          className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                        >
+                          <option value="">Select template…</option>
+                          {templates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      )}
+                      {(configNode.config.noResponse?.type) === "chatbot" && (
+                        <select
+                          value={configNode.config.noResponse?.targetBotId || ""}
+                          onChange={(e) => updateNodeConfig(configNode.id, { noResponse: { ...configNode.config.noResponse, targetBotId: e.target.value } })}
+                          className="w-full px-3 py-2 border border-red-100 rounded-lg text-xs bg-white"
+                        >
+                          <option value="">Select chatbot…</option>
+                          {otherBots.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+                        </select>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-gray-400 italic leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      The bot will ask the question above. If the contact replies Yes, the conversation is assigned to the selected person. If No, the configured response is sent.
                     </p>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
 
-            {/* Config Footer */}
-            <div className="p-4 border-t border-gray-250 bg-slate-50 flex gap-2.5">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setConfigNode(null)}
-                className="flex-1 text-xs"
-              >
-                Done
-              </Button>
-            </div>
+                {/* CONNECT CHATBOT CONFIG */}
+                {configNode.type === "connectChatbot" && (
+                  <div className="space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                          Target Chatbot
+                        </label>
+                        <InfoTooltip text="Hands off conversation to another bot. Note: flow engine simulation has limited support for multi-bot tracking in test drawer." />
+                      </div>
+                      <select
+                        value={configNode.config.targetBotId || ""}
+                        onChange={(e) => updateNodeConfig(configNode.id, { targetBotId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"
+                      >
+                        <option value="">Choose target bot...</option>
+                        {otherBots.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-gray-400 mt-2 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        The conversation will continue entirely inside the selected bot — nothing after this step will run.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Config Footer */}
+              <div className="p-4 border-t border-gray-250 bg-slate-50 flex gap-2.5">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setConfigNode(null)}
+                  className="flex-1 text-xs"
+                >
+                  Done
+                </Button>
+              </div>
             </div>
           </>
         )}
