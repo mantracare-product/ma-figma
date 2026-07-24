@@ -15,6 +15,11 @@ interface Appointment {
   status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
   notes?: string;
   rating?: number;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  processId?: string;
+  stageId?: string;
 }
 
 interface Employee {

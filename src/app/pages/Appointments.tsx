@@ -227,6 +227,7 @@ export default function Appointments() {
   const [bookingStageId, setBookingStageId] = useState("");
   const [bookingStartHour, setBookingStartHour] = useState(9);
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
+  const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -406,6 +407,50 @@ export default function Appointments() {
     return weekDates;
   };
 
+  const openBookingDrawerForReschedule = (apt: Appointment) => {
+    setSelectedAppointment(apt);
+    setDrawerMode("reschedule");
+
+    setBookingTitle(apt.title || `Appointment with ${apt.clientName}`);
+    setBookingDescription(apt.description || "");
+
+    const prov = employees.find((e) => e.id === apt.employeeId) || null;
+    setSelectedProvider(prov);
+
+    const cl = clients.find((c) => c.name === apt.clientName || c.email === apt.clientEmail) || {
+      id: apt.id * 1000,
+      name: apt.clientName,
+      email: apt.clientEmail,
+      phone: apt.clientPhone,
+    };
+    setSelectedClient(cl);
+
+    setBookingProcessId(apt.processId || "");
+    setBookingStageId(apt.stageId || "");
+
+    setSelectedDate(apt.date || formatDate(new Date()));
+    if (apt.time) {
+      const parts = apt.time.split(":");
+      const hh = parseInt(parts[0], 10);
+      const mm = parseInt(parts[1], 10);
+      setBookingStartHour(isNaN(hh) ? 9 : hh);
+      setBookingStartMinute(isNaN(mm) ? 0 : mm);
+    } else {
+      setBookingStartHour(9);
+      setBookingStartMinute(0);
+    }
+
+    setBookingNote(apt.notes || "");
+    setBookingTags(apt.tags ? apt.tags.join(", ") : "");
+    if (apt.notes?.toLowerCase().includes("in-person")) {
+      setSessionType("inPerson");
+    } else {
+      setSessionType("video");
+    }
+
+    setShowAddModal(true);
+  };
+
   const handleBookingComplete = () => {
     if (!selectedClient || !selectedProvider || !selectedDate || !bookingTitle.trim()) {
       toast.error("Please fill in all required fields");
@@ -415,33 +460,62 @@ export default function Appointments() {
     const startHH = String(bookingStartHour).padStart(2, "0");
     const startMM = String(bookingStartMinute).padStart(2, "0");
     const timeStr = `${startHH}:${startMM}`;
+    const parsedTags = bookingTags ? bookingTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
 
-    const newAppointment: Appointment = {
-      id: Math.max(...appointments.map((a) => a.id)) + 1,
-      clientName: selectedClient.name,
-      clientEmail: selectedClient.email,
-      clientPhone: selectedClient.phone,
-      employeeId: selectedProvider.id,
-      serviceId: 1,
-      date: selectedDate,
-      time: timeStr,
-      duration: 60,
-      status: "scheduled",
-      notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
-      title: bookingTitle.trim(),
-      description: bookingDescription.trim() || undefined,
-      tags: bookingTags ? bookingTags.split(",").map((t) => t.trim()).filter(Boolean) : undefined,
-      processId: bookingProcessId || undefined,
-      stageId: bookingStageId || undefined,
-    };
+    if (drawerMode === "reschedule" && selectedAppointment) {
+      setAppointments(
+        appointments.map((a) =>
+          a.id === selectedAppointment.id
+            ? {
+                ...a,
+                clientName: selectedClient.name,
+                clientEmail: selectedClient.email,
+                clientPhone: selectedClient.phone,
+                employeeId: selectedProvider.id,
+                date: selectedDate,
+                time: timeStr,
+                notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
+                title: bookingTitle.trim(),
+                description: bookingDescription.trim() || undefined,
+                tags: parsedTags,
+                processId: bookingProcessId || undefined,
+                stageId: bookingStageId || undefined,
+              }
+            : a
+        )
+      );
+      toast.success("Appointment rescheduled successfully!");
+    } else {
+      const newAppointment: Appointment = {
+        id: appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1,
+        clientName: selectedClient.name,
+        clientEmail: selectedClient.email,
+        clientPhone: selectedClient.phone,
+        employeeId: selectedProvider.id,
+        serviceId: 1,
+        date: selectedDate,
+        time: timeStr,
+        duration: 60,
+        status: "scheduled",
+        notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
+        title: bookingTitle.trim(),
+        description: bookingDescription.trim() || undefined,
+        tags: parsedTags,
+        processId: bookingProcessId || undefined,
+        stageId: bookingStageId || undefined,
+      };
 
-    setAppointments([...appointments, newAppointment]);
+      setAppointments([...appointments, newAppointment]);
+      toast.success("Appointment scheduled successfully!");
+    }
+
     setShowAddModal(false);
     resetBookingWorkflow();
-    toast.success("Appointment scheduled successfully!");
   };
 
   const resetBookingWorkflow = () => {
+    setDrawerMode("create");
+    setSelectedAppointment(null);
     setSelectedClient(null);
     setSelectedProvider(devUserRole === "provider" ? currentProviderUser : null);
     setSelectedDate(formatDate(new Date()));
@@ -1813,7 +1887,7 @@ export default function Appointments() {
                             return (
                               <div
                                 key={apt.id}
-                                onClick={() => openEditModal(apt)}
+                                onClick={() => openBookingDrawerForReschedule(apt)}
                                 className="cursor-pointer hover:opacity-80"
                                 style={{
                                   display: 'flex',
@@ -1988,18 +2062,7 @@ export default function Appointments() {
                         onReschedule={(id) => {
                           const apt = appointments.find(a => a.id === id);
                           if (apt) {
-                            setSelectedAppointment(apt);
-                            setAppointmentFormData({
-                              clientName: apt.clientName,
-                              clientEmail: apt.clientEmail,
-                              clientPhone: apt.clientPhone,
-                              employeeId: apt.employeeId,
-                              serviceId: apt.serviceId,
-                              date: apt.date,
-                              time: apt.time,
-                              notes: apt.notes || "",
-                            });
-                            setShowEditModal(true);
+                            openBookingDrawerForReschedule(apt);
                           }
                         }}
                         onMarkComplete={(id) => {
@@ -2353,7 +2416,7 @@ export default function Appointments() {
                                   <AlertCircle className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => openEditModal(apt)}
+                                  onClick={() => openBookingDrawerForReschedule(apt)}
                                   className="hover:opacity-80"
                                   title="Edit"
                                   style={{ color: '#6B7280' }}
@@ -2399,10 +2462,12 @@ export default function Appointments() {
         title={
           <div>
             <p className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Schedule Appointment
+              {drawerMode === "reschedule" ? "Reschedule Appointment" : "Schedule Appointment"}
             </p>
-            <p className="text-sm text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Create a new appointment with a client
+            <p className="text-xs text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+              {drawerMode === "reschedule"
+                ? "Update the date and time for this appointment"
+                : "Create a new appointment with a client"}
             </p>
           </div>
         }
@@ -2422,7 +2487,7 @@ export default function Appointments() {
                   border: "none",
                 }}
               >
-                Schedule Appointment
+                {drawerMode === "reschedule" ? "Save Changes" : "Schedule Appointment"}
               </button>
             );
           })()
@@ -2709,240 +2774,56 @@ export default function Appointments() {
                 />
               </div>
 
+              {/* ⑨ Custom Fields */}
+              {(apptVisibleFieldKeys.length > 0 || appointmentCustomFields.length > 0) && (
+                <div className="border-t border-slate-200 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>Custom Fields</label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setApptSelectFieldsOpen(true)}
+                        className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+                      >
+                        Select Fields
+                      </button>
+                      <span className="text-slate-300">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setApptCreateFieldOpen(true)}
+                        className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
+                      >
+                        + Create Field
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    {getAllFields("appointment")
+                      .filter(f => f.source === "custom" && apptVisibleFieldKeys.includes(f.key))
+                      .map(f => (
+                        <div key={f.key}>
+                          <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+                            {f.label}{f.required && " *"}
+                          </label>
+                          <input
+                            type="text"
+                            value={customFieldValues[f.key] || ""}
+                            onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))}
+                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
+                            className={inputCls}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+
             </div>
           );
         })()}
       </CustomSideDrawer>
-
-      {/* Edit Appointment Modal */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          resetForm();
-        }}
-        title="Edit Appointment"
-        maxWidth="2xl"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowEditModal(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleEditAppointment}>
-              <Edit className="w-4 h-4" />
-              Save Changes
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Client Name *</label>
-              <Input
-                type="text"
-                placeholder="John Doe"
-                value={appointmentFormData.clientName}
-                onChange={(e) =>
-                  setAppointmentFormData({ ...appointmentFormData, clientName: e.target.value })
-                }
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Client Email</label>
-              <Input
-                type="email"
-                placeholder="john@example.com"
-                value={appointmentFormData.clientEmail}
-                onChange={(e) =>
-                  setAppointmentFormData({ ...appointmentFormData, clientEmail: e.target.value })
-                }
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Client Phone</label>
-            <Input
-              type="tel"
-              placeholder="+1 (555) 123-4567"
-              value={appointmentFormData.clientPhone}
-              onChange={(e) =>
-                setAppointmentFormData({ ...appointmentFormData, clientPhone: e.target.value })
-              }
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Provider *</label>
-              <select
-                value={appointmentFormData.employeeId}
-                onChange={(e) =>
-                  setAppointmentFormData({
-                    ...appointmentFormData,
-                    employeeId: parseInt(e.target.value),
-                  })
-                }
-                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              >
-                <option value={0}>Select a provider</option>
-                {employees.map((emp) => (
-                  <option key={emp.id} value={emp.id}>
-                    {emp.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Service *</label>
-              <select
-                value={appointmentFormData.serviceId}
-                onChange={(e) =>
-                  setAppointmentFormData({
-                    ...appointmentFormData,
-                    serviceId: parseInt(e.target.value),
-                  })
-                }
-                className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              >
-                <option value={0}>Select a service</option>
-                {services.map((svc) => (
-                  <option key={svc.id} value={svc.id}>
-                    {svc.name} - {svc.duration} min (${svc.price})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Date *</label>
-              <Input
-                type="date"
-                value={appointmentFormData.date}
-                onChange={(e) =>
-                  setAppointmentFormData({ ...appointmentFormData, date: e.target.value })
-                }
-                min={new Date().toISOString().split("T")[0]}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Time *</label>
-              <Input
-                type="time"
-                value={appointmentFormData.time}
-                onChange={(e) =>
-                  setAppointmentFormData({ ...appointmentFormData, time: e.target.value })
-                }
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Notes</label>
-            <textarea
-              placeholder="Additional notes or special requirements..."
-              value={appointmentFormData.notes}
-              onChange={(e) =>
-                setAppointmentFormData({ ...appointmentFormData, notes: e.target.value })
-              }
-              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              rows={3}
-            />
-          </div>
-
-          {selectedAppointment && (
-            <div>
-              <label className="block text-sm font-medium mb-2">Status</label>
-              <div className="flex gap-2">
-                {(["scheduled", "completed", "cancelled", "no-show"] as const).map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => handleStatusChange(selectedAppointment.id, status)}
-                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${selectedAppointment.status === status
-                        ? "bg-primary text-white"
-                        : "bg-muted text-muted-foreground hover:bg-muted/80"
-                      }`}
-                  >
-                    {status}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {/* Custom Appointment Fields Section */}
-          {(apptVisibleFieldKeys.length > 0 || appointmentCustomFields.length > 0) && (
-            <div className="border-t border-gray-100 pt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-sm font-semibold text-gray-700">Custom Fields</h4>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setApptSelectFieldsOpen(true)}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Select Fields
-                  </button>
-                  <span className="text-gray-300">|</span>
-                  <button
-                    type="button"
-                    onClick={() => setApptCreateFieldOpen(true)}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    + Create Field
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {getAllFields("appointment")
-                  .filter(f => f.source === "custom" && apptVisibleFieldKeys.includes(f.key))
-                  .map(f => (
-                    <div key={f.key}>
-                      <label className="block text-sm font-medium mb-1.5">{f.label}{f.required && " *"}</label>
-                      <input
-                        type="text"
-                        value={customFieldValues[f.key] || ""}
-                        onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
-                        className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                      />
-                    </div>
-                  ))
-                }
-              </div>
-            </div>
-          )}
-
-          {/* Inline field add trigger if no custom fields yet */}
-          {appointmentCustomFields.length === 0 && (
-            <div className="border-t border-gray-100 pt-4 flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setApptSelectFieldsOpen(true)}
-                className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
-              >
-                Select Fields
-              </button>
-              <span className="text-gray-300">·</span>
-              <button
-                type="button"
-                onClick={() => setApptCreateFieldOpen(true)}
-                className="text-sm text-gray-500 hover:text-blue-600 transition-colors"
-              >
-                + Create Custom Field
-              </button>
-            </div>
-          )}
-        </div>
-      </Modal>
 
       {/* Appointment Select Fields Modal */}
       {apptSelectFieldsOpen && (
