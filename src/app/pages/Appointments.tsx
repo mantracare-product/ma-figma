@@ -31,6 +31,7 @@ import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
+import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 
 interface Appointment {
   id: number;
@@ -2451,379 +2452,53 @@ export default function Appointments() {
       </div>
 
 
-      {/* Schedule Appointment Drawer — single-page form */}
-      <CustomSideDrawer
+      {/* Schedule Appointment Drawer */}
+      <ScheduleAppointmentDrawer
         isOpen={showAddModal}
         onClose={() => {
           setShowAddModal(false);
           resetBookingWorkflow();
         }}
-        maxWidth="sm:max-w-[480px]"
-        title={
-          <div>
-            <p className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {drawerMode === "reschedule" ? "Reschedule Appointment" : "Schedule Appointment"}
-            </p>
-            <p className="text-xs text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {drawerMode === "reschedule"
-                ? "Update the date and time for this appointment"
-                : "Create a new appointment with a client"}
-            </p>
-          </div>
-        }
-        footer={
-          (() => {
-            const isValid = !!(bookingTitle.trim() && selectedProvider && selectedClient && selectedDate);
-            return (
-              <button
-                onClick={handleBookingComplete}
-                disabled={!isValid}
-                className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
-                style={{
-                  fontFamily: "Outfit, sans-serif",
-                  backgroundColor: isValid ? "#1e293b" : "#E5E7EB",
-                  color: isValid ? "#ffffff" : "#9CA3AF",
-                  cursor: isValid ? "pointer" : "not-allowed",
-                  border: "none",
-                }}
-              >
-                {drawerMode === "reschedule" ? "Save Changes" : "Schedule Appointment"}
-              </button>
-            );
-          })()
-        }
-      >
-        {/* Single-page booking form */}
-        {(() => {
-          const endHour = (bookingStartHour + 1) % 24;
-          const endMin = bookingStartMinute;
-          const startHHMM = `${String(bookingStartHour).padStart(2, "0")}:${String(bookingStartMinute).padStart(2, "0")}`;
-          const endHHMM = `${String(endHour).padStart(2, "0")}:${String(endMin).padStart(2, "0")}`;
-          const fmtDate = (hhmm: string) => {
-            if (!selectedDate) return "";
-            const d = new Date(`${selectedDate}T${hhmm}`);
-            return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) +
-              " at " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-          };
-
-          const inputCls = "w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white";
-          const labelCls = "block text-xs font-semibold text-slate-700 mb-1.5";
-
-          return (
-            <div className="space-y-5">
-
-              {/* ① Title */}
-              <div>
-                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g., Follow-up consultation"
-                  value={bookingTitle}
-                  onChange={(e) => setBookingTitle(e.target.value)}
-                  className={inputCls}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-              </div>
-
-              {/* ② Description */}
-              <div>
-                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Description
-                </label>
-                <textarea
-                  placeholder="Add appointment details..."
-                  value={bookingDescription}
-                  onChange={(e) => setBookingDescription(e.target.value)}
-                  rows={3}
-                  className={inputCls + " resize-none"}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-              </div>
-
-              {/* ③ Schedule For / Schedule With */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Schedule For <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={selectedProvider?.id ?? ""}
-                    onChange={(e) => {
-                      const emp = employees.find((x) => x.id === Number(e.target.value));
-                      setSelectedProvider(emp || null);
-                    }}
-                    className={inputCls}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <option value="">Select a user</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>{emp.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Schedule With <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={selectedClient?.id ?? ""}
-                    onChange={(e) => {
-                      const cl = clients.find((x) => x.id === Number(e.target.value));
-                      setSelectedClient(cl || null);
-                    }}
-                    className={inputCls}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <option value="">Select a client</option>
-                    {clients.map((cl) => (
-                      <option key={cl.id} value={cl.id}>{cl.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* ④ Process / Stage */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Select Process
-                  </label>
-                  <select
-                    value={bookingProcessId}
-                    onChange={(e) => {
-                      setBookingProcessId(e.target.value);
-                      setBookingStageId("");
-                    }}
-                    className={inputCls}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <option value="">Select a process</option>
-                    {Object.keys(processStages).map((p) => (
-                      <option key={p} value={p}>{p}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Select Stage
-                  </label>
-                  <select
-                    value={bookingStageId}
-                    onChange={(e) => setBookingStageId(e.target.value)}
-                    disabled={!bookingProcessId}
-                    className={inputCls + (!bookingProcessId ? " opacity-50 cursor-not-allowed" : "")}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <option value="">Select a stage</option>
-                    {(processStages[bookingProcessId] || []).map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* ⑤ Date / Note */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className={inputCls}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Note
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Quick note..."
-                    value={bookingNote}
-                    onChange={(e) => setBookingNote(e.target.value)}
-                    className={inputCls}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
-              </div>
-
-              {/* ⑥ Times in client timezone */}
-              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                <p
-                  className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-3"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  Times in client timezone
-                </p>
-                {!selectedClient ? (
-                  <p
-                    className="text-center text-sm py-2"
-                    style={{ color: "#1A73E8", fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Select a client to enable time selection
-                  </p>
-                ) : (
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Start */}
-                    <div>
-                      <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>Start</p>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0}
-                          max={23}
-                          value={bookingStartHour}
-                          onChange={(e) => setBookingStartHour(Math.min(23, Math.max(0, Number(e.target.value))))}
-                          className="w-12 text-center border border-slate-200 rounded-lg py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        />
-                        <span className="text-slate-400 font-bold text-sm">:</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={59}
-                          value={bookingStartMinute}
-                          onChange={(e) => setBookingStartMinute(Math.min(59, Math.max(0, Number(e.target.value))))}
-                          className="w-12 text-center border border-slate-200 rounded-lg py-1.5 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        />
-                      </div>
-                      {selectedDate && (
-                        <p className="text-[11px] text-slate-400 mt-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {fmtDate(startHHMM)}
-                        </p>
-                      )}
-                    </div>
-                    {/* End (auto = start + 60 min) */}
-                    <div>
-                      <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>End</p>
-                      <div className="flex items-center gap-1">
-                        <div
-                          className="w-12 text-center border border-slate-100 rounded-lg py-1.5 text-sm font-semibold text-slate-400 bg-slate-100"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {String(endHour).padStart(2, "0")}
-                        </div>
-                        <span className="text-slate-400 font-bold text-sm">:</span>
-                        <div
-                          className="w-12 text-center border border-slate-100 rounded-lg py-1.5 text-sm font-semibold text-slate-400 bg-slate-100"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {String(endMin).padStart(2, "0")}
-                        </div>
-                      </div>
-                      {selectedDate && (
-                        <p className="text-[11px] text-slate-400 mt-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {fmtDate(endHHMM)}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ⑦ Session Type */}
-              <div>
-                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Session Type
-                </label>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setSessionType("video")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                      sessionType === "video"
-                        ? "bg-cyan-500 text-white"
-                        : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Video
-                  </button>
-                  <button
-                    onClick={() => setSessionType("inPerson")}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
-                      sessionType === "inPerson"
-                        ? "bg-cyan-500 text-white"
-                        : "bg-white text-slate-600 border border-slate-200 hover:border-slate-300"
-                    }`}
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    In-Person
-                  </button>
-                </div>
-              </div>
-
-              {/* ⑧ Tags */}
-              <div>
-                <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Tags
-                </label>
-                <input
-                  type="text"
-                  placeholder="Comma-separated tags, e.g., follow-up, urgent"
-                  value={bookingTags}
-                  onChange={(e) => setBookingTags(e.target.value)}
-                  className={inputCls}
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                />
-              </div>
-
-              {/* ⑨ Custom Fields */}
-              {(apptVisibleFieldKeys.length > 0 || appointmentCustomFields.length > 0) && (
-                <div className="border-t border-slate-200 pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>Custom Fields</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setApptSelectFieldsOpen(true)}
-                        className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
-                      >
-                        Select Fields
-                      </button>
-                      <span className="text-slate-300">|</span>
-                      <button
-                        type="button"
-                        onClick={() => setApptCreateFieldOpen(true)}
-                        className="text-xs text-cyan-600 hover:text-cyan-700 font-medium"
-                      >
-                        + Create Field
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-3">
-                    {getAllFields("appointment")
-                      .filter(f => f.source === "custom" && apptVisibleFieldKeys.includes(f.key))
-                      .map(f => (
-                        <div key={f.key}>
-                          <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
-                            {f.label}{f.required && " *"}
-                          </label>
-                          <input
-                            type="text"
-                            value={customFieldValues[f.key] || ""}
-                            onChange={e => setCustomFieldValues(prev => ({ ...prev, [f.key]: e.target.value }))}
-                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
-                            className={inputCls}
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          />
-                        </div>
-                      ))
-                    }
-                  </div>
-                </div>
-              )}
-
-            </div>
-          );
-        })()}
-      </CustomSideDrawer>
+        mode={drawerMode}
+        values={{
+          title: bookingTitle,
+          description: bookingDescription,
+          note: bookingNote,
+          tags: bookingTags,
+          processId: bookingProcessId,
+          stageId: bookingStageId,
+          date: selectedDate,
+          startHour: bookingStartHour,
+          startMinute: bookingStartMinute,
+          sessionType: sessionType,
+          client: selectedClient,
+          provider: selectedProvider,
+        }}
+        onChange={(patch) => {
+          if (patch.title !== undefined) setBookingTitle(patch.title);
+          if (patch.description !== undefined) setBookingDescription(patch.description);
+          if (patch.note !== undefined) setBookingNote(patch.note);
+          if (patch.tags !== undefined) setBookingTags(patch.tags);
+          if (patch.processId !== undefined) setBookingProcessId(patch.processId);
+          if (patch.stageId !== undefined) setBookingStageId(patch.stageId);
+          if (patch.date !== undefined) setSelectedDate(patch.date);
+          if (patch.startHour !== undefined) setBookingStartHour(patch.startHour);
+          if (patch.startMinute !== undefined) setBookingStartMinute(patch.startMinute);
+          if (patch.sessionType !== undefined) setSessionType(patch.sessionType);
+          if (patch.client !== undefined) setSelectedClient(patch.client);
+          if (patch.provider !== undefined) setSelectedProvider(patch.provider);
+        }}
+        onSave={handleBookingComplete}
+        employees={employees}
+        clients={clients}
+        processStages={processStages}
+        customFields={appointmentCustomFields}
+        visibleCustomFieldKeys={apptVisibleFieldKeys}
+        customFieldValues={customFieldValues}
+        onCustomFieldChange={(key, val) => setCustomFieldValues((prev) => ({ ...prev, [key]: val }))}
+        onOpenSelectFields={() => setApptSelectFieldsOpen(true)}
+        onOpenCreateField={() => setApptCreateFieldOpen(true)}
+      />
 
       {/* Appointment Select Fields Modal */}
       {apptSelectFieldsOpen && (
