@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router";
-import { Search, Filter, Download, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, MoreVertical, Trash2 } from "lucide-react";
+import { Search, Filter, Download, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, MoreVertical, Trash2, CalendarClock } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -189,6 +189,334 @@ const initialCallLogs: (Omit<CallLog, "process"> & { process?: string })[] = [
   { id: "CALL-099", client: "Emily Davis", clientId: "CL-003", type: "Outbound", status: "Completed", lastStage: "Follow-up", currentStage: "Billing Inquiry", duration: "5:30", date: "2024-03-26 12:15", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
   { id: "CALL-100", client: "Priya Sharma", clientId: "CL-013", type: "Outbound", status: "Completed", lastStage: "Initial Contact", currentStage: "Insurance Verification", duration: "3:20", date: "2024-03-26 10:45", hasRecording: true, hasTranscript: true, hasScheduledCall: false },
 ];
+
+type MetricTone = "success" | "warning" | "neutral";
+
+const metricToneStyles: Record<MetricTone, { bg: string; text: string }> = {
+  success: { bg: "bg-emerald-50", text: "text-emerald-800" },
+  warning: { bg: "bg-amber-50", text: "text-amber-800" },
+  neutral: { bg: "bg-slate-50", text: "text-slate-900" },
+};
+
+function MetricTile({
+  label,
+  value,
+  phrase,
+  tone = "neutral",
+  tooltip,
+  leverPosition,
+}: {
+  label: string;
+  value: string;
+  phrase: string;
+  tone?: MetricTone;
+  tooltip: string;
+  leverPosition?: number;
+}) {
+  const { bg, text } = metricToneStyles[tone];
+  const mutedLabel = tone === "neutral" ? "text-slate-500" : text;
+  const mutedPhrase = tone === "neutral" ? "text-slate-600" : `${text} opacity-85`;
+
+  return (
+    <div className={`min-w-0 rounded-xl p-3.5 ${bg}`}>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <p
+          className={`text-[11px] leading-snug ${mutedLabel}`}
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {label}
+        </p>
+        <Tooltip text={tooltip}>
+          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+        </Tooltip>
+      </div>
+      <p
+        className="text-xl font-bold truncate"
+        style={{ fontFamily: "DM Sans, sans-serif" }}
+        title={value}
+      >
+        <span className={text}>{value}</span>
+      </p>
+      <p
+        className={`text-[11px] leading-snug mt-1 break-words ${
+          leverPosition !== undefined ? "mb-1.5" : ""
+        } ${mutedPhrase}`}
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {phrase}
+      </p>
+      {leverPosition !== undefined && (
+        <div className="h-1 bg-black/10 rounded-full relative">
+          <div
+            className={`absolute top-1/2 w-2 h-2 rounded-full ${
+              tone === "success"
+                ? "bg-emerald-600"
+                : tone === "warning"
+                ? "bg-amber-600"
+                : "bg-primary"
+            }`}
+            style={{ left: `${leverPosition}%`, transform: "translate(-50%, -50%)" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricGroup({
+  label,
+  columns = 2,
+  defaultOpen = true,
+  children,
+}: {
+  label: string;
+  columns?: 2 | 3;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between mb-2 group"
+        aria-expanded={open}
+      >
+        <p
+          className="text-[12px] text-slate-400 group-hover:text-slate-600 transition-colors"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {label}
+        </p>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {open && (
+        <div
+          className={`grid gap-2.5 ${
+            columns === 3 ? "grid-cols-3" : "grid-cols-2"
+          }`}
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Static section wrapper (no collapse) ─────────────────────────────────────
+function MetricSection({
+  label,
+  columns = 2,
+  children,
+}: {
+  label: string;
+  columns?: 2 | 3;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <p
+        className="text-[12px] text-slate-400 mb-2"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {label}
+      </p>
+      <div
+        className="grid gap-2.5"
+        style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Deterministic per-call metrics ───────────────────────────────────────────
+interface CallReviewMetrics {
+  // Outcome
+  didItWork: { value: string; tone: MetricTone; phrase: string };
+  clientHappiness: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  howLong: { value: string; phrase: string };
+  whatNext: { value: string; phrase: string };
+  // Sentiment arc
+  sentimentStart: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  sentimentMid: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  sentimentEnd: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  // Talk-time
+  aiSpokePercent: { value: string; phrase: string; leverPosition?: number };
+  longestStretch: { value: string; phrase: string };
+  silencePercent: { value: string; phrase: string; leverPosition?: number };
+  warmthPercent: { value: string; phrase: string; leverPosition?: number };
+  // Response latency
+  typicalResponse: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  slowestResponse: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  timesStuck: { value: string; phrase: string };
+}
+
+function hashStr(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (Math.imul(h, 16777619) >>> 0);
+  }
+  return h;
+}
+
+function makePrng(seed: number) {
+  // mulberry32
+  let s = seed >>> 0;
+  return function (): number {
+    s += 0x6d2b79f5;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function randRange(rng: () => number, min: number, max: number): number {
+  return min + rng() * (max - min);
+}
+
+const SENTIMENT_OPTIONS: Array<{
+  value: string;
+  tone: MetricTone;
+  phrases: string[];
+  leverMin: number;
+  leverMax: number;
+}> = [
+  { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"], leverMin: 70, leverMax: 100 },
+  { value: "Neutral",  tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"],        leverMin: 40, leverMax: 69 },
+  { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"], leverMin: 10, leverMax: 39 },
+];
+
+function pickSentiment(rng: () => number) {
+  const weights = [0.5, 0.35, 0.15]; // positive, neutral, negative
+  const roll = rng();
+  let cum = 0;
+  for (let i = 0; i < weights.length; i++) {
+    cum += weights[i];
+    if (roll < cum) {
+      const opt = SENTIMENT_OPTIONS[i];
+      const phrase = opt.phrases[Math.floor(rng() * opt.phrases.length)];
+      const lever = Math.round(randRange(rng, opt.leverMin, opt.leverMax));
+      return { value: opt.value, tone: opt.tone as MetricTone, phrase, leverPosition: lever };
+    }
+  }
+  const opt = SENTIMENT_OPTIONS[1];
+  return { value: opt.value, tone: opt.tone as MetricTone, phrase: opt.phrases[0], leverPosition: 50 };
+}
+
+function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
+  const rng = makePrng(hashStr(call.id));
+  const isCompleted = call.status === "Completed";
+
+  // ── Outcome (real fields) ────────────────────────────────────────────────
+  const didItWork: CallReviewMetrics["didItWork"] =
+    call.status === "Completed"
+      ? { value: "Yes", tone: "success", phrase: "Goal achieved" }
+      : call.status === "Failed"
+      ? { value: "No", tone: "warning", phrase: "Call did not connect" }
+      : { value: "Not yet", tone: "neutral", phrase: "Call hasn't happened yet" };
+
+  const rawDuration = call.duration;
+  const noDuration = !rawDuration || rawDuration === "0:00";
+  const howLong: CallReviewMetrics["howLong"] = noDuration
+    ? { value: "—", phrase: "No duration recorded" }
+    : { value: rawDuration, phrase: "Total call length" };
+
+  // Generate a near-future follow-up date (seeded)
+  const futureDays = Math.floor(randRange(rng, 3, 14));
+  const baseDate = new Date("2024-04-15");
+  baseDate.setDate(baseDate.getDate() + futureDays);
+  const followUpLabel = baseDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  const whatNext: CallReviewMetrics["whatNext"] = call.hasScheduledCall
+    ? { value: "Scheduled", phrase: `Follow-up on ${followUpLabel}` }
+    : { value: "None", phrase: "No follow-up logged" };
+
+  // ── Happiness (randomised only for completed) ────────────────────────────
+  const noData = { value: "—", tone: "neutral" as MetricTone, phrase: "No data for this call" };
+
+  let clientHappiness: CallReviewMetrics["clientHappiness"];
+  if (isCompleted) {
+    const score = Math.round(randRange(rng, 3.0, 5.0) * 10) / 10;
+    const lever = Math.round(((score - 1) / 4) * 100);
+    const tone: MetricTone = score >= 4.0 ? "success" : score >= 3.0 ? "neutral" : "warning";
+    clientHappiness = { value: `${score.toFixed(1)} / 5`, tone, phrase: "Estimated from tone and words", leverPosition: lever };
+  } else {
+    clientHappiness = { ...noData };
+  }
+
+  // ── Sentiment arc ────────────────────────────────────────────────────────
+  const sentimentStart    = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
+  const sentimentMid      = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
+  const sentimentEnd      = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
+
+  // ── Talk-time ────────────────────────────────────────────────────────────
+  let aiSpokePercent: CallReviewMetrics["aiSpokePercent"];
+  let longestStretch: CallReviewMetrics["longestStretch"];
+  let silencePercent: CallReviewMetrics["silencePercent"];
+  let warmthPercent: CallReviewMetrics["warmthPercent"];
+
+  if (isCompleted) {
+    const ai = Math.round(randRange(rng, 40, 70));
+    const stretch = Math.round(randRange(rng, 20, 60));
+    const silence = Math.round(randRange(rng, 5, 25));
+    const warmth = Math.round(randRange(rng, 40, 80));
+    aiSpokePercent  = { value: `${ai}%`,       phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call`, leverPosition: ai };
+    longestStretch  = { value: `${stretch}s`,  phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
+    silencePercent  = { value: `${silence}%`,  phrase: silence < 15 ? "Less than average" : "A normal amount of pause", leverPosition: silence };
+    warmthPercent   = { value: `${warmth}%`,   phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone", leverPosition: warmth };
+  } else {
+    aiSpokePercent  = { value: "—", phrase: "No data for this call" };
+    longestStretch  = { value: "—", phrase: "No data for this call" };
+    silencePercent  = { value: "—", phrase: "No data for this call" };
+    warmthPercent   = { value: "—", phrase: "No data for this call" };
+  }
+
+  // ── Latency ──────────────────────────────────────────────────────────────
+  let typicalResponse: CallReviewMetrics["typicalResponse"];
+  let slowestResponse: CallReviewMetrics["slowestResponse"];
+  let timesStuck: CallReviewMetrics["timesStuck"];
+
+  if (isCompleted) {
+    const typical = Math.round(randRange(rng, 0.4, 1.2) * 10) / 10;
+    const slowest = Math.round(randRange(rng, 1.0, 2.5) * 10) / 10;
+    const stuck   = Math.floor(randRange(rng, 0, 3));
+    const typLever = Math.round((1 - (typical - 0.4) / 0.8) * 100);
+    const slwLever = Math.round(((slowest - 1.0) / 1.5) * 100);
+    typicalResponse = {
+      value: `${typical.toFixed(1)}s`,
+      tone: typical <= 0.8 ? "success" : "neutral",
+      phrase: typical <= 0.8 ? "Faster than the 0.8s goal" : "Slightly above the 0.8s goal",
+      leverPosition: typLever,
+    };
+    slowestResponse = {
+      value: `${slowest.toFixed(1)}s`,
+      tone: slowest > 1.5 ? "warning" : "neutral",
+      phrase: slowest > 1.5 ? "Slower than the 1.5s goal" : "Within the 1.5s goal",
+      leverPosition: slwLever,
+    };
+    timesStuck = { value: `${stuck}`, phrase: stuck === 0 ? "Handled everything on its own" : `Fell back ${stuck} time${stuck > 1 ? "s" : ""}` };
+  } else {
+    typicalResponse = { value: "—", tone: "neutral", phrase: "No data for this call" };
+    slowestResponse = { value: "—", tone: "neutral", phrase: "No data for this call" };
+    timesStuck      = { value: "—", phrase: "No data for this call" };
+  }
+
+  return {
+    didItWork, clientHappiness, howLong, whatNext,
+    sentimentStart, sentimentMid, sentimentEnd,
+    aiSpokePercent, longestStretch, silencePercent, warmthPercent,
+    typicalResponse, slowestResponse, timesStuck,
+  };
+}
 
 export default function CallLogs() {
   const location = useLocation();
@@ -2423,350 +2751,124 @@ export default function CallLogs() {
                 </div>
               )}
 
-              {activeDrawerTab === "call-review" && (
-                <div className="space-y-6 p-6">
-                  {/* Call Review Card */}
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Review</h2>
+              {activeDrawerTab === "call-review" && selectedCallForDetails && (() => {
+                const m = getCallReviewMetrics(selectedCallForDetails);
+                return (
+                  <div className="space-y-5 p-6">
+                    <MetricSection label="How the call went">
+                      <MetricTile
+                        label="Did it work"
+                        value={m.didItWork.value}
+                        tone={m.didItWork.tone}
+                        phrase={m.didItWork.phrase}
+                        tooltip="Whether the call achieved the goal it was triggered for."
+                      />
+                      <MetricTile
+                        label="How happy was the client"
+                        value={m.clientHappiness.value}
+                        tone={m.clientHappiness.tone}
+                        phrase={m.clientHappiness.phrase}
+                        leverPosition={m.clientHappiness.leverPosition}
+                        tooltip="Predicted satisfaction based on sentiment and word choice throughout the call."
+                      />
+                      <MetricTile
+                        label="How long it took"
+                        value={m.howLong.value}
+                        phrase={m.howLong.phrase}
+                        tooltip="Total call length."
+                      />
+                      <MetricTile
+                        label="What happens next"
+                        value={m.whatNext.value}
+                        phrase={m.whatNext.phrase}
+                        tooltip="The follow-up action that was logged before the call ended."
+                      />
+                    </MetricSection>
 
-                    <div className="space-y-6">
-                      {/* Quality Metrics Cards */}
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
-                              <Volume2 className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  Call Quality
-                                </p>
-                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
-                              </div>
-                              <p className="text-2xl font-bold text-blue-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                9.5
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-blue-600" />
-                            <span className="text-xs text-blue-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +12% vs avg
-                            </span>
-                          </div>
-                        </div>
+                    <MetricSection label="How the client felt over time" columns={3}>
+                      <MetricTile
+                        label="Start"
+                        value={m.sentimentStart.value}
+                        tone={m.sentimentStart.tone}
+                        phrase={m.sentimentStart.phrase}
+                        leverPosition={m.sentimentStart.leverPosition}
+                        tooltip="Sentiment detected in the first third of the call."
+                      />
+                      <MetricTile
+                        label="Middle"
+                        value={m.sentimentMid.value}
+                        tone={m.sentimentMid.tone}
+                        phrase={m.sentimentMid.phrase}
+                        leverPosition={m.sentimentMid.leverPosition}
+                        tooltip="Sentiment detected in the middle third of the call."
+                      />
+                      <MetricTile
+                        label="End"
+                        value={m.sentimentEnd.value}
+                        tone={m.sentimentEnd.tone}
+                        phrase={m.sentimentEnd.phrase}
+                        leverPosition={m.sentimentEnd.leverPosition}
+                        tooltip="Sentiment detected in the final third of the call."
+                      />
+                    </MetricSection>
 
-                        <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center shadow-md">
-                              <GitBranch className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  Flow Score
-                                </p>
-                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
-                              </div>
-                              <p className="text-2xl font-bold text-purple-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                9.2
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-purple-600" />
-                            <span className="text-xs text-purple-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +8% vs avg
-                            </span>
-                          </div>
-                        </div>
+                    <MetricSection label="Who did the talking">
+                      <MetricTile
+                        label="Time the AI spoke"
+                        value={m.aiSpokePercent.value}
+                        phrase={m.aiSpokePercent.phrase}
+                        leverPosition={m.aiSpokePercent.leverPosition}
+                        tooltip="Share of total talk time spoken by the AI agent."
+                      />
+                      <MetricTile
+                        label="Longest stretch without a break"
+                        value={m.longestStretch.value}
+                        phrase={m.longestStretch.phrase}
+                        tooltip="Longest uninterrupted stretch of AI speech."
+                      />
+                      <MetricTile
+                        label="Silence during the call"
+                        value={m.silencePercent.value}
+                        phrase={m.silencePercent.phrase}
+                        leverPosition={m.silencePercent.leverPosition}
+                        tooltip="Percentage of the call with no speech from either party."
+                      />
+                      <MetricTile
+                        label="How warm the AI sounded"
+                        value={m.warmthPercent.value}
+                        phrase={m.warmthPercent.phrase}
+                        leverPosition={m.warmthPercent.leverPosition}
+                        tooltip="Share of agent responses classified as empathetic or rapport-building."
+                      />
+                    </MetricSection>
 
-                        <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-green-100/50 border border-green-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center shadow-md">
-                              <Users className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <div className="flex items-center gap-1">
-                                <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  Engagement
-                                </p>
-                                <InfoTooltip text="AI-generated score out of 10 based on this call's audio and transcript." />
-                              </div>
-                              <p className="text-2xl font-bold text-green-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                8.8
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-green-600" />
-                            <span className="text-xs text-green-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +5% vs avg
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Performance Metrics */}
-                      <div className="bg-muted/30 rounded-xl p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Performance Metrics
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Clarity
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                95%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '95%' }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Professionalism
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                98%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '98%' }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Client Engagement
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                88%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '88%' }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Areas of Improvement */}
-                      <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Suggested Improvements
-                        </h4>
-                        <ul className="space-y-3">
-                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <span className="text-amber-600 text-xs font-bold">1</span>
-                            </div>
-                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                              Consider reducing pause time between questions to maintain conversation momentum
-                            </span>
-                          </li>
-                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <span className="text-amber-600 text-xs font-bold">2</span>
-                            </div>
-                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                              Add more personalized context for better client connection and rapport building
-                            </span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
+                    <MetricSection label="How fast the AI responded" columns={3}>
+                      <MetricTile
+                        label="Typical response time"
+                        value={m.typicalResponse.value}
+                        tone={m.typicalResponse.tone}
+                        phrase={m.typicalResponse.phrase}
+                        leverPosition={m.typicalResponse.leverPosition}
+                        tooltip="Average time the AI took to respond after the client finished speaking."
+                      />
+                      <MetricTile
+                        label="Slowest response"
+                        value={m.slowestResponse.value}
+                        tone={m.slowestResponse.tone}
+                        phrase={m.slowestResponse.phrase}
+                        leverPosition={m.slowestResponse.leverPosition}
+                        tooltip="The single longest response delay during the call."
+                      />
+                      <MetricTile
+                        label="Times the AI got stuck"
+                        value={m.timesStuck.value}
+                        phrase={m.timesStuck.phrase}
+                        tooltip="Number of times the call fell back to a human or a scripted default."
+                      />
+                    </MetricSection>
                   </div>
-
-                  {/* Smart Analysis / QA */}
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Smart Analysis & QA</h2>
-
-                    <div className="space-y-6">
-                      {/* Customer Satisfaction */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Customer Satisfaction
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Dead Air */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Dead Air
-                              </p>
-                              <InfoTooltip text="Percentage of the call where neither party was speaking." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              14.69%
-                            </p>
-                          </div>
-
-                          {/* Display Patience and Courtesy */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Display Patience and Courtesy
-                              </p>
-                              <InfoTooltip text="AI evaluation of assistant's polite behavior." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              100%
-                            </p>
-                          </div>
-
-                          {/* Empathy */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Empathy
-                              </p>
-                              <InfoTooltip text="AI evaluation of empathetic phrases and tone." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              58.22%
-                            </p>
-                          </div>
-
-                          {/* Hold Time Violation */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Hold Time Violation
-                              </p>
-                              <InfoTooltip text="Checks if the caller was left on hold for too long." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              28.33%
-                            </p>
-                          </div>
-
-                          {/* Negative Customer Sentiment */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Negative Customer Sentiment
-                              </p>
-                              <InfoTooltip text="Percentage of caller responses with negative tone or sentiment." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              19.52%
-                            </p>
-                          </div>
-
-                          {/* Supervisor Escalation */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Supervisor Escalation
-                              </p>
-                              <InfoTooltip text="Probability that the caller requested a supervisor." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              2.87%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Process Adherence */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Process Adherence
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Proper Call Hold */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Proper Call Hold
-                              </p>
-                              <InfoTooltip text="Adherence to standard hold procedure." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              67.89%
-                            </p>
-                          </div>
-
-                          {/* Proper Call Opening */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Proper Call Opening
-                              </p>
-                              <InfoTooltip text="Adherence to standard greeting procedure." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              67.33%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Compliance */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Compliance
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Customer Verification */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Customer Verification
-                              </p>
-                              <InfoTooltip text="Verification of caller identity where required." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              79.31%
-                            </p>
-                          </div>
-
-                          {/* Recorded Line Message */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Recorded Line Message
-                              </p>
-                              <InfoTooltip text="Verification that compliance recording disclaimer was spoken." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              7.38%
-                            </p>
-                          </div>
-
-                          {/* Redaction */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <div className="flex items-center gap-1 mb-2">
-                              <p className="text-xs text-slate-500" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Redaction
-                              </p>
-                              <InfoTooltip text="Redaction percentage of sensitive information from transcripts." />
-                            </div>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              59.99%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {activeDrawerTab === "review" && (
                 <div className="space-y-6 p-6">

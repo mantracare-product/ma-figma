@@ -171,6 +171,125 @@ const getProcessFromStage = (stage: string): string => {
   return stageToProcessMap[stage] || 'Patient Intake'; // default to Patient Intake
 };
 
+type MetricTone = "success" | "warning" | "neutral";
+
+const metricToneStyles: Record<MetricTone, { bg: string; text: string }> = {
+  success: { bg: "bg-emerald-50", text: "text-emerald-800" },
+  warning: { bg: "bg-amber-50", text: "text-amber-800" },
+  neutral: { bg: "bg-slate-50", text: "text-slate-900" },
+};
+
+function MetricTile({
+  label,
+  value,
+  phrase,
+  tone = "neutral",
+  tooltip,
+  leverPosition,
+}: {
+  label: string;
+  value: string;
+  phrase: string;
+  tone?: MetricTone;
+  tooltip: string;
+  leverPosition?: number;
+}) {
+  const { bg, text } = metricToneStyles[tone];
+  const mutedLabel = tone === "neutral" ? "text-slate-500" : text;
+  const mutedPhrase = tone === "neutral" ? "text-slate-600" : `${text} opacity-85`;
+
+  return (
+    <div className={`min-w-0 rounded-xl p-3.5 ${bg}`}>
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <p
+          className={`text-[11px] leading-snug ${mutedLabel}`}
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {label}
+        </p>
+        <Tooltip text={tooltip}>
+          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+        </Tooltip>
+      </div>
+      <p
+        className="text-xl font-bold truncate"
+        style={{ fontFamily: "DM Sans, sans-serif" }}
+        title={value}
+      >
+        <span className={text}>{value}</span>
+      </p>
+      <p
+        className={`text-[11px] leading-snug mt-1 break-words ${
+          leverPosition !== undefined ? "mb-1.5" : ""
+        } ${mutedPhrase}`}
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        {phrase}
+      </p>
+      {leverPosition !== undefined && (
+        <div className="h-1 bg-black/10 rounded-full relative">
+          <div
+            className={`absolute top-1/2 w-2 h-2 rounded-full ${
+              tone === "success"
+                ? "bg-emerald-600"
+                : tone === "warning"
+                ? "bg-amber-600"
+                : "bg-primary"
+            }`}
+            style={{ left: `${leverPosition}%`, transform: "translate(-50%, -50%)" }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MetricGroup({
+  label,
+  columns = 2,
+  defaultOpen = true,
+  children,
+}: {
+  label: string;
+  columns?: 2 | 3;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center justify-between mb-2 group"
+        aria-expanded={open}
+      >
+        <p
+          className="text-[12px] text-slate-400 group-hover:text-slate-600 transition-colors"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {label}
+        </p>
+        <ChevronDown
+          className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+      {open && (
+        <div
+          className={`grid gap-2.5 ${
+            columns === 3 ? "grid-cols-3" : "grid-cols-2"
+          }`}
+          style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
+        >
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Deals() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -3151,305 +3270,147 @@ export default function Deals() {
               )}
 
               {activeDrawerTab === "call-review" && (
-                <div className="space-y-6 p-6">
-                  {/* Call Review Card */}
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Call Review</h2>
+                <div className="space-y-5 p-6">
+                  <MetricGroup label="How the call went" defaultOpen>
+                    <MetricTile
+                      label="Did it work"
+                      value="Yes"
+                      tone="success"
+                      phrase="Insurance confirmed"
+                      tooltip="Whether the call achieved the goal it was triggered for."
+                    />
+                    <MetricTile
+                      label="How happy was the client"
+                      value="4.6 / 5"
+                      tone="success"
+                      phrase="Estimated from tone and words"
+                      leverPosition={92}
+                      tooltip="Predicted satisfaction based on sentiment and word choice throughout the call."
+                    />
+                    <MetricTile
+                      label="How long it took"
+                      value="4m 32s"
+                      phrase="Quicker than most calls like this"
+                      tooltip="Total call length compared to similar calls this week."
+                    />
+                    <MetricTile
+                      label="What happens next"
+                      value="Scheduled"
+                      phrase="Form review on Apr 11"
+                      tooltip="The follow-up action that was logged before the call ended."
+                    />
+                  </MetricGroup>
 
-                    <div className="space-y-6">
-                      {/* Quality Metrics Cards */}
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 border border-blue-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-blue-500 flex items-center justify-center shadow-md">
-                              <Volume2 className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-blue-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Call Quality
-                              </p>
-                              <p className="text-2xl font-bold text-blue-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                9.5
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-blue-600" />
-                            <span className="text-xs text-blue-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +12% vs avg
-                            </span>
-                          </div>
-                        </div>
+                  <MetricGroup label="How the client felt over time" columns={3} defaultOpen>
+                    <MetricTile
+                      label="Start"
+                      value="Positive"
+                      tone="success"
+                      phrase="Warm greeting"
+                      leverPosition={90}
+                      tooltip="Sentiment detected in the first third of the call."
+                    />
+                    <MetricTile
+                      label="Middle"
+                      value="Neutral"
+                      tone="warning"
+                      phrase="Clarifying policy"
+                      leverPosition={50}
+                      tooltip="Sentiment detected in the middle third of the call."
+                    />
+                    <MetricTile
+                      label="End"
+                      value="Positive"
+                      tone="success"
+                      phrase="Resolution confirmed"
+                      leverPosition={85}
+                      tooltip="Sentiment detected in the final third of the call."
+                    />
+                  </MetricGroup>
 
-                        <div className="relative overflow-hidden bg-gradient-to-br from-purple-50 to-purple-100/50 border border-purple-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-purple-500 flex items-center justify-center shadow-md">
-                              <GitBranch className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-purple-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Flow Score
-                              </p>
-                              <p className="text-2xl font-bold text-purple-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                9.2
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-purple-600" />
-                            <span className="text-xs text-purple-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +8% vs avg
-                            </span>
-                          </div>
-                        </div>
+                  <MetricGroup label="Who did the talking" defaultOpen={false}>
+                    <MetricTile
+                      label="Time the AI spoke"
+                      value="58%"
+                      phrase="2m 38s of the call"
+                      leverPosition={58}
+                      tooltip="Share of total talk time spoken by the AI agent."
+                    />
+                    <MetricTile
+                      label="Longest stretch without a break"
+                      value="38s"
+                      phrase="Short enough to stay natural"
+                      tooltip="Longest uninterrupted stretch of AI speech."
+                    />
+                    <MetricTile
+                      label="Silence during the call"
+                      value="15%"
+                      phrase="A normal amount of pause"
+                      leverPosition={15}
+                      tooltip="Percentage of the call with no speech from either party."
+                    />
+                    <MetricTile
+                      label="How warm the AI sounded"
+                      value="58%"
+                      phrase="Fairly friendly tone"
+                      leverPosition={58}
+                      tooltip="Share of agent responses classified as empathetic or rapport-building."
+                    />
+                  </MetricGroup>
 
-                        <div className="relative overflow-hidden bg-gradient-to-br from-green-50 to-green-100/50 border border-green-200 rounded-xl p-5">
-                          <div className="flex items-center gap-3 mb-3">
-                            <div className="w-10 h-10 rounded-lg bg-green-500 flex items-center justify-center shadow-md">
-                              <Users className="w-5 h-5 text-white" />
-                            </div>
-                            <div>
-                              <p className="text-xs font-medium text-green-700" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Engagement
-                              </p>
-                              <p className="text-2xl font-bold text-green-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                8.8
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-green-600" />
-                            <span className="text-xs text-green-600" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              +5% vs avg
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                  <MetricGroup label="How fast the AI responded" defaultOpen={false}>
+                    <MetricTile
+                      label="Typical response time"
+                      value="0.6s"
+                      phrase="Faster than the 0.8s goal"
+                      leverPosition={78}
+                      tooltip="Average time the AI took to respond after the client finished speaking."
+                    />
+                    <MetricTile
+                      label="Slowest response"
+                      value="1.9s"
+                      tone="warning"
+                      phrase="Slower than the 1.5s goal"
+                      leverPosition={95}
+                      tooltip="The single longest response delay during the call."
+                    />
+                    <MetricTile
+                      label="Times the AI got stuck"
+                      value="0"
+                      phrase="Handled everything on its own"
+                      tooltip="Number of times the call fell back to a human or a scripted default."
+                    />
+                    <MetricTile
+                      label="AI version used"
+                      value="v2.3"
+                      phrase="Current live version"
+                      tooltip="The model version that handled this call."
+                    />
+                  </MetricGroup>
 
-                      {/* Performance Metrics */}
-                      <div className="bg-muted/30 rounded-xl p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Performance Metrics
-                        </h4>
-                        <div className="space-y-4">
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Clarity
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                95%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '95%' }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Professionalism
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                98%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '98%' }}
-                              ></div>
-                            </div>
-                          </div>
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium" style={{ color: '#475569', fontFamily: 'Outfit, sans-serif' }}>
-                                Client Engagement
-                              </span>
-                              <span className="text-sm font-semibold text-primary" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                88%
-                              </span>
-                            </div>
-                            <div className="relative w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                              <div
-                                className="absolute top-0 left-0 h-full rounded-full bg-gradient-to-r from-primary to-blue-400 shadow-sm transition-all duration-500"
-                                style={{ width: '88%' }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Areas of Improvement */}
-                      <div className="bg-amber-50/50 border border-amber-200 rounded-xl p-5">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Suggested Improvements
-                        </h4>
-                        <ul className="space-y-3">
-                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <span className="text-amber-600 text-xs font-bold">1</span>
-                            </div>
-                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                              Consider reducing pause time between questions to maintain conversation momentum
-                            </span>
-                          </li>
-                          <li className="flex items-start gap-3 bg-white rounded-lg p-3 border border-amber-100">
-                            <div className="w-6 h-6 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <span className="text-amber-600 text-xs font-bold">2</span>
-                            </div>
-                            <span className="text-sm leading-relaxed" style={{ color: '#78350F', fontFamily: 'Outfit, sans-serif' }}>
-                              Add more personalized context for better client connection and rapport building
-                            </span>
-                          </li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Smart Analysis / QA */}
-                  <div className="bg-card rounded-2xl p-8 border border-border shadow-lg">
-                    <h2 className="text-lg font-semibold mb-4" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Smart Analysis & QA</h2>
-
-                    <div className="space-y-6">
-                      {/* Customer Satisfaction */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Customer Satisfaction
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Dead Air */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Dead Air
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              14.69%
-                            </p>
-                          </div>
-
-                          {/* Display Patience and Courtesy */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Display Patience and Courtesy
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              100%
-                            </p>
-                          </div>
-
-                          {/* Empathy */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Empathy
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              58.22%
-                            </p>
-                          </div>
-
-                          {/* Hold Time Violation */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Hold Time Violation
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              28.33%
-                            </p>
-                          </div>
-
-                          {/* Negative Customer Sentiment */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Negative Customer Sentiment
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              19.52%
-                            </p>
-                          </div>
-
-                          {/* Supervisor Escalation */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Supervisor Escalation
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              2.87%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Process Adherence */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Process Adherence
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Proper Call Hold */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Proper Call Hold
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              67.89%
-                            </p>
-                          </div>
-
-                          {/* Proper Call Opening */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Proper Call Opening
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              67.33%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Compliance */}
-                      <div className="bg-slate-50 rounded-lg p-6 border border-border">
-                        <h4 className="text-sm font-medium mb-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                          Compliance
-                        </h4>
-                        <div className="grid grid-cols-3 gap-4">
-                          {/* Customer Verification */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Customer Verification
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              79.31%
-                            </p>
-                          </div>
-
-                          {/* Recorded Line Message */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Recorded Line Message
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              7.38%
-                            </p>
-                          </div>
-
-                          {/* Redaction */}
-                          <div className="bg-white border border-border rounded-lg p-5">
-                            <p className="text-xs text-slate-500 mb-2" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Redaction
-                            </p>
-                            <p className="text-2xl font-semibold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                              59.99%
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <MetricGroup label="Rules the call had to follow" defaultOpen={false}>
+                    <MetricTile
+                      label="Confirmed who they were"
+                      value="Yes"
+                      tone="success"
+                      phrase="Name and date of birth checked"
+                      tooltip="Whether client identity was verified per policy."
+                    />
+                    <MetricTile
+                      label="Told them the call is recorded"
+                      value="No"
+                      tone="warning"
+                      phrase="Missed at the start of the call"
+                      tooltip="Whether the mandatory recording disclosure was delivered."
+                    />
+                    <MetricTile
+                      label="Kept private details hidden"
+                      value="Yes"
+                      tone="success"
+                      phrase="Sensitive info was masked"
+                      tooltip="Whether PII and identifiers were properly redacted in the transcript."
+                    />
+                  </MetricGroup>
                 </div>
               )}
 
