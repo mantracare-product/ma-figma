@@ -4,7 +4,7 @@ export type WorkflowStep = {
   description: string;
   iconKey: string;
   stepKey?: string;
-  trigger?: "stage" | "incall" | "postcall";
+  trigger?: "stage" | "incall" | "inchat" | "postcall";
   executionType?: "wait" | "parallel";
   delayValue?: number;
   delayUnit?: string;

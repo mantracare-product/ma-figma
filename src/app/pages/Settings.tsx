@@ -10,6 +10,7 @@ import { useNavigate, useLocation } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
 import { useFieldRegistry, FieldDefinition, FieldModule } from "../context/FieldRegistryContext";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
+import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import {
   Save,
   Plus,
@@ -1782,7 +1783,54 @@ export default function Settings() {
   };
 
   // Integration handlers
+  const [connectedWhatsAppNumbers, setConnectedWhatsAppNumbers] = useState<WhatsAppNumberEntry[]>(() => getStoredWhatsAppNumbers());
+  const [showAddWhatsAppNumberForm, setShowAddWhatsAppNumberForm] = useState(false);
+  const [newWhatsAppNumberInput, setNewWhatsAppNumberInput] = useState("");
+
+  useEffect(() => {
+    const syncNumbers = () => setConnectedWhatsAppNumbers(getStoredWhatsAppNumbers());
+    window.addEventListener(WHATSAPP_NUMBERS_EVENT, syncNumbers);
+    return () => window.removeEventListener(WHATSAPP_NUMBERS_EVENT, syncNumbers);
+  }, []);
+
+  const handleAddWhatsAppNumberSave = () => {
+    if (!newWhatsAppNumberInput.trim()) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    const newEntry: WhatsAppNumberEntry = {
+      id: `wa-${Date.now()}`,
+      displayPhoneNumber: newWhatsAppNumberInput.trim(),
+      name: `WhatsApp (${newWhatsAppNumberInput.trim()})`,
+      wabaId: `WABA-MOCK-${Date.now()}`,
+    };
+    const updated = [...connectedWhatsAppNumbers, newEntry];
+    saveStoredWhatsAppNumbers(updated);
+    setConnectedWhatsAppNumbers(updated);
+    setShowAddWhatsAppNumberForm(false);
+    setNewWhatsAppNumberInput("");
+    toast.success(`WhatsApp number ${newEntry.displayPhoneNumber} connected`);
+  };
+
+  const handleDisconnectWhatsAppNumber = (id: string) => {
+    const updated = connectedWhatsAppNumbers.filter((n) => n.id !== id);
+    saveStoredWhatsAppNumbers(updated);
+    setConnectedWhatsAppNumbers(updated);
+
+    if (updated.length === 0) {
+      setIntegrations((prev) =>
+        prev.map((int) =>
+          int.id === "whatsapp-business" ? { ...int, connected: false, credentials: undefined } : int
+        )
+      );
+    }
+    toast.success("WhatsApp number disconnected");
+  };
+
   const handleConnectIntegration = (integration: Integration) => {
+    if (integration.id === "whatsapp-business") {
+      setConnectedWhatsAppNumbers(getStoredWhatsAppNumbers());
+    }
     setSelectedIntegration(integration);
     setIntegrationCredentials(integration.credentials || {});
     setVisibleFields({});
@@ -1877,26 +1925,26 @@ export default function Settings() {
   };
 
   const handleMetaSignupCallback = async (authCode: string) => {
-    // TODO(backend): POST authCode to your server, which exchanges it with Meta's
-    // Graph API for a long-lived access token, then fetches the WABA ID and
-    // phone_number_id via the /debug_token and /waba endpoints.
-    // On success, the backend returns { wabaId, phoneNumberId, businessAccountId, displayPhoneNumber }.
     try {
-      // Placeholder for the actual backend call — replace with real endpoint.
       const result = await fetch("/api/integrations/whatsapp/meta-signup-callback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: authCode }),
       }).then((r) => r.json());
 
-      setIntegrationCredentials({
-        ...integrationCredentials,
+      const connectionId = `wa-${Date.now()}`;
+      const newEntry: WhatsAppNumberEntry = {
+        id: connectionId,
+        displayPhoneNumber: result.displayPhoneNumber || "WhatsApp Number",
+        name: `WhatsApp (${result.displayPhoneNumber || "WhatsApp Business"})`,
         wabaId: result.wabaId,
         phoneNumberId: result.phoneNumberId,
         businessAccountId: result.businessAccountId,
-        displayPhoneNumber: result.displayPhoneNumber,
-        connectedViaMeta: "true",
-      });
+      };
+
+      const updated = [...connectedWhatsAppNumbers, newEntry];
+      saveStoredWhatsAppNumbers(updated);
+      setConnectedWhatsAppNumbers(updated);
 
       setIntegrations((prev) =>
         prev.map((i) =>
@@ -1906,7 +1954,7 @@ export default function Settings() {
         )
       );
 
-      toast.success(`WhatsApp Business connected: ${result.displayPhoneNumber}`);
+      toast.success(`WhatsApp Business connected: ${result.displayPhoneNumber || "New Number"}`);
     } catch (err) {
       toast.error("Couldn't complete WhatsApp signup — please try again.");
     }
@@ -9694,83 +9742,90 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
 
                   {selectedIntegration?.id === "whatsapp-business" && (
                     <div className="space-y-6">
-                      {integrationCredentials.connectedViaMeta === "true" || selectedIntegration.connected ? (
-                        <div className="space-y-4">
-                          <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-xl">
-                            <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
-                            <div>
-                              <p className="text-sm font-semibold text-green-900">
-                                Connected: {integrationCredentials.displayPhoneNumber || integrationCredentials.phoneNumberHint || "WhatsApp Business"}
-                              </p>
-                              <p className="text-xs text-green-700 mt-0.5">
-                                WABA ID: {integrationCredentials.wabaId || "WABA-META-CLOUD"} · Managed via Meta
-                              </p>
+                      <div className="space-y-4">
+                        <div className="space-y-2">
+                          <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider">
+                            Connected WhatsApp Numbers ({connectedWhatsAppNumbers.length})
+                          </label>
+                          {connectedWhatsAppNumbers.map((num) => (
+                            <div
+                              key={num.id}
+                              className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-xl"
+                            >
+                              <div className="flex items-center gap-3">
+                                <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                                <div>
+                                  <p className="text-sm font-semibold text-green-900">
+                                    {num.displayPhoneNumber}
+                                  </p>
+                                  <p className="text-xs text-green-700 mt-0.5">
+                                    WABA ID: {num.wabaId || "WABA-META-CLOUD"} · Managed via Meta
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => handleDisconnectWhatsAppNumber(num.id)}
+                                className="text-xs border-destructive text-destructive hover:bg-destructive/10 cursor-pointer"
+                              >
+                                Disconnect
+                              </Button>
                             </div>
-                          </div>
-
-                          <div className="flex gap-3">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleMetaEmbeddedSignup}
-                              className="flex-1 justify-center text-xs"
-                            >
-                              Reconnect / Switch Number
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleDisconnectIntegration}
-                              className="flex-1 justify-center text-xs border-destructive text-destructive hover:bg-destructive/10"
-                            >
-                              Disconnect
-                            </Button>
-                          </div>
+                          ))}
                         </div>
-                      ) : (
-                        <div className="space-y-4">
-                          <div>
-                            <div className="flex items-center gap-2 mb-2">
-                              <label className="block text-sm font-medium">WhatsApp Business Phone Number</label>
-                              <Tooltip text="The number you plan to use for WhatsApp Business. You'll confirm or add this number inside the Meta signup window.">
-                                <HelpCircle className="w-3.5 h-3.5 text-muted-foreground cursor-help" />
-                              </Tooltip>
-                            </div>
+
+                        {!showAddWhatsAppNumberForm ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowAddWhatsAppNumberForm(true)}
+                            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl font-semibold text-sm transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-4 h-4" />
+                            + Add WhatsApp Number
+                          </button>
+                        ) : (
+                          <div className="p-4 bg-gray-50 border border-border rounded-xl space-y-3">
+                            <label className="block text-sm font-semibold text-gray-900">Add WhatsApp Phone Number</label>
                             <input
                               type="text"
-                              value={integrationCredentials.phoneNumberHint || ""}
-                              onChange={(e) =>
-                                setIntegrationCredentials({
-                                  ...integrationCredentials,
-                                  phoneNumberHint: e.target.value,
-                                })
-                              }
+                              value={newWhatsAppNumberInput}
+                              onChange={(e) => setNewWhatsAppNumberInput(e.target.value)}
                               placeholder="+1 555 123 4567"
-                              className="w-full px-4 py-2 bg-input-background border border-input rounded-xl text-sm"
+                              className="w-full px-3 py-2 bg-white border border-input rounded-xl text-sm"
                             />
-                            <p className="text-[11px] text-muted-foreground mt-1.5 leading-normal">
-                              If left blank, you'll enter your number during Meta signup.
-                            </p>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={handleAddWhatsAppNumberSave}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition-colors cursor-pointer"
+                              >
+                                Save Number
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setShowAddWhatsAppNumberForm(false);
+                                  setNewWhatsAppNumberInput("");
+                                }}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-semibold text-xs transition-colors cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
                           </div>
+                        )}
 
-                          <div className="pt-2">
-                            <button
-                              type="button"
-                              onClick={handleMetaEmbeddedSignup}
-                              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#1877F2] hover:bg-[#166FE5] text-white rounded-xl font-semibold text-sm transition-colors cursor-pointer"
-                            >
-                              <svg viewBox="0 0 24 24" className="w-5 h-5" fill="white">
-                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
-                              </svg>
-                              Continue with Facebook — Set Up WhatsApp
-                            </button>
-                            <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                              This opens Meta's official WhatsApp Business signup. You'll log into your Facebook Business account, select or create your WhatsApp Business Account, and confirm your phone number — Meta handles the rest, including webhook setup.
-                            </p>
-                          </div>
+                        <div className="pt-2 text-center">
+                          <button
+                            type="button"
+                            onClick={handleMetaEmbeddedSignup}
+                            className="text-xs text-gray-500 hover:text-blue-600 underline cursor-pointer"
+                          >
+                            Or connect via Meta Embedded Signup (requires setup)
+                          </button>
                         </div>
-                      )}
-
+                      </div>
                     </div>
                   )}
 

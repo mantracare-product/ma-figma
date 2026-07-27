@@ -9,11 +9,11 @@ export interface StepDetailDrawerProps {
   isOpen: boolean;
   step: WorkflowStep | null;
   isCreatingNewStep: boolean;
-  stepAllowedTriggers: Record<string, Array<"stage" | "incall" | "postcall">>;
+  stepAllowedTriggers: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">>;
   processes: any[];
 
-  stepTrigger: "stage" | "incall" | "postcall";
-  onStepTriggerChange: (t: "stage" | "incall" | "postcall") => void;
+  stepTrigger: "stage" | "incall" | "inchat" | "postcall";
+  onStepTriggerChange: (t: "stage" | "incall" | "inchat" | "postcall") => void;
 
   executionType: "wait" | "parallel";
   onExecutionTypeChange: (t: "wait" | "parallel") => void;
@@ -69,16 +69,19 @@ export default function StepDetailDrawer({
     [
       { key: "stage" as const, label: "On Entering Stage" },
       { key: "incall" as const, label: "In Call" },
+      { key: "inchat" as const, label: "In Chat" },
       { key: "postcall" as const, label: "Post Call" },
     ] as const
-  ).filter((t) => allowedTriggers.includes(t.key));
+  ).filter((t) => allowedTriggers.includes(t.key as any));
 
   const subtitleText =
     stepTrigger === "stage"
       ? "Runs in sequence as part of this stage's step order, with an optional delay."
       : stepTrigger === "incall"
-      ? "Fires the moment the AI decides to take this action mid-conversation."
-      : "Fires automatically once the call has ended.";
+        ? "Fires the moment the AI decides to take this action mid-conversation."
+        : stepTrigger === "inchat"
+          ? "Fires when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage."
+          : "Fires automatically once the call has ended.";
 
   const isSingle = visibleButtons.length === 1;
 
@@ -101,9 +104,9 @@ export default function StepDetailDrawer({
       <div
         className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
         style={{
-          width: "50vw",
-          minWidth: "50vw",
-          maxWidth: "50vw",
+          width: "55vw",
+          minWidth: "55vw",
+          maxWidth: "55vw",
           boxShadow: "-4px 0 24px rgba(0,0,0,0.12)",
         }}
       >
@@ -164,11 +167,10 @@ export default function StepDetailDrawer({
                         )}
                         <button
                           onClick={() => onStepTriggerChange(t.key)}
-                          className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                            stepTrigger === t.key
+                          className={`w-[160px] px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${stepTrigger === t.key
                               ? "bg-primary text-white"
                               : "text-gray-600 hover:text-gray-900"
-                          }`}
+                            }`}
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
                           {t.label}
@@ -242,7 +244,7 @@ export default function StepDetailDrawer({
                   <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0 ml-1" />
                 </button>
               </div>
-            ) : stepTrigger === "incall" ? (
+            ) : stepTrigger === "incall" || stepTrigger === "inchat" ? (
               <div className="w-fit flex-shrink-0">
                 <label
                   className="block text-sm font-semibold mb-2"

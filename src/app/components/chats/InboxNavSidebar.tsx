@@ -178,7 +178,7 @@ export default function InboxNavSidebar({
           className="text-sm font-bold text-gray-900"
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
-          Navigation
+          All Channels
         </h3>
         <button
           type="button"

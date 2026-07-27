@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router";
 import { toast } from "sonner";
@@ -45,6 +45,9 @@ import {
   Calendar,
   AlertTriangle,
   PanelLeft,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Hash,
   FlaskConical,
   Share2,
   Copy,
@@ -83,6 +86,7 @@ import {
 import ChatbotTab from "../components/chats/ChatbotTab";
 import InboxNavSidebar from "../components/chats/InboxNavSidebar";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
+import { getStoredWhatsAppNumbers } from "../../lib/useWhatsAppNumbers";
 
 // ─── Type Definitions ────────────────────────────────────────────────────────
 
@@ -106,6 +110,7 @@ interface Conversation {
   id: string;
   contactName: string;
   phoneNumber: string;
+  inboxNumber?: string;
   channel: "whatsapp" | "sms" | "website";
   lastMessage: string;
   timestamp: string;
@@ -231,6 +236,7 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     id: "conv-1",
     contactName: "Sarah Jenkins",
     phoneNumber: "+1 (555) 234-5678",
+    inboxNumber: "+1 (555) 123-4567",
     channel: "whatsapp",
     lastMessage: "I wanted to change my appointment slot to 3:00 PM if possible.",
     timestamp: "10:35 AM",
@@ -248,6 +254,7 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     id: "conv-2",
     contactName: "Michael Chang",
     phoneNumber: "+1 (555) 876-5432",
+    inboxNumber: "+1 (555) 432-1000",
     channel: "sms",
     lastMessage: "Thanks, I will confirm by tonight.",
     timestamp: "Yesterday",
@@ -264,6 +271,7 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     id: "conv-3",
     contactName: "Elena Rostova",
     phoneNumber: "+1 (555) 345-6789",
+    inboxNumber: "+1 (555) 987-6543",
     channel: "whatsapp",
     lastMessage: "Awesome service! Thanks for checking in.",
     timestamp: "Yesterday",
@@ -783,12 +791,19 @@ export default function Chats() {
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>("whatsapp");
+  const [numberFilter, setNumberFilter] = useState<string>("all");
+
+  useEffect(() => {
+    setNumberFilter("all");
+  }, [channelFilter]);
   const [campaignStatusFilter, setCampaignStatusFilter] = useState<"all" | "active" | "draft" | "completed">("all");
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
   type ViewFilter = "all" | "open" | "resolved" | "unread" | "assigned_to_me";
   const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
-  const [navCollapsed, setNavCollapsed] = useState(false);
+  const [showViewFilterDropdown, setShowViewFilterDropdown] = useState(false);
+  const [showNumberFilterDropdown, setShowNumberFilterDropdown] = useState(false);
+  const [isListPaneCollapsed, setIsListPaneCollapsed] = useState(false);
   const [showInlineSearch, setShowInlineSearch] = useState(false);
   const [composerText, setComposerText] = useState("");
   const [showUseTemplateDropdown, setShowUseTemplateDropdown] = useState(false);
@@ -1045,6 +1060,18 @@ export default function Chats() {
     toast.success("Message sent");
   };
 
+  const availableNumbersForChannel = useMemo(() => {
+    if (channelFilter === "whatsapp") {
+      const stored = getStoredWhatsAppNumbers().map((n) => n.displayPhoneNumber);
+      const convNumbers = conversations.filter((c) => c.channel === "whatsapp" && c.inboxNumber).map((c) => c.inboxNumber!);
+      return Array.from(new Set([...stored, ...convNumbers]));
+    }
+    if (channelFilter === "sms") {
+      return Array.from(new Set(conversations.filter((c) => c.channel === "sms" && c.inboxNumber).map((c) => c.inboxNumber!)));
+    }
+    return [];
+  }, [channelFilter, conversations]);
+
   const filteredConversations = conversations.filter(c => {
     const matchesSearch = c.contactName.toLowerCase().includes(chatSearch.toLowerCase()) || c.phoneNumber.includes(chatSearch) || c.lastMessage.toLowerCase().includes(chatSearch.toLowerCase());
     const matchesChannel = channelFilter === null ? false : channelFilter === "all" ? true : c.channel === channelFilter;
@@ -1053,7 +1080,8 @@ export default function Chats() {
         viewFilter === "unread" ? c.unreadCount > 0 :
           viewFilter === "assigned_to_me" ? c.assignedPersonId === CURRENT_USER_ID :
             c.status === viewFilter;
-    return matchesSearch && matchesChannel && matchesView;
+    const matchesNumber = numberFilter === "all" ? true : c.inboxNumber === numberFilter;
+    return matchesSearch && matchesChannel && matchesView && matchesNumber;
   });
 
   // ── Templates State ──
@@ -1460,54 +1488,160 @@ export default function Chats() {
             {/* ══════════════════════════════════════════════════════
                 TAB: CHATS INBOX
             ══════════════════════════════════════════════════════ */}
+            {/* ══════════════════════════════════════════════════════
+                TAB: CHATS INBOX
+            ══════════════════════════════════════════════════════ */}
             {activeTab === "chats" && (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex h-[calc(100vh-230px)] overflow-hidden">
+              <div className="flex h-[calc(100vh-230px)] overflow-hidden">
                 {/* Pane 1 — List Pane */}
-                <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
-                  {/* Header */}
-                  <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <button type="button" onClick={() => setNavCollapsed(v => !v)}
-                          className="p-1 hover:bg-gray-100 rounded text-gray-400 shrink-0"
-                          title={navCollapsed ? "Show sidebar" : "Hide sidebar"}>
-                          <PanelLeft className="w-4 h-4" />
-                        </button>
-                        <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : viewFilter === "assigned_to_me" ? "Assigned to me" : "All chats"}
-                        </h3>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <button type="button" onClick={() => setShowInlineSearch(v => !v)}
-                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400">
-                          <Search className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-gray-400 pl-7" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      {filteredConversations.length} Chats · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
-                    </p>
-                    {showInlineSearch && (
-                      <div className="relative pt-1">
-                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)} autoFocus
-                          placeholder="Search conversations..."
-                          className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                          style={{ fontFamily: "Outfit, sans-serif" }} />
-                      </div>
+                {isListPaneCollapsed ? (
+                  <div className="w-12 shrink-0 border-r border-gray-200 flex flex-col items-center py-3 bg-slate-50 space-y-4">
+                    <button
+                      type="button"
+                      onClick={() => setIsListPaneCollapsed(false)}
+                      className="p-2 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"
+                      title="Expand chat list"
+                    >
+                      <PanelLeftOpen className="w-4 h-4" />
+                    </button>
+                    {filteredConversations.filter(c => c.unreadCount > 0).length > 0 && (
+                      <span className="w-6 h-6 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shadow-sm" title="Unread chats">
+                        {filteredConversations.filter(c => c.unreadCount > 0).length}
+                      </span>
                     )}
-                    {/* View filter pills */}
-                    <div className="flex gap-1.5 pt-1 overflow-x-auto no-scrollbar">
-                      {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map(v => (
-                        <button key={v} onClick={() => setViewFilter(v)}
-                          className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all whitespace-nowrap ${viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                            }`}
-                          style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : v === "resolved" ? "Resolved" : "Assigned to me"}
-                        </button>
-                      ))}
-                    </div>
                   </div>
+                ) : (
+                  <div className="w-[320px] shrink-0 border-r border-gray-200 flex flex-col h-full" style={{ backgroundColor: '#F8FAFC' }}>
+                    {/* Header */}
+                    <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2 relative">
+
+                      {/* Row 1 — Number switcher dropdown */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowNumberFilterDropdown(prev => !prev);
+                            setShowViewFilterDropdown(false);
+                          }}
+                          className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors min-w-0 max-w-full"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          <span className="truncate">
+                            {numberFilter === "all" || availableNumbersForChannel.length === 0
+                              ? "All Numbers"
+                              : numberFilter}
+                          </span>
+                          <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showNumberFilterDropdown ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {showNumberFilterDropdown && (
+                          <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 space-y-0.5 text-xs font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                            <button
+                              type="button"
+                              onClick={() => { setNumberFilter("all"); setShowNumberFilterDropdown(false); }}
+                              className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                                numberFilter === "all" ? "text-blue-700 font-bold bg-blue-50/50" : "text-gray-700"
+                              }`}
+                            >
+                              <span>All Numbers</span>
+                              {numberFilter === "all" && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                            </button>
+                            {availableNumbersForChannel.map(num => (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => { setNumberFilter(num); setShowNumberFilterDropdown(false); }}
+                                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                                  numberFilter === num ? "text-blue-700 font-bold bg-blue-50/50" : "text-gray-700"
+                                }`}
+                              >
+                                <span>{num}</span>
+                                {numberFilter === num && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Row 2 — Search + Filter funnel + Collapse */}
+                      <div className="flex items-center gap-2">
+                        <div className="relative flex-1 min-w-0">
+                          <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                          <input
+                            type="text"
+                            value={chatSearch}
+                            onChange={e => setChatSearch(e.target.value)}
+                            placeholder="Search conversations..."
+                            className="w-full pl-8 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        {/* View filter button */}
+                        <div className="relative shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowViewFilterDropdown(prev => !prev);
+                              setShowNumberFilterDropdown(false);
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors relative ${
+                              viewFilter !== "all"
+                                ? "bg-green-50 text-green-700 hover:bg-green-100"
+                                : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                            }`}
+                            title="Filter view"
+                          >
+                            <Filter className="w-4 h-4" />
+                            {viewFilter !== "all" && (
+                              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-600" />
+                            )}
+                          </button>
+
+                          {showViewFilterDropdown && (
+                            <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 space-y-0.5 text-xs font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                              {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map(v => (
+                                <button
+                                  key={v}
+                                  type="button"
+                                  onClick={() => { setViewFilter(v); setShowViewFilterDropdown(false); }}
+                                  className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-gray-50 transition-colors ${
+                                    viewFilter === v ? "text-green-700 font-bold bg-green-50/50" : "text-gray-700"
+                                  }`}
+                                >
+                                  <span>{v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : v === "resolved" ? "Resolved" : "Assigned to me"}</span>
+                                  {viewFilter === v && <Check className="w-3.5 h-3.5 text-green-600" />}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsListPaneCollapsed(true)}
+                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-400 hover:text-gray-600 shrink-0"
+                          title="Collapse chat list"
+                        >
+                          <PanelLeftClose className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Row 3 — Contextual chat count */}
+                      <p className="text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {filteredConversations.length}{" "}
+                        {viewFilter === "open" ? "Active Chats" :
+                          viewFilter === "resolved" ? "Solved Chats" :
+                          viewFilter === "unread" ? "Unread Chats" :
+                          viewFilter === "assigned_to_me" ? "Assigned Chats" :
+                          "Total Chats"}
+                        {filteredConversations.filter(c => c.unreadCount > 0).length > 0 && (
+                          <span className="ml-1.5 text-blue-500 font-semibold">
+                            · {filteredConversations.filter(c => c.unreadCount > 0).length} Unread
+                          </span>
+                        )}
+                      </p>
+                    </div>
                   {/* Conversation List */}
                   <div className="flex-1 overflow-y-auto">
                     {channelFilter === null ? (
@@ -1566,6 +1700,7 @@ export default function Chats() {
                     })}
                   </div>
                 </div>
+                )}
 
                 {/* Right Pane — Chat Window */}
                 <div className="flex-1 flex flex-col h-full bg-white">
@@ -1599,6 +1734,11 @@ export default function Chats() {
                           <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${CHANNEL_CLASSES[activeConversation.channel]}`}>
                             {CHANNEL_LABELS[activeConversation.channel]}
                           </span>
+                          {activeConversation.inboxNumber && (
+                            <span className="text-xs text-gray-500 font-medium ml-1">
+                              via {activeConversation.inboxNumber}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2">
                           {/* Unified Read-only status chip */}

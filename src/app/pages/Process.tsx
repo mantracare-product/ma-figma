@@ -409,20 +409,25 @@ const INTENT_CONDITION_OPTIONS: Record<string, string[]> = {
     "Caller provides/confirms their email address for follow-up",
     "Caller requests documentation or forms via email",
   ],
+  assignhuman: [
+    "Client asks to speak with a human / representative / agent",
+    "Client message indicates frustration or dissatisfaction",
+    "Client's request is too complex for the AI to resolve via chat",
+  ],
 };
 
-const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall">> = {
-  "whatsapp": ["stage", "incall", "postcall"],
-  "sms": ["stage", "incall", "postcall"],
-  "email": ["stage", "incall", "postcall"],
-  "processmovement": ["postcall"],
-  "endworkflow": ["stage", "postcall"],
-  "fieldupdate": ["stage", "postcall"],
-  "assignhuman": ["stage", "postcall"],
-  "crmupdate": ["stage", "postcall"],
-  "ehrupdate": ["stage", "postcall"],
-  "wh_trigger": ["stage", "postcall"],
-  "webhook_trigger": ["stage", "postcall"],
+const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" | "postcall">> = {
+  "whatsapp": ["stage", "incall", "inchat", "postcall"],
+  "sms": ["stage", "incall", "inchat", "postcall"],
+  "email": ["stage", "incall", "inchat", "postcall"],
+  "processmovement": ["inchat", "postcall"],
+  "endworkflow": ["stage", "inchat", "postcall"],
+  "fieldupdate": ["stage", "inchat", "postcall"],
+  "assignhuman": ["stage", "inchat", "postcall"],
+  "crmupdate": ["stage", "inchat", "postcall"],
+  "ehrupdate": ["stage", "inchat", "postcall"],
+  "wh_trigger": ["stage", "inchat", "postcall"],
+  "webhook_trigger": ["stage", "inchat", "postcall"],
   "collectinformation": ["stage", "postcall"],
   "scheduleappointment": ["postcall"],
   "smartcallanalysis": ["stage", "postcall"],
@@ -438,7 +443,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "postcall
   "managecalendar": ["incall", "postcall"],
 };
 
-const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "postcall", excludeId?: string) => {
+const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "incall" | "inchat" | "postcall", excludeId?: string) => {
   const laneSteps = steps.filter(s => (s.trigger ?? "stage") === lane && s.id !== excludeId);
   // Identify which step ids belong to a parallel group (>=2 consecutive parallel steps)
   const parallelMemberIds = new Set<string>();
@@ -579,14 +584,44 @@ export default function Process() {
   const [selectedOffDays, setSelectedOffDays] = useState<string[]>(["Sat", "Sun"]);
   const [customOffDates, setCustomOffDates] = useState<string[]>([]);
 
+  // Business Hours state
+  const [businessHoursExpanded, setBusinessHoursExpanded] = useState(false);
+  const [businessHoursEnabled, setBusinessHoursEnabled] = useState(false);
+  const [businessHoursTimezone, setBusinessHoursTimezone] = useState("America/New_York");
+  const [businessHoursByDay, setBusinessHoursByDay] = useState<Record<string, { enabled: boolean; start: string; end: string }>>({
+    Mon: { enabled: true, start: "09:00", end: "17:00" },
+    Tue: { enabled: true, start: "09:00", end: "17:00" },
+    Wed: { enabled: true, start: "09:00", end: "17:00" },
+    Thu: { enabled: true, start: "09:00", end: "17:00" },
+    Fri: { enabled: true, start: "09:00", end: "17:00" },
+    Sat: { enabled: false, start: "09:00", end: "17:00" },
+    Sun: { enabled: false, start: "09:00", end: "17:00" },
+  });
+  const [outsideHoursAction, setOutsideHoursAction] = useState<"queue" | "voicemail" | "message">("message");
+  const [outsideHoursMessage, setOutsideHoursMessage] = useState("We're currently closed. Our business hours are Monday to Friday, 9 AM to 5 PM.");
+
   // Inbound source state
   const [inboundNumbers, setInboundNumbers] = useState<string[]>(["+1 (555) 123-4567", "+1 (555) 987-6543", "+1 (555) 555-1234"]);
   const [selectedInboundNumbers, setSelectedInboundNumbers] = useState<string[]>(["+1 (555) 123-4567"]);
   const [stageType, setStageType] = useState<string>("AI Receives Calls");
+  const [selectedStageChannels, setSelectedStageChannels] = useState<string[]>(["calls"]);
   const [showAddNumberModal, setShowAddNumberModal] = useState(false);
   const [newNumber, setNewNumber] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("+1");
   const [showNumberDropdown, setShowNumberDropdown] = useState(false);
+  const [showChannelDropdown, setShowChannelDropdown] = useState(false);
+  const channelDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showChannelDropdown) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (channelDropdownRef.current && !channelDropdownRef.current.contains(e.target as Node)) {
+        setShowChannelDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showChannelDropdown]);
 
   // AI Default Settings state
   const [aiDefaultSettingsExpanded, setAiDefaultSettingsExpanded] = useState(false);
@@ -744,7 +779,6 @@ export default function Process() {
   // WhatsApp / SMS / Email states
   const [templateId, setTemplateId] = useState<string>("");
   const [smsMessage, setSmsMessage] = useState("");
-  const [smsConnectedAccount, setSmsConnectedAccount] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
   const [whatsappTemplateIdentifier, setWhatsappTemplateIdentifier] = useState("");
   const [whatsappSource, setWhatsappSource] = useState<"template" | "campaign" | "chatbot">("template");
@@ -855,7 +889,7 @@ export default function Process() {
   const [expandedConditionIndex, setExpandedConditionIndex] = useState<number | null>(0);
   const [conditionPreview, setConditionPreview] = useState("");
 
-  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "postcall">("stage");
+  const [stepTrigger, setStepTrigger] = useState<"stage" | "incall" | "inchat" | "postcall">("stage");
   const [connectAfterId, setConnectAfterId] = useState<string | undefined>(undefined);
   const [stepActionName, setStepActionName] = useState("");
   const [stepActionReason, setStepActionReason] = useState("");
@@ -928,7 +962,7 @@ export default function Process() {
       ...CONDITION_FIELDS,
     ],
     whatsapp: ["whatsappSource", "whatsappTemplate", "whatsappTemplateIdentifier", "whatsappCampaignId", "whatsappChatbotId", ...CONDITION_FIELDS],
-    sms: ["smsMessage", "smsConnectedAccount", ...CONDITION_FIELDS],
+    sms: ["smsMessage", ...CONDITION_FIELDS],
     email: [
       "emailConnectedAccount", "showCustomEmail", "emailSubject",
       "emailRichBody", "emailHtmlBody", "htmlBodyViewMode",
@@ -975,7 +1009,6 @@ export default function Process() {
     whatsappCampaignId: () => whatsappCampaignId,
     whatsappChatbotId: () => whatsappChatbotId,
     smsMessage: () => smsMessage,
-    smsConnectedAccount: () => smsConnectedAccount,
     emailConnectedAccount: () => emailConnectedAccount,
     showCustomEmail: () => showCustomEmail,
     emailSubject: () => emailSubject,
@@ -1056,7 +1089,6 @@ export default function Process() {
     whatsappCampaignId: setWhatsappCampaignId,
     whatsappChatbotId: setWhatsappChatbotId,
     smsMessage: setSmsMessage,
-    smsConnectedAccount: setSmsConnectedAccount,
     emailConnectedAccount: setEmailConnectedAccount,
     showCustomEmail: setShowCustomEmail,
     emailSubject: setEmailSubject,
@@ -1170,7 +1202,6 @@ export default function Process() {
     setAssignedUser("Select user...");
     setTemplateId("");
     setSmsMessage("");
-    setSmsConnectedAccount("");
     setWhatsappTemplate("");
     setWhatsappTemplateIdentifier("");
     setWhatsappSource("template");
@@ -2932,6 +2963,145 @@ export default function Process() {
                             )}
                           </div>
 
+                          {/* Business Hours */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Clock className="w-5 h-5 text-primary" />
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Business Hours
+                                  </span>
+                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {businessHoursEnabled ? 'On' : 'Off'}
+                                </span>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
+                              </div>
+                            </button>
+
+                            {businessHoursExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                                {/* Enable toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enable Business Hours
+                                    </span>
+                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={businessHoursEnabled}
+                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                                  </label>
+                                </div>
+
+                                {/* Timezone */}
+                                <div>
+                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
+                                  <select
+                                    value={businessHoursTimezone}
+                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                  >
+                                    <option value="America/New_York">Eastern Time (ET)</option>
+                                    <option value="America/Chicago">Central Time (CT)</option>
+                                    <option value="America/Denver">Mountain Time (MT)</option>
+                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
+                                    <option value="Europe/London">GMT / London</option>
+                                  </select>
+                                </div>
+
+                                {/* Per-day hours */}
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
+                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
+                                    const dayData = businessHoursByDay[day];
+                                    return (
+                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                          <input
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={dayData.enabled}
+                                            onChange={(e) =>
+                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
+                                            }
+                                          />
+                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                                        </label>
+                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
+                                          {day}
+                                        </span>
+                                        <input
+                                          type="time"
+                                          value={dayData.start}
+                                          disabled={!dayData.enabled}
+                                          onChange={(e) =>
+                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
+                                          }
+                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
+                                        />
+                                        <span className="text-xs text-gray-400">to</span>
+                                        <input
+                                          type="time"
+                                          value={dayData.end}
+                                          disabled={!dayData.enabled}
+                                          onChange={(e) =>
+                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
+                                          }
+                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Outside-hours behavior */}
+                                <div>
+                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    When contacted outside business hours
+                                  </label>
+                                  <select
+                                    value={outsideHoursAction}
+                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
+                                  >
+                                    <option value="message">Play/Send a custom message</option>
+                                    <option value="voicemail">Route to voicemail</option>
+                                    <option value="queue">Queue until next business hours</option>
+                                  </select>
+                                  {outsideHoursAction === "message" && (
+                                    <textarea
+                                      value={outsideHoursMessage}
+                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
+                                      rows={3}
+                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
+                                      placeholder="We're currently closed. Our business hours are..."
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
                           {/* Detect Voicemail */}
                           <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
                             <button
@@ -3095,19 +3265,19 @@ export default function Process() {
                               <div className="flex flex-col">
                                 <div className="flex items-center gap-1.5 mb-2">
                                   <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Call Actions
+                                    Action
                                   </label>
-                                  <InfoTooltip text="Controls whether this stage answers inbound calls, places outbound calls, or hands off to a person." />
+                                  <InfoTooltip text="Controls how this stage handles communication — whether the AI answers inbound calls, makes outbound calls, or hands off to a person." />
                                 </div>
                                 <Select value={stageType} onValueChange={setStageType}>
                                   <SelectTrigger className="h-full">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="AI Receives Calls">AI Receives Calls</SelectItem>
-                                    <SelectItem value="AI Makes Calls">AI Makes Calls</SelectItem>
-                                    <SelectItem value="No Call Activity">No Call Activity</SelectItem>
-                                    <SelectItem value="Transfer to Human">Transfer to Human</SelectItem>
+                                    <SelectItem value="AI Receives Calls">Client Reach Out To Us</SelectItem>
+                                    <SelectItem value="AI Makes Calls">Reach Out To The Client</SelectItem>
+                                    <SelectItem value="No Call Activity">No Action</SelectItem>
+                                    <SelectItem value="Transfer to Human">Handle By Human</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -3197,6 +3367,87 @@ export default function Process() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Channels multi-select — only for "AI Receives Calls" */}
+                            {stageType === "AI Receives Calls" && (
+                              <div ref={channelDropdownRef} className="relative flex flex-col">
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Channels
+                                  </label>
+                                  <InfoTooltip text="Select every channel through which clients can reach out to this stage." />
+                                </div>
+
+                                {(() => {
+                                  const CHANNEL_OPTIONS = [
+                                    { key: "calls", label: "AI Receives Call" },
+                                    { key: "whatsapp", label: "AI Receives Message on WhatsApp" },
+                                    { key: "sms", label: "AI Receives Message on SMS" },
+                                    { key: "website", label: "AI Receives Message on Website" },
+                                  ] as const;
+                                  const labelMap = Object.fromEntries(CHANNEL_OPTIONS.map(c => [c.key, c.label]));
+
+                                  return (
+                                    <>
+                                      {/* Header row — full width, shows selected channels as capsules */}
+                                      <div className="flex flex-wrap gap-2 p-3 bg-input-background border border-input rounded-lg min-h-[42px] w-full">
+                                        {selectedStageChannels.map((key) => (
+                                          <span
+                                            key={key}
+                                            className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-sm h-fit"
+                                          >
+                                            {labelMap[key]}
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setSelectedStageChannels((prev) => prev.filter((c) => c !== key))
+                                              }
+                                              className="hover:bg-primary/20 rounded"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </button>
+                                          </span>
+                                        ))}
+                                        <button
+                                          type="button"
+                                          onClick={() => setShowChannelDropdown(!showChannelDropdown)}
+                                          className="text-sm text-muted-foreground hover:text-foreground"
+                                        >
+                                          + Add
+                                        </button>
+                                      </div>
+
+                                      {/* Dropdown panel — full width, checkbox list, stays open across selections */}
+                                      {showChannelDropdown && (
+                                        <div className="absolute mt-1 top-full p-2 bg-card border border-border rounded-lg shadow-lg z-10 w-full">
+                                          {CHANNEL_OPTIONS.map((ch) => {
+                                            const checked = selectedStageChannels.includes(ch.key);
+                                            return (
+                                              <label
+                                                key={ch.key}
+                                                className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted rounded cursor-pointer"
+                                              >
+                                                <input
+                                                  type="checkbox"
+                                                  checked={checked}
+                                                  onChange={() =>
+                                                    setSelectedStageChannels((prev) =>
+                                                      checked ? prev.filter((c) => c !== ch.key) : [...prev, ch.key]
+                                                    )
+                                                  }
+                                                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                                                />
+                                                <span style={{ fontFamily: 'Outfit, sans-serif' }}>{ch.label}</span>
+                                              </label>
+                                            );
+                                          })}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            )}
 
                             {/* When to move to this stage */}
                             <div className="rounded-lg border border-border overflow-hidden">
@@ -3735,6 +3986,7 @@ export default function Process() {
                                 ) : (() => {
                                   const stageSteps = workflowSteps.filter(s => !s.trigger || s.trigger === "stage");
                                   const inCallSteps = workflowSteps.filter(s => s.trigger === "incall");
+                                  const inChatSteps = workflowSteps.filter(s => s.trigger === "inchat");
                                   const postCallSteps = workflowSteps.filter(s => s.trigger === "postcall");
                                   const isBlockedCallType = stageType === "No Call Activity" || stageType === "Transfer to Human";
 
@@ -3922,6 +4174,91 @@ export default function Process() {
                                               </span>
                                             </div>
                                           )}
+                                        </div>
+                                      )}
+
+                                      {/* In Chat List */}
+                                      {inChatSteps.length > 0 && (
+                                        <div className="space-y-2">
+                                          <div className="flex items-center gap-1.5">
+                                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                              In Chat
+                                            </p>
+                                            <InfoTooltip text="These steps fire when the client sends a message in a chat channel (WhatsApp, SMS, or Website) during this stage." />
+                                          </div>
+                                          <div className="space-y-2">
+                                            {inChatSteps.map((step) => (
+                                              <div
+                                                key={step.id}
+                                                className="flex items-center gap-3 p-3 rounded-lg border border-border bg-white cursor-pointer hover:bg-muted/10 transition-colors"
+                                                onClick={(e) => {
+                                                  if ((e.target as HTMLElement).closest('button')) return;
+                                                  resetStepDetailState();
+                                                  setCurrentEditingStep(step);
+                                                  setIsCreatingNewStep(false);
+                                                  setStepTrigger(step.trigger ?? "stage");
+                                                  setExecutionType(step.executionType ?? "wait");
+                                                  setDelayValue(step.delayValue ?? 5);
+                                                  setDelayUnit(step.delayUnit ?? "Minute");
+                                                  restoreStepParams(step.stepKey, step.params);
+                                                  setStepDetailDrawerOpen(true);
+                                                }}
+                                              >
+                                                <div className="w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0" style={{ backgroundColor: '#7C3AED' }}>
+                                                  <StepIcon iconKey={step.iconKey} />
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                  <p className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>{step.name}</p>
+                                                  <p className="text-xs" style={{ color: '#94A3B8', fontFamily: 'Outfit, sans-serif' }}>→ Message Driven</p>
+                                                </div>
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Duplicate"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                      if (fullIdx !== -1) setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                      toast.success("Step duplicated successfully");
+                                                    }}
+                                                  >
+                                                    <Copy className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-muted/40 transition-colors"
+                                                    title="Edit"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      resetStepDetailState();
+                                                      setCurrentEditingStep(step);
+                                                      setIsCreatingNewStep(false);
+                                                      setConnectAfterId(step.connectAfterId);
+                                                      setStepTrigger(step.trigger ?? "stage");
+                                                      setExecutionType(step.executionType ?? "wait");
+                                                      setDelayValue(step.delayValue ?? 5);
+                                                      setDelayUnit(step.delayUnit ?? "Minute");
+                                                      restoreStepParams(step.stepKey, step.params);
+                                                      setStepDetailDrawerOpen(true);
+                                                    }}
+                                                  >
+                                                    <Pencil className="w-4 h-4 text-muted-foreground" />
+                                                  </button>
+                                                  <button
+                                                    className="p-1.5 rounded hover:bg-red-50 transition-colors"
+                                                    title="Delete"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                      toast.success("Step removed successfully");
+                                                    }}
+                                                  >
+                                                    <Trash2 className="w-4 h-4 text-red-500" />
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
                                         </div>
                                       )}
 
@@ -4724,6 +5061,145 @@ export default function Process() {
                               </div>
                             )}
                           </div>
+
+                          {/* Business Hours */}
+                          <div className="w-full rounded-xl border border-gray-200 overflow-hidden bg-white mt-4">
+                            <button
+                              type="button"
+                              onClick={() => setBusinessHoursExpanded(!businessHoursExpanded)}
+                              className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors"
+                            >
+                              <div className="flex items-center gap-3">
+                                <Clock className="w-5 h-5 text-primary" />
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Business Hours
+                                  </span>
+                                  <Tooltip text="Restrict when the AI actively receives calls/messages or makes outbound calls to specific hours per day.">
+                                    <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                  </Tooltip>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${businessHoursEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                                  {businessHoursEnabled ? 'On' : 'Off'}
+                                </span>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${businessHoursExpanded ? 'rotate-180' : ''}`} />
+                              </div>
+                            </button>
+
+                            {businessHoursExpanded && (
+                              <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/40">
+                                {/* Enable toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium" style={{ color: '#020817', fontFamily: 'Outfit, sans-serif' }}>
+                                      Enable Business Hours
+                                    </span>
+                                    <Tooltip text="When enabled, this process/stage will only actively operate within the hours defined below.">
+                                      <Info className="w-3.5 h-3.5 text-gray-400 cursor-help" />
+                                    </Tooltip>
+                                  </div>
+                                  <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      className="sr-only peer"
+                                      checked={businessHoursEnabled}
+                                      onChange={(e) => setBusinessHoursEnabled(e.target.checked)}
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary" />
+                                  </label>
+                                </div>
+
+                                {/* Timezone */}
+                                <div>
+                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Timezone</label>
+                                  <select
+                                    value={businessHoursTimezone}
+                                    onChange={(e) => setBusinessHoursTimezone(e.target.value)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                                  >
+                                    <option value="America/New_York">Eastern Time (ET)</option>
+                                    <option value="America/Chicago">Central Time (CT)</option>
+                                    <option value="America/Denver">Mountain Time (MT)</option>
+                                    <option value="America/Los_Angeles">Pacific Time (PT)</option>
+                                    <option value="Asia/Kolkata">India Standard Time (IST)</option>
+                                    <option value="Europe/London">GMT / London</option>
+                                  </select>
+                                </div>
+
+                                {/* Per-day hours */}
+                                <div className="space-y-2">
+                                  <label className="text-sm font-medium block" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>Hours by Day</label>
+                                  {(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const).map((day) => {
+                                    const dayData = businessHoursByDay[day];
+                                    return (
+                                      <div key={day} className="flex items-center gap-3 p-2.5 bg-white border border-gray-200 rounded-lg">
+                                        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                          <input
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={dayData.enabled}
+                                            onChange={(e) =>
+                                              setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], enabled: e.target.checked } }))
+                                            }
+                                          />
+                                          <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary" />
+                                        </label>
+                                        <span className="text-sm font-semibold w-10 shrink-0" style={{ fontFamily: 'DM Sans, sans-serif', color: dayData.enabled ? '#020817' : '#9CA3AF' }}>
+                                          {day}
+                                        </span>
+                                        <input
+                                          type="time"
+                                          value={dayData.start}
+                                          disabled={!dayData.enabled}
+                                          onChange={(e) =>
+                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], start: e.target.value } }))
+                                          }
+                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
+                                        />
+                                        <span className="text-xs text-gray-400">to</span>
+                                        <input
+                                          type="time"
+                                          value={dayData.end}
+                                          disabled={!dayData.enabled}
+                                          onChange={(e) =>
+                                            setBusinessHoursByDay((prev) => ({ ...prev, [day]: { ...prev[day], end: e.target.value } }))
+                                          }
+                                          className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm disabled:opacity-40 disabled:bg-gray-50"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+
+                                {/* Outside-hours behavior */}
+                                <div>
+                                  <label className="text-sm font-medium block mb-2" style={{ color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
+                                    When contacted outside business hours
+                                  </label>
+                                  <select
+                                    value={outsideHoursAction}
+                                    onChange={(e) => setOutsideHoursAction(e.target.value as typeof outsideHoursAction)}
+                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition-colors mb-3"
+                                  >
+                                    <option value="message">Play/Send a custom message</option>
+                                    <option value="voicemail">Route to voicemail</option>
+                                    <option value="queue">Queue until next business hours</option>
+                                  </select>
+                                  {outsideHoursAction === "message" && (
+                                    <textarea
+                                      value={outsideHoursMessage}
+                                      onChange={(e) => setOutsideHoursMessage(e.target.value)}
+                                      rows={3}
+                                      className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:outline-none focus:border-blue-500 transition-colors"
+                                      placeholder="We're currently closed. Our business hours are..."
+                                    />
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -4752,10 +5228,10 @@ export default function Process() {
                             style={{ backgroundColor: 'rgba(0,0,0,0.30)' }}
                             onClick={() => setWorkflowStepsDrawerOpen(false)}
                           />
-                          {/* Drawer panel — 50vw, full height, anchored right */}
+                          {/* Drawer panel — 75vw, full height, anchored right */}
                           <div
                             className="fixed top-0 right-0 h-screen z-50 flex flex-col bg-white border-l border-border"
-                            style={{ width: '50vw', minWidth: '50vw', maxWidth: '50vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
+                            style={{ width: '55vw', minWidth: '55vw', maxWidth: '55vw', boxShadow: '-4px 0 24px rgba(0,0,0,0.12)' }}
                           >
                             {/* Header */}
                             <div className="flex-shrink-0 px-6 pt-6 pb-4 border-b border-border">

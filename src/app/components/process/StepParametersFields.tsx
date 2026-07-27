@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { InfoTooltip } from "../help/InfoTooltip";
-import { getStoredBots } from "../../../lib/useChatbotBots";
+
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
 
 const availableEmployees = [
@@ -60,7 +60,7 @@ export default function StepParametersFields({
   const [parametersSectionExpanded, setParametersSectionExpanded] = useState(true);
   const [whatsappTemplates, setWhatsappTemplates] = useState<any[]>([]);
   const [whatsappCampaigns, setWhatsappCampaigns] = useState<any[]>([]);
-  const [whatsappChatbots, setWhatsappChatbots] = useState<any[]>([]);
+
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
   const [customWebhookIntegrations, setCustomWebhookIntegrations] = useState<any[]>([]);
   const [jsonPaste, setJsonPaste] = useState("");
@@ -79,7 +79,6 @@ export default function StepParametersFields({
       try {
         setWhatsappTemplates(getStoredTemplates());
         setWhatsappCampaigns(JSON.parse(localStorage.getItem("whatsappCampaigns") || "[]"));
-        setWhatsappChatbots(getStoredBots());
       } catch (e) {
         console.error(e);
       }
@@ -138,9 +137,9 @@ export default function StepParametersFields({
   const callActionVoiceResponse = params.callActionVoiceResponse ?? "";
 
   const whatsappTemplate = params.whatsappTemplate ?? "";
-  const whatsappSource = params.whatsappSource ?? "template";
+  // Coerce legacy chatbot source to template
+  const whatsappSource = (params.whatsappSource === "chatbot" ? "template" : params.whatsappSource) ?? "template";
   const whatsappCampaignId = params.whatsappCampaignId ?? "";
-  const whatsappChatbotId = params.whatsappChatbotId ?? "";
   const smsMessage = params.smsMessage ?? "";
   const smsConnectedAccount = params.smsConnectedAccount ?? "";
   const emailConnectedAccount = params.emailConnectedAccount ?? "";
@@ -258,7 +257,7 @@ export default function StepParametersFields({
                 This step will only execute when all specified conditions are met.
               </p>
 
-              {stepTrigger === "incall" ? (
+              {stepTrigger === "incall" || stepTrigger === "inchat" ? (
                 <div className="space-y-4">
                   {/* Field Conditions */}
                   <div className="rounded-lg border border-border overflow-hidden bg-white">
@@ -736,19 +735,16 @@ export default function StepParametersFields({
                   <div className="inline-flex rounded-md border border-border overflow-hidden bg-white">
                     {[
                       { v: "template", l: "Template" },
-                      { v: "campaign", l: "Campaign" },
-                      { v: "chatbot", l: "Chatbot" }
+                      { v: "campaign", l: "Campaign" }
                     ].map(opt => (
                       <button
                         key={opt.v}
                         type="button"
                         onClick={() => {
                           if (opt.v === "template") {
-                            onChange({ whatsappSource: "template", whatsappCampaignId: "", whatsappChatbotId: "" });
+                            onChange({ whatsappSource: "template", whatsappCampaignId: "" });
                           } else if (opt.v === "campaign") {
-                            onChange({ whatsappSource: "campaign", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappChatbotId: "" });
-                          } else if (opt.v === "chatbot") {
-                            onChange({ whatsappSource: "chatbot", whatsappTemplate: "", whatsappTemplateIdentifier: "", whatsappCampaignId: "" });
+                            onChange({ whatsappSource: "campaign", whatsappTemplate: "", whatsappTemplateIdentifier: "" });
                           }
                         }}
                         className={`px-3 py-1.5 text-xs font-semibold ${whatsappSource === opt.v ? "bg-blue-600 text-white" : "bg-white text-gray-600 hover:bg-gray-50"}`}
@@ -795,13 +791,6 @@ export default function StepParametersFields({
                         </select>
                       )
                     )}
-                    {renderField(
-                      "Connected Account",
-                      <select className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors">
-                        <option value="">Select WhatsApp account...</option>
-                        <option>+1 (555) 123-4567</option>
-                      </select>
-                    )}
                   </>
                 )}
 
@@ -835,35 +824,7 @@ export default function StepParametersFields({
                   )
                 )}
 
-                {whatsappSource === "chatbot" && (
-                  whatsappChatbots.length === 0 ? (
-                    <div className="space-y-1.5">
-                      <label className="block text-sm font-semibold text-[#020817]">Chatbot</label>
-                      <div className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded-lg border border-dashed flex flex-col gap-1.5 bg-white">
-                        <span>No chatbots yet — create one in Chats → Chatbot</span>
-                        <Link to="/chats?tab=chatbot" className="text-xs text-blue-600 hover:underline font-semibold w-fit">
-                          Manage Chatbots →
-                        </Link>
-                      </div>
-                    </div>
-                  ) : (
-                    renderField(
-                      "Chatbot",
-                      <select
-                        value={whatsappChatbotId}
-                        onChange={e => onChange({ whatsappChatbotId: e.target.value })}
-                        className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white outline-none focus:border-blue-500 transition-colors"
-                      >
-                        <option value="">Select Chatbot...</option>
-                        {whatsappChatbots.map(b => (
-                          <option key={b.id} value={b.id}>
-                            {b.name}
-                          </option>
-                        ))}
-                      </select>
-                    )
-                  )
-                )}
+
               </div>
             )}
 
@@ -888,17 +849,6 @@ export default function StepParametersFields({
                     className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none"
                   />
                 </div>
-                {renderField(
-                  "Connected Account",
-                  <select
-                    value={smsConnectedAccount}
-                    onChange={e => onChange({ smsConnectedAccount: e.target.value })}
-                    className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white"
-                  >
-                    <option value="">Select SMS account...</option>
-                    <option value="+15551234567">+1 (555) 123-4567</option>
-                  </select>
-                )}
               </div>
             )}
 
