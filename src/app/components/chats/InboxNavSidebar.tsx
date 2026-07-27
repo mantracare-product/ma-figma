@@ -11,31 +11,17 @@ import {
   Bot,
   PanelLeftClose,
   PanelLeftOpen,
-  Filter,
-  CheckCircle2,
-  Clock,
-  Zap,
-  Tag,
-  Layers,
-  Settings
 } from "lucide-react";
-import { ChannelType, CHANNEL_LABELS } from "../../../constants/channels";
+import { ChannelType } from "../../../constants/channels";
 
 export type TabKey = "chats" | "campaigns" | "templates" | "chatbot";
 
 interface ChatsNavSidebarProps {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  // Inbox sub-filters
   channelFilter: "all" | ChannelType | null;
   setChannelFilter: (v: "all" | ChannelType) => void;
 }
-
-const CHANNEL_ICON: Record<ChannelType, React.ReactNode> = {
-  whatsapp: <MessageCircle className="w-4 h-4 text-[#25D366]" />,
-  sms: <MessageSquare className="w-4 h-4 text-blue-600" />,
-  website: <Globe className="w-4 h-4 text-purple-600" />,
-};
 
 function NavRow({
   icon,
@@ -83,7 +69,7 @@ export default function InboxNavSidebar({
     }
   });
 
-  const [inboxExpanded, setInboxExpanded] = useState<boolean>(true);
+  const [whatsappExpanded, setWhatsappExpanded] = useState<boolean>(true);
 
   const toggleCollapsed = () => {
     setCollapsed(prev => {
@@ -95,11 +81,27 @@ export default function InboxNavSidebar({
     });
   };
 
-  const handleTopLevelClick = (tab: TabKey) => {
-    onTabChange(tab);
-    if (tab === "chats") setChannelFilter("all");
-  };
+  // Derived active flags
+  const isWaInboxActive = activeTab === "chats" && channelFilter === "whatsapp";
+  const isWaTemplatesActive = activeTab === "templates";
+  const isWaCampaignsActive = activeTab === "campaigns";
+  const isWhatsAppGroupActive = isWaInboxActive || isWaTemplatesActive || isWaCampaignsActive;
+  const isSmsActive = activeTab === "chats" && channelFilter === "sms";
+  const isWebsiteActive = activeTab === "chats" && channelFilter === "website";
 
+  // Auto-expand when deep-linking directly to templates/campaigns
+  useEffect(() => {
+    if (isWhatsAppGroupActive) setWhatsappExpanded(true);
+  }, [isWhatsAppGroupActive]);
+
+  // Handlers
+  const handleWhatsAppInbox = () => { onTabChange("chats"); setChannelFilter("whatsapp"); };
+  const handleWhatsAppTemplates = () => { onTabChange("templates"); };
+  const handleWhatsAppCampaigns = () => { onTabChange("campaigns"); };
+  const handleSms = () => { onTabChange("chats"); setChannelFilter("sms"); };
+  const handleWebsite = () => { onTabChange("chats"); setChannelFilter("website"); };
+
+  // ── Collapsed icon-rail ─────────────────────────────────────────────────────
   if (collapsed) {
     return (
       <div className="w-[56px] shrink-0 border-r border-gray-200 flex flex-col h-full bg-white items-center py-3 space-y-4">
@@ -115,54 +117,59 @@ export default function InboxNavSidebar({
         <div className="w-8 h-px bg-gray-200" />
 
         <div className="flex-1 space-y-2 flex flex-col items-center">
+          {/* WhatsApp — expands sidebar to reveal Inbox / Templates / Campaigns */}
           <button
             type="button"
             onClick={toggleCollapsed}
-            className={`p-2.5 rounded-lg transition-colors relative ${
-              activeTab === "chats" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+            className={`p-2.5 rounded-lg transition-colors ${
+              isWhatsAppGroupActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
             }`}
-            title="Inbox — expand sidebar to pick a channel"
+            title="WhatsApp — expand sidebar to pick Inbox, Templates, or Campaigns"
           >
-            <InboxIcon className="w-5 h-5" />
+            <MessageCircle className="w-5 h-5 text-[#25D366]" />
           </button>
 
+          {/* SMS — direct navigate */}
           <button
             type="button"
-            onClick={() => handleTopLevelClick("campaigns")}
-            className={`p-2.5 rounded-lg transition-colors relative ${
-              activeTab === "campaigns" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+            onClick={handleSms}
+            className={`p-2.5 rounded-lg transition-colors ${
+              isSmsActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
             }`}
-            title="Campaigns"
+            title="SMS"
           >
-            <BarChart2 className="w-5 h-5" />
+            <MessageSquare className="w-5 h-5 text-blue-600" />
           </button>
 
+          {/* Website — direct navigate */}
           <button
             type="button"
-            onClick={() => handleTopLevelClick("templates")}
-            className={`p-2.5 rounded-lg transition-colors relative ${
-              activeTab === "templates" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+            onClick={handleWebsite}
+            className={`p-2.5 rounded-lg transition-colors ${
+              isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
             }`}
-            title="Template Builder"
+            title="Website"
           >
-            <FileText className="w-5 h-5" />
+            <Globe className="w-5 h-5 text-purple-600" />
           </button>
 
+          {/* Chatbot */}
           <button
             type="button"
-            onClick={() => handleTopLevelClick("chatbot")}
-            className={`p-2.5 rounded-lg transition-colors relative ${
+            onClick={() => onTabChange("chatbot")}
+            className={`p-2.5 rounded-lg transition-colors ${
               activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
             }`}
             title="Chatbot"
           >
-            <Bot className="w-5 h-5" />
+            <Bot className="w-5 h-5 text-purple-600" />
           </button>
         </div>
       </div>
     );
   }
 
+  // ── Expanded sidebar ────────────────────────────────────────────────────────
   return (
     <div className="w-[220px] shrink-0 border-r border-gray-200 flex flex-col h-full bg-white select-none">
       {/* Header */}
@@ -184,67 +191,85 @@ export default function InboxNavSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3 space-y-3">
-        {/* 1. INBOX */}
+        {/* 1. WHATSAPP — expandable group */}
         <div>
           <div
-            onClick={() => setInboxExpanded(prev => !prev)}
+            onClick={() => setWhatsappExpanded(prev => !prev)}
             className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
-              activeTab === "chats" ? "bg-green-50 text-green-800 font-semibold" : "text-gray-800 hover:bg-gray-100"
+              isWhatsAppGroupActive
+                ? "bg-green-50 text-green-800 font-semibold"
+                : "text-gray-800 hover:bg-gray-100"
             }`}
           >
-            <div className="flex items-center gap-2 text-xs font-bold" style={{ fontFamily: "DM Sans, sans-serif" }}>
-              <InboxIcon className="w-4 h-4 text-green-700" />
-              <span>Inbox</span>
+            <div
+              className="flex items-center gap-2 text-xs font-bold"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <MessageCircle className="w-4 h-4 text-[#25D366]" />
+              <span>WhatsApp</span>
             </div>
-            {inboxExpanded ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+            {whatsappExpanded
+              ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+              : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
           </div>
 
-          {inboxExpanded && (
+          {whatsappExpanded && (
             <div className="mt-1 space-y-0.5">
-              {(["whatsapp", "sms", "website"] as const).map((ch) => (
-                <NavRow
-                  key={ch}
-                  icon={CHANNEL_ICON[ch]}
-                  label={CHANNEL_LABELS[ch]}
-                  active={activeTab === "chats" && channelFilter === ch}
-                  onClick={() => { onTabChange("chats"); setChannelFilter(ch); }}
-                  isSubItem
-                />
-              ))}
+              <NavRow
+                icon={<InboxIcon className="w-4 h-4 text-green-700" />}
+                label="Inbox"
+                active={isWaInboxActive}
+                onClick={handleWhatsAppInbox}
+                isSubItem
+              />
+              <NavRow
+                icon={<FileText className="w-4 h-4 text-indigo-600" />}
+                label="Templates"
+                active={isWaTemplatesActive}
+                onClick={handleWhatsAppTemplates}
+                isSubItem
+              />
+              <NavRow
+                icon={<BarChart2 className="w-4 h-4 text-blue-600" />}
+                label="Campaigns"
+                active={isWaCampaignsActive}
+                onClick={handleWhatsAppCampaigns}
+                isSubItem
+              />
             </div>
           )}
         </div>
 
-        {/* 2. CAMPAIGNS */}
+        {/* 2. SMS — leaf */}
         <button
           type="button"
-          onClick={() => handleTopLevelClick("campaigns")}
+          onClick={handleSms}
           className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            activeTab === "campaigns" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
+            isSmsActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
           }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
-          <BarChart2 className="w-4 h-4 text-blue-600" />
-          <span>Campaigns</span>
+          <MessageSquare className="w-4 h-4 text-blue-600" />
+          <span>SMS</span>
         </button>
 
-        {/* 3. TEMPLATES */}
+        {/* 3. WEBSITE — leaf */}
         <button
           type="button"
-          onClick={() => handleTopLevelClick("templates")}
+          onClick={handleWebsite}
           className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            activeTab === "templates" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
+            isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
           }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
-          <FileText className="w-4 h-4 text-indigo-600" />
-          <span>Templates</span>
+          <Globe className="w-4 h-4 text-purple-600" />
+          <span>Website</span>
         </button>
 
-        {/* 4. CHATBOT */}
+        {/* 4. CHATBOT — leaf, unchanged */}
         <button
           type="button"
-          onClick={() => handleTopLevelClick("chatbot")}
+          onClick={() => onTabChange("chatbot")}
           className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
             activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
           }`}

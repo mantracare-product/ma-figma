@@ -216,6 +216,8 @@ export interface EscalationRule {
 const LANGUAGES = ["English", "Hindi", "Spanish", "French", "German", "Mandarin", "Arabic", "Portuguese", "Russian", "Japanese"];
 
 
+const CURRENT_USER_ID = "1";
+
 const AVAILABLE_EMPLOYEES = [
   { id: "1", name: "Sarah Johnson" },
   { id: "2", name: "Michael Chen" },
@@ -780,11 +782,11 @@ export default function Chats() {
   });
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
-  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>(null);
+  const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>("whatsapp");
   const [campaignStatusFilter, setCampaignStatusFilter] = useState<"all" | "active" | "draft" | "completed">("all");
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
-  type ViewFilter = "all" | "open" | "resolved" | "unread";
+  type ViewFilter = "all" | "open" | "resolved" | "unread" | "assigned_to_me";
   const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
   const [navCollapsed, setNavCollapsed] = useState(false);
   const [showInlineSearch, setShowInlineSearch] = useState(false);
@@ -830,6 +832,37 @@ export default function Chats() {
   }, [campaigns]);
 
   useEffect(() => { localStorage.setItem("whatsappMockConversations", JSON.stringify(conversations)); }, [conversations]);
+
+  // Handle navigation state (channel, threadId, clientId, emailId)
+  useEffect(() => {
+    const state = location.state as {
+      clientId?: string;
+      channel?: "whatsapp" | "sms" | "website" | "email" | "all";
+      threadId?: string;
+      emailId?: string;
+      messageId?: string;
+    } | null;
+
+    if (state?.channel) {
+      if (state.channel === "whatsapp" || state.channel === "sms" || state.channel === "website") {
+        setChannelFilter(state.channel);
+      } else {
+        setChannelFilter("all");
+      }
+    }
+
+    if (state?.threadId || state?.emailId || state?.messageId || state?.clientId) {
+      const targetId = state.threadId || state.emailId || state.messageId;
+      const found = conversations.find(
+        (c) =>
+          (targetId && c.id === targetId) ||
+          (state.clientId && (c as any).clientId === state.clientId)
+      );
+      if (found) {
+        setSelectedConversationId(found.id);
+      }
+    }
+  }, [location.state, conversations]);
 
   const activeConversation = conversations.find(c => c.id === selectedConversationId);
 
@@ -1018,7 +1051,8 @@ export default function Chats() {
     const matchesView =
       viewFilter === "all" ? true :
         viewFilter === "unread" ? c.unreadCount > 0 :
-          c.status === viewFilter;
+          viewFilter === "assigned_to_me" ? c.assignedPersonId === CURRENT_USER_ID :
+            c.status === viewFilter;
     return matchesSearch && matchesChannel && matchesView;
   });
 
@@ -1440,7 +1474,7 @@ export default function Chats() {
                           <PanelLeft className="w-4 h-4" />
                         </button>
                         <h3 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : "All chats"}
+                          {viewFilter === "open" ? "Active chats" : viewFilter === "resolved" ? "Solved chats" : viewFilter === "unread" ? "Unread chats" : viewFilter === "assigned_to_me" ? "Assigned to me" : "All chats"}
                         </h3>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
@@ -1463,13 +1497,13 @@ export default function Chats() {
                       </div>
                     )}
                     {/* View filter pills */}
-                    <div className="flex gap-1.5 pt-1">
-                      {(["all", "open", "unread", "resolved"] as const).map(v => (
+                    <div className="flex gap-1.5 pt-1 overflow-x-auto no-scrollbar">
+                      {(["all", "open", "unread", "resolved", "assigned_to_me"] as const).map(v => (
                         <button key={v} onClick={() => setViewFilter(v)}
-                          className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all ${viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
+                          className={`px-2.5 py-1 text-xs font-semibold rounded-full border transition-all whitespace-nowrap ${viewFilter === v ? "bg-green-50 border-green-200 text-green-700" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
                             }`}
                           style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : "Resolved"}
+                          {v === "all" ? "All" : v === "open" ? "Open" : v === "unread" ? "Unread" : v === "resolved" ? "Resolved" : "Assigned to me"}
                         </button>
                       ))}
                     </div>

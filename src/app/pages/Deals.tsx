@@ -21,7 +21,7 @@ import { StageProgressBar } from "../components/StageProgressBar";
 import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
-import ProcessDetailDrawer from "../components/deals/ProcessDetailDrawer";
+import ProcessDetailDrawer, { ActivityLogEntry } from "../components/deals/ProcessDetailDrawer";
 
 interface CallLog {
   id: string;
@@ -457,7 +457,7 @@ export default function Deals() {
   const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
   const [showViewDrawer, setShowViewDrawer] = useState(false);
   const [selectedLogForView, setSelectedLogForView] = useState<CallLog | null>(null);
-  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "history">("general");
+  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "activity" | "history">("general");
   const [historyFilter, setHistoryFilter] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<{ [key: string]: string }>({});
@@ -4038,6 +4038,158 @@ export default function Deals() {
         client={selectedLogForView ? mockClients[selectedLogForView.clientId] : undefined}
         activeTab={viewDrawerTab}
         onTabChange={(tab) => setViewDrawerTab(tab)}
+        activity={
+          selectedLogForView
+            ? [
+                {
+                  id: `act-entry-${selectedLogForView.id}`,
+                  type: "process_entry",
+                  timestamp: "2024-04-08 09:00",
+                  status: "success",
+                  sourceStepName: "Process Intake",
+                  refId: selectedLogForView.id,
+                  details: {
+                    primary: `Enrolled in "${selectedLogForView.process}"`,
+                    secondary: "Initial Stage: New",
+                  },
+                },
+                {
+                  id: `act-wa-${selectedLogForView.id}`,
+                  type: "whatsapp",
+                  timestamp: "2024-04-09 10:00",
+                  status: "success",
+                  sourceStepName: "Onboarding Flow",
+                  refId: `chat-${selectedLogForView.clientId}`,
+                  details: {
+                    primary: "Template: appointment_reminder",
+                    secondary: mockClients[selectedLogForView.clientId]?.phone
+                      ? `Sent to ${mockClients[selectedLogForView.clientId].phone}`
+                      : undefined,
+                  },
+                },
+                {
+                  id: `act-call-${selectedLogForView.id}`,
+                  type: "call",
+                  direction: selectedLogForView.type?.toLowerCase().includes("inbound") ? "inbound" : "outbound",
+                  timestamp: "2024-04-10 11:30",
+                  status: selectedLogForView.status === "Completed" ? "success" : selectedLogForView.status === "Failed" ? "failed" : "pending",
+                  sourceStepName: selectedLogForView.relationshipReason || "Outbound Call Step",
+                  refId: selectedLogForView.id,
+                  details: {
+                    primary: selectedLogForView.duration ? `Duration ${selectedLogForView.duration}` : "Call scheduled",
+                    secondary: `Status: ${selectedLogForView.status}`,
+                  },
+                },
+                {
+                  id: `act-stage-1-${selectedLogForView.id}`,
+                  type: "stage_update",
+                  timestamp: "2024-04-11 14:00",
+                  status: "success",
+                  sourceStepName: "Pipeline Automation",
+                  refId: selectedLogForView.id,
+                  details: {
+                    primary: `Moved to ${selectedLogForView.currentStage}`,
+                    secondary: `Process: ${selectedLogForView.process}`,
+                  },
+                },
+                {
+                  id: `act-email-${selectedLogForView.id}`,
+                  type: "email",
+                  timestamp: "2024-04-12 09:30",
+                  status: "success",
+                  sourceStepName: "Welcome Email Campaign",
+                  refId: `msg-${selectedLogForView.id}`,
+                  details: {
+                    primary: "Template: welcome_onboarding",
+                    secondary: mockClients[selectedLogForView.clientId]?.email
+                      ? `Sent to ${mockClients[selectedLogForView.clientId].email}`
+                      : "Sent to client email",
+                  },
+                },
+                {
+                  id: `act-apt-${selectedLogForView.id}`,
+                  type: "appointment_booked",
+                  timestamp: "2024-04-12 15:00",
+                  status: "success",
+                  sourceStepName: "Schedule Appointment Step",
+                  refId: `apt-${selectedLogForView.id}`,
+                  details: {
+                    primary: "Slot: 10:00 AM – 10:30 AM",
+                    secondary: "Location: Main Clinic",
+                  },
+                },
+                {
+                  id: `act-completed-${selectedLogForView.id}`,
+                  type: "process_completed",
+                  timestamp: selectedLogForView.date,
+                  status: "success",
+                  sourceStepName: "Deal Closed",
+                  refId: selectedLogForView.id,
+                  details: {
+                    primary: `Final Stage: ${selectedLogForView.currentStage}`,
+                    secondary: `Process: ${selectedLogForView.process}`,
+                  },
+                },
+              ]
+            : []
+        }
+        onOpenActivity={(entry) => {
+          switch (entry.type) {
+            case "call": {
+              const call = callLogs.find((l) => l.id === entry.refId) || selectedLogForView;
+              if (call) {
+                setSelectedCallForDetails(call);
+                setActiveDrawerTab("summary");
+                setShowCallDetailsDrawer(true);
+              }
+              break;
+            }
+            case "whatsapp":
+              navigate("/chats", {
+                state: {
+                  clientId: selectedLogForView?.clientId,
+                  channel: "whatsapp",
+                  threadId: entry.refId,
+                },
+              });
+              break;
+            case "sms":
+              navigate("/chats", {
+                state: {
+                  clientId: selectedLogForView?.clientId,
+                  channel: "sms",
+                  threadId: entry.refId,
+                },
+              });
+              break;
+            case "email":
+              navigate("/chats", {
+                state: {
+                  clientId: selectedLogForView?.clientId,
+                  channel: "email",
+                  emailId: entry.refId,
+                },
+              });
+              break;
+            case "process_entry":
+            case "stage_update":
+            case "process_completed":
+            case "field_update":
+              setViewDrawerTab("history");
+              break;
+            case "webhook_trigger":
+              toast.info(`Webhook fired: ${entry.sourceStepName ?? "automation"}`);
+              break;
+            case "appointment_booked":
+              navigate("/appointments", {
+                state: {
+                  clientId: selectedLogForView?.clientId,
+                  appointmentId: entry.refId,
+                },
+              });
+              break;
+          }
+        }}
         stageIdx={drawerStageIdx}
         onStageChange={(idx) => {
           if (!selectedLogForView) return;
