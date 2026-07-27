@@ -21,6 +21,7 @@ interface ChatsNavSidebarProps {
   onTabChange: (tab: TabKey) => void;
   channelFilter: "all" | ChannelType | null;
   setChannelFilter: (v: "all" | ChannelType) => void;
+  showChatbotTab?: boolean; // NEW — defaults to true for backward compatibility
 }
 
 function NavRow({
@@ -40,13 +41,11 @@ function NavRow({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-        isSubItem ? "pl-7" : ""
-      } ${
-        active
+      className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${isSubItem ? "pl-7" : ""
+        } ${active
           ? "bg-green-50 text-green-800 font-semibold shadow-xs"
           : "text-gray-700 hover:bg-gray-100"
-      }`}
+        }`}
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
       {icon}
@@ -60,6 +59,7 @@ export default function InboxNavSidebar({
   onTabChange,
   channelFilter,
   setChannelFilter,
+  showChatbotTab = true,
 }: ChatsNavSidebarProps) {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try {
@@ -76,7 +76,7 @@ export default function InboxNavSidebar({
       const next = !prev;
       try {
         sessionStorage.setItem("chats_sidebar_collapsed", String(next));
-      } catch {}
+      } catch { }
       return next;
     });
   };
@@ -121,9 +121,8 @@ export default function InboxNavSidebar({
           <button
             type="button"
             onClick={toggleCollapsed}
-            className={`p-2.5 rounded-lg transition-colors ${
-              isWhatsAppGroupActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
-            }`}
+            className={`p-2.5 rounded-lg transition-colors ${isWhatsAppGroupActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+              }`}
             title="WhatsApp — expand sidebar to pick Inbox, Templates, or Campaigns"
           >
             <MessageCircle className="w-5 h-5 text-[#25D366]" />
@@ -133,9 +132,8 @@ export default function InboxNavSidebar({
           <button
             type="button"
             onClick={handleSms}
-            className={`p-2.5 rounded-lg transition-colors ${
-              isSmsActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
-            }`}
+            className={`p-2.5 rounded-lg transition-colors ${isSmsActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+              }`}
             title="SMS"
           >
             <MessageSquare className="w-5 h-5 text-blue-600" />
@@ -145,25 +143,25 @@ export default function InboxNavSidebar({
           <button
             type="button"
             onClick={handleWebsite}
-            className={`p-2.5 rounded-lg transition-colors ${
-              isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
-            }`}
+            className={`p-2.5 rounded-lg transition-colors ${isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+              }`}
             title="Website"
           >
             <Globe className="w-5 h-5 text-purple-600" />
           </button>
 
           {/* Chatbot */}
-          <button
-            type="button"
-            onClick={() => onTabChange("chatbot")}
-            className={`p-2.5 rounded-lg transition-colors ${
-              activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
-            }`}
-            title="Chatbot"
-          >
-            <Bot className="w-5 h-5 text-purple-600" />
-          </button>
+          {showChatbotTab && (
+            <button
+              type="button"
+              onClick={() => onTabChange("chatbot")}
+              className={`p-2.5 rounded-lg transition-colors ${activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+                }`}
+              title="Chatbot"
+            >
+              <Bot className="w-5 h-5 text-purple-600" />
+            </button>
+          )}
         </div>
       </div>
     );
@@ -195,11 +193,10 @@ export default function InboxNavSidebar({
         <div>
           <div
             onClick={() => setWhatsappExpanded(prev => !prev)}
-            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${
-              isWhatsAppGroupActive
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${isWhatsAppGroupActive
                 ? "bg-green-50 text-green-800 font-semibold"
                 : "text-gray-800 hover:bg-gray-100"
-            }`}
+              }`}
           >
             <div
               className="flex items-center gap-2 text-xs font-bold"
@@ -244,9 +241,8 @@ export default function InboxNavSidebar({
         <button
           type="button"
           onClick={handleSms}
-          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            isSmsActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
-          }`}
+          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${isSmsActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
+            }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
           <MessageSquare className="w-4 h-4 text-blue-600" />
@@ -257,28 +253,29 @@ export default function InboxNavSidebar({
         <button
           type="button"
           onClick={handleWebsite}
-          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
-          }`}
+          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
+            }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
           <Globe className="w-4 h-4 text-purple-600" />
           <span>Website</span>
         </button>
 
-        {/* 4. CHATBOT — leaf, unchanged */}
-        <button
-          type="button"
-          onClick={() => onTabChange("chatbot")}
-          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${
-            activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
-          }`}
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          <Bot className="w-4 h-4 text-purple-600" />
-          <span>Chatbot</span>
-        </button>
+        {/* 4. CHATBOT — leaf, gated */}
+        {showChatbotTab && (
+          <button
+            type="button"
+            onClick={() => onTabChange("chatbot")}
+            className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${activeTab === "chatbot" ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
+              }`}
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            <Bot className="w-4 h-4 text-purple-600" />
+            <span>Chatbot</span>
+          </button>
+        )}
       </div>
     </div>
   );
 }
+

@@ -702,18 +702,22 @@ export default function Settings() {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('whatsappTemplateIntegrations');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed.length > 0) {
-          setIntegrations((prev) =>
-            prev.map((i) =>
-              i.id === "whatsapp-business"
-                ? { ...i, connected: true, credentials: parsed[0]?.credentials || parsed[0] }
-                : i
-            )
-          );
-        }
+      const storedNumbers = getStoredWhatsAppNumbers();
+      if (storedNumbers.length > 0) {
+        setIntegrations((prev) =>
+          prev.map((i) =>
+            i.id === "whatsapp-business"
+              ? {
+                  ...i,
+                  connected: true,
+                  credentials: {
+                    displayPhoneNumber: storedNumbers[0].displayPhoneNumber,
+                    isDemo: "true",
+                  },
+                }
+              : i
+          )
+        );
       }
     } catch (e) {
       console.error(e);

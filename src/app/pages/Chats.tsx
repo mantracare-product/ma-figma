@@ -86,7 +86,7 @@ import {
 import ChatbotTab from "../components/chats/ChatbotTab";
 import InboxNavSidebar from "../components/chats/InboxNavSidebar";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
-import { getStoredWhatsAppNumbers } from "../../lib/useWhatsAppNumbers";
+import { getStoredWhatsAppNumbers, DEFAULT_MOCK_NUMBERS } from "../../lib/useWhatsAppNumbers";
 
 // ─── Type Definitions ────────────────────────────────────────────────────────
 
@@ -232,6 +232,7 @@ const AVAILABLE_EMPLOYEES = [
 ];
 
 const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
+  // Number 1: +1 (555) 123-4567
   {
     id: "conv-1",
     contactName: "Sarah Jenkins",
@@ -247,26 +248,28 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       { id: "msg-1-2", text: "Could I reschedule my appointment for tomorrow?", timestamp: "10:32 AM", sender: "contact" },
       { id: "msg-1-3", text: "I wanted to change my appointment slot to 3:00 PM if possible.", timestamp: "10:35 AM", sender: "contact" },
     ],
-    botStatus: "active",
+    botStatus: "off",
     assignedPersonId: "",
   },
   {
     id: "conv-2",
     contactName: "Michael Chang",
     phoneNumber: "+1 (555) 876-5432",
-    inboxNumber: "+1 (555) 432-1000",
-    channel: "sms",
-    lastMessage: "Thanks, I will confirm by tonight.",
+    inboxNumber: "+1 (555) 123-4567",
+    channel: "whatsapp",
+    lastMessage: "Thanks for the update!",
     timestamp: "Yesterday",
-    unreadCount: 0,
+    unreadCount: 1,
     status: "open",
     messages: [
-      { id: "msg-2-1", text: "Hi Michael, your lab reports have been received.", timestamp: "Yesterday, 4:15 PM", sender: "me", status: "read" },
-      { id: "msg-2-2", text: "Thanks, I will confirm by tonight.", timestamp: "Yesterday, 4:20 PM", sender: "contact" },
+      { id: "msg-2-1", text: "Hi, has my lab report come back yet?", timestamp: "Yesterday, 2:00 PM", sender: "contact" },
+      { id: "msg-2-2", text: "Yes! Everything looks normal, we'll email the full report shortly.", timestamp: "Yesterday, 2:10 PM", sender: "me", status: "read" },
+      { id: "msg-2-3", text: "Thanks for the update!", timestamp: "Yesterday, 2:12 PM", sender: "contact" },
     ],
-    botStatus: "paused",
-    assignedPersonId: "1",
+    botStatus: "off",
+    assignedPersonId: "",
   },
+  // Number 2: +1 (555) 987-6543
   {
     id: "conv-3",
     contactName: "Elena Rostova",
@@ -287,6 +290,43 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
   {
     id: "conv-4",
     contactName: "Priya Nair",
+    phoneNumber: "+1 (555) 345-8901",
+    inboxNumber: "+1 (555) 987-6543",
+    channel: "whatsapp",
+    lastMessage: "Sounds good, thank you!",
+    timestamp: "3 days ago",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      { id: "msg-4-1", text: "Do you have any openings this Friday?", timestamp: "3 days ago", sender: "contact" },
+      { id: "msg-4-2", text: "Yes, we have a 11:00 AM slot open.", timestamp: "3 days ago", sender: "me", status: "read" },
+      { id: "msg-4-3", text: "Sounds good, thank you!", timestamp: "3 days ago", sender: "contact" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  // SMS channel conversation
+  {
+    id: "conv-5",
+    contactName: "David Miller",
+    phoneNumber: "+1 (555) 432-1000",
+    inboxNumber: "+1 (555) 432-1000",
+    channel: "sms",
+    lastMessage: "Thanks, I will confirm by tonight.",
+    timestamp: "Yesterday",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      { id: "msg-5-1", text: "Hi David, your lab reports have been received.", timestamp: "Yesterday, 4:15 PM", sender: "me", status: "read" },
+      { id: "msg-5-2", text: "Thanks, I will confirm by tonight.", timestamp: "Yesterday, 4:20 PM", sender: "contact" },
+    ],
+    botStatus: "paused",
+    assignedPersonId: "1",
+  },
+  // Website channel conversation
+  {
+    id: "conv-6",
+    contactName: "Alex Rivera",
     phoneNumber: "Website Visitor",
     channel: "website",
     lastMessage: "Do you accept walk-ins?",
@@ -294,10 +334,10 @@ const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
     unreadCount: 1,
     status: "open",
     messages: [
-      { id: "msg-4-1", text: "Hi! How can I help you today?", timestamp: "2 hours ago", sender: "me", status: "read" },
-      { id: "msg-4-2", text: "Do you accept walk-ins?", timestamp: "2 hours ago", sender: "contact" },
+      { id: "msg-6-1", text: "Hi! How can I help you today?", timestamp: "2 hours ago", sender: "me", status: "read" },
+      { id: "msg-6-2", text: "Do you accept walk-ins?", timestamp: "2 hours ago", sender: "contact" },
     ],
-    botStatus: "active",
+    botStatus: "off",
     assignedPersonId: "",
   },
 ];
@@ -758,7 +798,9 @@ const CampaignBuilderView: React.FC<CampaignBuilderViewProps> = ({
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// Legacy chatbot/campaign-automation module — superseded by Process Settings automation.
+// Flip to true to restore the old chatbot-driven UI without touching any other code.
+const LEGACY_CHATBOT_MODULE_ENABLED = false;
 
 export default function Chats() {
   const navigate = useNavigate();
@@ -774,7 +816,7 @@ export default function Chats() {
     const tabParam = params.get("tab");
     if (tabParam === "templates") setActiveTab("templates");
     else if (tabParam === "campaigns") setActiveTab("campaigns");
-    else if (tabParam === "chatbot") setActiveTab("chatbot");
+    else if (tabParam === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED) setActiveTab("chatbot");
     else setActiveTab("chats");
   }, [location.search]);
 
@@ -785,8 +827,33 @@ export default function Chats() {
 
   // ── Chats State ──
   const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const stored = localStorage.getItem("whatsappMockConversations");
-    return stored ? JSON.parse(stored) : INITIAL_MOCK_CONVERSATIONS;
+    const validNumbers = new Set(DEFAULT_MOCK_NUMBERS.map((n) => n.displayPhoneNumber));
+    try {
+      const stored = localStorage.getItem("whatsappMockConversations");
+      if (stored) {
+        const parsed: Conversation[] = JSON.parse(stored);
+        const updated = parsed.map((c) => {
+          if (c.channel === "whatsapp" && (!c.inboxNumber || !validNumbers.has(c.inboxNumber))) {
+            return { ...c, inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber };
+          }
+          return c;
+        });
+
+        const hasNum1Open = updated.some(
+          (c) => c.channel === "whatsapp" && c.inboxNumber === DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber && c.status === "open"
+        );
+        const hasNum2Open = updated.some(
+          (c) => c.channel === "whatsapp" && c.inboxNumber === DEFAULT_MOCK_NUMBERS[1]?.displayPhoneNumber && c.status === "open"
+        );
+
+        if (hasNum1Open && hasNum2Open) {
+          return updated;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_MOCK_CONVERSATIONS;
   });
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
@@ -1482,6 +1549,7 @@ export default function Chats() {
             onTabChange={handleTabChange}
             channelFilter={channelFilter}
             setChannelFilter={setChannelFilter}
+            showChatbotTab={LEGACY_CHATBOT_MODULE_ENABLED}
           />
 
           <div className="flex-1 min-w-0 bg-white p-4 overflow-y-auto">
@@ -1913,43 +1981,49 @@ export default function Chats() {
                                 ) : (
                                   <>
                                     {/* 1. Templates */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        setShowUseTemplateDropdown(true);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                    >
-                                      <FileText className="w-4 h-4 text-amber-600 shrink-0" />
-                                      <span>Templates</span>
-                                    </button>
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowComposerGearMenu(false);
+                                          setShowUseTemplateDropdown(true);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                      >
+                                        <FileText className="w-4 h-4 text-amber-600 shrink-0" />
+                                        <span>Templates</span>
+                                      </button>
+                                    )}
 
                                     {/* 2. Assign Chatbot */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        setShowAssignBotModal(true);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                    >
-                                      <Bot className="w-4 h-4 text-blue-600 shrink-0" />
-                                      <span>Assign Chatbot</span>
-                                    </button>
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowComposerGearMenu(false);
+                                          setShowAssignBotModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                      >
+                                        <Bot className="w-4 h-4 text-blue-600 shrink-0" />
+                                        <span>Assign Chatbot</span>
+                                      </button>
+                                    )}
 
                                     {/* 3. Enroll in Campaign */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        setShowEnrollCampaignModal(true);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                    >
-                                      <Zap className="w-4 h-4 text-purple-600 shrink-0" />
-                                      <span>Enroll in Campaign</span>
-                                    </button>
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowComposerGearMenu(false);
+                                          setShowEnrollCampaignModal(true);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
+                                      >
+                                        <Zap className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span>Enroll in Campaign</span>
+                                      </button>
+                                    )}
 
                                     {/* 4. Assign Responsible */}
                                     <button
@@ -1966,53 +2040,57 @@ export default function Chats() {
                                     <div className="my-1 border-t border-gray-100" />
 
                                     {/* 5. Take Over from Bot */}
-                                    {(() => {
-                                      const isBotActive =
-                                        activeConversation.assignedBotId &&
-                                        (activeConversation.botStatus ?? "off") === "active" &&
-                                        !activeConversation.assignedPersonId;
-                                      return (
-                                        <button
-                                          type="button"
-                                          disabled={!isBotActive}
-                                          onClick={() => {
-                                            setShowComposerGearMenu(false);
-                                            setConversations((prev) =>
-                                              prev.map((c) =>
-                                                c.id === selectedConversationId
-                                                  ? { ...c, botStatus: "paused", assignedPersonId: "1" }
-                                                  : c
-                                              )
-                                            );
-                                            toast.success("Bot paused. You took over the conversation.");
-                                          }}
-                                          className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${isBotActive
-                                              ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
-                                              : "opacity-40 cursor-not-allowed text-gray-400"
-                                            }`}
-                                        >
-                                          <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                                          <span>Take Over from Bot</span>
-                                        </button>
-                                      );
-                                    })()}
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
+                                      (() => {
+                                        const isBotActive =
+                                          activeConversation.assignedBotId &&
+                                          (activeConversation.botStatus ?? "off") === "active" &&
+                                          !activeConversation.assignedPersonId;
+                                        return (
+                                          <button
+                                            type="button"
+                                            disabled={!isBotActive}
+                                            onClick={() => {
+                                              setShowComposerGearMenu(false);
+                                              setConversations((prev) =>
+                                                prev.map((c) =>
+                                                  c.id === selectedConversationId
+                                                    ? { ...c, botStatus: "paused", assignedPersonId: "1" }
+                                                    : c
+                                                )
+                                              );
+                                              toast.success("Bot paused. You took over the conversation.");
+                                            }}
+                                            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${isBotActive
+                                                ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
+                                                : "opacity-40 cursor-not-allowed text-gray-400"
+                                              }`}
+                                          >
+                                            <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
+                                            <span>Take Over from Bot</span>
+                                          </button>
+                                        );
+                                      })()
+                                    )}
 
                                     {/* 6. Test (DEV-only) */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        setShowTestContactDrawer(true);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
-                                    >
-                                      <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
-                                      <span>Test</span>
-                                      <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
-                                    </button>
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setShowComposerGearMenu(false);
+                                          setShowTestContactDrawer(true);
+                                        }}
+                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
+                                      >
+                                        <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
+                                        <span>Test</span>
+                                        <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
+                                      </button>
+                                    )}
 
                                     {/* 7. Pause / Resume Bot */}
-                                    {(activeConversation.botStatus ?? "off") !== "off" && (
+                                    {LEGACY_CHATBOT_MODULE_ENABLED && (activeConversation.botStatus ?? "off") !== "off" && (
                                       <button
                                         type="button"
                                         onClick={() => {
@@ -2059,7 +2137,7 @@ export default function Chats() {
                             )}
 
                             {/* Upward-expanding Template Picker Menu */}
-                            {showUseTemplateDropdown && (
+                            {LEGACY_CHATBOT_MODULE_ENABLED && showUseTemplateDropdown && (
                               <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
                                 <div className="p-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
                                   <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Select Template</span>
@@ -2683,6 +2761,13 @@ export default function Chats() {
                                   const displayName = campaign.audienceName || campaign.audience;
 
                                   if (displayName) {
+                                    if (!LEGACY_CHATBOT_MODULE_ENABLED) {
+                                      return (
+                                        <span className="text-xs text-purple-700 font-semibold block">
+                                          {displayName}{totalCount > 0 ? ` (${totalCount})` : ""}
+                                        </span>
+                                      );
+                                    }
                                     return (
                                       <button
                                         onClick={() => { setSharingCampaign(campaign); setShowShareModal(true); }}
@@ -2723,7 +2808,7 @@ export default function Chats() {
             {/* ══════════════════════════════════════════════════════
             TAB: CHATBOT — Managed by ChatbotTab component
         ══════════════════════════════════════════════════════ */}
-            {activeTab === "chatbot" && (
+            {activeTab === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED && (
               <ChatbotTab
                 campaigns={campaigns}
                 employees={AVAILABLE_EMPLOYEES}
@@ -2795,10 +2880,12 @@ export default function Chats() {
                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
                   <Pencil className="w-4 h-4" />Edit Campaign
                 </button>
-                <button onClick={() => { setOpenMenuCampaignId(null); setSharingCampaign(campaign); setShowShareModal(true); }}
-                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <Share2 className="w-4 h-4" />Share
-                </button>
+                {LEGACY_CHATBOT_MODULE_ENABLED && (
+                  <button onClick={() => { setOpenMenuCampaignId(null); setSharingCampaign(campaign); setShowShareModal(true); }}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-purple-50 hover:text-purple-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <Share2 className="w-4 h-4" />Share
+                  </button>
+                )}
                 {(campaign.status === "active" || campaign.status === "paused") && (
                   <button onClick={() => { handleToggleCampaign(campaign.id); setOpenMenuCampaignId(null); }}
                     className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-yellow-50 hover:text-yellow-600 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -2884,49 +2971,57 @@ export default function Chats() {
       )}
 
       {/* Modals & Live Simulator Drawer */}
-      <AssignChatbotModal
-        isOpen={showAssignBotModal}
-        onClose={() => setShowAssignBotModal(false)}
-        channel={activeConversation?.channel || "whatsapp"}
-        assignedPersonId={activeConversation?.assignedPersonId}
-        assignedBotId={activeConversation?.assignedBotId}
-        onAssign={handleAssignBot}
-      />
+      {LEGACY_CHATBOT_MODULE_ENABLED && (
+        <AssignChatbotModal
+          isOpen={showAssignBotModal}
+          onClose={() => setShowAssignBotModal(false)}
+          channel={activeConversation?.channel || "whatsapp"}
+          assignedPersonId={activeConversation?.assignedPersonId}
+          assignedBotId={activeConversation?.assignedBotId}
+          onAssign={handleAssignBot}
+        />
+      )}
 
-      <EnrollCampaignModal
-        isOpen={showEnrollCampaignModal}
-        onClose={() => setShowEnrollCampaignModal(false)}
-        onEnroll={handleEnrollCampaign}
-      />
+      {LEGACY_CHATBOT_MODULE_ENABLED && (
+        <EnrollCampaignModal
+          isOpen={showEnrollCampaignModal}
+          onClose={() => setShowEnrollCampaignModal(false)}
+          onEnroll={handleEnrollCampaign}
+        />
+      )}
 
-      <TestAsContactDrawer
-        isOpen={showTestContactDrawer}
-        onClose={() => setShowTestContactDrawer(false)}
-        conversation={activeConversation || null}
-        bot={(() => {
-          if (!activeConversation?.assignedBotId) return undefined;
-          try {
-            const raw = localStorage.getItem("chatbotBots");
-            if (raw) {
-              const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
-              const bots = JSON.parse(raw).map(sanitizeBot);
-              return bots.find((b: any) => b.id === activeConversation.assignedBotId);
-            }
-          } catch { }
-          return undefined;
-        })()}
-        onUpdateConversation={(updated) => {
-          setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
-        }}
-      />
+      {LEGACY_CHATBOT_MODULE_ENABLED && (
+        <TestAsContactDrawer
+          isOpen={showTestContactDrawer}
+          onClose={() => setShowTestContactDrawer(false)}
+          conversation={activeConversation || null}
+          bot={(() => {
+            if (!activeConversation?.assignedBotId) return undefined;
+            try {
+              const raw = localStorage.getItem("chatbotBots");
+              if (raw) {
+                const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
+                const bots = JSON.parse(raw).map(sanitizeBot);
+                return bots.find((b: any) => b.id === activeConversation.assignedBotId);
+              }
+            } catch { }
+            return undefined;
+          })()}
+          onUpdateConversation={(updated) => {
+            setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
+          }}
+        />
+      )}
 
-      <CampaignShareModal
-        isOpen={showShareModal}
-        onClose={() => { setShowShareModal(false); setSharingCampaign(null); }}
-        campaign={sharingCampaign}
-        initialSelectedIds={sharingCampaign?.audienceClientIds || []}
-        onShare={(payload) => sharingCampaign && handleShareCampaign(sharingCampaign, payload)}
-      />
+      {LEGACY_CHATBOT_MODULE_ENABLED && (
+        <CampaignShareModal
+          isOpen={showShareModal}
+          onClose={() => { setShowShareModal(false); setSharingCampaign(null); }}
+          campaign={sharingCampaign}
+          initialSelectedIds={sharingCampaign?.audienceClientIds || []}
+          onShare={(payload) => sharingCampaign && handleShareCampaign(sharingCampaign, payload)}
+        />
+      )}
 
       <TemplateLibraryDrawer
         isOpen={showTemplateLibrary}
