@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
-  Play, ChevronDown, Download, ArrowLeft, Check
+  Play, ChevronDown, Download, ArrowLeft, Check, Globe
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -54,6 +54,8 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   appointment_booked: "#CFFAFE",
   field_update: "#F1F5F9",
   process_completed: "#DCFCE7",
+  website_message: "#F3E8FF",
+  website: "#F3E8FF",
   outbound_call: "#DBEAFE",
   inbound_call: "#DBEAFE",
   failed_call: "#FEE2E2",
@@ -74,6 +76,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   field_update: "Field Updated",
   appointment_booked: "Appointment Booked",
   process_completed: "Process Completed",
+  website_message: "Website Message Received",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -802,6 +805,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       case "whatsapp": return <MessageCircle className="w-5 h-5 text-emerald-600" />;
       case "sms": return <MessageSquare className="w-5 h-5 text-indigo-600" />;
       case "email": return <Mail className="w-5 h-5 text-amber-600" />;
+      case "website_message":
+      case "website": return <Globe className="w-5 h-5 text-purple-600" />;
       case "process_entry": return <LogIn className="w-5 h-5 text-blue-600" />;
       case "stage_update":
       case "stage_change": return <ArrowRightCircle className="w-5 h-5 text-purple-600" />;
@@ -822,6 +827,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         return "text-indigo-700 bg-indigo-50 border border-indigo-200";
       case "email":
         return "text-amber-700 bg-amber-50 border border-amber-200";
+      case "website_message":
+      case "website":
+        return "text-purple-700 bg-purple-50 border border-purple-200";
       case "process_entry":
         return "text-blue-700 bg-blue-50 border border-blue-200";
       case "stage_update":
@@ -1669,9 +1677,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 ) : (
                   filteredDrawerActivities.map((item, i) => {
                     const isLast = i === filteredDrawerActivities.length - 1;
-                    const rawType = (item as any).rawType || item.type;
-                    const heading = HEADING_BY_TYPE[rawType] || HEADING_BY_TYPE[item.type] || item.title;
-                    const timestampStr = (item as any).fullTimestamp || `${item.date}, ${item.time}`;
+                    const rawType = ((item as any).rawType || item.type) as string;
+                    const heading = HEADING_BY_TYPE[rawType] || HEADING_BY_TYPE[item.type] || (item as any).title;
+                    const timestampStr = (item as any).fullTimestamp || `${(item as any).date}, ${(item as any).time}`;
 
                     return (
                       <div key={item.id} className="relative flex gap-3 pb-4 last:pb-0">
@@ -1726,6 +1734,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                   emailId: (item as any).refId,
                                 },
                               });
+                            } else if (rawType === "website_message" || rawType === "website") {
+                              navigate("/chats", {
+                                state: {
+                                  clientId: client.id,
+                                  channel: "website",
+                                  threadId: (item as any).refId,
+                                },
+                              });
                             } else if ((item as any).callId) {
                               setSelectedCallId((item as any).callId);
                               setShowCallDetailsFromProfile(true);
@@ -1767,6 +1783,29 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                               <p className="text-[11px] text-gray-400">via {(item as any).sourceStepName}</p>
                             )}
                           </div>
+
+                          {(rawType === "website_message" ||
+                            item.type === "website_message" ||
+                            (item.title || "").toLowerCase().includes("website") ||
+                            ((item as any).description || "").toLowerCase().includes("website")) && (
+                            <div className="mt-2 text-left">
+                              <span
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate("/chats", {
+                                    state: {
+                                      clientId: client.id,
+                                      channel: "website",
+                                    },
+                                  });
+                                }}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                              >
+                                <Globe className="w-3.5 h-3.5 text-purple-600" />
+                                View Website Chat
+                              </span>
+                            </div>
+                          )}
 
                           <div className="flex flex-wrap items-center gap-2 mt-2">
                             {activeProcessTabDrawer === "all" && item.processName && (

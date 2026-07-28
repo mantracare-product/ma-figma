@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router";
 import {
   X,
   ChevronDown,
@@ -18,6 +19,7 @@ import {
   LogIn,
   ArrowRightCircle,
   CheckCircle2,
+  Globe,
 } from "lucide-react";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
@@ -124,7 +126,8 @@ export type ActivityType =
   | "appointment_booked"
   | "call"                 // outbound/inbound call triggered for stage
   | "stage_update"         // transition to a new stage (exit + entry)
-  | "process_completed";   // top-most card — deal/process reached terminal state
+  | "process_completed"    // top-most card — deal/process reached terminal state
+  | "website_message";
 
 export interface ActivityLogEntry {
   id: string;
@@ -151,6 +154,7 @@ const ACTIVITY_ICON_BG: Record<ActivityType, string> = {
   appointment_booked: "#CFFAFE",
   field_update: "#F1F5F9",
   process_completed: "#DCFCE7",
+  website_message: "#F3E8FF",
 };
 
 const ActivityIcon = ({ type }: { type: ActivityType }) => {
@@ -176,6 +180,8 @@ const ActivityIcon = ({ type }: { type: ActivityType }) => {
       return <Calendar className={`${iconClass} text-cyan-600`} />;
     case "field_update":
       return <Pencil className={`${iconClass} text-slate-600`} />;
+    case "website_message":
+      return <Globe className={`${iconClass} text-purple-600`} />;
     default:
       return <Pencil className={`${iconClass} text-slate-600`} />;
   }
@@ -192,6 +198,7 @@ const HEADING_BY_TYPE: Record<ActivityType, string> = {
   field_update: "Field Updated",
   appointment_booked: "Appointment Booked",
   process_completed: "Process Completed",
+  website_message: "Website Message Received",
 };
 
 export interface ProcessDetailDrawerProps {
@@ -267,7 +274,8 @@ export default function ProcessDetailDrawer({
   historyFilters,
   onHistoryFiltersChange,
 }: ProcessDetailDrawerProps) {
-  if (!isOpen || !log) return null;
+  const navigate = useNavigate();
+  const [draftText, setDraftText] = useState("");
 
   const mockHistory = [
     {
@@ -313,15 +321,15 @@ export default function ProcessDetailDrawer({
       let val = "";
       if (editedValues[f.key] !== undefined) {
         val = editedValues[f.key];
-      } else if ((log as any)[f.key] !== undefined && (log as any)[f.key] !== null && (log as any)[f.key] !== "") {
+      } else if (log && (log as any)[f.key] !== undefined && (log as any)[f.key] !== null && (log as any)[f.key] !== "") {
         val = (log as any)[f.key];
       } else {
-        if (f.key === "client_name") val = log.client;
+        if (f.key === "client_name") val = log?.client || "—";
         else if (f.key === "responsible") val = client?.responsible || "Unassigned";
         else if (f.key === "deal_type") val = "Organic";
         else if (f.key === "source") val = (client as any)?.source || (client?.email ? client.email.split("@")[1] || "—" : "whatsapp");
         else if (f.key === "start_date")
-          val = log.date
+          val = log?.date
             ? new Date(log.date).toLocaleDateString("en-US", {
                 month: "long",
                 day: "numeric",
@@ -334,8 +342,8 @@ export default function ProcessDetailDrawer({
         else if (f.key === "country") val = client?.country || "—";
         else if (f.key === "time_slot") val = "8AM – 8PM";
         else if (f.key === "comment") val = "";
-        else if (f.key === "status" || f.key === "stage") val = log.currentStage || log.status || "—";
-        else if (f.key === "process") val = log.process || "—";
+        else if (f.key === "status" || f.key === "stage") val = log?.currentStage || log?.status || "—";
+        else if (f.key === "process") val = log?.process || "—";
         else val = "—";
       }
       return {
@@ -348,14 +356,14 @@ export default function ProcessDetailDrawer({
       };
     });
 
-  const [draftText, setDraftText] = useState("");
-
   useEffect(() => {
     if (editingField) {
       const f = fields.find((fl) => fl.key === editingField);
       setDraftText(f ? String(f.value) : "");
     }
   }, [editingField, fields]);
+
+  if (!isOpen || !log) return null;
 
   return (
     <>
@@ -760,6 +768,7 @@ export default function ProcessDetailDrawer({
                       call: 2,
                       stage_update: 3,
                       process_completed: 4,
+                      website_message: 1,
                     };
 
                     const toChronologicalOrder = (entries: ActivityLogEntry[]) =>
@@ -849,6 +858,31 @@ export default function ProcessDetailDrawer({
                                 <p className="text-[11px] text-gray-400">via {entry.sourceStepName}</p>
                               )}
                             </div>
+
+                            {(entry.type === "website_message" ||
+                              (entry.details?.primary || "").toLowerCase().includes("website") ||
+                              (entry.details?.secondary || "").toLowerCase().includes("website")) && (
+                              <div className="mt-2.5">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    e.preventDefault();
+                                    onClose();
+                                    navigate("/chats", {
+                                      state: {
+                                        clientId: log?.clientId || client?.id,
+                                        channel: "website",
+                                      },
+                                    });
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <Globe className="w-3.5 h-3.5 text-purple-600" />
+                                  View Website Chat
+                                </button>
+                              </div>
+                            )}
 
                             {entry.status && entry.status !== "success" && (
                               <span

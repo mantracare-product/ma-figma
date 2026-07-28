@@ -6,7 +6,7 @@ export interface ActivityLogRecord {
   clientId: string;
   processId: string;
   processName: string;
-  type: "process_entry" | "stage_update" | "whatsapp" | "sms" | "email" | "field_update";
+  type: "process_entry" | "stage_update" | "whatsapp" | "sms" | "email" | "field_update" | "website_message";
   timestamp: string; // ISO
   status?: "success" | "failed" | "pending";
   refId: string;

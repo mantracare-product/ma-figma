@@ -53,6 +53,7 @@ import {
   Copy,
   Upload,
   LibraryBig,
+  Sparkles,
 } from "lucide-react";
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
 import { LibraryTemplate } from "../../lib/templateLibrary";
@@ -87,6 +88,8 @@ import {
 } from "../components/ui/select";
 import ChatbotTab from "../components/chats/ChatbotTab";
 import InboxNavSidebar from "../components/chats/InboxNavSidebar";
+import WebsiteWidgetSettingsTab from "../components/chats/WebsiteWidgetSettingsTab";
+import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
 import { getStoredWhatsAppNumbers, DEFAULT_MOCK_NUMBERS } from "../../lib/useWhatsAppNumbers";
 
@@ -810,7 +813,7 @@ export default function Chats() {
   const location = useLocation();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const TAB_ORDER = ["chats", "campaigns", "templates", "chatbot"] as const;
+  const TAB_ORDER = ["chats", "campaigns", "templates", "chatbot", "website-settings"] as const;
   type TabKey = typeof TAB_ORDER[number];
   const [activeTab, setActiveTab] = useState<TabKey>("chats");
 
@@ -928,6 +931,7 @@ export default function Chats() {
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");
   type ViewFilter = "all" | "open" | "resolved" | "unread" | "assigned_to_me";
   const [viewFilter, setViewFilter] = useState<ViewFilter>("open");
+  const [showTestWebsiteDrawer, setShowTestWebsiteDrawer] = useState(false);
   const [showViewFilterDropdown, setShowViewFilterDropdown] = useState(false);
   const [showNumberFilterDropdown, setShowNumberFilterDropdown] = useState(false);
   const [isListPaneCollapsed, setIsListPaneCollapsed] = useState(false);
@@ -1655,25 +1659,42 @@ export default function Chats() {
                     {/* Header */}
                     <div className="px-4 py-3 border-b border-gray-200 bg-white space-y-2 relative">
 
-                      {/* Row 1 — Number switcher dropdown */}
-                      <div className="relative">
+                      {/* Row 1 — Number switcher dropdown & Test Website Bot */}
+                      <div className="flex items-center justify-between gap-2 relative">
+                        <div className="relative flex-1 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNumberFilterDropdown(prev => !prev);
+                              setShowViewFilterDropdown(false);
+                            }}
+                            className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors min-w-0 max-w-full"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            <span className="truncate">
+                              {numberFilter === "all" || availableNumbersForChannel.length === 0
+                                ? "All Numbers"
+                                : numberFilter}
+                            </span>
+                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showNumberFilterDropdown ? "rotate-180" : ""}`} />
+                          </button>
+                        </div>
+
                         <button
                           type="button"
                           onClick={() => {
-                            setShowNumberFilterDropdown(prev => !prev);
-                            setShowViewFilterDropdown(false);
+                            if (channelFilter === "website") {
+                              setShowTestWebsiteDrawer(true);
+                            } else {
+                              setShowTestProcessDrawer(true);
+                            }
                           }}
-                          className="flex items-center gap-1.5 text-sm font-bold text-gray-900 hover:text-blue-600 transition-colors min-w-0 max-w-full"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                          className="px-2.5 py-1 bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors shrink-0 shadow-2xs cursor-pointer"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <span className="truncate">
-                            {numberFilter === "all" || availableNumbersForChannel.length === 0
-                              ? "All Numbers"
-                              : numberFilter}
-                          </span>
-                          <ChevronDown className={`w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform ${showNumberFilterDropdown ? "rotate-180" : ""}`} />
+                          <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                          Test
                         </button>
-
                         {showNumberFilterDropdown && (
                           <div className="absolute left-0 mt-1 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-30 py-1 space-y-0.5 text-xs font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
                             <button
@@ -2925,6 +2946,18 @@ export default function Chats() {
                 statusFilter={chatbotStatusFilter}
               />
             )}
+
+            {/* ══════════════════════════════════════════════════════
+                TAB: WEBSITE WIDGET SETTINGS
+            ══════════════════════════════════════════════════════ */}
+            {activeTab === "website-settings" && (
+              <WebsiteWidgetSettingsTab
+                onNavigateToInbox={() => {
+                  setActiveTab("chats");
+                  setChannelFilter("website");
+                }}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -3104,6 +3137,11 @@ export default function Chats() {
         onClose={() => setShowTestProcessDrawer(false)}
         processes={processes}
         getWorkflowStepsForStage={getWorkflowStepsForStage}
+      />
+
+      <TestWebsiteChatDrawer
+        isOpen={showTestWebsiteDrawer}
+        onClose={() => setShowTestWebsiteDrawer(false)}
       />
 
       {LEGACY_CHATBOT_MODULE_ENABLED && (

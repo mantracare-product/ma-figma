@@ -19,7 +19,7 @@ interface SyncParams {
   contactName: string;
   phoneNumber: string;
   inboxNumber: string;
-  channel: "whatsapp" | "sms";
+  channel: "whatsapp" | "sms" | "website";
   messages: SyncMessageInput[];
 }
 

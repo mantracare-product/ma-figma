@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { ChannelType } from "../../../constants/channels";
 
-export type TabKey = "chats" | "campaigns" | "templates" | "chatbot";
+export type TabKey = "chats" | "campaigns" | "templates" | "chatbot" | "website-settings";
 
 interface ChatsNavSidebarProps {
   activeTab: TabKey;
@@ -70,6 +70,7 @@ export default function InboxNavSidebar({
   });
 
   const [whatsappExpanded, setWhatsappExpanded] = useState<boolean>(true);
+  const [websiteExpanded, setWebsiteExpanded] = useState<boolean>(true);
 
   const toggleCollapsed = () => {
     setCollapsed(prev => {
@@ -87,19 +88,23 @@ export default function InboxNavSidebar({
   const isWaCampaignsActive = activeTab === "campaigns";
   const isWhatsAppGroupActive = isWaInboxActive || isWaTemplatesActive || isWaCampaignsActive;
   const isSmsActive = activeTab === "chats" && channelFilter === "sms";
-  const isWebsiteActive = activeTab === "chats" && channelFilter === "website";
+  const isWebsiteInboxActive = activeTab === "chats" && channelFilter === "website";
+  const isWebsiteSettingsActive = activeTab === "website-settings";
+  const isWebsiteGroupActive = isWebsiteInboxActive || isWebsiteSettingsActive;
 
-  // Auto-expand when deep-linking directly to templates/campaigns
+  // Auto-expand when deep-linking
   useEffect(() => {
     if (isWhatsAppGroupActive) setWhatsappExpanded(true);
-  }, [isWhatsAppGroupActive]);
+    if (isWebsiteGroupActive) setWebsiteExpanded(true);
+  }, [isWhatsAppGroupActive, isWebsiteGroupActive]);
 
   // Handlers
   const handleWhatsAppInbox = () => { onTabChange("chats"); setChannelFilter("whatsapp"); };
   const handleWhatsAppTemplates = () => { onTabChange("templates"); };
   const handleWhatsAppCampaigns = () => { onTabChange("campaigns"); };
   const handleSms = () => { onTabChange("chats"); setChannelFilter("sms"); };
-  const handleWebsite = () => { onTabChange("chats"); setChannelFilter("website"); };
+  const handleWebsiteInbox = () => { onTabChange("chats"); setChannelFilter("website"); };
+  const handleWebsiteSettings = () => { onTabChange("website-settings"); setChannelFilter("website"); };
 
   // ── Collapsed icon-rail ─────────────────────────────────────────────────────
   if (collapsed) {
@@ -142,8 +147,8 @@ export default function InboxNavSidebar({
           {/* Website — direct navigate */}
           <button
             type="button"
-            onClick={handleWebsite}
-            className={`p-2.5 rounded-lg transition-colors ${isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
+            onClick={handleWebsiteInbox}
+            className={`p-2.5 rounded-lg transition-colors ${isWebsiteGroupActive ? "bg-green-50 text-green-800" : "text-gray-600 hover:bg-gray-100"
               }`}
             title="Website"
           >
@@ -249,17 +254,46 @@ export default function InboxNavSidebar({
           <span>SMS</span>
         </button>
 
-        {/* 3. WEBSITE — leaf */}
-        <button
-          type="button"
-          onClick={handleWebsite}
-          className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-lg transition-colors text-xs font-bold ${isWebsiteActive ? "bg-green-50 text-green-800" : "text-gray-800 hover:bg-gray-100"
-            }`}
-          style={{ fontFamily: "DM Sans, sans-serif" }}
-        >
-          <Globe className="w-4 h-4 text-purple-600" />
-          <span>Website</span>
-        </button>
+        {/* 3. WEBSITE — expandable group */}
+        <div>
+          <div
+            onClick={() => setWebsiteExpanded(prev => !prev)}
+            className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${isWebsiteGroupActive
+                ? "bg-green-50 text-green-800 font-semibold"
+                : "text-gray-800 hover:bg-gray-100"
+              }`}
+          >
+            <div
+              className="flex items-center gap-2 text-xs font-bold"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              <Globe className="w-4 h-4 text-purple-600" />
+              <span>Website</span>
+            </div>
+            {websiteExpanded
+              ? <ChevronDown className="w-3.5 h-3.5 text-gray-500" />
+              : <ChevronRight className="w-3.5 h-3.5 text-gray-500" />}
+          </div>
+
+          {websiteExpanded && (
+            <div className="mt-1 space-y-0.5">
+              <NavRow
+                icon={<InboxIcon className="w-4 h-4 text-purple-700" />}
+                label="Inbox"
+                active={isWebsiteInboxActive}
+                onClick={handleWebsiteInbox}
+                isSubItem
+              />
+              <NavRow
+                icon={<BarChart2 className="w-4 h-4 text-purple-600" />}
+                label="Widget Settings"
+                active={isWebsiteSettingsActive}
+                onClick={handleWebsiteSettings}
+                isSubItem
+              />
+            </div>
+          )}
+        </div>
 
         {/* 4. CHATBOT — leaf, gated */}
         {showChatbotTab && (
