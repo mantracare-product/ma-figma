@@ -397,7 +397,7 @@ export default function FlowBuilderTab({
               !n.id.startsWith("cond-") && !n.id.startsWith("parallel-") && !n.id.startsWith("wait-"))
       );
 
-      const lanes: Record<"stage" | "incall" | "inchat" | "postcall", WorkflowStep[]> = {
+      const lanes: Record<string, WorkflowStep[]> = {
         stage: [],
         incall: [],
         inchat: [],
@@ -405,7 +405,8 @@ export default function FlowBuilderTab({
       };
       workflowSteps.forEach(step => {
         const laneKey = step.trigger ?? "stage";
-        if (laneKey in lanes) lanes[laneKey as keyof typeof lanes].push(step);
+        if (!lanes[laneKey]) lanes[laneKey] = [];
+        lanes[laneKey].push(step);
       });
 
       const generatedNodes: FlowNode[] = [];
@@ -663,18 +664,21 @@ export default function FlowBuilderTab({
       // 1. Keep manual (user-drawn) connections starting with "conn-"
       const manualConnections = prevConnections.filter(c => c.id.startsWith("conn-"));
 
-      const lanes: Record<"stage" | "incall" | "postcall", WorkflowStep[]> = {
+      const lanes: Record<string, WorkflowStep[]> = {
         stage: [],
         incall: [],
+        inchat: [],
         postcall: [],
       };
       workflowSteps.forEach(step => {
-        lanes[step.trigger ?? "stage"].push(step);
+        const key = step.trigger ?? "stage";
+        if (!lanes[key]) lanes[key] = [];
+        lanes[key].push(step);
       });
 
       const parallelGroups: ParallelGroup[] = [];
-      (["stage", "incall", "postcall"] as const).forEach(laneKey => {
-        const stepsInLane = lanes[laneKey];
+      (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
+        const stepsInLane = lanes[laneKey] || [];
         let currentGroup: WorkflowStep[] = [];
         stepsInLane.forEach(step => {
           if (step.executionType === "parallel") {
@@ -740,8 +744,8 @@ export default function FlowBuilderTab({
       // 3. Initialize start connections on the very first render if manualConnections is empty
       const initialConnections: FlowConnection[] = [];
       if (manualConnections.length === 0 && isFirstRender.current) {
-        (["stage", "incall", "postcall"] as const).forEach(laneKey => {
-          const stepsInLane = lanes[laneKey];
+        (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
+          const stepsInLane = lanes[laneKey] || [];
           if (stepsInLane.length > 0) {
             const firstStep = stepsInLane[0];
             const inGroup = parallelGroups.find(g => g.firstStepId === firstStep.id);
@@ -759,8 +763,8 @@ export default function FlowBuilderTab({
 
       // 4. Generate structural connections (Wait, Cond, Parallel) inside each step
       const autoConnections: FlowConnection[] = [];
-      (["stage", "incall", "postcall"] as const).forEach(laneKey => {
-        const stepsInLane = lanes[laneKey];
+      (["stage", "incall", "inchat", "postcall"] as const).forEach(laneKey => {
+        const stepsInLane = lanes[laneKey] || [];
         const processedStepIds = new Set<string>();
 
         stepsInLane.forEach((step) => {

@@ -66,7 +66,9 @@ import AssignChatbotModal from "../components/chats/AssignChatbotModal";
 import EnrollCampaignModal from "../components/chats/EnrollCampaignModal";
 import CampaignShareModal from "../components/chats/CampaignShareModal";
 import { getClientList } from "../../lib/getClientList";
-import TestAsContactDrawer from "../components/chats/TestAsContactDrawer";
+import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
+import { useProcessStore } from "../../lib/useProcessStore";
+import { TEST_CHAT_SYNC_EVENT } from "../../lib/testConversationSync";
 import RequestTemplateApprovalModal from "../components/chats/RequestTemplateApprovalModal";
 import { Bot as BotType } from "../components/chats/ChatbotTab";
 import {
@@ -104,6 +106,7 @@ interface Message {
     mediaUrl?: string;
     fileName?: string;
   };
+  footerText?: string;
 }
 
 interface Conversation {
@@ -877,9 +880,10 @@ export default function Chats() {
   const [showComposerGearMenu, setShowComposerGearMenu] = useState(false);
   const [assignAgentMenuOpen, setAssignAgentMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+  const { processes, getWorkflowStepsForStage } = useProcessStore();
   const [showAssignBotModal, setShowAssignBotModal] = useState(false);
   const [showEnrollCampaignModal, setShowEnrollCampaignModal] = useState(false);
-  const [showTestContactDrawer, setShowTestContactDrawer] = useState(false);
+  const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -914,6 +918,17 @@ export default function Chats() {
   }, [campaigns]);
 
   useEffect(() => { localStorage.setItem("whatsappMockConversations", JSON.stringify(conversations)); }, [conversations]);
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const stored = localStorage.getItem("whatsappMockConversations");
+        if (stored) setConversations(JSON.parse(stored));
+      } catch {}
+    };
+    window.addEventListener(TEST_CHAT_SYNC_EVENT, handler);
+    return () => window.removeEventListener(TEST_CHAT_SYNC_EVENT, handler);
+  }, []);
 
   // Handle navigation state (channel, threadId, clientId, emailId)
   useEffect(() => {
@@ -1838,6 +1853,18 @@ export default function Chats() {
                               );
                             }
                           })()}
+
+                          {/* Small corner DEV test button — always visible, not gated by legacy flag */}
+                          <button
+                            type="button"
+                            onClick={() => setShowTestProcessDrawer(true)}
+                            title="Test process chat"
+                            className="flex items-center gap-1 px-2 py-1 bg-gray-900 hover:bg-black text-white rounded-md text-[10px] font-semibold transition-colors"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <FlaskConical className="w-3 h-3" />
+                            Test
+                          </button>
                         </div>
                       </div>
 
@@ -1875,7 +1902,32 @@ export default function Chats() {
                               <div className="max-w-[68%] space-y-1">
                                 <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? "bg-blue-600 text-white rounded-tr-none" : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"}`}
                                   style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {msg.header?.type && msg.header.type !== "none" && (
+                                    <div className="mb-1">
+                                      {msg.header.type === "text" && msg.header.text && (
+                                        <p className="font-bold text-sm leading-tight">{msg.header.text}</p>
+                                      )}
+                                      {msg.header.type === "image" && (
+                                        <div className="w-full h-20 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-400 mb-1">
+                                          Image{msg.header.fileName ? `: ${msg.header.fileName}` : ""}
+                                        </div>
+                                      )}
+                                      {msg.header.type === "video" && (
+                                        <div className="w-full h-20 bg-gray-900 rounded flex items-center justify-center text-xs text-white mb-1">
+                                          Video{msg.header.fileName ? `: ${msg.header.fileName}` : ""}
+                                        </div>
+                                      )}
+                                      {msg.header.type === "document" && (
+                                        <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1 text-xs text-gray-700 mb-1">
+                                          📄 {msg.header.fileName || "document"}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
                                   <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                                  {msg.footerText && (
+                                    <p className="text-[10px] text-gray-400 mt-1">{msg.footerText}</p>
+                                  )}
                                 </div>
                                 {msg.buttons && msg.buttons.length > 0 && (
                                   <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5">
@@ -2079,7 +2131,7 @@ export default function Chats() {
                                         type="button"
                                         onClick={() => {
                                           setShowComposerGearMenu(false);
-                                          setShowTestContactDrawer(true);
+                                          setShowTestProcessDrawer(true);
                                         }}
                                         className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
                                       >
@@ -2990,28 +3042,12 @@ export default function Chats() {
         />
       )}
 
-      {LEGACY_CHATBOT_MODULE_ENABLED && (
-        <TestAsContactDrawer
-          isOpen={showTestContactDrawer}
-          onClose={() => setShowTestContactDrawer(false)}
-          conversation={activeConversation || null}
-          bot={(() => {
-            if (!activeConversation?.assignedBotId) return undefined;
-            try {
-              const raw = localStorage.getItem("chatbotBots");
-              if (raw) {
-                const sanitizeBot = (b: any) => ({ ...b, channels: (b.channels || []).filter((c: string) => c !== "sms") });
-                const bots = JSON.parse(raw).map(sanitizeBot);
-                return bots.find((b: any) => b.id === activeConversation.assignedBotId);
-              }
-            } catch { }
-            return undefined;
-          })()}
-          onUpdateConversation={(updated) => {
-            setConversations((prev) => prev.map((c) => (c.id === updated.id ? (updated as Conversation) : c)));
-          }}
-        />
-      )}
+      <TestProcessChatDrawer
+        isOpen={showTestProcessDrawer}
+        onClose={() => setShowTestProcessDrawer(false)}
+        processes={processes}
+        getWorkflowStepsForStage={getWorkflowStepsForStage}
+      />
 
       {LEGACY_CHATBOT_MODULE_ENABLED && (
         <CampaignShareModal

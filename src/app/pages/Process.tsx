@@ -26,6 +26,9 @@ import { WorkflowStep } from "../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
 import StepParametersFields from "../components/process/StepParametersFields";
 import StepDetailDrawer from "../components/process/StepDetailDrawer";
+import { assignNumberToStage } from "../../lib/useStageNumberRouting";
+import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
+import { getStoredProcesses, saveStoredProcesses, getWorkflowStepsForStage as getStoreWorkflowSteps } from "../../lib/useProcessStore";
 
 interface AISettings {
   platform: string;
@@ -35,16 +38,30 @@ interface AISettings {
   style?: string;
 }
 
-interface Stage {
+export interface Stage {
   id: string;
   name: string;
   description: string;
   status: string;
   color?: string;
   aiSettings?: AISettings;
+  // Persisted stage configuration
+  stageType?: string;
+  selectedInboundNumbers?: string[];
+  selectedStageChannels?: string[];
+  responsiblePerson?: string;
+  whenToMove?: string;
+  callerPitchMode?: "single" | "comprehensive";
+  callerPitch?: string;
+  greetingIntroMessage?: string;
+  objectiveText?: string;
+  businessInfoItems?: Array<{ id: number; title: string; information: string; active: boolean }>;
+  primaryLanguage?: string;
+  secondaryLanguages?: string[];
+  workflowSteps?: WorkflowStep[];
 }
 
-interface Process {
+export interface Process {
   id: string;
   name: string;
   description: string;
@@ -480,41 +497,11 @@ export default function Process() {
     setCollapsed(true);
   }, [setCollapsed]);
 
-  const [processes, setProcesses] = useState<Process[]>([
-    {
-      id: "1",
-      name: "Patient Intake",
-      description: "Initial patient onboarding and verification process",
-      aiSettings: {
-        platform: "OpenAI - GPT-4o",
-        voiceSpeed: 1.0,
-        voice: "Ava",
-        tone: "Professional",
-        style: "Balanced",
-      },
-      stages: [
-        { id: "1-1", name: "Initial Contact", description: "First call to patient for basic information gathering", status: "active", color: "#22D3EE" },
-        { id: "1-2", name: "Insurance Verify", description: "Verify patient insurance details and coverage", status: "active", color: "#22D3EE" },
-        { id: "1-3", name: "Schedule Appointment", description: "Schedule the patient's first appointment", status: "active", color: "#EC4899" },
-      ],
-    },
-    {
-      id: "2",
-      name: "Follow-up Calls",
-      description: "Post-visit follow-up and medication reminders",
-      aiSettings: {
-        platform: "Anthropic Claude",
-        voiceSpeed: 1.2,
-        voice: "Eva",
-        tone: "Friendly",
-        style: "Balanced",
-      },
-      stages: [
-        { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active" },
-        { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active" },
-      ],
-    },
-  ]);
+  const [processes, setProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    saveStoredProcesses(processes);
+  }, [processes]);
 
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
@@ -690,6 +677,46 @@ export default function Process() {
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const [stepDetailDrawerOpen, setStepDetailDrawerOpen] = useState(false);
   const [currentEditingStep, setCurrentEditingStep] = useState<WorkflowStep | null>(null);
+
+  // Load persisted stage config whenever the selected stage changes
+  useEffect(() => {
+    if (!selectedProcess || !expandedStage || viewMode !== "stage") return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    const stg = proc?.stages.find((s) => s.id === expandedStage);
+    if (!stg) return;
+    setStageType(stg.stageType ?? "AI Receives Calls");
+    setSelectedInboundNumbers(stg.selectedInboundNumbers ?? ["+1 (555) 123-4567"]);
+    setSelectedStageChannels(stg.selectedStageChannels ?? ["calls"]);
+    setResponsiblePerson(stg.responsiblePerson ?? "");
+    setWhenToMove(stg.whenToMove ?? "");
+    setCallerPitchMode(stg.callerPitchMode ?? "single");
+    setCallerPitch(stg.callerPitch ?? "Hi, I'm calling from [Your Business Name] to follow up on your recent inquiry. We'd love to help you get started with our services. Is now a good time to talk?");
+    setGreetingIntroMessage(stg.greetingIntroMessage ?? "");
+    setObjectiveText(stg.objectiveText ?? "");
+    setBusinessInfoItems(stg.businessInfoItems ?? []);
+    setPrimaryLanguage(stg.primaryLanguage ?? "");
+    setSecondaryLanguages(stg.secondaryLanguages ?? []);
+    setWorkflowSteps(stg.workflowSteps ?? []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProcess, expandedStage, viewMode]);
+
+  // Auto-persist workflowSteps immediately (only discrete drawer-save changes, safe to auto-save)
+  useEffect(() => {
+    if (!selectedProcess || !expandedStage || viewMode !== "stage") return;
+    setProcesses((prev) =>
+      prev.map((p) =>
+        p.id !== selectedProcess
+          ? p
+          : {
+              ...p,
+              stages: p.stages.map((s) =>
+                s.id !== expandedStage ? s : { ...s, workflowSteps }
+              ),
+            }
+      )
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowSteps]);
 
   useEffect(() => {
     if (stepDetailDrawerOpen && currentEditingStep?.stepKey === "wh_trigger") {
@@ -1398,6 +1425,7 @@ export default function Process() {
   ];
 
   // In-Call Actions state variables
+  const [showTestProcessDrawer, setShowTestProcessDrawer] = useState(false);
   const [savedTransferScenarios, setSavedTransferScenarios] = useState<Array<{
     id: number;
     description: string;
@@ -1448,6 +1476,29 @@ export default function Process() {
   const [expandedTransferScenario, setExpandedTransferScenario] = useState<number | null>(null);
   const [expandedTextMessageScenario, setExpandedTextMessageScenario] = useState<number | null>(null);
   const [showAddFormDropdown, setShowAddFormDropdown] = useState(false);
+
+  // Additive: keep the stage-number routing registry in sync whenever this
+  // stage's inbound numbers change, without altering any existing UI/logic.
+  useEffect(() => {
+    if (!selectedProcess || !expandedStage || viewMode !== "stage") return;
+    if (stageType !== "AI Receives Calls") return;
+    const proc = processes.find((p) => p.id === selectedProcess);
+    const stg = proc?.stages.find((s) => s.id === expandedStage);
+    if (!proc || !stg) return;
+
+    selectedInboundNumbers.forEach((number) => {
+      // WhatsApp channel numbers route via this registry; SMS uses the same list today
+      // but only register as "whatsapp" for now since that's the tested channel.
+      assignNumberToStage({
+        number,
+        channel: "whatsapp",
+        processId: proc.id,
+        processName: proc.name,
+        stageId: stg.id,
+        stageName: stg.name,
+      });
+    });
+  }, [selectedInboundNumbers, selectedProcess, expandedStage, viewMode, stageType, processes]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [smartAnalysisTrackWhat, setSmartAnalysisTrackWhat] = useState("");
@@ -2012,7 +2063,10 @@ export default function Process() {
           title="Process Settings"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
           actions={
-            <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+            <>
+              <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
+              <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
+            </>
           }
         />
 
@@ -5437,7 +5491,22 @@ export default function Process() {
                           setIsCreatingNewStep(false);
                         }}
                         onSave={() => {
+                          const pendingIntent = intentInput.trim();
+                          const finalIntentConditions = pendingIntent
+                            ? [...intentConditions, { id: `intent-${Date.now()}`, value: pendingIntent }]
+                            : intentConditions;
+
+                          if (pendingIntent) {
+                            setIntentConditions(finalIntentConditions);
+                            setIntentInput("");
+                          }
+
                           if (currentEditingStep) {
+                            const capturedParams = captureStepParams(currentEditingStep.stepKey);
+                            capturedParams.intentConditions = finalIntentConditions;
+
+                            console.log("[DEBUG] Saving step with conditionsEnabled:", capturedParams.conditionsEnabled, "intentConditions:", finalIntentConditions);
+
                             const stepToSave: WorkflowStep = {
                               ...currentEditingStep,
                               trigger: stepTrigger,
@@ -5445,7 +5514,7 @@ export default function Process() {
                               delayValue: stepTrigger !== "incall" ? delayValue : undefined,
                               delayUnit: stepTrigger !== "incall" ? delayUnit : undefined,
                               connectAfterId: stepTrigger !== "incall" && executionType === "wait" ? connectAfterId : undefined,
-                              params: captureStepParams(currentEditingStep.stepKey),
+                              params: capturedParams,
                             };
                             if (isCreatingNewStep) {
                               if (branchAddTarget === "true") {
@@ -5476,7 +5545,41 @@ export default function Process() {
                           setExpandedStage(null);
                           setViewMode("process");
                         }}>Cancel</Button>
-                        <Button variant="primary" onClick={() => toast.success("Stage configuration saved")}>
+                        <Button
+                          variant="primary"
+                          onClick={() => {
+                            if (!selectedProcess || !expandedStage) return;
+                            setProcesses((prev) =>
+                              prev.map((p) =>
+                                p.id !== selectedProcess
+                                  ? p
+                                  : {
+                                      ...p,
+                                      stages: p.stages.map((s) =>
+                                        s.id !== expandedStage
+                                          ? s
+                                          : {
+                                              ...s,
+                                              stageType,
+                                              selectedInboundNumbers,
+                                              selectedStageChannels,
+                                              responsiblePerson,
+                                              whenToMove,
+                                              callerPitchMode,
+                                              callerPitch,
+                                              greetingIntroMessage,
+                                              objectiveText,
+                                              businessInfoItems,
+                                              primaryLanguage,
+                                              secondaryLanguages,
+                                            }
+                                      ),
+                                    }
+                              )
+                            );
+                            toast.success("Stage configuration saved");
+                          }}
+                        >
                           Save Changes
                         </Button>
                       </div>
@@ -7093,6 +7196,13 @@ export default function Process() {
             </div>
           </div>
         )}
+
+        <TestProcessChatDrawer
+          isOpen={showTestProcessDrawer}
+          onClose={() => setShowTestProcessDrawer(false)}
+          processes={processes}
+          getWorkflowStepsForStage={(processId, stageId) => getStoreWorkflowSteps(processId, stageId)}
+        />
 
       </div>
     </div>
