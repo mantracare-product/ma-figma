@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
-  MessageSquare, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
+  MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
@@ -19,8 +19,62 @@ import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
 import { useFieldRegistry, FieldDefinition, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
+import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
+import { getActivityForClient } from "../../lib/activityLog";
+import { getStoredCallLogs } from "../../lib/processLogsStore";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
+
+const CHRONO_RANK: Record<string, number> = {
+  process_entry: 0,
+  whatsapp: 1,
+  sms: 1,
+  email: 1,
+  webhook_trigger: 1,
+  field_update: 1,
+  appointment_booked: 1,
+  call: 2,
+  outbound_call: 2,
+  inbound_call: 2,
+  failed_call: 2,
+  stage_update: 3,
+  stage_change: 3,
+  process_completed: 4,
+};
+
+const ACTIVITY_ICON_BG: Record<string, string> = {
+  process_entry: "#EFF6FF",
+  call: "#DBEAFE",
+  whatsapp: "#DCFCE7",
+  sms: "#E0E7FF",
+  email: "#FEF3C7",
+  stage_update: "#F3E8FF",
+  stage_change: "#F3E8FF",
+  webhook_trigger: "#FFE4E6",
+  appointment_booked: "#CFFAFE",
+  field_update: "#F1F5F9",
+  process_completed: "#DCFCE7",
+  outbound_call: "#DBEAFE",
+  inbound_call: "#DBEAFE",
+  failed_call: "#FEE2E2",
+};
+
+const HEADING_BY_TYPE: Record<string, string> = {
+  process_entry: "Process Entered",
+  stage_update: "Stage Updated",
+  stage_change: "Stage Changed",
+  call: "Outbound Call Triggered",
+  outbound_call: "Outbound Call Completed",
+  inbound_call: "Inbound Call Received",
+  failed_call: "Outbound Call Failed",
+  whatsapp: "WhatsApp Message Triggered",
+  sms: "SMS Triggered",
+  email: "Email Triggered",
+  webhook_trigger: "Webhook Triggered",
+  field_update: "Field Updated",
+  appointment_booked: "Appointment Booked",
+  process_completed: "Process Completed",
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -262,6 +316,22 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     sessionStorage.setItem("clients", JSON.stringify(clients));
   }, [clients]);
 
+  // Live-sync: pick up clients written by TestProcessChatDrawer or other tabs
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const saved = sessionStorage.getItem("clients");
+        if (saved) setClients(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener(CLIENTS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(CLIENTS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
   // Custom field definitions from shared context (same ones Settings.tsx manages)
   const { getAllFields, addCustomField } = useFieldRegistry();
 
@@ -444,13 +514,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // ─── Derived data (verbatim from Clients.tsx) ─────────────────────────────
 
   const drawerClientProcesses = (() => {
+    const storedCallLogs = getStoredCallLogs().filter(
+      (l) => l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()
+    );
+    const realStages: ClientProcessStage[] = (client as any).processStages ?? [];
     const headings = new Set<string>();
+
+    storedCallLogs.forEach((l) => headings.add(l.process));
     client.processes.forEach((processName) => {
       const parts = processName.split(":");
       if (parts.length >= 1) headings.add(parts[0].trim());
     });
 
     const clientDeals = initialDeals.filter((d) => d.clientName === client.name);
+    const emailDomain = client.email ? client.email.split("@")[1] || "—" : "—";
 
     return Array.from(headings).map((heading, idx): {
       id: string;
@@ -463,43 +540,71 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       dealType: string;
       source: string;
     } => {
+      const matchingStoredLog = storedCallLogs.find(
+        (l) => l.process === heading || l.process.toLowerCase() === heading.toLowerCase()
+      );
+      const matchingRealStage = realStages.find(
+        (s) => s.processName === heading || s.processName.toLowerCase() === heading.toLowerCase()
+      );
       const matchingDeal = clientDeals.find((d) => getProcessFromDealStage(d.stage) === heading);
 
-      // Derive email-domain source from client object
-      const emailDomain = client.email ? client.email.split("@")[1] || "—" : "—";
+      if (matchingStoredLog) {
+        let statusVal: "Completed" | "In Progress" | "Pending" | "On Hold" = "In Progress";
+        if (matchingStoredLog.status === "Completed") statusVal = "Completed";
+        else if (matchingStoredLog.status === "Failed") statusVal = "On Hold";
+        else if (matchingStoredLog.status === "Pending") statusVal = "Pending";
+
+        return {
+          id: matchingStoredLog.id,
+          name: heading,
+          currentStage: matchingStoredLog.currentStage,
+          lastActivity: matchingStoredLog.date ? `Last contact - ${matchingStoredLog.date.split(" ")[0]}` : "—",
+          status: statusVal,
+          created: matchingStoredLog.date || "—",
+          responsible: (client as any).responsible || "Unassigned",
+          dealType: "Organic",
+          source: (client as any).source ?? emailDomain,
+        };
+      }
+
+      if (matchingRealStage) {
+        return {
+          id: matchingDeal?.id ?? `process-${idx + 1}`,
+          name: heading,
+          currentStage: matchingRealStage.stageName,
+          lastActivity: "—",
+          status: "In Progress" as const,
+          created: matchingDeal?.createdDate ? matchingDeal.createdDate + " 00:00" : "—",
+          responsible: matchingDeal?.responsible ?? (client as any).responsible ?? "Unassigned",
+          dealType: "Organic",
+          source: (client as any).source ?? emailDomain,
+        };
+      }
 
       if (matchingDeal) {
         const parts = matchingDeal.stage.split(":");
         const stageLabel = parts.length > 1 ? parts[1].trim() : parts[0].trim();
-
         let statusVal: "Completed" | "In Progress" | "Pending" | "On Hold" = "In Progress";
         if (matchingDeal.status === "Won") statusVal = "Completed";
         else if (matchingDeal.status === "Lost") statusVal = "On Hold";
-
         return {
-          id: matchingDeal.id,
-          name: heading,
-          currentStage: stageLabel,
-          lastActivity: "Apr 10, 2024",
-          status: statusVal,
-          created: matchingDeal.createdDate + " 00:00",
-          responsible: matchingDeal.responsible,
-          dealType: "Organic",
-          source: emailDomain,
-        };
-      } else {
-        return {
-          id: `process-${idx + 1}`,
-          name: heading,
-          currentStage: idx === 0 ? "Insurance Verification" : "Billing Inquiry",
-          lastActivity: "Apr 10, 2024",
-          status: "In Progress" as "Completed" | "In Progress" | "Pending" | "On Hold",
-          created: idx === 0 ? "2024-03-15 09:30" : "2024-04-01 14:20",
-          responsible: idx === 0 ? "John Smith" : "Emily Davis",
-          dealType: "Organic",
-          source: emailDomain,
+          id: matchingDeal.id, name: heading, currentStage: stageLabel, lastActivity: "Apr 10, 2024",
+          status: statusVal, created: matchingDeal.createdDate + " 00:00", responsible: matchingDeal.responsible,
+          dealType: "Organic", source: emailDomain,
         };
       }
+
+      return {
+        id: `process-${idx + 1}`,
+        name: heading,
+        currentStage: (client as any).stage || "Initial Contact",
+        lastActivity: "—",
+        status: "Pending" as const,
+        created: "—",
+        responsible: (client as any).responsible ?? "Unassigned",
+        dealType: "Organic",
+        source: (client as any).source ?? emailDomain,
+      };
     });
   })();
 
@@ -508,7 +613,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       const process = drawerClientProcesses.find((p) => p.name === heading);
       return process?.id || "process-1";
     };
-    return [
+    const mockItems = [
       {
         id: "act-1",
         processId: findProcessId("Patient Intake"),
@@ -572,6 +677,39 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         callId: "call-006",
       },
     ];
+
+    // Use real activity log when available; fall back to mock for demo clients
+    const realActivity = getActivityForClient(client.id).map((r) => ({
+      id: r.id,
+      processId: drawerClientProcesses.find((p) => p.name === r.processName)?.id ?? "process-1",
+      processName: r.processName,
+      type: r.type,
+      rawType: r.type,
+      refId: r.refId,
+      rawTimestamp: r.timestamp,
+      fullTimestamp: new Date(r.timestamp).toLocaleString(),
+      date: new Date(r.timestamp).toLocaleDateString(),
+      time: new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      title: r.details.primary,
+      description: r.details.secondary,
+      sourceStepName: r.details.secondary,
+      status: r.status === "success" ? "Completed" : r.status,
+    }));
+
+    const rawList = realActivity.length > 0 ? realActivity : mockItems;
+
+    const toChronologicalOrder = (entries: typeof rawList) =>
+      [...entries].sort((a, b) => {
+        const timeA = (a as any).rawTimestamp ? new Date((a as any).rawTimestamp).getTime() : new Date(a.date).getTime();
+        const timeB = (b as any).rawTimestamp ? new Date((b as any).rawTimestamp).getTime() : new Date(b.date).getTime();
+        const diff = timeA - timeB;
+        if (diff !== 0) return diff;
+        const rankA = CHRONO_RANK[(a as any).rawType] ?? CHRONO_RANK[a.type] ?? 1;
+        const rankB = CHRONO_RANK[(b as any).rawType] ?? CHRONO_RANK[b.type] ?? 1;
+        return rankA - rankB;
+      });
+
+    return [...toChronologicalOrder(rawList)].reverse();
   })();
 
   const getDrawerActivityCount = (processId: string) => {
@@ -661,10 +799,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const getDrawerActivityIcon = (type: string) => {
     switch (type) {
-      case "outbound_call": return <PhoneOutgoing className="w-5 h-5" />;
-      case "inbound_call": return <PhoneIncoming className="w-5 h-5" />;
-      case "failed_call": return <PhoneOff className="w-5 h-5" />;
-      case "stage_change": return <Settings className="w-5 h-5" />;
+      case "whatsapp": return <MessageCircle className="w-5 h-5 text-emerald-600" />;
+      case "sms": return <MessageSquare className="w-5 h-5 text-indigo-600" />;
+      case "email": return <Mail className="w-5 h-5 text-amber-600" />;
+      case "process_entry": return <LogIn className="w-5 h-5 text-blue-600" />;
+      case "stage_update":
+      case "stage_change": return <ArrowRightCircle className="w-5 h-5 text-purple-600" />;
+      case "outbound_call":
+      case "call": return <PhoneOutgoing className="w-5 h-5 text-blue-600" />;
+      case "inbound_call": return <PhoneIncoming className="w-5 h-5 text-blue-600" />;
+      case "failed_call": return <PhoneOff className="w-5 h-5 text-red-600" />;
       case "call_scheduled": return <CalendarClock className="w-5 h-5" />;
       default: return <Clock className="w-5 h-5" />;
     }
@@ -672,13 +816,23 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const getDrawerActivityColor = (type: string) => {
     switch (type) {
+      case "whatsapp":
+        return "text-emerald-700 bg-emerald-50 border border-emerald-200";
+      case "sms":
+        return "text-indigo-700 bg-indigo-50 border border-indigo-200";
+      case "email":
+        return "text-amber-700 bg-amber-50 border border-amber-200";
+      case "process_entry":
+        return "text-blue-700 bg-blue-50 border border-blue-200";
+      case "stage_update":
+      case "stage_change":
+        return "text-purple-700 bg-purple-50 border border-purple-200";
       case "outbound_call":
       case "inbound_call":
-        return "text-secondary bg-secondary/10";
+      case "call":
+        return "text-blue-700 bg-blue-50 border border-blue-200";
       case "failed_call":
-        return "text-destructive bg-destructive/10";
-      case "stage_change":
-        return "text-primary bg-primary/10";
+        return "text-destructive bg-destructive/10 border border-red-200";
       case "call_scheduled":
         return "text-warning bg-warning/10";
       default:
@@ -1506,71 +1660,141 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 ))}
               </div>
 
-              {/* Activity List */}
-              <div className="space-y-3">
+              {/* Activity List — Vertical Timeline matching ProcessDetailDrawer */}
+              <div className="relative p-2">
                 {filteredDrawerActivities.length === 0 ? (
                   <div className="text-center py-8">
                     <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>No activity for this process yet</p>
                   </div>
                 ) : (
-                  filteredDrawerActivities.map((item) => (
-                    <div
-                      key={item.id}
-                      className="p-4 border border-border rounded-xl hover:bg-muted/30 transition-all cursor-pointer"
-                      onClick={() => {
-                        if ((item as any).callId) {
-                          setSelectedCallId((item as any).callId);
-                          setShowCallDetailsFromProfile(true);
-                        }
-                      }}
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${getDrawerActivityColor(item.type)}`}>
-                          {getDrawerActivityIcon(item.type)}
+                  filteredDrawerActivities.map((item, i) => {
+                    const isLast = i === filteredDrawerActivities.length - 1;
+                    const rawType = (item as any).rawType || item.type;
+                    const heading = HEADING_BY_TYPE[rawType] || HEADING_BY_TYPE[item.type] || item.title;
+                    const timestampStr = (item as any).fullTimestamp || `${item.date}, ${item.time}`;
+
+                    return (
+                      <div key={item.id} className="relative flex gap-3 pb-4 last:pb-0">
+                        {/* Amazon-tracker connecting line — runs behind the node */}
+                        {!isLast && (
+                          <div
+                            className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0"
+                            style={{
+                              backgroundColor: item.status === "Pending" ? "transparent" : "#1E88E5",
+                              backgroundImage: item.status === "Pending"
+                                ? "repeating-linear-gradient(to bottom, #CBD5E1 0 4px, transparent 4px 8px)"
+                                : undefined,
+                            }}
+                          />
+                        )}
+
+                        {/* Node icon — sits on the line */}
+                        <div
+                          className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2"
+                          style={{
+                            backgroundColor: item.status === "Failed" ? "#FEE2E2" : ACTIVITY_ICON_BG[rawType] || ACTIVITY_ICON_BG[item.type] || "#F1F5F9",
+                            borderColor: item.status === "Failed" ? "#DC2626" : item.status === "Pending" ? "#CBD5E1" : "transparent",
+                          }}
+                        >
+                          {getDrawerActivityIcon(rawType || item.type)}
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm" style={{ fontFamily: "DM Sans, sans-serif" }}>{item.title}</p>
-                              {(item as any).description && (
-                                <p className="text-xs mt-0.5" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{(item as any).description}</p>
-                              )}
-                            </div>
-                            <div className="flex-shrink-0 text-right">
-                              <p className="text-xs whitespace-nowrap" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{item.date}</p>
-                              <p className="text-xs whitespace-nowrap" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>{item.time}</p>
-                            </div>
+
+                        {/* Standalone card — heading + details */}
+                        <button
+                          onClick={() => {
+                            if (rawType === "whatsapp" || item.type === "whatsapp") {
+                              navigate("/chats", {
+                                state: {
+                                  clientId: client.id,
+                                  channel: "whatsapp",
+                                  threadId: (item as any).refId,
+                                },
+                              });
+                            } else if (rawType === "sms" || item.type === "sms") {
+                              navigate("/chats", {
+                                state: {
+                                  clientId: client.id,
+                                  channel: "sms",
+                                  threadId: (item as any).refId,
+                                },
+                              });
+                            } else if (rawType === "email" || item.type === "email") {
+                              navigate("/chats", {
+                                state: {
+                                  clientId: client.id,
+                                  channel: "email",
+                                  emailId: (item as any).refId,
+                                },
+                              });
+                            } else if ((item as any).callId) {
+                              setSelectedCallId((item as any).callId);
+                              setShowCallDetailsFromProfile(true);
+                            }
+                          }}
+                          className="flex-1 text-left p-3 rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className="text-sm font-bold text-gray-900"
+                              style={{ fontFamily: "DM Sans, sans-serif" }}
+                            >
+                              {heading}
+                            </span>
+                            <span
+                              className="text-xs text-gray-400 whitespace-nowrap"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {timestampStr}
+                            </span>
                           </div>
-                          <div className="flex flex-wrap items-center gap-3 mt-2">
-                            {activeProcessTabDrawer === "all" && (
-                              <span className="text-xs" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
+
+                          <div className="mt-1.5 space-y-0.5">
+                            <p
+                              className="text-xs text-gray-700 font-medium"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              {item.title}
+                            </p>
+                            {(item as any).description && (
+                              <p
+                                className="text-xs text-gray-500"
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                {(item as any).description}
+                              </p>
+                            )}
+                            {(item as any).sourceStepName && (
+                              <p className="text-[11px] text-gray-400">via {(item as any).sourceStepName}</p>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                            {activeProcessTabDrawer === "all" && item.processName && (
+                              <span className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
                                 Process: <span className="font-medium text-primary">{item.processName}</span>
                               </span>
                             )}
-                            {(item as any).duration && (
-                              <span className="text-xs" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                                Duration: <span className="font-medium">{(item as any).duration}</span>
+                            {item.status && item.status !== "Completed" && item.status !== "success" && (
+                              <span
+                                className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
+                                style={{
+                                  backgroundColor: item.status === "Failed" ? "#FEE2E2" : "#FEF3C7",
+                                  color: item.status === "Failed" ? "#DC2626" : "#CA8A04",
+                                }}
+                              >
+                                {item.status}
                               </span>
                             )}
-                            {(item as any).status && (
-                              <span
-                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  (item as any).status === "Completed"
-                                    ? "bg-success/10 text-success"
-                                    : (item as any).status === "Failed"
-                                    ? "bg-destructive/10 text-destructive"
-                                    : "bg-muted"
-                                }`}
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {(item as any).status}
+                            {item.status === "Completed" && (
+                              <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                Completed
                               </span>
                             )}
                           </div>
-                        </div>
+                        </button>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 

@@ -1,8 +1,15 @@
+export const CLIENTS_STORE_EVENT = "clientsStore_updated";
+
+function notifyClientsChanged() {
+  window.dispatchEvent(new Event(CLIENTS_STORE_EVENT));
+}
+
 export interface ClientProcessStage {
   processId: string;
   processName: string;
   stageId: string;
   stageName: string;
+  channel?: "whatsapp" | "sms"; // source of this enrollment
 }
 
 // Reads/writes an additive field on the existing client record stored under
@@ -30,6 +37,7 @@ export function setClientProcessStage(clientId: string, entry: ClientProcessStag
       return { ...c, processStages: [...withoutThisProcess, entry] };
     });
     sessionStorage.setItem("clients", JSON.stringify(updated));
+    notifyClientsChanged();
   } catch {}
 }
 
@@ -62,12 +70,14 @@ export function createClientWithProcessStage(
       countryFlag: "🇺🇸",
       processes: [entry.processName],
       stage: entry.stageName,
+      source: entry.channel ?? "unknown",
       responsible: "",
       lastContact: new Date().toISOString().split("T")[0],
       status: "Active",
       processStages: [entry],
     };
     sessionStorage.setItem("clients", JSON.stringify([newClient, ...clients]));
+    notifyClientsChanged();
     return newClient;
   } catch {
     return null;

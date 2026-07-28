@@ -15,6 +15,7 @@ interface SyncMessageInput {
 }
 
 interface SyncParams {
+  clientId?: string;
   contactName: string;
   phoneNumber: string;
   inboxNumber: string;
@@ -38,7 +39,7 @@ function writeConversations(convs: any[]) {
 
 // Finds or creates a conversation for this phone number, appends the given
 // messages, and updates lastMessage/timestamp/unreadCount — same shape Chats.tsx expects.
-export function syncTestMessagesToInbox({ contactName, phoneNumber, inboxNumber, channel, messages }: SyncParams) {
+export function syncTestMessagesToInbox({ clientId, contactName, phoneNumber, inboxNumber, channel, messages }: SyncParams) {
   const convs = readConversations();
   let idx = convs.findIndex((c) => c.phoneNumber === phoneNumber && c.channel === channel);
 
@@ -57,6 +58,7 @@ export function syncTestMessagesToInbox({ contactName, phoneNumber, inboxNumber,
   if (idx === -1) {
     convs.push({
       id: `conv-test-${Date.now()}`,
+      clientId,
       contactName,
       phoneNumber,
       inboxNumber,
@@ -73,6 +75,7 @@ export function syncTestMessagesToInbox({ contactName, phoneNumber, inboxNumber,
     const existing = convs[idx];
     convs[idx] = {
       ...existing,
+      ...(clientId ? { clientId } : {}),
       lastMessage: newMsgObjs[newMsgObjs.length - 1]?.text ?? existing.lastMessage,
       timestamp: "Just now",
       unreadCount: existing.unreadCount + newMsgObjs.filter((m) => m.sender === "contact").length,

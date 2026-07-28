@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
 
 export const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
@@ -312,13 +313,13 @@ export default function ProcessDetailDrawer({
       let val = "";
       if (editedValues[f.key] !== undefined) {
         val = editedValues[f.key];
-      } else if ((log as any)[f.key] !== undefined) {
+      } else if ((log as any)[f.key] !== undefined && (log as any)[f.key] !== null && (log as any)[f.key] !== "") {
         val = (log as any)[f.key];
       } else {
         if (f.key === "client_name") val = log.client;
         else if (f.key === "responsible") val = client?.responsible || "Unassigned";
         else if (f.key === "deal_type") val = "Organic";
-        else if (f.key === "source") val = client?.email?.split("@")[1] || "—";
+        else if (f.key === "source") val = (client as any)?.source || (client?.email ? client.email.split("@")[1] || "—" : "whatsapp");
         else if (f.key === "start_date")
           val = log.date
             ? new Date(log.date).toLocaleDateString("en-US", {
@@ -333,7 +334,7 @@ export default function ProcessDetailDrawer({
         else if (f.key === "country") val = client?.country || "—";
         else if (f.key === "time_slot") val = "8AM – 8PM";
         else if (f.key === "comment") val = "";
-        else if (f.key === "status") val = log.status || "—";
+        else if (f.key === "status" || f.key === "stage") val = log.currentStage || log.status || "—";
         else if (f.key === "process") val = log.process || "—";
         else val = "—";
       }
@@ -391,12 +392,19 @@ export default function ProcessDetailDrawer({
           {/* Header */}
           <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100">
             <div className="flex items-center justify-between">
-              <h2
-                className="text-lg font-bold"
-                style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
-              >
-                {log.client}
-              </h2>
+              <div>
+                <h2
+                  className="text-lg font-bold"
+                  style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
+                >
+                  {log.client}
+                </h2>
+                <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  <span>Process: <strong className="text-gray-700">{log.process}</strong></span>
+                  <span>•</span>
+                  <span>Stage: <strong className="text-gray-700">{log.currentStage}</strong></span>
+                </div>
+              </div>
               <button
                 onClick={onClose}
                 className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
@@ -408,36 +416,48 @@ export default function ProcessDetailDrawer({
 
           {/* Stage Pipeline - Rectangular Chips */}
           <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: "#F5F7FA" }}>
-            <div className="flex items-center gap-0">
-              {dealStageLabels.map((label, i) => {
-                const idx = i + 1;
-                const isCompleted = idx < stageIdx;
-                const isActive = idx === stageIdx;
-                const isFirst = i === 0;
-                const isLast = i === dealStageLabels.length - 1;
-
-                return (
-                  <button
-                    key={label}
-                    onClick={() => onStageChange(idx)}
-                    className="flex-1 flex items-center justify-center transition-all hover:opacity-90"
-                    style={{
-                      height: "40px",
-                      backgroundColor: isCompleted || isActive ? "#1E88E5" : "transparent",
-                      color: isCompleted || isActive ? "#FFFFFF" : "#9E9E9E",
-                      fontSize: "13px",
-                      fontWeight: isActive ? 600 : 500,
-                      fontFamily: "Outfit, sans-serif",
-                      borderRadius: isFirst ? "8px 0 0 8px" : isLast ? "0 8px 8px 0" : "0",
-                      border: isCompleted || isActive ? "none" : "1px solid #E8ECF0",
-                      cursor: "pointer",
-                    }}
-                  >
-                    {isCompleted && "✓ "}
-                    {label}
-                  </button>
+            <div className="flex items-center gap-0 overflow-x-auto">
+              {(() => {
+                const storedProcesses = getStoredProcesses();
+                const matchedProc = storedProcesses.find(
+                  (p) => p.name === log.process || p.name.toLowerCase() === log.process.toLowerCase()
                 );
-              })}
+                const activeStageList = matchedProc ? matchedProc.stages.map((s) => s.name) : dealStageLabels;
+                const matchedIdx = activeStageList.findIndex(
+                  (s) => s.toLowerCase() === log.currentStage.toLowerCase()
+                );
+                const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
+
+                return activeStageList.map((label, i) => {
+                  const idx = i + 1;
+                  const isCompleted = idx < effectiveStageIdx;
+                  const isActive = idx === effectiveStageIdx;
+                  const isFirst = i === 0;
+                  const isLast = i === activeStageList.length - 1;
+
+                  return (
+                    <button
+                      key={label}
+                      onClick={() => onStageChange(idx)}
+                      className="flex-1 min-w-[100px] flex items-center justify-center px-2 text-center transition-all hover:opacity-90"
+                      style={{
+                        height: "40px",
+                        backgroundColor: isCompleted || isActive ? "#1E88E5" : "transparent",
+                        color: isCompleted || isActive ? "#FFFFFF" : "#9E9E9E",
+                        fontSize: "12px",
+                        fontWeight: isActive ? 600 : 500,
+                        fontFamily: "Outfit, sans-serif",
+                        borderRadius: isFirst ? "8px 0 0 8px" : isLast ? "0 8px 8px 0" : "0",
+                        border: isCompleted || isActive ? "none" : "1px solid #E8ECF0",
+                        cursor: "pointer",
+                      }}
+                    >
+                      {isCompleted && "✓ "}
+                      {label}
+                    </button>
+                  );
+                });
+              })()}
             </div>
           </div>
 

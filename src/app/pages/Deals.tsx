@@ -22,6 +22,8 @@ import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ProcessDetailDrawer, { ActivityLogEntry } from "../components/deals/ProcessDetailDrawer";
+import { getActivityForProcess } from "../../lib/activityLog";
+import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
 
 interface CallLog {
   id: string;
@@ -296,12 +298,30 @@ export default function Deals() {
   const entityType = "deals";
   const entityLabel = "deals";
   // Ensure all call logs have process field
-  const [callLogs, setCallLogs] = useState<CallLog[]>(
-    initialCallLogs.map(log => ({
+  const [callLogs, setCallLogs] = useState<CallLog[]>(() => {
+    return getStoredCallLogs().map(log => ({
       ...log,
       process: log.process || getProcessFromStage(log.currentStage)
-    }))
-  );
+    }));
+  });
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const stored = getStoredCallLogs();
+        setCallLogs(stored.map(log => ({
+          ...log,
+          process: log.process || getProcessFromStage(log.currentStage)
+        })));
+      } catch {}
+    };
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
@@ -4035,104 +4055,125 @@ export default function Deals() {
         isOpen={showViewDrawer && selectedLogForView !== null}
         onClose={() => setShowViewDrawer(false)}
         log={selectedLogForView}
-        client={selectedLogForView ? mockClients[selectedLogForView.clientId] : undefined}
+        client={selectedLogForView ? (mockClients[selectedLogForView.clientId] || (() => {
+          try {
+            const raw = sessionStorage.getItem("clients");
+            const clients = raw ? JSON.parse(raw) : [];
+            return clients.find((c: any) => c.id === selectedLogForView.clientId || c.name === selectedLogForView.client);
+          } catch { return undefined; }
+        })()) : undefined}
         activeTab={viewDrawerTab}
         onTabChange={(tab) => setViewDrawerTab(tab)}
-        activity={
-          selectedLogForView
-            ? [
-                {
-                  id: `act-entry-${selectedLogForView.id}`,
-                  type: "process_entry",
-                  timestamp: "2024-04-08 09:00",
-                  status: "success",
-                  sourceStepName: "Process Intake",
-                  refId: selectedLogForView.id,
-                  details: {
-                    primary: `Enrolled in "${selectedLogForView.process}"`,
-                    secondary: "Initial Stage: New",
-                  },
-                },
-                {
-                  id: `act-wa-${selectedLogForView.id}`,
-                  type: "whatsapp",
-                  timestamp: "2024-04-09 10:00",
-                  status: "success",
-                  sourceStepName: "Onboarding Flow",
-                  refId: `chat-${selectedLogForView.clientId}`,
-                  details: {
-                    primary: "Template: appointment_reminder",
-                    secondary: mockClients[selectedLogForView.clientId]?.phone
-                      ? `Sent to ${mockClients[selectedLogForView.clientId].phone}`
-                      : undefined,
-                  },
-                },
-                {
-                  id: `act-call-${selectedLogForView.id}`,
-                  type: "call",
-                  direction: selectedLogForView.type?.toLowerCase().includes("inbound") ? "inbound" : "outbound",
-                  timestamp: "2024-04-10 11:30",
-                  status: selectedLogForView.status === "Completed" ? "success" : selectedLogForView.status === "Failed" ? "failed" : "pending",
-                  sourceStepName: selectedLogForView.relationshipReason || "Outbound Call Step",
-                  refId: selectedLogForView.id,
-                  details: {
-                    primary: selectedLogForView.duration ? `Duration ${selectedLogForView.duration}` : "Call scheduled",
-                    secondary: `Status: ${selectedLogForView.status}`,
-                  },
-                },
-                {
-                  id: `act-stage-1-${selectedLogForView.id}`,
-                  type: "stage_update",
-                  timestamp: "2024-04-11 14:00",
-                  status: "success",
-                  sourceStepName: "Pipeline Automation",
-                  refId: selectedLogForView.id,
-                  details: {
-                    primary: `Moved to ${selectedLogForView.currentStage}`,
-                    secondary: `Process: ${selectedLogForView.process}`,
-                  },
-                },
-                {
-                  id: `act-email-${selectedLogForView.id}`,
-                  type: "email",
-                  timestamp: "2024-04-12 09:30",
-                  status: "success",
-                  sourceStepName: "Welcome Email Campaign",
-                  refId: `msg-${selectedLogForView.id}`,
-                  details: {
-                    primary: "Template: welcome_onboarding",
-                    secondary: mockClients[selectedLogForView.clientId]?.email
-                      ? `Sent to ${mockClients[selectedLogForView.clientId].email}`
-                      : "Sent to client email",
-                  },
-                },
-                {
-                  id: `act-apt-${selectedLogForView.id}`,
-                  type: "appointment_booked",
-                  timestamp: "2024-04-12 15:00",
-                  status: "success",
-                  sourceStepName: "Schedule Appointment Step",
-                  refId: `apt-${selectedLogForView.id}`,
-                  details: {
-                    primary: "Slot: 10:00 AM – 10:30 AM",
-                    secondary: "Location: Main Clinic",
-                  },
-                },
-                {
-                  id: `act-completed-${selectedLogForView.id}`,
-                  type: "process_completed",
-                  timestamp: selectedLogForView.date,
-                  status: "success",
-                  sourceStepName: "Deal Closed",
-                  refId: selectedLogForView.id,
-                  details: {
-                    primary: `Final Stage: ${selectedLogForView.currentStage}`,
-                    secondary: `Process: ${selectedLogForView.process}`,
-                  },
-                },
-              ]
-            : []
-        }
+        activity={(() => {
+          if (!selectedLogForView) return [];
+          const clientObj = mockClients[selectedLogForView.clientId] || (() => {
+            try {
+              const raw = sessionStorage.getItem("clients");
+              const clients = raw ? JSON.parse(raw) : [];
+              return clients.find((c: any) => c.id === selectedLogForView.clientId || c.name === selectedLogForView.client);
+            } catch { return undefined; }
+          })();
+          const realEntries = getActivityForProcess(selectedLogForView.clientId, selectedLogForView.process)
+            .map((r) => ({
+              id: r.id,
+              type: r.type,
+              timestamp: new Date(r.timestamp).toLocaleString(),
+              status: r.status,
+              refId: r.refId,
+              direction: r.direction,
+              sourceStepName: r.details.secondary,
+              details: r.details,
+            }));
+          if (realEntries.length > 0) return realEntries;
+          // Fallback mock entries for demo clients that have no real activity yet
+          return [
+            {
+              id: `act-entry-${selectedLogForView.id}`,
+              type: "process_entry",
+              timestamp: "2024-04-08 09:00",
+              status: "success",
+              sourceStepName: "Process Intake",
+              refId: selectedLogForView.id,
+              details: {
+                primary: `Enrolled in "${selectedLogForView.process}"`,
+                secondary: "Initial Stage: New",
+              },
+            },
+            {
+              id: `act-wa-${selectedLogForView.id}`,
+              type: "whatsapp",
+              timestamp: "2024-04-09 10:00",
+              status: "success",
+              sourceStepName: "Onboarding Flow",
+              refId: `chat-${selectedLogForView.clientId}`,
+              details: {
+                primary: "Template: appointment_reminder",
+                secondary: clientObj?.phone ? `Sent to ${clientObj.phone}` : undefined,
+              },
+            },
+            {
+              id: `act-call-${selectedLogForView.id}`,
+              type: "call",
+              direction: selectedLogForView.type?.toLowerCase().includes("inbound") ? "inbound" : "outbound",
+              timestamp: "2024-04-10 11:30",
+              status: selectedLogForView.status === "Completed" ? "success" : selectedLogForView.status === "Failed" ? "failed" : "pending",
+              sourceStepName: selectedLogForView.relationshipReason || "Outbound Call Step",
+              refId: selectedLogForView.id,
+              details: {
+                primary: selectedLogForView.duration ? `Duration ${selectedLogForView.duration}` : "Call scheduled",
+                secondary: `Status: ${selectedLogForView.status}`,
+              },
+            },
+            {
+              id: `act-stage-1-${selectedLogForView.id}`,
+              type: "stage_update",
+              timestamp: "2024-04-11 14:00",
+              status: "success",
+              sourceStepName: "Pipeline Automation",
+              refId: selectedLogForView.id,
+              details: {
+                primary: `Moved to ${selectedLogForView.currentStage}`,
+                secondary: `Process: ${selectedLogForView.process}`,
+              },
+            },
+            {
+              id: `act-email-${selectedLogForView.id}`,
+              type: "email",
+              timestamp: "2024-04-12 09:30",
+              status: "success",
+              sourceStepName: "Welcome Email Campaign",
+              refId: `msg-${selectedLogForView.id}`,
+              details: {
+                primary: "Template: welcome_onboarding",
+                secondary: clientObj?.email ? `Sent to ${clientObj.email}` : "Sent to client email",
+              },
+            },
+            {
+              id: `act-apt-${selectedLogForView.id}`,
+              type: "appointment_booked",
+              timestamp: "2024-04-12 15:00",
+              status: "success",
+              sourceStepName: "Schedule Appointment Step",
+              refId: `apt-${selectedLogForView.id}`,
+              details: {
+                primary: "Slot: 10:00 AM – 10:30 AM",
+                secondary: "Location: Main Clinic",
+              },
+            },
+            {
+              id: `act-completed-${selectedLogForView.id}`,
+              type: "process_completed",
+              timestamp: selectedLogForView.date,
+              status: "success",
+              sourceStepName: "Deal Closed",
+              refId: selectedLogForView.id,
+              details: {
+                primary: `Final Stage: ${selectedLogForView.currentStage}`,
+                secondary: `Process: ${selectedLogForView.process}`,
+              },
+            },
+          ];
+        })()}
         onOpenActivity={(entry) => {
           switch (entry.type) {
             case "call": {

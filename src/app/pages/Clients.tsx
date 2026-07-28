@@ -21,6 +21,7 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
 import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
 
 interface Client {
   id: string;
@@ -161,6 +162,22 @@ export default function Clients() {
   useEffect(() => {
     sessionStorage.setItem("clients", JSON.stringify(clients));
   }, [clients]);
+
+  // Live-sync: pick up clients written by TestProcessChatDrawer or other tabs
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const saved = sessionStorage.getItem("clients");
+        if (saved) setClients(JSON.parse(saved));
+      } catch {}
+    };
+    window.addEventListener(CLIENTS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(CLIENTS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
 
   const [modalProcess, setModalProcess] = useState("");
   const [modalStage, setModalStage] = useState("");

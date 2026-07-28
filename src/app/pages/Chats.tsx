@@ -866,6 +866,63 @@ export default function Chats() {
   useEffect(() => {
     setNumberFilter("all");
   }, [channelFilter]);
+
+  useEffect(() => {
+    const state = location.state as {
+      clientId?: string;
+      threadId?: string;
+      phone?: string;
+      contactName?: string;
+      channel?: string;
+    } | null;
+
+    if (state && conversations.length > 0) {
+      let matchedConv = null;
+
+      if (state.threadId) {
+        matchedConv = conversations.find((c) => c.id === state.threadId);
+      }
+
+      if (!matchedConv && state.clientId) {
+        matchedConv = conversations.find((c: any) => c.clientId === state.clientId);
+      }
+
+      if (!matchedConv && state.contactName) {
+        const targetName = state.contactName.trim().toLowerCase();
+        matchedConv = conversations.find((c) => c.contactName.trim().toLowerCase() === targetName);
+      }
+
+      if (!matchedConv && state.phone) {
+        const targetClean = state.phone.replace(/\D/g, "");
+        if (targetClean) {
+          matchedConv = conversations.find((c) => c.phoneNumber.replace(/\D/g, "") === targetClean);
+        }
+      }
+
+      if (!matchedConv && state.clientId) {
+        try {
+          const rawClients = sessionStorage.getItem("clients");
+          const clientList = rawClients ? JSON.parse(rawClients) : [];
+          const client = clientList.find((c: any) => c.id === state.clientId);
+          if (client) {
+            const cleanPhone = (client.phone || client.phoneNumber || "").replace(/\D/g, "");
+            matchedConv = conversations.find(
+              (c) =>
+                (client.name && c.contactName.toLowerCase() === client.name.toLowerCase()) ||
+                (cleanPhone && c.phoneNumber.replace(/\D/g, "") === cleanPhone)
+            );
+          }
+        } catch {}
+      }
+
+      if (matchedConv) {
+        setSelectedConversationId(matchedConv.id);
+        if (matchedConv.channel) {
+          setChannelFilter(matchedConv.channel as any);
+        }
+      }
+    }
+  }, [location.state, conversations]);
   const [campaignStatusFilter, setCampaignStatusFilter] = useState<"all" | "active" | "draft" | "completed">("all");
   const [templateCategoryFilter, setTemplateCategoryFilter] = useState<"all" | "Marketing" | "Utility" | "Authentication">("all");
   const [chatbotStatusFilter, setChatbotStatusFilter] = useState<"all" | "active" | "inactive">("all");

@@ -13,6 +13,8 @@ import { syncTestMessagesToInbox } from "../../../lib/testConversationSync";
 import { Process, Stage } from "../../pages/Process";
 import { WorkflowStep } from "../../types/workflow";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
+import { addActivityEntry } from "../../../lib/activityLog";
+import { addProcessCallLog, updateProcessCallLogStage } from "../../../lib/processLogsStore";
 
 interface TestProcessChatDrawerProps {
   isOpen: boolean;
@@ -53,6 +55,8 @@ export default function TestProcessChatDrawer({
     let contactName = resolvedContact?.name ?? "";
     let contactPhone = resolvedContact?.phone ?? "";
 
+    const isFirstSessionTurn = !clientId;
+
     if (!clientId) {
       if (selectedClientId) {
         const existing = clients.find((c) => c.id === selectedClientId);
@@ -73,6 +77,7 @@ export default function TestProcessChatDrawer({
           processName: routing.processName,
           stageId: routing.stageId,
           stageName: routing.stageName,
+          channel: source,
         });
         clientId = created?.id ?? null;
         stageCtx = {
@@ -88,6 +93,26 @@ export default function TestProcessChatDrawer({
     }
 
     if (!stageCtx) return;
+
+    if (isFirstSessionTurn && clientId) {
+      addActivityEntry({
+        clientId,
+        processId: stageCtx.processId,
+        processName: stageCtx.processName,
+        type: "process_entry",
+        refId: `entry-${Date.now()}`,
+        status: "success",
+        details: { primary: `Entered ${stageCtx.processName} via ${source}`, secondary: stageCtx.stageName },
+      });
+
+      addProcessCallLog({
+        clientId,
+        clientName: contactName,
+        processName: stageCtx.processName,
+        stageName: stageCtx.stageName,
+        channel: source,
+      });
+    }
 
     const freshProcesses = getStoredProcesses();
     const process = freshProcesses.find((p) => p.id === stageCtx!.processId);
@@ -119,8 +144,19 @@ export default function TestProcessChatDrawer({
           stageId: newStage.id,
           stageName: newStage.name,
         });
+        updateProcessCallLogStage(clientId, process.name, newStage.name);
         setActiveStage({ processId: process.id, stageId: newStage.id, stageName: newStage.name, processName: process.name });
         newTurns.push({ role: "system", text: `→ Moved to stage: ${newStage.name}` });
+
+        addActivityEntry({
+          clientId,
+          processId: process.id,
+          processName: process.name,
+          type: "stage_update",
+          refId: `stage-${Date.now()}`,
+          status: "success",
+          details: { primary: `Moved to stage: ${newStage.name}`, secondary: `via ${source}` },
+        });
       }
     }
 
@@ -128,6 +164,7 @@ export default function TestProcessChatDrawer({
     setDraft("");
 
     syncTestMessagesToInbox({
+      clientId: clientId || undefined,
       contactName,
       phoneNumber: contactPhone,
       inboxNumber: selectedNumber,
@@ -146,6 +183,19 @@ export default function TestProcessChatDrawer({
         },
       ],
     });
+
+    if (clientId && result.firedAutomation && ["whatsapp", "sms", "email"].includes(result.firedAutomation.stepKey)) {
+      addActivityEntry({
+        clientId,
+        processId: process.id,
+        processName: process.name,
+        type: result.firedAutomation.stepKey as "whatsapp" | "sms" | "email",
+        refId: `msg-${Date.now()}`,
+        status: "success",
+        direction: "outbound",
+        details: { primary: result.firedAutomation.stepName, secondary: result.text.slice(0, 80) },
+      });
+    }
   };
 
   return (
