@@ -210,7 +210,7 @@ function MetricTile({
   value: string;
   phrase: string;
   tone?: MetricTone;
-  tooltip: string;
+  tooltip?: string;
   leverPosition?: number;
 }) {
   const { bg, text } = metricToneStyles[tone];
@@ -226,9 +226,11 @@ function MetricTile({
         >
           {label}
         </p>
-        <Tooltip text={tooltip}>
-          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
-        </Tooltip>
+        {tooltip && (
+          <Tooltip text={tooltip}>
+            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+          </Tooltip>
+        )}
       </div>
       <p
         className="text-xl font-bold truncate"
@@ -516,6 +518,56 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     aiSpokePercent, longestStretch, silencePercent, warmthPercent,
     typicalResponse, slowestResponse, timesStuck,
   };
+}
+
+export function getSentimentSummary(m: CallReviewMetrics): string {
+  if (m.sentimentStart.value === "—") return "No sentiment data available for this call.";
+  const start = m.sentimentStart.value.toLowerCase();
+  const mid = m.sentimentMid.value.toLowerCase();
+  const end = m.sentimentEnd.value.toLowerCase();
+  if (start === end && mid === start) {
+    return `Maintained a steady ${start} tone throughout the call.`;
+  }
+  if (start === end) {
+    return `Started ${start}, shifted to ${mid} mid-call, and returned to ${end}.`;
+  }
+  return `Started ${start}, shifted to ${mid}, and ended ${end}.`;
+}
+
+export interface KeyDetailItem {
+  category: "Requirement" | "Objection" | "Commitment" | "Open question";
+  text: string;
+}
+
+export function getKeyDetails(call: CallLog): KeyDetailItem[] {
+  if (call.status !== "Completed") return [];
+
+  const rng = makePrng(hashStr(call.id + "_key_details"));
+  const pool: KeyDetailItem[] = [
+    { category: "Requirement", text: "Requested morning appointment slot before 10 AM" },
+    { category: "Requirement", text: "Needs itemized receipt sent via email for reimbursement" },
+    { category: "Requirement", text: "Prefers WhatsApp notifications over SMS alerts" },
+    { category: "Objection", text: "Hesitant about out-of-pocket consultation fee" },
+    { category: "Objection", text: "Uncertain about scheduling commitment for next month" },
+    { category: "Objection", text: "Disliked previous clinic waiting time" },
+    { category: "Commitment", text: "Agreed to complete pre-intake form before Friday" },
+    { category: "Commitment", text: "Confirmed availability for Tuesday follow-up call" },
+    { category: "Commitment", text: "Promised to upload medical history documents to patient portal" },
+    { category: "Open question", text: "Asked if virtual consultation option is available" },
+    { category: "Open question", text: "Inquired whether family members can attend the session" },
+    { category: "Open question", text: "Waiting to verify partner work schedule before confirming" },
+  ];
+
+  const count = Math.floor(randRange(rng, 2, 4.99));
+  const poolCopy = [...pool];
+  const selected: KeyDetailItem[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const idx = Math.floor(rng() * poolCopy.length);
+    selected.push(poolCopy.splice(idx, 1)[0]);
+  }
+
+  return selected;
 }
 
 export default function CallLogs() {
@@ -2753,85 +2805,165 @@ export default function CallLogs() {
 
               {activeDrawerTab === "call-review" && selectedCallForDetails && (() => {
                 const m = getCallReviewMetrics(selectedCallForDetails);
+                const keyDetails = getKeyDetails(selectedCallForDetails);
+                const isCompleted = selectedCallForDetails.status === "Completed";
+                const sentimentSummary = getSentimentSummary(m);
+
+                const getSentimentDotColor = (tone: MetricTone) => {
+                  if (tone === "success") return "bg-emerald-500 border-emerald-600";
+                  if (tone === "warning") return "bg-rose-500 border-rose-600";
+                  return "bg-slate-400 border-slate-500";
+                };
+
+                const getTagStyle = (category: KeyDetailItem["category"]) => {
+                  switch (category) {
+                    case "Requirement":
+                      return "bg-teal-50 text-teal-700 border-teal-200";
+                    case "Objection":
+                      return "bg-rose-50 text-rose-700 border-rose-200";
+                    case "Commitment":
+                      return "bg-purple-50 text-purple-700 border-purple-200";
+                    case "Open question":
+                      return "bg-slate-100 text-slate-700 border-slate-200";
+                  }
+                };
+
                 return (
                   <div className="space-y-5 p-6">
-                    <MetricSection label="How the call went">
-                      <MetricTile
-                        label="Did it work"
-                        value={m.didItWork.value}
-                        tone={m.didItWork.tone}
-                        phrase={m.didItWork.phrase}
-                        tooltip="Whether the call achieved the goal it was triggered for."
-                      />
-                      <MetricTile
-                        label="How happy was the client"
-                        value={m.clientHappiness.value}
-                        tone={m.clientHappiness.tone}
-                        phrase={m.clientHappiness.phrase}
-                        leverPosition={m.clientHappiness.leverPosition}
-                        tooltip="Predicted satisfaction based on sentiment and word choice throughout the call."
-                      />
-                      <MetricTile
-                        label="How long it took"
-                        value={m.howLong.value}
-                        phrase={m.howLong.phrase}
-                        tooltip="Total call length."
-                      />
-                      <MetricTile
-                        label="What happens next"
-                        value={m.whatNext.value}
-                        phrase={m.whatNext.phrase}
-                        tooltip="The follow-up action that was logged before the call ended."
-                      />
-                    </MetricSection>
+                    {/* 1. Hero Row (2 cards) */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Hero 1: Did it work */}
+                      <div
+                        className={`p-4 rounded-xl border transition-all ${
+                          m.didItWork.tone === "success"
+                            ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
+                            : m.didItWork.tone === "warning"
+                            ? "bg-amber-50/70 border-amber-200 text-amber-950"
+                            : "bg-slate-50 border-slate-200 text-slate-900"
+                        }`}
+                      >
+                        <p className="text-[12px] text-slate-500 font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Did it work
+                        </p>
+                        <p className="text-[26px] font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {m.didItWork.value}
+                        </p>
+                        <p className="text-[11px] text-slate-600 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {m.didItWork.phrase}
+                        </p>
+                      </div>
 
-                    <MetricSection label="How the client felt over time" columns={3}>
-                      <MetricTile
-                        label="Start"
-                        value={m.sentimentStart.value}
-                        tone={m.sentimentStart.tone}
-                        phrase={m.sentimentStart.phrase}
-                        leverPosition={m.sentimentStart.leverPosition}
-                        tooltip="Sentiment detected in the first third of the call."
-                      />
-                      <MetricTile
-                        label="Middle"
-                        value={m.sentimentMid.value}
-                        tone={m.sentimentMid.tone}
-                        phrase={m.sentimentMid.phrase}
-                        leverPosition={m.sentimentMid.leverPosition}
-                        tooltip="Sentiment detected in the middle third of the call."
-                      />
-                      <MetricTile
-                        label="End"
-                        value={m.sentimentEnd.value}
-                        tone={m.sentimentEnd.tone}
-                        phrase={m.sentimentEnd.phrase}
-                        leverPosition={m.sentimentEnd.leverPosition}
-                        tooltip="Sentiment detected in the final third of the call."
-                      />
-                    </MetricSection>
+                      {/* Hero 2: Client happiness */}
+                      <div className="p-4 rounded-xl border border-slate-200 bg-white">
+                        <p className="text-[12px] text-slate-500 font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Client happiness
+                        </p>
+                        <p className="text-[26px] font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {m.clientHappiness.value}
+                        </p>
+                        <p className="text-[11px] text-slate-500 mt-1 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {m.clientHappiness.phrase}
+                        </p>
+                        {m.clientHappiness.leverPosition !== undefined && (
+                          <div className="h-1.5 bg-slate-100 rounded-full relative overflow-visible">
+                            <div
+                              className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm"
+                              style={{ left: `${m.clientHappiness.leverPosition}%`, transform: "translate(-50%, -50%)" }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
 
-                    <MetricSection label="Who did the talking">
+                    {/* 2. Sentiment Trend Card */}
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                      <p className="text-[12px] text-slate-400 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        How the client felt over time
+                      </p>
+
+                      {!isCompleted ? (
+                        <p className="text-xs text-slate-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          No data for this call.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="relative flex items-center justify-between px-6 pt-2 pb-1">
+                            {/* Connected line */}
+                            <div className="absolute left-10 right-10 top-[17px] h-[2px] bg-slate-200 z-0" />
+
+                            {/* Dot 1: Start */}
+                            <div className="relative z-10 flex flex-col items-center gap-1.5">
+                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentStart.tone)}`} />
+                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {m.sentimentStart.value}
+                              </span>
+                              <span className="text-[10px] text-slate-400">Start</span>
+                            </div>
+
+                            {/* Dot 2: Mid */}
+                            <div className="relative z-10 flex flex-col items-center gap-1.5">
+                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentMid.tone)}`} />
+                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {m.sentimentMid.value}
+                              </span>
+                              <span className="text-[10px] text-slate-400">Middle</span>
+                            </div>
+
+                            {/* Dot 3: End */}
+                            <div className="relative z-10 flex flex-col items-center gap-1.5">
+                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentEnd.tone)}`} />
+                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {m.sentimentEnd.value}
+                              </span>
+                              <span className="text-[10px] text-slate-400">End</span>
+                            </div>
+                          </div>
+
+                          <div className="pt-1 border-t border-slate-100">
+                            <p className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              {sentimentSummary}
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {/* 3. Key Details Card (Decision-Support) */}
+                    <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
+                      <p className="text-[12px] text-slate-400 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Key details
+                      </p>
+
+                      {keyDetails.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          No key details captured for this call.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          {keyDetails.map((detail, idx) => (
+                            <div key={idx} className="flex items-center gap-2.5 text-xs">
+                              <span
+                                className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold flex-shrink-0 ${getTagStyle(detail.category)}`}
+                                style={{ fontFamily: "Outfit, sans-serif" }}
+                              >
+                                {detail.category}
+                              </span>
+                              <span className="text-slate-700 text-xs font-normal leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {detail.text}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 4. Collapsible Metric Groups */}
+                    <MetricGroup label="Talk and pacing" defaultOpen={true} columns={2}>
                       <MetricTile
                         label="Time the AI spoke"
                         value={m.aiSpokePercent.value}
                         phrase={m.aiSpokePercent.phrase}
                         leverPosition={m.aiSpokePercent.leverPosition}
-                        tooltip="Share of total talk time spoken by the AI agent."
-                      />
-                      <MetricTile
-                        label="Longest stretch without a break"
-                        value={m.longestStretch.value}
-                        phrase={m.longestStretch.phrase}
-                        tooltip="Longest uninterrupted stretch of AI speech."
-                      />
-                      <MetricTile
-                        label="Silence during the call"
-                        value={m.silencePercent.value}
-                        phrase={m.silencePercent.phrase}
-                        leverPosition={m.silencePercent.leverPosition}
-                        tooltip="Percentage of the call with no speech from either party."
                       />
                       <MetricTile
                         label="How warm the AI sounded"
@@ -2840,16 +2972,26 @@ export default function CallLogs() {
                         leverPosition={m.warmthPercent.leverPosition}
                         tooltip="Share of agent responses classified as empathetic or rapport-building."
                       />
-                    </MetricSection>
+                      <MetricTile
+                        label="Longest stretch without a break"
+                        value={m.longestStretch.value}
+                        phrase={m.longestStretch.phrase}
+                      />
+                      <MetricTile
+                        label="Silence during the call"
+                        value={m.silencePercent.value}
+                        phrase={m.silencePercent.phrase}
+                        leverPosition={m.silencePercent.leverPosition}
+                      />
+                    </MetricGroup>
 
-                    <MetricSection label="How fast the AI responded" columns={3}>
+                    <MetricGroup label="Response speed" defaultOpen={false} columns={3}>
                       <MetricTile
                         label="Typical response time"
                         value={m.typicalResponse.value}
                         tone={m.typicalResponse.tone}
                         phrase={m.typicalResponse.phrase}
                         leverPosition={m.typicalResponse.leverPosition}
-                        tooltip="Average time the AI took to respond after the client finished speaking."
                       />
                       <MetricTile
                         label="Slowest response"
@@ -2863,9 +3005,17 @@ export default function CallLogs() {
                         label="Times the AI got stuck"
                         value={m.timesStuck.value}
                         phrase={m.timesStuck.phrase}
-                        tooltip="Number of times the call fell back to a human or a scripted default."
                       />
-                    </MetricSection>
+                    </MetricGroup>
+
+                    {/* 5. Footer Row */}
+                    <div className="pt-3 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <div className="flex items-center gap-2">
+                        <CalendarClock className="w-4 h-4 text-slate-400" />
+                        <span>{m.whatNext.phrase}</span>
+                      </div>
+                      <span className="font-semibold text-slate-700">{m.whatNext.value}</span>
+                    </div>
                   </div>
                 );
               })()}
