@@ -140,6 +140,7 @@ export default function StepParametersFields({
   // Coerce legacy chatbot source to template
   const whatsappSource = (params.whatsappSource === "chatbot" ? "template" : params.whatsappSource) ?? "template";
   const whatsappCampaignId = params.whatsappCampaignId ?? "";
+  const websiteNotificationMessage = params.websiteNotificationMessage ?? "";
   const smsMessage = params.smsMessage ?? "";
   const smsConnectedAccount = params.smsConnectedAccount ?? "";
   const emailConnectedAccount = params.emailConnectedAccount ?? "";
@@ -824,7 +825,19 @@ export default function StepParametersFields({
                   )
                 )}
 
-
+                {renderField(
+                  <div className="flex items-center gap-1.5">
+                    <span>Website Chat Notification Message</span>
+                    <InfoTooltip text="Message shown in Website Chat Widget when a visitor triggers this automation (e.g. notifying them that the template details were dispatched to their WhatsApp)." />
+                  </div>,
+                  <textarea
+                    rows={2}
+                    value={websiteNotificationMessage}
+                    onChange={e => onChange({ websiteNotificationMessage: e.target.value })}
+                    placeholder="e.g. We have sent the requested details to your WhatsApp number. Please check your WhatsApp messages!"
+                    className="w-full px-3 py-2 text-xs rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500"
+                  />
+                )}
               </div>
             )}
 
@@ -849,6 +862,20 @@ export default function StepParametersFields({
                     className="w-full px-3 py-2.5 text-sm rounded-md border border-border bg-white resize-none"
                   />
                 </div>
+
+                {renderField(
+                  <div className="flex items-center gap-1.5">
+                    <span>Website Chat Notification Message</span>
+                    <InfoTooltip text="Message shown in Website Chat Widget when a visitor triggers this SMS automation (e.g. notifying them that the SMS details were sent to their number)." />
+                  </div>,
+                  <textarea
+                    rows={2}
+                    value={websiteNotificationMessage}
+                    onChange={e => onChange({ websiteNotificationMessage: e.target.value })}
+                    placeholder="e.g. We have sent the requested details to your mobile number via SMS. Please check your messages!"
+                    className="w-full px-3 py-2 text-xs rounded-md border border-border bg-white resize-none outline-none focus:border-blue-500"
+                  />
+                )}
               </div>
             )}
 

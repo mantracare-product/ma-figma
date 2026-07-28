@@ -22,6 +22,13 @@ export interface ProcessSimResult {
   header?: ProcessSimTurn["header"];
   footerText?: string;
   buttons?: ProcessSimTurn["buttons"];
+  whatsappOutbound?: {
+    text: string;
+    templateName?: string;
+    header?: ProcessSimTurn["header"];
+    footerText?: string;
+    buttons?: ProcessSimTurn["buttons"];
+  };
 }
 
 // Evaluates the step's own configured intent conditions (typed in the
@@ -66,27 +73,31 @@ interface FormattedTemplateMessage {
 }
 
 function formatWhatsappTemplateMessage(template: any): FormattedTemplateMessage {
-  const headerType = template.headerType ?? template.header?.type ?? "none";
-  const headerText = template.headerText ?? template.header?.content;
+  const header =
+    template.headerType && template.headerType !== "none"
+      ? {
+          type: template.headerType,
+          text: template.headerType === "text" ? template.headerText : undefined,
+          fileName: template.headerType !== "text" ? template.headerFileName : undefined,
+        }
+      : undefined;
 
   return {
-    text: template.bodyText || "",
-    header:
-      headerType && headerType !== "none"
-        ? { type: headerType, text: headerText, fileName: template.headerFileName }
-        : undefined,
+    text: template.bodyText || `[Template: ${template.name}]`,
+    header,
     footerText: template.footerText || undefined,
-    buttons: template.buttons?.length
+    buttons: template.buttons
       ? template.buttons.map((b: any) => ({ label: b.label, type: b.type, value: b.value }))
       : undefined,
   };
 }
 
-function resolveAutomationMessage(step: any): {
+function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "website"): {
   text: string;
   header?: ProcessSimTurn["header"];
   footerText?: string;
   buttons?: ProcessSimTurn["buttons"];
+  whatsappOutbound?: ProcessSimResult["whatsappOutbound"];
 } {
   const p = step.params ?? {};
   switch (step.stepKey) {
@@ -96,14 +107,33 @@ function resolveAutomationMessage(step: any): {
         const matched = campaigns.find((c: any) => c.id === p.whatsappCampaignId || c.name === p.whatsappCampaignId);
         if (!matched) return { text: `[Campaign "${p.whatsappCampaignId || "unknown"}" — not found]` };
         const firstMessageNode = matched.nodes?.find((n: any) => n.type === "message");
-        return {
+        const formatted = {
           text: firstMessageNode?.content
             ? `[Campaign: ${matched.name}] ${firstMessageNode.content}`
             : `[Campaign: ${matched.name} triggered — no message content on first node]`,
+          templateName: matched.name,
         };
+        if (channel === "website") {
+          const websiteMsg = p.websiteNotificationMessage?.trim() ||
+            `We have sent the "${matched.name}" campaign details to your WhatsApp number. Please check your WhatsApp messages!`;
+          return {
+            text: websiteMsg,
+            whatsappOutbound: formatted,
+          };
+        }
+        return formatted;
       }
       if (p.whatsappSource === "chatbot") {
-        return { text: `[Chatbot flow triggered — "${p.whatsappChatbotId || "Untitled Bot"}"]` };
+        const formatted = { text: `[Chatbot flow triggered — "${p.whatsappChatbotId || "Untitled Bot"}"]`, templateName: p.whatsappChatbotId || "Bot Flow" };
+        if (channel === "website") {
+          const websiteMsg = p.websiteNotificationMessage?.trim() ||
+            `We have sent the requested bot information to your WhatsApp number. Please check your WhatsApp messages!`;
+          return {
+            text: websiteMsg,
+            whatsappOutbound: formatted,
+          };
+        }
+        return formatted;
       }
 
       const templates = getStoredWhatsappTemplatesRaw();
@@ -114,12 +144,44 @@ function resolveAutomationMessage(step: any): {
       if (!matched) {
         return { text: `[WhatsApp template "${identifier || "unknown"}" — content not found, check template identifier]` };
       }
-      return formatWhatsappTemplateMessage(matched);
+      const formatted = formatWhatsappTemplateMessage(matched);
+      const whatsappOutbound = {
+        ...formatted,
+        templateName: matched.name,
+      };
+
+      if (channel === "website") {
+        const websiteMsg = p.websiteNotificationMessage?.trim() ||
+          `We have sent the "${matched.name}" template to your WhatsApp number. Please check your WhatsApp messages!`;
+        return {
+          text: websiteMsg,
+          whatsappOutbound,
+        };
+      }
+
+      return {
+        ...formatted,
+        whatsappOutbound,
+      };
     }
-    case "sms":
-      return { text: p.smsMessage ? `[SMS] ${p.smsMessage}` : "[SMS — no message configured]" };
-    case "email":
-      return { text: p.emailSubject ? `[Email] Subject: ${p.emailSubject}` : "[Email — no subject configured]" };
+    case "sms": {
+      const smsText = p.smsMessage ? `[SMS] ${p.smsMessage}` : "[SMS — no message configured]";
+      if (channel === "website") {
+        const websiteMsg = p.websiteNotificationMessage?.trim() ||
+          `We have sent an SMS to your mobile number. Please check your SMS inbox!`;
+        return { text: websiteMsg };
+      }
+      return { text: smsText };
+    }
+    case "email": {
+      const emailText = p.emailSubject ? `[Email] Subject: ${p.emailSubject}` : "[Email — no subject configured]";
+      if (channel === "website") {
+        const websiteMsg = p.websiteNotificationMessage?.trim() ||
+          `We have sent an email to your email address. Please check your inbox!`;
+        return { text: websiteMsg };
+      }
+      return { text: emailText };
+    }
     default:
       return { text: `Okay, I've noted that (${step.name}).` };
   }
@@ -156,7 +218,8 @@ export function generateProcessStageReply(
   stage: any,
   workflowSteps: any[],
   userMessage: string,
-  history: ProcessSimTurn[]
+  history: ProcessSimTurn[],
+  channel?: "whatsapp" | "sms" | "website"
 ): ProcessSimResult {
   const inChatSteps = workflowSteps.filter((s) => s.trigger === "inchat");
 
@@ -176,7 +239,7 @@ export function generateProcessStageReply(
       }
     }
 
-    const resolved = resolveAutomationMessage(step);
+    const resolved = resolveAutomationMessage(step, channel);
     return {
       ...resolved,
       matchedReason: `Matched intent condition on '${step.name}'`,

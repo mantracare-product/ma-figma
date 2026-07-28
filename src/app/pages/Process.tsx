@@ -806,6 +806,7 @@ export default function Process() {
   // WhatsApp / SMS / Email states
   const [templateId, setTemplateId] = useState<string>("");
   const [smsMessage, setSmsMessage] = useState("");
+  const [websiteNotificationMessage, setWebsiteNotificationMessage] = useState("");
   const [whatsappTemplate, setWhatsappTemplate] = useState("");
   const [whatsappTemplateIdentifier, setWhatsappTemplateIdentifier] = useState("");
   const [whatsappSource, setWhatsappSource] = useState<"template" | "campaign" | "chatbot">("template");
@@ -988,8 +989,8 @@ export default function Process() {
       "callActionAgentId", "callActionReason", "callActionVoiceResponse", "callActionExtension",
       ...CONDITION_FIELDS,
     ],
-    whatsapp: ["whatsappSource", "whatsappTemplate", "whatsappTemplateIdentifier", "whatsappCampaignId", "whatsappChatbotId", ...CONDITION_FIELDS],
-    sms: ["smsMessage", ...CONDITION_FIELDS],
+    whatsapp: ["whatsappSource", "whatsappTemplate", "whatsappTemplateIdentifier", "whatsappCampaignId", "whatsappChatbotId", "websiteNotificationMessage", ...CONDITION_FIELDS],
+    sms: ["smsMessage", "websiteNotificationMessage", ...CONDITION_FIELDS],
     email: [
       "emailConnectedAccount", "showCustomEmail", "emailSubject",
       "emailRichBody", "emailHtmlBody", "htmlBodyViewMode",
@@ -1036,6 +1037,7 @@ export default function Process() {
     whatsappCampaignId: () => whatsappCampaignId,
     whatsappChatbotId: () => whatsappChatbotId,
     smsMessage: () => smsMessage,
+    websiteNotificationMessage: () => websiteNotificationMessage,
     emailConnectedAccount: () => emailConnectedAccount,
     showCustomEmail: () => showCustomEmail,
     emailSubject: () => emailSubject,
@@ -1116,6 +1118,7 @@ export default function Process() {
     whatsappCampaignId: setWhatsappCampaignId,
     whatsappChatbotId: setWhatsappChatbotId,
     smsMessage: setSmsMessage,
+    websiteNotificationMessage: setWebsiteNotificationMessage,
     emailConnectedAccount: setEmailConnectedAccount,
     showCustomEmail: setShowCustomEmail,
     emailSubject: setEmailSubject,
@@ -1229,6 +1232,7 @@ export default function Process() {
     setAssignedUser("Select user...");
     setTemplateId("");
     setSmsMessage("");
+    setWebsiteNotificationMessage("");
     setWhatsappTemplate("");
     setWhatsappTemplateIdentifier("");
     setWhatsappSource("template");

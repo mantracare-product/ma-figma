@@ -114,9 +114,45 @@ export function processWebsiteVisitorSubmission({
     channel: "website",
   });
 
-  // 4. Generate automation reply
+  // 4. Generate automation reply with channel="website"
   const workflowSteps = (initialStage as any).workflowSteps ?? [];
-  const result = generateProcessStageReply(initialStage, workflowSteps, firstMessage, []);
+  const result = generateProcessStageReply(initialStage, workflowSteps, firstMessage, [], "website");
+
+  // If automation step triggered a WhatsApp template / campaign message, dispatch it to WhatsApp Inbox & Activity log
+  if (result.whatsappOutbound || (result.firedAutomation && result.firedAutomation.stepKey === "whatsapp")) {
+    const waPayload = result.whatsappOutbound || { text: result.text, templateName: undefined, header: result.header, footerText: result.footerText, buttons: result.buttons };
+    syncTestMessagesToInbox({
+      clientId,
+      contactName: name,
+      phoneNumber: phone || "+1 (555) 019-9090",
+      inboxNumber: "+1 (555) 234-5678",
+      channel: "whatsapp",
+      messages: [
+        {
+          text: waPayload.text,
+          sender: "me",
+          origin: "template",
+          header: waPayload.header,
+          footerText: waPayload.footerText,
+          buttons: waPayload.buttons,
+        },
+      ],
+    });
+
+    addActivityEntry({
+      clientId,
+      processId: targetProcess.id,
+      processName: targetProcess.name,
+      type: "whatsapp",
+      refId: `wa-out-${Date.now()}`,
+      status: "success",
+      direction: "outbound",
+      details: {
+        primary: result.firedAutomation?.stepName || "WhatsApp Message Triggered",
+        secondary: waPayload.templateName ? `Template: ${waPayload.templateName}` : waPayload.text.slice(0, 80),
+      },
+    });
+  }
 
   // Handle stage transition if triggered
   if (result.newStageName) {

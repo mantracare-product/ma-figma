@@ -129,7 +129,7 @@ export default function TestWebsiteChatDrawer({
 
     const workflowSteps = (currentStage as any).workflowSteps ?? [];
     const previousTurns = updatedTurns.slice(0, -1);
-    const result = generateProcessStageReply(currentStage, workflowSteps, userText, previousTurns);
+    const result = generateProcessStageReply(currentStage, workflowSteps, userText, previousTurns, "website");
 
     let nextStageObj = currentStage;
     if (result.newStageName) {
@@ -186,6 +186,41 @@ export default function TestWebsiteChatDrawer({
         },
       ],
     });
+
+    if (result.whatsappOutbound || (result.firedAutomation && result.firedAutomation.stepKey === "whatsapp")) {
+      const waPayload = result.whatsappOutbound || { text: result.text, templateName: undefined, header: result.header, footerText: result.footerText, buttons: result.buttons };
+      syncTestMessagesToInbox({
+        clientId: activeClientId,
+        contactName: visitorName,
+        phoneNumber: visitorPhone || "+1 (555) 345-6789",
+        inboxNumber: "+1 (555) 234-5678",
+        channel: "whatsapp",
+        messages: [
+          {
+            text: waPayload.text,
+            sender: "me",
+            origin: "template",
+            header: waPayload.header,
+            footerText: waPayload.footerText,
+            buttons: waPayload.buttons,
+          },
+        ],
+      });
+
+      addActivityEntry({
+        clientId: activeClientId,
+        processId: selectedProcessId || "1",
+        processName: targetProcessName,
+        type: "whatsapp",
+        refId: `wa-out-${Date.now()}`,
+        status: "success",
+        direction: "outbound",
+        details: {
+          primary: result.firedAutomation?.stepName || "WhatsApp Message Triggered",
+          secondary: waPayload.templateName ? `Template: ${waPayload.templateName}` : waPayload.text.slice(0, 80),
+        },
+      });
+    }
   };
 
   const handleReset = () => {
