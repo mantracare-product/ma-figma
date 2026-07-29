@@ -12,7 +12,7 @@ import { FieldDef, Form, INITIAL_FORMS } from "../../data/forms";
 import { FlowStep, IntakeFlow, INITIAL_FLOWS } from "../../data/intakeFlows";
 import ClientProfile, { Client, initialClients } from "./ClientProfile";
 import ShareFormDrawer from "../components/webform/ShareFormDrawer";
-import { ShareClient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
+import { ShareClient, ShareLiteralRecipient, ShareChannel, ShareTarget, ShareTargetKind } from "../components/webform/shareTypes";
 import { useClientFields } from "../context/ClientFieldsContext";
 import { appendClientSubmission } from "../../data/submissionsStore";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
@@ -1383,12 +1383,14 @@ export default function WebForms() {
 
   const handleShareSend = ({
     formId,
-    clients,
+    clients = [],
+    literals = [],
     channel,
     kind,
   }: {
     formId: number;
-    clients: ShareClient[];
+    clients?: ShareClient[];
+    literals?: ShareLiteralRecipient[];
     channel: ShareChannel;
     kind: ShareTargetKind;
   }) => {
@@ -1397,7 +1399,7 @@ export default function WebForms() {
       day: "numeric",
       year: "numeric",
     });
-    const newRecords: Submission[] = clients.map((client, i) => ({
+    const clientRecords: Submission[] = clients.map((client, i) => ({
       id: Date.now() + i,
       clientId: client.id,
       formId,
@@ -1411,6 +1413,21 @@ export default function WebForms() {
         "Phone": client.phone,
       },
     }));
+
+    const literalRecords: Submission[] = literals.map((rec, i) => ({
+      id: Date.now() + 1000 + i,
+      clientId: rec.id,
+      formId,
+      name: rec.value,
+      email: channel === "email" ? rec.value : "",
+      date: today,
+      status: "sent",
+      fields: {
+        "Recipient": rec.value,
+      },
+    }));
+
+    const newRecords = [...clientRecords, ...literalRecords];
     setSubmissions((prev) => [...newRecords, ...prev]);
 
     // Cross-write into the shared clientFormSubmissions store so the client's

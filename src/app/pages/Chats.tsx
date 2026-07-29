@@ -820,7 +820,14 @@ export default function Chats() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const tabParam = params.get("tab");
-    if (tabParam === "templates") setActiveTab("templates");
+    const actionParam = params.get("action");
+    if (tabParam === "templates") {
+      setActiveTab("templates");
+      if (actionParam === "create") {
+        handleCreateNewTemplate();
+        setTemplatesView("builder");
+      }
+    }
     else if (tabParam === "campaigns") setActiveTab("campaigns");
     else if (tabParam === "chatbot" && LEGACY_CHATBOT_MODULE_ENABLED) setActiveTab("chatbot");
     else setActiveTab("chats");
@@ -1932,17 +1939,6 @@ export default function Chats() {
                             }
                           })()}
 
-                          {/* Small corner DEV test button — always visible, not gated by legacy flag */}
-                          <button
-                            type="button"
-                            onClick={() => setShowTestProcessDrawer(true)}
-                            title="Test process chat"
-                            className="flex items-center gap-1 px-2 py-1 bg-gray-900 hover:bg-black text-white rounded-md text-[10px] font-semibold transition-colors"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <FlaskConical className="w-3 h-3" />
-                            Test
-                          </button>
                         </div>
                       </div>
 

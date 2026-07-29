@@ -325,7 +325,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       try {
         const saved = sessionStorage.getItem("clients");
         if (saved) setClients(JSON.parse(saved));
-      } catch {}
+      } catch { }
     };
     window.addEventListener(CLIENTS_STORE_EVENT, handler);
     window.addEventListener("storage", handler);
@@ -914,11 +914,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               <button
                 key={tab.id}
                 onClick={() => setActiveProfileTab(tab.id)}
-                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${
-                  activeProfileTab === tab.id
+                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${activeProfileTab === tab.id
                     ? "border-b-2 border-primary text-primary"
                     : "hover:text-foreground"
-                }`}
+                  }`}
                 style={{
                   fontFamily: "Outfit, sans-serif",
                   color: activeProfileTab === tab.id ? undefined : "#6B7280",
@@ -1788,25 +1787,24 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                             item.type === "website_message" ||
                             (item.title || "").toLowerCase().includes("website") ||
                             ((item as any).description || "").toLowerCase().includes("website")) && (
-                            <div className="mt-2 text-left">
-                              <span
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate("/chats", {
-                                    state: {
-                                      clientId: client.id,
-                                      channel: "website",
-                                    },
-                                  });
-                                }}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                              >
-                                <Globe className="w-3.5 h-3.5 text-purple-600" />
-                                View Website Chat
-                              </span>
-                            </div>
-                          )}
-
+                              <div className="mt-2 text-left">
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate("/chats", {
+                                      state: {
+                                        clientId: client.id,
+                                        channel: "website",
+                                      },
+                                    });
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  <Globe className="w-3.5 h-3.5 text-purple-600" />
+                                  View Website Chat
+                                </span>
+                              </div>
+                            )}
                           <div className="flex flex-wrap items-center gap-2 mt-2">
                             {activeProcessTabDrawer === "all" && item.processName && (
                               <span className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -1988,9 +1986,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   <button
                     key={mode}
                     onClick={() => setFormsTabMode(mode)}
-                    className={`px-4 py-2 text-xs font-semibold transition-colors ${
-                      formsTabMode === mode ? "text-white" : "bg-white text-[#6B7280] hover:bg-gray-50"
-                    }`}
+                    className={`px-4 py-2 text-xs font-semibold transition-colors ${formsTabMode === mode ? "text-white" : "bg-white text-[#6B7280] hover:bg-gray-50"
+                      }`}
                     style={{
                       fontFamily: "Outfit, sans-serif",
                       backgroundColor: formsTabMode === mode ? "#4F8EF7" : undefined,
@@ -2059,11 +2056,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                           <span className="text-[10px] font-bold uppercase" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em" }}>
                                             Status
                                           </span>
-                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${
-                                            submission.status === "completed" ? "bg-green-100 text-green-700"
-                                            : submission.status === "pending" ? "bg-amber-100 text-amber-700"
-                                            : "bg-red-100 text-red-700"
-                                          }`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${submission.status === "completed" ? "bg-green-100 text-green-700"
+                                              : submission.status === "pending" ? "bg-amber-100 text-amber-700"
+                                                : "bg-red-100 text-red-700"
+                                            }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                                             {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
                                           </span>
                                         </div>
@@ -2144,9 +2140,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 {flow.name}
                               </h3>
                               <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${
-                                  status === "completed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
-                                }`}
+                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium shrink-0 ${status === "completed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                                  }`}
                                 style={{ fontFamily: "Outfit, sans-serif" }}
                               >
                                 {status === "completed" ? "Completed" : "In Progress"}
@@ -2177,9 +2172,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     <div key={stepKey} className="flex gap-3">
                                       <div className="flex flex-col items-center w-6 shrink-0">
                                         <div
-                                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-                                            done ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
-                                          }`}
+                                          className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${done ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-400"
+                                            }`}
                                           style={{ fontFamily: "DM Sans, sans-serif" }}
                                         >
                                           {done ? <Check className="w-3.5 h-3.5" /> : idx + 1}
