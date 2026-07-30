@@ -23,6 +23,7 @@ import {
   Workflow,
   MessageCircle,
   Database,
+  Gift,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/web-forms", label: "Web Forms", icon: FileText },
     { path: "/appointments", label: "Appointments", icon: CalendarIcon },
     { path: "/services", label: "Services", icon: Package },
+    { path: "/refer-and-earn", label: "Refer & Earn", icon: Gift },
   ];
 
   return (

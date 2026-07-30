@@ -201,24 +201,20 @@ const metricToneStyles: Record<MetricTone, { bg: string; text: string }> = {
 function MetricTile({
   label,
   value,
-  phrase,
   tone = "neutral",
   tooltip,
-  leverPosition,
 }: {
   label: string;
   value: string;
-  phrase: string;
+  phrase?: string;
   tone?: MetricTone;
   tooltip?: string;
-  leverPosition?: number;
 }) {
   const { bg, text } = metricToneStyles[tone];
   const mutedLabel = tone === "neutral" ? "text-slate-500" : text;
-  const mutedPhrase = tone === "neutral" ? "text-slate-600" : `${text} opacity-85`;
 
   return (
-    <div className={`min-w-0 rounded-xl p-3.5 ${bg}`}>
+    <div className={`min-w-0 rounded-xl p-3.5 ${bg} h-full flex flex-col justify-between`}>
       <div className="flex items-start justify-between gap-2 mb-1">
         <p
           className={`text-[11px] leading-snug ${mutedLabel}`}
@@ -226,41 +222,16 @@ function MetricTile({
         >
           {label}
         </p>
-        {tooltip && (
-          <Tooltip text={tooltip}>
-            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
-          </Tooltip>
-        )}
+        <Tooltip text={tooltip || label}>
+          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+        </Tooltip>
       </div>
       <p
-        className="text-xl font-bold truncate"
+        className="text-xl font-bold break-words leading-snug"
         style={{ fontFamily: "DM Sans, sans-serif" }}
-        title={value}
       >
         <span className={text}>{value}</span>
       </p>
-      <p
-        className={`text-[11px] leading-snug mt-1 break-words ${
-          leverPosition !== undefined ? "mb-1.5" : ""
-        } ${mutedPhrase}`}
-        style={{ fontFamily: "Outfit, sans-serif" }}
-      >
-        {phrase}
-      </p>
-      {leverPosition !== undefined && (
-        <div className="h-1 bg-black/10 rounded-full relative">
-          <div
-            className={`absolute top-1/2 w-2 h-2 rounded-full ${
-              tone === "success"
-                ? "bg-emerald-600"
-                : tone === "warning"
-                ? "bg-amber-600"
-                : "bg-primary"
-            }`}
-            style={{ left: `${leverPosition}%`, transform: "translate(-50%, -50%)" }}
-          />
-        </div>
-      )}
     </div>
   );
 }
@@ -299,7 +270,7 @@ function MetricGroup({
       </button>
       {open && (
         <div
-          className={`grid gap-2.5 ${
+          className={`grid gap-2.5 items-stretch ${
             columns === 3 ? "grid-cols-3" : "grid-cols-2"
           }`}
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
@@ -330,7 +301,7 @@ function MetricSection({
         {label}
       </p>
       <div
-        className="grid gap-2.5"
+        className="grid gap-2.5 items-stretch"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
         {children}
@@ -342,23 +313,24 @@ function MetricSection({
 // ── Deterministic per-call metrics ───────────────────────────────────────────
 interface CallReviewMetrics {
   // Outcome
-  didItWork: { value: string; tone: MetricTone; phrase: string };
-  clientHappiness: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  callOutcome: { value: string; tone: MetricTone; phrase: string };
+  clientHappiness: { value: string; tone: MetricTone; phrase: string };
   howLong: { value: string; phrase: string };
   whatNext: { value: string; phrase: string };
+  // Outcome & Disconnection
+  disconnectReason: { value: string; phrase: string };
+  bargeInCount: { value: string; phrase: string };
+  toolFailure: { value: string; tone: MetricTone; phrase: string };
+  loopDetected: { value: string; tone: MetricTone; phrase: string };
   // Sentiment arc
-  sentimentStart: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
-  sentimentMid: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
-  sentimentEnd: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
+  sentimentStart: { value: string; tone: MetricTone; phrase: string };
+  sentimentMid: { value: string; tone: MetricTone; phrase: string };
+  sentimentEnd: { value: string; tone: MetricTone; phrase: string };
   // Talk-time
-  aiSpokePercent: { value: string; phrase: string; leverPosition?: number };
+  aiSpokePercent: { value: string; phrase: string };
   longestStretch: { value: string; phrase: string };
-  silencePercent: { value: string; phrase: string; leverPosition?: number };
-  warmthPercent: { value: string; phrase: string; leverPosition?: number };
-  // Response latency
-  typicalResponse: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
-  slowestResponse: { value: string; tone: MetricTone; phrase: string; leverPosition?: number };
-  timesStuck: { value: string; phrase: string };
+  silencePercent: { value: string; phrase: string };
+  warmthPercent: { value: string; phrase: string };
 }
 
 function hashStr(s: string): number {
@@ -389,12 +361,10 @@ const SENTIMENT_OPTIONS: Array<{
   value: string;
   tone: MetricTone;
   phrases: string[];
-  leverMin: number;
-  leverMax: number;
 }> = [
-  { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"], leverMin: 70, leverMax: 100 },
-  { value: "Neutral",  tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"],        leverMin: 40, leverMax: 69 },
-  { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"], leverMin: 10, leverMax: 39 },
+  { value: "Positive", tone: "success", phrases: ["Warm greeting", "Engaged and responsive", "Upbeat throughout", "Resolution confirmed"] },
+  { value: "Neutral",  tone: "neutral", phrases: ["Steady tone", "Clarifying details", "Matter-of-fact", "Calm and focused"] },
+  { value: "Negative", tone: "warning", phrases: ["Sounded hesitant", "Signs of frustration", "Uncertain responses", "Needed reassurance"] },
 ];
 
 function pickSentiment(rng: () => number) {
@@ -406,12 +376,11 @@ function pickSentiment(rng: () => number) {
     if (roll < cum) {
       const opt = SENTIMENT_OPTIONS[i];
       const phrase = opt.phrases[Math.floor(rng() * opt.phrases.length)];
-      const lever = Math.round(randRange(rng, opt.leverMin, opt.leverMax));
-      return { value: opt.value, tone: opt.tone as MetricTone, phrase, leverPosition: lever };
+      return { value: opt.value, tone: opt.tone as MetricTone, phrase };
     }
   }
   const opt = SENTIMENT_OPTIONS[1];
-  return { value: opt.value, tone: opt.tone as MetricTone, phrase: opt.phrases[0], leverPosition: 50 };
+  return { value: opt.value, tone: opt.tone as MetricTone, phrase: opt.phrases[0] };
 }
 
 function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
@@ -419,12 +388,12 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
   const isCompleted = call.status === "Completed";
 
   // ── Outcome (real fields) ────────────────────────────────────────────────
-  const didItWork: CallReviewMetrics["didItWork"] =
-    call.status === "Completed"
-      ? { value: "Yes", tone: "success", phrase: "Goal achieved" }
-      : call.status === "Failed"
-      ? { value: "No", tone: "warning", phrase: "Call did not connect" }
-      : { value: "Not yet", tone: "neutral", phrase: "Call hasn't happened yet" };
+  const callOutcome: CallReviewMetrics["callOutcome"] =
+    call.status !== "Completed"
+      ? { value: "No Outcome", tone: "neutral", phrase: call.status === "Failed" ? "Call did not connect" : "Call hasn't happened yet" }
+      : call.lastStage && call.lastStage !== "N/A" && call.lastStage !== call.currentStage
+      ? { value: "Stage Advanced", tone: "success", phrase: `${call.lastStage} → ${call.currentStage}` }
+      : { value: "No Change", tone: "neutral", phrase: `Remained at ${call.currentStage}` };
 
   const rawDuration = call.duration;
   const noDuration = !rawDuration || rawDuration === "0:00";
@@ -442,23 +411,43 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     ? { value: "Scheduled", phrase: `Follow-up on ${followUpLabel}` }
     : { value: "None", phrase: "No follow-up logged" };
 
+  // ── Call Outcome & Disconnection ──────────────────────────────────────────
+  const disconnectOptions = ["Caller Disconnected", "Completed Naturally", "No Answer", "Voicemail Detected"];
+  const disconnectReason = isCompleted
+    ? { value: disconnectOptions[Math.floor(rng() * disconnectOptions.length)], phrase: "How the call ended" }
+    : { value: "—", phrase: "No data for this call" };
+
+  const bargeIns = isCompleted ? Math.floor(randRange(rng, 0, 8)) : 0;
+  const bargeInCount = isCompleted
+    ? { value: `${bargeIns}`, phrase: bargeIns > 4 ? "Higher than usual — client interrupted often" : "Normal range" }
+    : { value: "—", phrase: "No data for this call" };
+
+  const hadToolFailure = isCompleted ? rng() < 0.15 : false;
+  const toolFailure = isCompleted
+    ? { value: hadToolFailure ? "Yes" : "No", tone: (hadToolFailure ? "warning" : "success") as MetricTone, phrase: hadToolFailure ? "An automated action failed mid-call" : "All automated actions succeeded" }
+    : { value: "—", tone: "neutral" as MetricTone, phrase: "No data for this call" };
+
+  const hadLoop = isCompleted ? rng() < 0.1 : false;
+  const loopDetected = isCompleted
+    ? { value: hadLoop ? "Yes" : "No", tone: (hadLoop ? "warning" : "success") as MetricTone, phrase: hadLoop ? "AI repeated itself during the call" : "No repetition detected" }
+    : { value: "—", tone: "neutral" as MetricTone, phrase: "No data for this call" };
+
   // ── Happiness (randomised only for completed) ────────────────────────────
   const noData = { value: "—", tone: "neutral" as MetricTone, phrase: "No data for this call" };
 
   let clientHappiness: CallReviewMetrics["clientHappiness"];
   if (isCompleted) {
     const score = Math.round(randRange(rng, 3.0, 5.0) * 10) / 10;
-    const lever = Math.round(((score - 1) / 4) * 100);
     const tone: MetricTone = score >= 4.0 ? "success" : score >= 3.0 ? "neutral" : "warning";
-    clientHappiness = { value: `${score.toFixed(1)} / 5`, tone, phrase: "Estimated from tone and words", leverPosition: lever };
+    clientHappiness = { value: `${score.toFixed(1)} / 5`, tone, phrase: "Estimated from tone and words" };
   } else {
     clientHappiness = { ...noData };
   }
 
   // ── Sentiment arc ────────────────────────────────────────────────────────
-  const sentimentStart    = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
-  const sentimentMid      = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
-  const sentimentEnd      = isCompleted ? pickSentiment(rng) : { ...noData, leverPosition: undefined };
+  const sentimentStart    = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentMid      = isCompleted ? pickSentiment(rng) : { ...noData };
+  const sentimentEnd      = isCompleted ? pickSentiment(rng) : { ...noData };
 
   // ── Talk-time ────────────────────────────────────────────────────────────
   let aiSpokePercent: CallReviewMetrics["aiSpokePercent"];
@@ -471,10 +460,10 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     const stretch = Math.round(randRange(rng, 20, 60));
     const silence = Math.round(randRange(rng, 5, 25));
     const warmth = Math.round(randRange(rng, 40, 80));
-    aiSpokePercent  = { value: `${ai}%`,       phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call`, leverPosition: ai };
+    aiSpokePercent  = { value: `${ai}%`,       phrase: `${Math.round(ai / 100 * parseFloat(rawDuration || "4") * 60)}s of the call` };
     longestStretch  = { value: `${stretch}s`,  phrase: stretch < 40 ? "Short enough to stay natural" : "Slightly long for a single stretch" };
-    silencePercent  = { value: `${silence}%`,  phrase: silence < 15 ? "Less than average" : "A normal amount of pause", leverPosition: silence };
-    warmthPercent   = { value: `${warmth}%`,   phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone", leverPosition: warmth };
+    silencePercent  = { value: `${silence}%`,  phrase: silence < 15 ? "Less than average" : "A normal amount of pause" };
+    warmthPercent   = { value: `${warmth}%`,   phrase: warmth >= 60 ? "Friendly and empathetic" : "Fairly professional tone" };
   } else {
     aiSpokePercent  = { value: "—", phrase: "No data for this call" };
     longestStretch  = { value: "—", phrase: "No data for this call" };
@@ -482,41 +471,11 @@ function getCallReviewMetrics(call: CallLog): CallReviewMetrics {
     warmthPercent   = { value: "—", phrase: "No data for this call" };
   }
 
-  // ── Latency ──────────────────────────────────────────────────────────────
-  let typicalResponse: CallReviewMetrics["typicalResponse"];
-  let slowestResponse: CallReviewMetrics["slowestResponse"];
-  let timesStuck: CallReviewMetrics["timesStuck"];
-
-  if (isCompleted) {
-    const typical = Math.round(randRange(rng, 0.4, 1.2) * 10) / 10;
-    const slowest = Math.round(randRange(rng, 1.0, 2.5) * 10) / 10;
-    const stuck   = Math.floor(randRange(rng, 0, 3));
-    const typLever = Math.round((1 - (typical - 0.4) / 0.8) * 100);
-    const slwLever = Math.round(((slowest - 1.0) / 1.5) * 100);
-    typicalResponse = {
-      value: `${typical.toFixed(1)}s`,
-      tone: typical <= 0.8 ? "success" : "neutral",
-      phrase: typical <= 0.8 ? "Faster than the 0.8s goal" : "Slightly above the 0.8s goal",
-      leverPosition: typLever,
-    };
-    slowestResponse = {
-      value: `${slowest.toFixed(1)}s`,
-      tone: slowest > 1.5 ? "warning" : "neutral",
-      phrase: slowest > 1.5 ? "Slower than the 1.5s goal" : "Within the 1.5s goal",
-      leverPosition: slwLever,
-    };
-    timesStuck = { value: `${stuck}`, phrase: stuck === 0 ? "Handled everything on its own" : `Fell back ${stuck} time${stuck > 1 ? "s" : ""}` };
-  } else {
-    typicalResponse = { value: "—", tone: "neutral", phrase: "No data for this call" };
-    slowestResponse = { value: "—", tone: "neutral", phrase: "No data for this call" };
-    timesStuck      = { value: "—", phrase: "No data for this call" };
-  }
-
   return {
-    didItWork, clientHappiness, howLong, whatNext,
+    callOutcome, clientHappiness, howLong, whatNext,
+    disconnectReason, bargeInCount, toolFailure, loopDetected,
     sentimentStart, sentimentMid, sentimentEnd,
     aiSpokePercent, longestStretch, silencePercent, warmthPercent,
-    typicalResponse, slowestResponse, timesStuck,
   };
 }
 
@@ -534,40 +493,22 @@ export function getSentimentSummary(m: CallReviewMetrics): string {
   return `Started ${start}, shifted to ${mid}, and ended ${end}.`;
 }
 
-export interface KeyDetailItem {
-  category: "Requirement" | "Objection" | "Commitment" | "Open question";
-  text: string;
+export interface UpdatedField {
+  field: string;
+  value: string;
 }
 
-export function getKeyDetails(call: CallLog): KeyDetailItem[] {
+export function getUpdatedFields(call: CallLog): UpdatedField[] {
   if (call.status !== "Completed") return [];
-
-  const rng = makePrng(hashStr(call.id + "_key_details"));
-  const pool: KeyDetailItem[] = [
-    { category: "Requirement", text: "Requested morning appointment slot before 10 AM" },
-    { category: "Requirement", text: "Needs itemized receipt sent via email for reimbursement" },
-    { category: "Requirement", text: "Prefers WhatsApp notifications over SMS alerts" },
-    { category: "Objection", text: "Hesitant about out-of-pocket consultation fee" },
-    { category: "Objection", text: "Uncertain about scheduling commitment for next month" },
-    { category: "Objection", text: "Disliked previous clinic waiting time" },
-    { category: "Commitment", text: "Agreed to complete pre-intake form before Friday" },
-    { category: "Commitment", text: "Confirmed availability for Tuesday follow-up call" },
-    { category: "Commitment", text: "Promised to upload medical history documents to patient portal" },
-    { category: "Open question", text: "Asked if virtual consultation option is available" },
-    { category: "Open question", text: "Inquired whether family members can attend the session" },
-    { category: "Open question", text: "Waiting to verify partner work schedule before confirming" },
-  ];
-
-  const count = Math.floor(randRange(rng, 2, 4.99));
-  const poolCopy = [...pool];
-  const selected: KeyDetailItem[] = [];
-
-  for (let i = 0; i < count; i++) {
-    const idx = Math.floor(rng() * poolCopy.length);
-    selected.push(poolCopy.splice(idx, 1)[0]);
+  const fields: UpdatedField[] = [];
+  if (call.lastStage && call.lastStage !== "N/A" && call.lastStage !== call.currentStage) {
+    fields.push({ field: "Stage", value: call.currentStage });
   }
-
-  return selected;
+  if (call.hasScheduledCall) {
+    fields.push({ field: "Next Follow-up", value: "Scheduled" });
+  }
+  fields.push({ field: "Last Contact", value: call.date.split(" ")[0] });
+  return fields;
 }
 
 export default function CallLogs() {
@@ -2472,7 +2413,7 @@ export default function CallLogs() {
                     backgroundColor: activeDrawerTab === "call-review" ? "#FFFFFF" : undefined,
                   }}
                 >
-                  Call Review
+                  Call Analysis
                 </button>
                 <button
                   onClick={() => setActiveDrawerTab("review")}
@@ -2805,155 +2746,110 @@ export default function CallLogs() {
 
               {activeDrawerTab === "call-review" && selectedCallForDetails && (() => {
                 const m = getCallReviewMetrics(selectedCallForDetails);
-                const keyDetails = getKeyDetails(selectedCallForDetails);
-                const isCompleted = selectedCallForDetails.status === "Completed";
-                const sentimentSummary = getSentimentSummary(m);
-
-                const getSentimentDotColor = (tone: MetricTone) => {
-                  if (tone === "success") return "bg-emerald-500 border-emerald-600";
-                  if (tone === "warning") return "bg-rose-500 border-rose-600";
-                  return "bg-slate-400 border-slate-500";
-                };
-
-                const getTagStyle = (category: KeyDetailItem["category"]) => {
-                  switch (category) {
-                    case "Requirement":
-                      return "bg-teal-50 text-teal-700 border-teal-200";
-                    case "Objection":
-                      return "bg-rose-50 text-rose-700 border-rose-200";
-                    case "Commitment":
-                      return "bg-purple-50 text-purple-700 border-purple-200";
-                    case "Open question":
-                      return "bg-slate-100 text-slate-700 border-slate-200";
-                  }
-                };
+                const updatedFields = getUpdatedFields(selectedCallForDetails);
 
                 return (
                   <div className="space-y-5 p-6">
                     {/* 1. Hero Row (2 cards) */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Hero 1: Did it work */}
+                    <div className="grid grid-cols-2 gap-3 items-stretch">
+                      {/* Hero 1: Call Outcome */}
                       <div
-                        className={`p-4 rounded-xl border transition-all ${
-                          m.didItWork.tone === "success"
+                        className={`p-4 rounded-xl border transition-all h-full flex flex-col justify-between ${
+                          m.callOutcome.tone === "success"
                             ? "bg-emerald-50/70 border-emerald-200 text-emerald-950"
-                            : m.didItWork.tone === "warning"
+                            : m.callOutcome.tone === "warning"
                             ? "bg-amber-50/70 border-amber-200 text-amber-950"
                             : "bg-slate-50 border-slate-200 text-slate-900"
                         }`}
                       >
-                        <p className="text-[12px] text-slate-500 font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Did it work
-                        </p>
-                        <p className="text-[26px] font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {m.didItWork.value}
-                        </p>
-                        <p className="text-[11px] text-slate-600 mt-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {m.didItWork.phrase}
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-[12px] text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Call Outcome
+                          </p>
+                          <Tooltip text="Whether this call moved the client forward in their pipeline stage.">
+                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+                          </Tooltip>
+                        </div>
+                        <p className="text-[26px] font-bold break-words leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          {m.callOutcome.value}
                         </p>
                       </div>
 
                       {/* Hero 2: Client happiness */}
-                      <div className="p-4 rounded-xl border border-slate-200 bg-white">
-                        <p className="text-[12px] text-slate-500 font-medium mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Client happiness
-                        </p>
-                        <p className="text-[26px] font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      <div className="p-4 rounded-xl border border-slate-200 bg-white h-full flex flex-col justify-between">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <p className="text-[12px] text-slate-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Client happiness
+                          </p>
+                          <Tooltip text="Estimated satisfaction based on tone and word choice during the call.">
+                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help mt-0.5" />
+                          </Tooltip>
+                        </div>
+                        <p className="text-[26px] font-bold break-words leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
                           {m.clientHappiness.value}
                         </p>
-                        <p className="text-[11px] text-slate-500 mt-1 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {m.clientHappiness.phrase}
-                        </p>
-                        {m.clientHappiness.leverPosition !== undefined && (
-                          <div className="h-1.5 bg-slate-100 rounded-full relative overflow-visible">
-                            <div
-                              className="absolute top-1/2 w-2.5 h-2.5 rounded-full bg-primary shadow-sm"
-                              style={{ left: `${m.clientHappiness.leverPosition}%`, transform: "translate(-50%, -50%)" }}
-                            />
-                          </div>
-                        )}
                       </div>
                     </div>
 
-                    {/* 2. Sentiment Trend Card */}
+                    {/* 2. Call Outcome & Disconnection */}
+                    <MetricSection label="Call Outcome & Disconnection" columns={2}>
+                      <MetricTile
+                        label="Disconnect / End Reason"
+                        value={m.disconnectReason.value}
+                        phrase={m.disconnectReason.phrase}
+                        tooltip="How and why the call ended."
+                      />
+                      <MetricTile
+                        label="Barge-in Count"
+                        value={m.bargeInCount.value}
+                        phrase={m.bargeInCount.phrase}
+                        tooltip="Number of times the client spoke over or interrupted the AI."
+                      />
+                      <MetricTile
+                        label="Tool / Action Failure"
+                        value={m.toolFailure.value}
+                        tone={m.toolFailure.tone}
+                        phrase={m.toolFailure.phrase}
+                        tooltip="Whether any automated action (booking, lookup, etc.) failed during the call."
+                      />
+                      <MetricTile
+                        label="Loop Detected"
+                        value={m.loopDetected.value}
+                        tone={m.loopDetected.tone}
+                        phrase={m.loopDetected.phrase}
+                        tooltip="Whether the AI repeated the same response pattern during the call."
+                      />
+                    </MetricSection>
+
+                    {/* 3. Fields Updated From This Call */}
                     <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                      <p className="text-[12px] text-slate-400 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        How the client felt over time
-                      </p>
-
-                      {!isCompleted ? (
-                        <p className="text-xs text-slate-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          No data for this call.
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[12px] text-slate-400 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Fields updated from this call
                         </p>
+                        <Tooltip text="CRM fields that were created or changed as a direct result of this call.">
+                          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 flex-shrink-0 cursor-help" />
+                        </Tooltip>
+                      </div>
+                      {updatedFields.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>No fields were updated from this call.</p>
                       ) : (
-                        <>
-                          <div className="relative flex items-center justify-between px-6 pt-2 pb-1">
-                            {/* Connected line */}
-                            <div className="absolute left-10 right-10 top-[17px] h-[2px] bg-slate-200 z-0" />
-
-                            {/* Dot 1: Start */}
-                            <div className="relative z-10 flex flex-col items-center gap-1.5">
-                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentStart.tone)}`} />
-                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {m.sentimentStart.value}
-                              </span>
-                              <span className="text-[10px] text-slate-400">Start</span>
-                            </div>
-
-                            {/* Dot 2: Mid */}
-                            <div className="relative z-10 flex flex-col items-center gap-1.5">
-                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentMid.tone)}`} />
-                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {m.sentimentMid.value}
-                              </span>
-                              <span className="text-[10px] text-slate-400">Middle</span>
-                            </div>
-
-                            {/* Dot 3: End */}
-                            <div className="relative z-10 flex flex-col items-center gap-1.5">
-                              <div className={`w-3.5 h-3.5 rounded-full border-2 ${getSentimentDotColor(m.sentimentEnd.tone)}`} />
-                              <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {m.sentimentEnd.value}
-                              </span>
-                              <span className="text-[10px] text-slate-400">End</span>
-                            </div>
-                          </div>
-
-                          <div className="pt-1 border-t border-slate-100">
-                            <p className="text-xs text-slate-600" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {sentimentSummary}
-                            </p>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* 3. Key Details Card (Decision-Support) */}
-                    <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                      <p className="text-[12px] text-slate-400 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Key details
-                      </p>
-
-                      {keyDetails.length === 0 ? (
-                        <p className="text-xs text-slate-500 italic" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          No key details captured for this call.
-                        </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          {keyDetails.map((detail, idx) => (
-                            <div key={idx} className="flex items-center gap-2.5 text-xs">
-                              <span
-                                className={`px-2 py-0.5 rounded-md border text-[11px] font-semibold flex-shrink-0 ${getTagStyle(detail.category)}`}
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {detail.category}
-                              </span>
-                              <span className="text-slate-700 text-xs font-normal leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {detail.text}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
+                        <table className="w-full text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <thead>
+                            <tr className="text-left text-slate-400 uppercase text-[10px] tracking-wide">
+                              <th className="pb-2 font-medium">Field</th>
+                              <th className="pb-2 font-medium">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {updatedFields.map((f, i) => (
+                              <tr key={i}>
+                                <td className="py-2 text-primary font-medium">{f.field}</td>
+                                <td className="py-2 text-slate-700">{f.value}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       )}
                     </div>
 
@@ -2963,48 +2859,25 @@ export default function CallLogs() {
                         label="Time the AI spoke"
                         value={m.aiSpokePercent.value}
                         phrase={m.aiSpokePercent.phrase}
-                        leverPosition={m.aiSpokePercent.leverPosition}
+                        tooltip="Share of call duration during which the AI agent was speaking."
                       />
                       <MetricTile
                         label="How warm the AI sounded"
                         value={m.warmthPercent.value}
                         phrase={m.warmthPercent.phrase}
-                        leverPosition={m.warmthPercent.leverPosition}
                         tooltip="Share of agent responses classified as empathetic or rapport-building."
                       />
                       <MetricTile
                         label="Longest stretch without a break"
                         value={m.longestStretch.value}
                         phrase={m.longestStretch.phrase}
+                        tooltip="The longest single block of uninterrupted talking during the call."
                       />
                       <MetricTile
                         label="Silence during the call"
                         value={m.silencePercent.value}
                         phrase={m.silencePercent.phrase}
-                        leverPosition={m.silencePercent.leverPosition}
-                      />
-                    </MetricGroup>
-
-                    <MetricGroup label="Response speed" defaultOpen={false} columns={3}>
-                      <MetricTile
-                        label="Typical response time"
-                        value={m.typicalResponse.value}
-                        tone={m.typicalResponse.tone}
-                        phrase={m.typicalResponse.phrase}
-                        leverPosition={m.typicalResponse.leverPosition}
-                      />
-                      <MetricTile
-                        label="Slowest response"
-                        value={m.slowestResponse.value}
-                        tone={m.slowestResponse.tone}
-                        phrase={m.slowestResponse.phrase}
-                        leverPosition={m.slowestResponse.leverPosition}
-                        tooltip="The single longest response delay during the call."
-                      />
-                      <MetricTile
-                        label="Times the AI got stuck"
-                        value={m.timesStuck.value}
-                        phrase={m.timesStuck.phrase}
+                        tooltip="Total duration of pauses and silence during the conversation."
                       />
                     </MetricGroup>
 

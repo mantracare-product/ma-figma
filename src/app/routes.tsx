@@ -27,6 +27,7 @@ import Signup from "./pages/auth/Signup";
 import Chats from "./pages/Chats";
 import NotFound from "./pages/NotFound";
 import GuidePageRoute from "./pages/GuidePageRoute";
+import ReferAndEarn from "./pages/ReferAndEarn";
 
 export const router = createBrowserRouter([
   {
@@ -74,6 +75,7 @@ export const router = createBrowserRouter([
           { path: "profile", Component: Profile },
           { path: "guide", Component: GuidePageRoute },
           { path: "guide/:slug", Component: GuidePageRoute },
+          { path: "refer-and-earn", Component: ReferAndEarn },
         ],
       },
     ],
