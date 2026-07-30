@@ -12,6 +12,7 @@ import {
   Info,
   ChevronDown,
   ArrowRight,
+  ArrowLeft,
   HelpCircle,
   PackageCheck,
   Share2,
@@ -73,7 +74,7 @@ const FAQ_ITEMS = [
 ];
 
 export default function ReferAndEarn() {
-  const [activeTab, setActiveTab] = useState<"overview" | "referrals">("referrals");
+  const [activeTab, setActiveTab] = useState<"overview" | "referrals">("overview");
 
   // Selected plan state & derived link details
   const [selectedPlan, setSelectedPlan] = useState<PlanTier>("Starter");
@@ -130,119 +131,88 @@ export default function ReferAndEarn() {
           <HowItWorksButton onClick={() => setActiveTab("overview")} label="How Referrals Work" />
         </PageHeader>
 
-        {/* Main Layout Container with Local Sidebar */}
-        <div className="flex flex-col md:flex-row gap-8 items-start">
-          {/* Local Sub-Sidebar */}
-          <aside className="w-full md:w-52 shrink-0 space-y-1 bg-white p-2 border border-gray-200 rounded-xl md:sticky md:top-6 shadow-sm">
-            <button
-              type="button"
-              onClick={() => setActiveTab("overview")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs transition-colors text-left ${
-                activeTab === "overview"
-                  ? "bg-[#E8F0FE] text-[#4F8EF7] font-bold border-l-4 border-[#4F8EF7]"
-                  : "text-[#64748B] hover:bg-gray-50 hover:text-[#020817] font-medium"
-              }`}
-            >
-              <Info className="w-4 h-4 shrink-0" />
-              <span>Overview</span>
-            </button>
+        {/* Content Area (Full Width, No Sub-Sidebar) */}
+        <main className="w-full space-y-8 min-w-0">
+          {/* =========================================================================
+              VIEW 1: OVERVIEW (Informational Program Brochure)
+             ========================================================================= */}
+          {activeTab === "overview" && (
+            <div className="space-y-8">
+              {/* Hero Banner */}
+              <div
+                className="rounded-xl p-6 md:p-8 text-white shadow-md space-y-4"
+                style={{ backgroundColor: "#1F2937" }}
+              >
+                <div className="max-w-2xl space-y-2">
+                  <h2 className="text-2xl md:text-3xl font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Earn credits every time a practice signs up through you
+                  </h2>
+                  <p className="text-blue-50 text-sm leading-relaxed">
+                    MantraAssist partner program rewards you for helping businesses double their growth — from converting every lead to bringing customers back.
+                  </p>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("referrals")}
-              className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-xs transition-colors text-left ${
-                activeTab === "referrals"
-                  ? "bg-[#E8F0FE] text-[#4F8EF7] font-bold border-l-4 border-[#4F8EF7]"
-                  : "text-[#64748B] hover:bg-gray-50 hover:text-[#020817] font-medium"
-              }`}
-            >
-              <Users className="w-4 h-4 shrink-0" />
-              <span>My Referrals</span>
-            </button>
-          </aside>
-
-          {/* Content Area */}
-          <main className="flex-1 w-full space-y-8 min-w-0">
-            {/* =========================================================================
-                VIEW 1: OVERVIEW (Informational Program Brochure)
-               ========================================================================= */}
-            {activeTab === "overview" && (
-              <div className="space-y-8">
-                {/* Hero Banner */}
-                <div
-                  className="rounded-xl p-6 md:p-8 text-white shadow-md space-y-4"
-                  style={{ backgroundColor: "#1F2937" }}
-                >
-                  <div className="max-w-2xl space-y-2">
-                    <h2 className="text-2xl md:text-3xl font-bold leading-tight" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Earn credits every time a practice signs up through you
-                    </h2>
-                    <p className="text-blue-50 text-sm leading-relaxed">
-                      MantraAssist partner program rewards you for helping businesses double their growth — from converting every lead to bringing customers back.
-                    </p>
-
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab("referrals")}
-                        className="px-5 py-2.5 bg-white text-[#4F8EF7] hover:bg-blue-50 font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition-colors"
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        Get my referral link <ArrowRight className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("referrals")}
+                      className="px-5 py-2.5 bg-white text-[#4F8EF7] hover:bg-blue-50 font-bold rounded-xl text-xs flex items-center gap-2 shadow-md transition-colors"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      View My Referrals <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
+              </div>
 
-                {/* 3-Step Explainer */}
-                <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-xl space-y-6 shadow-sm">
-                  <div className="text-center max-w-xl mx-auto space-y-1">
-                    <h3 className="text-xl font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      How Referral Rewards Work
-                    </h3>
+              {/* 3-Step Explainer */}
+              <div className="bg-white border border-gray-200 p-6 md:p-8 rounded-xl space-y-6 shadow-sm">
+                <div className="text-center max-w-xl mx-auto space-y-1">
+                  <h3 className="text-xl font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    How Referral Rewards Work
+                  </h3>
+                  <p className="text-xs text-[#64748B]">
+                    3 simple steps to earn recurring rewards for growing our healthcare automation network.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
+                      1
+                    </div>
+                    <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Select Plan & Share Link
+                    </h4>
                     <p className="text-xs text-[#64748B]">
-                      3 simple steps to earn recurring rewards for growing our healthcare automation network.
+                      Pick a plan tier, get your unique link.
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
-                      <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
-                        1
-                      </div>
-                      <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Select Plan & Share Link
-                      </h4>
-                      <p className="text-xs text-[#64748B]">
-                        Pick a plan tier, get your unique link.
-                      </p>
+                  <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
+                      2
                     </div>
+                    <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Friend Signs Up
+                    </h4>
+                    <p className="text-xs text-[#64748B]">
+                      Your contact registers on any paid plan.
+                    </p>
+                  </div>
 
-                    <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
-                      <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
-                        2
-                      </div>
-                      <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Friend Signs Up
-                      </h4>
-                      <p className="text-xs text-[#64748B]">
-                        Your contact registers on any paid plan.
-                      </p>
+                  <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
+                    <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
+                      3
                     </div>
-
-                    <div className="bg-gray-50/70 border border-gray-200/80 p-5 rounded-xl space-y-2">
-                      <div className="w-7 h-7 rounded-full bg-[#E8F0FE] text-[#4F8EF7] flex items-center justify-center text-xs font-extrabold font-mono shrink-0">
-                        3
-                      </div>
-                      <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        Earn Commission Rate
-                      </h4>
-                      <p className="text-xs text-[#64748B]">
-                        Reward hits your balance within 24 hrs.
-                      </p>
-                    </div>
+                    <h4 className="text-sm font-bold text-[#020817]" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Earn Commission Rate
+                    </h4>
+                    <p className="text-xs text-[#64748B]">
+                      Reward hits your balance within 24 hrs.
+                    </p>
                   </div>
                 </div>
+              </div>
 
                 {/* Commission by Plan Section (Compact Table) */}
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
@@ -341,7 +311,19 @@ export default function ReferAndEarn() {
                 VIEW 2: MY REFERRALS (Personal Actionable Dashboard)
                ========================================================================= */}
             {activeTab === "referrals" && (
-              <div className="space-y-8">
+              <div className="space-y-6">
+                {/* Back to Overview Button */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("overview")}
+                    className="inline-flex items-center gap-1.5 text-xs font-medium text-[#64748B] hover:text-[#4F8EF7] transition-colors"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Back to Overview</span>
+                  </button>
+                </div>
+
                 {/* Merged Plan Selector & Link Output Card */}
                 <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-4">
                   {/* Plan Selector */}
@@ -583,7 +565,6 @@ export default function ReferAndEarn() {
               </div>
             )}
           </main>
-        </div>
       </div>
 
       <ReferralShareDrawer
