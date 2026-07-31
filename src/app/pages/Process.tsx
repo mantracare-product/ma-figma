@@ -38,6 +38,12 @@ interface AISettings {
   style?: string;
 }
 
+export interface StageChannelSource {
+  id: string;
+  channel: "calls" | "sms" | "whatsapp" | "website";
+  source: string;
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -49,6 +55,7 @@ export interface Stage {
   stageType?: string;
   selectedInboundNumbers?: string[];
   selectedStageChannels?: string[];
+  channelSources?: StageChannelSource[];
   responsiblePerson?: string;
   whenToMove?: string;
   callerPitchMode?: "single" | "comprehensive";
@@ -592,6 +599,9 @@ export default function Process() {
   const [selectedInboundNumbers, setSelectedInboundNumbers] = useState<string[]>(["+1 (555) 123-4567"]);
   const [stageType, setStageType] = useState<string>("AI Receives Calls");
   const [selectedStageChannels, setSelectedStageChannels] = useState<string[]>(["calls"]);
+  const [channelSources, setChannelSources] = useState<StageChannelSource[]>([
+    { id: "cs-1", channel: "calls", source: "+1 (555) 123-4567" },
+  ]);
   const [showAddNumberModal, setShowAddNumberModal] = useState(false);
   const [newNumber, setNewNumber] = useState("");
   const [selectedCountryCode, setSelectedCountryCode] = useState("+1");
@@ -602,7 +612,16 @@ export default function Process() {
   useEffect(() => {
     if (!showChannelDropdown) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (channelDropdownRef.current && !channelDropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      if (
+        channelDropdownRef.current &&
+        !channelDropdownRef.current.contains(target) &&
+        !target.closest('[role="listbox"]') &&
+        !target.closest('[role="option"]') &&
+        !target.closest('[data-radix-popper-content-wrapper]') &&
+        !target.closest('[data-radix-portal]')
+      ) {
         setShowChannelDropdown(false);
       }
     };
@@ -687,6 +706,20 @@ export default function Process() {
     setStageType(stg.stageType ?? "AI Receives Calls");
     setSelectedInboundNumbers(stg.selectedInboundNumbers ?? ["+1 (555) 123-4567"]);
     setSelectedStageChannels(stg.selectedStageChannels ?? ["calls"]);
+
+    if (stg.channelSources && stg.channelSources.length > 0) {
+      setChannelSources(stg.channelSources);
+    } else {
+      const defaultNum = (stg.selectedInboundNumbers && stg.selectedInboundNumbers[0]) || inboundNumbers[0] || "+1 (555) 123-4567";
+      const legacyChannels = stg.selectedStageChannels || ["calls"];
+      const initialSources: StageChannelSource[] = legacyChannels.map((ch, idx) => ({
+        id: `cs-init-${idx}`,
+        channel: (ch === "whatsapp" || ch === "sms" || ch === "website" || ch === "calls") ? (ch as any) : "calls",
+        source: ch === "website" ? "" : defaultNum,
+      }));
+      setChannelSources(initialSources.length > 0 ? initialSources : [{ id: "cs-1", channel: "calls", source: defaultNum }]);
+    }
+
     setResponsiblePerson(stg.responsiblePerson ?? "");
     setWhenToMove(stg.whenToMove ?? "");
     setCallerPitchMode(stg.callerPitchMode ?? "single");
@@ -1490,19 +1523,19 @@ export default function Process() {
     const stg = proc?.stages.find((s) => s.id === expandedStage);
     if (!proc || !stg) return;
 
-    selectedInboundNumbers.forEach((number) => {
-      // WhatsApp channel numbers route via this registry; SMS uses the same list today
-      // but only register as "whatsapp" for now since that's the tested channel.
-      assignNumberToStage({
-        number,
-        channel: "whatsapp",
-        processId: proc.id,
-        processName: proc.name,
-        stageId: stg.id,
-        stageName: stg.name,
-      });
+    channelSources.forEach((cs) => {
+      if ((cs.channel === "whatsapp" || cs.channel === "sms" || cs.channel === "calls") && cs.source) {
+        assignNumberToStage({
+          number: cs.source,
+          channel: cs.channel,
+          processId: proc.id,
+          processName: proc.name,
+          stageId: stg.id,
+          stageName: stg.name,
+        });
+      }
     });
-  }, [selectedInboundNumbers, selectedProcess, expandedStage, viewMode, stageType, processes]);
+  }, [channelSources, selectedProcess, expandedStage, viewMode, stageType, processes]);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [smartAnalysisTrackWhat, setSmartAnalysisTrackWhat] = useState("");
@@ -3317,10 +3350,10 @@ export default function Process() {
                         <div className="space-y-6">
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
-                            {/* Type and Right Column Field Row - Conditional Layout */}
-                            <div className={stageType === "AI Receives Calls" || stageType === "AI Makes Calls" || stageType === "Transfer to Human" ? "grid grid-cols-2 gap-4" : ""}>
+                            {/* Type and Right Column Field Row */}
+                            <div className={(stageType === "Transfer to Human" || stageType === "AI Makes Calls") ? "grid grid-cols-1 md:grid-cols-2 gap-4" : "w-full"}>
                               {/* Type Dropdown */}
-                              <div className="flex flex-col">
+                              <div className="flex flex-col w-full">
                                 <div className="flex items-center gap-1.5 mb-2">
                                   <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
                                     Action
@@ -3328,7 +3361,7 @@ export default function Process() {
                                   <InfoTooltip text="Controls how this stage handles communication — whether the AI answers inbound calls, makes outbound calls, or hands off to a person." />
                                 </div>
                                 <Select value={stageType} onValueChange={setStageType}>
-                                  <SelectTrigger className="h-full">
+                                  <SelectTrigger className="w-full">
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
@@ -3340,70 +3373,6 @@ export default function Process() {
                                 </Select>
                               </div>
 
-                              {/* Inbound Source Multi-Select - Only show when Type is "AI Receives Calls" or "AI Makes Calls" */}
-                              {(stageType === "AI Receives Calls" || stageType === "AI Makes Calls") && (
-                                <div className="relative flex flex-col">
-                                  <label className="flex items-center gap-2 text-sm font-medium mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    {stageType === "AI Makes Calls" ? "Choose the outbound source" : "Choose the inbound source"}
-                                    <Tooltip text={stageType === "AI Makes Calls" ? "Select which phone numbers this stage will use to make outbound calls" : "Select which phone numbers will trigger this stage when they receive calls"}>
-                                      <Info className="w-4 h-4 text-muted-foreground" />
-                                    </Tooltip>
-                                    {stageType === "AI Receives Calls" && (
-                                      <button
-                                        type="button"
-                                        onClick={() => setShowHowToReceiveCallModal(true)}
-                                        className="ml-1 text-sm font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
-                                        style={{ fontFamily: 'DM Sans, sans-serif', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
-                                      >
-                                        How to Receive Call
-                                      </button>
-                                    )}
-                                  </label>
-                                  <div className="flex flex-wrap gap-2 p-3 bg-input-background border border-input rounded-lg min-h-[42px] flex-1">
-                                    {selectedInboundNumbers.map((number) => (
-                                      <span
-                                        key={number}
-                                        className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-sm h-fit"
-                                      >
-                                        {number}
-                                        <button
-                                          type="button"
-                                          onClick={() => setSelectedInboundNumbers(selectedInboundNumbers.filter(n => n !== number))}
-                                          className="hover:bg-primary/20 rounded"
-                                        >
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </span>
-                                    ))}
-                                    <button
-                                      type="button"
-                                      onClick={() => setShowNumberDropdown(!showNumberDropdown)}
-                                      className="text-sm text-muted-foreground hover:text-foreground"
-                                    >
-                                      + Add
-                                    </button>
-                                  </div>
-                                  {showNumberDropdown && (
-                                    <div className="absolute mt-1 top-full p-2 bg-card border border-border rounded-lg shadow-lg z-10 w-full max-w-[300px]">
-                                      {inboundNumbers.filter(n => !selectedInboundNumbers.includes(n)).map((number) => (
-                                        <button
-                                          key={number}
-                                          type="button"
-                                          onClick={() => {
-                                            setSelectedInboundNumbers([...selectedInboundNumbers, number]);
-                                            setShowNumberDropdown(false);
-                                          }}
-                                          className="block w-full text-left px-3 py-2 text-sm hover:bg-muted rounded"
-                                        >
-                                          {number}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                </div>
-                              )}
-
                               {/* Responsible Person - Only show when Type is "Transfer to Human" */}
                               {stageType === "Transfer to Human" && (
                                 <div className="flex flex-col">
@@ -3411,7 +3380,7 @@ export default function Process() {
                                     Responsible Person
                                   </label>
                                   <Select value={responsiblePerson} onValueChange={setResponsiblePerson}>
-                                    <SelectTrigger className="h-full">
+                                    <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Select an employee" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -3424,86 +3393,226 @@ export default function Process() {
                                   </Select>
                                 </div>
                               )}
+
+                              {/* Outbound Source - Only show when Type is "AI Makes Calls" (Reach Out To The Client) */}
+                              {stageType === "AI Makes Calls" && (
+                                <div className="flex flex-col">
+                                  <div className="flex items-center gap-1.5 mb-2">
+                                    <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Outbound Source
+                                    </label>
+                                    <InfoTooltip text="Select the integrated phone number/source used by AI when making outbound calls or sending messages to the client." />
+                                  </div>
+                                  <Select
+                                    value={selectedInboundNumbers[0] || inboundNumbers[0] || ""}
+                                    onValueChange={(val) => {
+                                      setSelectedInboundNumbers([val]);
+                                      const updated: StageChannelSource[] = [{ id: "cs-outbound-1", channel: "calls", source: val }];
+                                      setChannelSources(updated);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-full">
+                                      <SelectValue placeholder="Select outbound source" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {inboundNumbers.map((num) => (
+                                        <SelectItem key={num} value={num}>
+                                          {num}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                             </div>
 
-                            {/* Channels multi-select — only for "AI Receives Calls" */}
+                            {/* Unified Channel & Source Dropdown Selector - Only when stageType is "AI Receives Calls" */}
                             {stageType === "AI Receives Calls" && (
-                              <div ref={channelDropdownRef} className="relative flex flex-col">
-                                <div className="flex items-center gap-1.5 mb-2">
-                                  <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                    Channels
-                                  </label>
-                                  <InfoTooltip text="Select every channel through which clients can reach out to this stage." />
+                              <div ref={channelDropdownRef} className="relative flex flex-col space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <label className="block text-sm font-medium" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                      Through which channel client has reach out to us
+                                    </label>
+                                    <InfoTooltip text="Configure each channel (Calls, SMS, WhatsApp, Website) and its corresponding integrated source number or website link for this stage." />
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowHowToReceiveCallModal(true)}
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-800 underline underline-offset-2 transition-colors"
+                                    style={{ fontFamily: 'DM Sans, sans-serif' }}
+                                  >
+                                    How to Receive Call
+                                  </button>
                                 </div>
 
-                                {(() => {
-                                  const CHANNEL_OPTIONS = [
-                                    { key: "calls", label: "AI Receives Call" },
-                                    { key: "whatsapp", label: "AI Receives Message on WhatsApp" },
-                                    { key: "sms", label: "AI Receives Message on SMS" },
-                                    { key: "website", label: "AI Receives Message on Website" },
-                                  ] as const;
-                                  const labelMap = Object.fromEntries(CHANNEL_OPTIONS.map(c => [c.key, c.label]));
-
-                                  return (
-                                    <>
-                                      {/* Header row — full width, shows selected channels as capsules */}
-                                      <div className="flex flex-wrap gap-2 p-3 bg-input-background border border-input rounded-lg min-h-[42px] w-full">
-                                        {selectedStageChannels.map((key) => (
+                                {/* Dropdown Trigger Box */}
+                                <div
+                                  onClick={() => setShowChannelDropdown(!showChannelDropdown)}
+                                  className="flex items-center justify-between min-h-[44px] p-2.5 bg-input-background border border-input rounded-lg cursor-pointer hover:border-primary/50 transition-colors"
+                                >
+                                  <div className="flex flex-wrap gap-2 items-center flex-1">
+                                    {channelSources.length === 0 ? (
+                                      <span className="text-sm text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        Select channel and source...
+                                      </span>
+                                    ) : (
+                                      channelSources.map((cs) => {
+                                        const channelLabel = cs.channel === "calls" ? "Calls" : cs.channel === "whatsapp" ? "WhatsApp" : cs.channel === "sms" ? "SMS" : "Website";
+                                        return (
                                           <span
-                                            key={key}
-                                            className="inline-flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded text-sm h-fit"
+                                            key={cs.id}
+                                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-primary/10 text-primary rounded-md text-xs font-medium"
+                                            style={{ fontFamily: 'Outfit, sans-serif' }}
                                           >
-                                            {labelMap[key]}
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setSelectedStageChannels((prev) => prev.filter((c) => c !== key))
-                                              }
-                                              className="hover:bg-primary/20 rounded"
-                                            >
-                                              <X className="w-3 h-3" />
-                                            </button>
+                                            <span className="font-semibold">{channelLabel}:</span>
+                                            <span className="opacity-90">{cs.source || "(Not set)"}</span>
                                           </span>
-                                        ))}
-                                        <button
-                                          type="button"
-                                          onClick={() => setShowChannelDropdown(!showChannelDropdown)}
-                                          className="text-sm text-muted-foreground hover:text-foreground"
-                                        >
-                                          + Add
-                                        </button>
-                                      </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pl-2 text-muted-foreground">
+                                    <ChevronDown className={`w-4 h-4 transition-transform ${showChannelDropdown ? "rotate-180" : ""}`} />
+                                  </div>
+                                </div>
 
-                                      {/* Dropdown panel — full width, checkbox list, stays open across selections */}
-                                      {showChannelDropdown && (
-                                        <div className="absolute mt-1 top-full p-2 bg-card border border-border rounded-lg shadow-lg z-10 w-full">
-                                          {CHANNEL_OPTIONS.map((ch) => {
-                                            const checked = selectedStageChannels.includes(ch.key);
-                                            return (
-                                              <label
-                                                key={ch.key}
-                                                className="flex items-center gap-3 px-3 py-2.5 text-sm hover:bg-muted rounded cursor-pointer"
+                                {/* Dropdown Panel Popover */}
+                                {showChannelDropdown && (
+                                  <div className="absolute top-full mt-2 left-0 right-0 p-4 bg-card border border-border rounded-xl shadow-xl z-30 space-y-4 max-h-[380px] overflow-y-auto">
+                                    <div className="flex items-center justify-between pb-2 border-b border-border">
+                                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                        Configure Channels & Sources
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => setShowChannelDropdown(false)}
+                                        className="text-xs text-primary font-medium hover:underline"
+                                      >
+                                        Done
+                                      </button>
+                                    </div>
+
+                                    {/* Configured Channel-Source Rows */}
+                                    <div className="space-y-3">
+                                      {channelSources.map((cs, idx) => {
+                                        const isPhoneChannel = cs.channel === "calls" || cs.channel === "whatsapp" || cs.channel === "sms";
+                                        return (
+                                          <div key={cs.id || idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center bg-muted/30 p-3 rounded-lg border border-border">
+                                            {/* Field 1: Channel */}
+                                            <div className="sm:col-span-5 flex flex-col">
+                                              <label className="text-xs font-medium text-muted-foreground mb-1">Channel</label>
+                                              <Select
+                                                value={cs.channel}
+                                                onValueChange={(val: "calls" | "sms" | "whatsapp" | "website") => {
+                                                  const updated = [...channelSources];
+                                                  const newSource = val === "website" ? "" : (inboundNumbers[0] || "+1 (555) 123-4567");
+                                                  updated[idx] = { ...cs, channel: val, source: newSource };
+                                                  setChannelSources(updated);
+                                                  setSelectedStageChannels(updated.map((c) => c.channel));
+                                                  setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
+                                                }}
                                               >
-                                                <input
-                                                  type="checkbox"
-                                                  checked={checked}
-                                                  onChange={() =>
-                                                    setSelectedStageChannels((prev) =>
-                                                      checked ? prev.filter((c) => c !== ch.key) : [...prev, ch.key]
-                                                    )
-                                                  }
-                                                  className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                                                />
-                                                <span style={{ fontFamily: 'Outfit, sans-serif' }}>{ch.label}</span>
+                                                <SelectTrigger className="w-full h-9 bg-white">
+                                                  <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  <SelectItem value="calls">Calls</SelectItem>
+                                                  <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                                                  <SelectItem value="sms">SMS</SelectItem>
+                                                  <SelectItem value="website">Website</SelectItem>
+                                                </SelectContent>
+                                              </Select>
+                                            </div>
+
+                                            {/* Field 2: Source (Integrated Phone Number or Website Link) */}
+                                            <div className="sm:col-span-6 flex flex-col">
+                                              <label className="text-xs font-medium text-muted-foreground mb-1">
+                                                {isPhoneChannel ? "Integrated Number (Source)" : "Website Link (Optional Source)"}
                                               </label>
-                                            );
-                                          })}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
+                                              {isPhoneChannel ? (
+                                                <Select
+                                                  value={cs.source || inboundNumbers[0] || ""}
+                                                  onValueChange={(val) => {
+                                                    const updated = [...channelSources];
+                                                    updated[idx] = { ...cs, source: val };
+                                                    setChannelSources(updated);
+                                                    setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
+                                                  }}
+                                                >
+                                                  <SelectTrigger className="w-full h-9 bg-white">
+                                                    <SelectValue placeholder="Select integrated number" />
+                                                  </SelectTrigger>
+                                                  <SelectContent>
+                                                    {inboundNumbers.map((num) => (
+                                                      <SelectItem key={num} value={num}>
+                                                        {num}
+                                                      </SelectItem>
+                                                    ))}
+                                                  </SelectContent>
+                                                </Select>
+                                              ) : (
+                                                <Input
+                                                  type="text"
+                                                  placeholder="https://example.com/contact (optional)"
+                                                  value={cs.source}
+                                                  onChange={(e) => {
+                                                    const updated = [...channelSources];
+                                                    updated[idx] = { ...cs, source: e.target.value };
+                                                    setChannelSources(updated);
+                                                  }}
+                                                  className="h-9 text-sm bg-white"
+                                                />
+                                              )}
+                                            </div>
+
+                                            {/* Delete button */}
+                                            <div className="sm:col-span-1 flex items-center justify-end pt-5 sm:pt-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (channelSources.length <= 1) {
+                                                    toast.error("At least one channel configuration is required.");
+                                                    return;
+                                                  }
+                                                  const updated = channelSources.filter((_, i) => i !== idx);
+                                                  setChannelSources(updated);
+                                                  setSelectedStageChannels(updated.map((c) => c.channel));
+                                                  setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
+                                                }}
+                                                className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-muted rounded-md transition-colors"
+                                                title="Remove channel"
+                                              >
+                                                <X className="w-4 h-4" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+
+                                    {/* Add Channel Button */}
+                                    <div>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const defaultNum = inboundNumbers[0] || "+1 (555) 123-4567";
+                                          const updated = [
+                                            ...channelSources,
+                                            { id: `cs-${Date.now()}`, channel: "calls" as const, source: defaultNum }
+                                          ];
+                                          setChannelSources(updated);
+                                          setSelectedStageChannels(updated.map((c) => c.channel));
+                                          setSelectedInboundNumbers(updated.filter((c) => c.source).map((c) => c.source));
+                                        }}
+                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-md transition-colors"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        Add Channel
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             )}
 
@@ -5567,6 +5676,7 @@ export default function Process() {
                                               stageType,
                                               selectedInboundNumbers,
                                               selectedStageChannels,
+                                              channelSources,
                                               responsiblePerson,
                                               whenToMove,
                                               callerPitchMode,

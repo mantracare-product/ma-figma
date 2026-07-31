@@ -1,6 +1,6 @@
 export type FieldDef = {
   label: string;
-  type: "text" | "email" | "tel" | "textarea" | "number" | "url" | "select" | "radio" | "date" | "time" | "toggle";
+  type: "text" | "email" | "tel" | "textarea" | "number" | "url" | "select" | "multiselect" | "checkbox" | "radio" | "date" | "time" | "toggle";
   placeholder?: string;
   required?: boolean;
   options?: { label: string; value: string }[];

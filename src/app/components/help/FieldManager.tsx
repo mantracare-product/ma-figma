@@ -6,6 +6,7 @@ import { toast } from "sonner";
 const FIELD_TYPE_MAP: Record<string, FieldInputType> = {
   "String": "text",
   "List": "select",
+  "Multi-Select List": "multiselect",
   "Date/Time": "date_time",
   "Date": "date",
   "Book a Resource": "text",

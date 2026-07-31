@@ -9,6 +9,12 @@ export interface AISettings {
   style?: string;
 }
 
+export interface StageChannelSource {
+  id: string;
+  channel: "calls" | "sms" | "whatsapp" | "website";
+  source: string;
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -16,6 +22,10 @@ export interface Stage {
   status: string;
   color?: string;
   aiSettings?: AISettings;
+  stageType?: string;
+  selectedInboundNumbers?: string[];
+  selectedStageChannels?: string[];
+  channelSources?: StageChannelSource[];
 }
 
 export interface Process {

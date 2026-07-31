@@ -11,6 +11,8 @@ import {
   Eye,
   EyeOff,
   Star,
+  X,
+  ListChecks,
 } from "lucide-react";
 
 interface FieldOption {
@@ -103,6 +105,81 @@ export default function FieldRenderer({
             {field.allowOther && <option value="other">Other</option>}
           </select>
         );
+
+      case "multiselect": {
+        const selectedValues: string[] = Array.isArray(fieldValue)
+          ? fieldValue
+          : fieldValue ? [String(fieldValue)] : [];
+
+        const toggleOption = (val: string) => {
+          if (selectedValues.includes(val)) {
+            onFieldChange(selectedValues.filter((v) => v !== val));
+          } else {
+            onFieldChange([...selectedValues, val]);
+          }
+        };
+
+        return (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-1.5 p-2 border border-gray-300 rounded-lg min-h-[42px] bg-white items-center">
+              {selectedValues.length === 0 ? (
+                <span className="text-sm text-gray-400 font-normal px-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {field.placeholder || "Select multiple options..."}
+                </span>
+              ) : (
+                selectedValues.map((val) => {
+                  const opt = field.options?.find((o) => o.value === val);
+                  const label = opt ? opt.label : val;
+                  return (
+                    <span
+                      key={val}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary rounded-md text-xs font-medium"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {label}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleOption(val);
+                        }}
+                        className="hover:bg-primary/20 rounded p-0.5"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  );
+                })
+              )}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1">
+              {field.options?.map((option) => {
+                const checked = selectedValues.includes(option.value);
+                return (
+                  <label
+                    key={option.id}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-all ${
+                      checked
+                        ? "border-primary bg-primary/5 text-primary font-semibold"
+                        : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700 font-medium"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleOption(option.value)}
+                      className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-2 focus:ring-primary/20 cursor-pointer"
+                    />
+                    <span className="text-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {option.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
 
       case "checkbox":
         return (

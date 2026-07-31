@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, type ReactNode }
 
 export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember";
 
-export type FieldInputType = "text" | "email" | "tel" | "select" | "textarea" | "date"
+export type FieldInputType = "text" | "email" | "tel" | "select" | "multiselect" | "textarea" | "date"
   | "date_time" | "number" | "money" | "link" | "whatsapp_link" | "yes_no";
 
 export interface FieldOption { id: number; label: string; value: string; }

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 
 export interface StageNumberAssignment {
   number: string;          // e.g. "+1 (555) 123-4567"
-  channel: "whatsapp" | "sms";
+  channel: "whatsapp" | "sms" | "calls";
   processId: string;
   processName: string;     // denormalized for easy display, e.g. "Patient Intake"
   stageId: string;
@@ -36,7 +36,7 @@ export function assignNumberToStage(assignment: StageNumberAssignment) {
   saveStageRouting([...filtered, assignment]);
 }
 
-export function resolveStageForNumber(number: string, channel: "whatsapp" | "sms"): StageNumberAssignment | null {
+export function resolveStageForNumber(number: string, channel: "whatsapp" | "sms" | "calls"): StageNumberAssignment | null {
   const rows = getStageRouting();
   return rows.find((r) => r.number === number && r.channel === channel) ?? null;
 }

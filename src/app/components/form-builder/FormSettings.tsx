@@ -60,17 +60,8 @@ export default function FormSettings({
   const tabs = [
     { id: "general", label: "General", icon: Globe },
     { id: "appearance", label: "Appearance", icon: Palette },
-    { id: "layout", label: "Layout", icon: Layout },
     { id: "multiStep", label: "Multi-Step", icon: Layers },
-    { id: "validation", label: "Validation", icon: ShieldCheck },
     { id: "confirmation", label: "Confirmation", icon: CheckCircle2 },
-    { id: "notifications", label: "Notifications", icon: Mail },
-    { id: "conditionalLogic", label: "Logic", icon: Zap },
-    { id: "payments", label: "Payments", icon: CreditCard },
-    { id: "integrations", label: "Integrations", icon: Link2 },
-    { id: "security", label: "Security", icon: Lock },
-    { id: "analytics", label: "Analytics", icon: BarChart3 },
-    { id: "advanced", label: "Advanced", icon: Code },
   ];
 
   return (
