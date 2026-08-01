@@ -20,8 +20,11 @@ import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
 import { useFieldRegistry, FieldDefinition, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
-import { getActivityForClient } from "../../lib/activityLog";
-import { getStoredCallLogs } from "../../lib/processLogsStore";
+import { getActivityForClient, getActivityForProcess } from "../../lib/activityLog";
+import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
+import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
+import ActivityTab from "../components/activity/ActivityTab";
+import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -454,6 +457,34 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [processSearchQuery, setProcessSearchQuery] = useState("");
 
+  const [showProcessDetailDrawer, setShowProcessDetailDrawer] = useState(false);
+  const [selectedProcessLog, setSelectedProcessLog] = useState<CallLog | null>(null);
+  const [processDetailTab, setProcessDetailTab] = useState<"general" | "activity" | "history">("general");
+  const [drawerVisibleFields, setDrawerVisibleFields] = useState<string[]>([
+    "currentStage",
+    "status",
+    "responsible",
+    "dealType",
+    "source",
+    "created",
+  ]);
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [showResponsibleDropdown, setShowResponsibleDropdown] = useState(false);
+  const [processFieldManagerOpen, setProcessFieldManagerOpen] = useState(false);
+  const [processFieldManagerMode, setProcessFieldManagerMode] = useState<"select" | "create">("select");
+  const [historyFilters, setHistoryFilters] = useState<ProcessDetailHistoryFilterState>({
+    showPopup: false,
+    quickFilter: null,
+    eventTypeFilter: "all",
+    createdByFilter: "all",
+    dateFilter: "all",
+    filtersActive: false,
+    showAddFieldPopup: false,
+    activeFilterFields: [],
+    selectedAddFields: [],
+  });
+
   // Initialize selectedProcesses and drawerProcessStages from client
   useEffect(() => {
     if (client) {
@@ -621,63 +652,132 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-1",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
-        type: "outbound_call" as const,
-        date: "Apr 10, 2024",
+        type: "process_completed" as const,
+        timestamp: "2024-04-13 14:30",
+        date: "Apr 13, 2024",
         time: "2:30 PM",
-        title: "Outbound Call Completed",
-        stage: "Insurance Verification",
-        duration: "4:32",
+        title: "Process Completed",
         status: "Completed",
-        callId: "call-001",
+        sourceStepName: "Deal Closed",
+        details: {
+          primary: "Final Stage: Insurance Verification",
+          secondary: "Process: Patient Intake",
+        },
       },
       {
         id: "act-2",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
-        type: "stage_change" as const,
-        date: "Apr 8, 2024",
-        time: "10:15 AM",
-        title: "Stage Changed",
-        description: "Moved from Initial Contact → Insurance Verification",
+        type: "appointment_booked" as const,
+        timestamp: "2024-04-12 15:00",
+        date: "Apr 12, 2024",
+        time: "3:00 PM",
+        title: "Appointment Booked",
+        status: "Completed",
+        sourceStepName: "Schedule Appointment Step",
+        details: {
+          primary: "Slot: 10:00 AM – 10:30 AM",
+          secondary: "Location: Main Clinic",
+        },
       },
       {
         id: "act-3",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
-        type: "outbound_call" as const,
-        date: "Apr 8, 2024",
+        type: "email" as const,
+        timestamp: "2024-04-12 09:30",
+        date: "Apr 12, 2024",
         time: "9:30 AM",
-        title: "Outbound Call Completed",
-        stage: "Initial Contact",
-        duration: "3:15",
+        title: "Email Triggered",
         status: "Completed",
-        callId: "call-002",
+        sourceStepName: "Welcome Email Campaign",
+        details: {
+          primary: "Template: welcome_onboarding",
+          secondary: `Sent to ${client.email || "client"}`,
+        },
       },
       {
         id: "act-4",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
-        type: "failed_call" as const,
-        date: "Apr 7, 2024",
-        time: "5:20 PM",
-        title: "Outbound Call Failed",
-        stage: "Initial Contact",
-        duration: "0:00",
-        status: "Failed",
-        callId: "call-003",
+        type: "stage_update" as const,
+        timestamp: "2024-04-11 14:00",
+        date: "Apr 11, 2024",
+        time: "2:00 PM",
+        title: "Stage Updated",
+        status: "Completed",
+        sourceStepName: "Pipeline Automation",
+        details: {
+          primary: "Moved to Insurance Verification",
+          secondary: "Process: Patient Intake",
+        },
       },
       {
         id: "act-5",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "outbound_call" as const,
+        timestamp: "2024-04-10 11:30",
+        date: "Apr 10, 2024",
+        time: "11:30 AM",
+        title: "Outbound Call Completed",
+        status: "Completed",
+        callId: "CALL-001",
+        sourceStepName: "Outbound Call Step",
+        details: {
+          primary: "Duration 4:32",
+          secondary: "Status: Completed",
+        },
+      },
+      {
+        id: "act-6",
+        processId: findProcessId("Patient Intake"),
+        processName: "Patient Intake",
+        type: "whatsapp" as const,
+        timestamp: "2024-04-09 10:15",
+        date: "Apr 9, 2024",
+        time: "10:15 AM",
+        title: "WhatsApp Message Triggered",
+        status: "Completed",
+        sourceStepName: "Onboarding Flow",
+        details: {
+          primary: "Template: appointment_reminder",
+          secondary: `Sent to ${client.phone || "phone"}`,
+        },
+      },
+      {
+        id: "act-7",
+        processId: findProcessId("Follow-up Calls"),
+        processName: "Follow-up Calls",
+        type: "failed_call" as const,
+        timestamp: "2024-04-08 16:45",
+        date: "Apr 8, 2024",
+        time: "4:45 PM",
+        title: "Outbound Call Failed",
+        status: "Failed",
+        callId: "CALL-010",
+        sourceStepName: "Follow-up Dialer",
+        details: {
+          primary: "Duration 0:00",
+          secondary: "No answer from recipient",
+        },
+      },
+      {
+        id: "act-8",
         processId: findProcessId("Follow-up Calls"),
         processName: "Follow-up Calls",
         type: "inbound_call" as const,
-        date: "Apr 10, 2024",
-        time: "1:45 PM",
+        timestamp: "2024-04-08 11:20",
+        date: "Apr 8, 2024",
+        time: "11:20 AM",
         title: "Inbound Call Received",
-        stage: "Follow-up",
-        duration: "5:05",
         status: "Completed",
-        callId: "call-006",
+        callId: "CALL-007",
+        sourceStepName: "Inbound Hotline",
+        details: {
+          primary: "Duration 3:55",
+          secondary: "Status: Completed",
+        },
       },
     ];
 
@@ -689,13 +789,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       type: r.type,
       rawType: r.type,
       refId: r.refId,
+      timestamp: r.timestamp,
       rawTimestamp: r.timestamp,
       fullTimestamp: new Date(r.timestamp).toLocaleString(),
       date: new Date(r.timestamp).toLocaleDateString(),
       time: new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      title: r.details.primary,
-      description: r.details.secondary,
-      sourceStepName: r.details.secondary,
+      title: r.details?.primary || "Activity",
+      description: r.details?.secondary,
+      details: r.details,
+      sourceStepName: r.details?.secondary,
       status: r.status === "success" ? "Completed" : r.status,
     }));
 
@@ -915,8 +1017,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 key={tab.id}
                 onClick={() => setActiveProfileTab(tab.id)}
                 className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${activeProfileTab === tab.id
-                    ? "border-b-2 border-primary text-primary"
-                    : "hover:text-foreground"
+                  ? "border-b-2 border-primary text-primary"
+                  : "hover:text-foreground"
                   }`}
                 style={{
                   fontFamily: "Outfit, sans-serif",
@@ -1326,8 +1428,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 return (
                                   <tr
                                     key={process.id}
-                                    onClick={() => setActiveProcessTabDrawer(isCurrentRowActive ? "all" : process.id)}
-                                    className="transition-colors border-b cursor-pointer"
+                                    onClick={() => {
+                                      const allLogs = getStoredCallLogs();
+                                      const matchingLog = allLogs.find(
+                                        (l) => (l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()) &&
+                                               (l.process.toLowerCase() === process.name.toLowerCase())
+                                      ) || {
+                                        id: process.id.startsWith("CALL-") ? process.id : `CALL-${process.name.toUpperCase().replace(/\s+/g, "-")}`,
+                                        client: client.name,
+                                        clientId: client.id,
+                                        type: "Outbound",
+                                        status: process.status,
+                                        process: process.name,
+                                        currentStage: process.currentStage,
+                                        duration: "4:32",
+                                        date: process.created !== "—" ? process.created : "2024-04-10 14:30",
+                                        hasRecording: true,
+                                        hasTranscript: true,
+                                        hasScheduledCall: true,
+                                      };
+
+                                      setSelectedProcessLog(matchingLog);
+                                      setProcessDetailTab("general");
+                                      setShowProcessDetailDrawer(true);
+                                    }}
+                                    className="transition-colors border-b cursor-pointer hover:bg-blue-50/50"
                                     style={{
                                       backgroundColor: rowBg,
                                       borderColor: "#F3F4F6",
@@ -1470,173 +1595,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                         </div>
                       </div>
                     </div>
-
-                    {/* Single Process Detail View (Expanded below) */}
-                    {activeProcessTabDrawer !== "all" && (() => {
-                      const selectedProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
-                      if (!selectedProcess) return null;
-
-                      const processActivities = drawerActivityItems.filter((item) => item.processId === selectedProcess.id);
-                      const lastActivity = processActivities.length > 0 ? processActivities[0] : null;
-                      const currentStage = drawerProcessStages[selectedProcess.id] || selectedProcess.currentStage;
-                      const stages = getStagesForProcess(selectedProcess.name);
-                      const currentIndex = stages.findIndex((s) => s.label === currentStage);
-
-                      return (
-                        <div
-                          key={selectedProcess.id}
-                          style={{ backgroundColor: "#FFFFFF", border: "1px solid #E5E7EB", borderRadius: "12px", boxShadow: "0 1px 2px rgba(0, 0, 0, 0.05)", overflow: "hidden" }}
-                          className="mt-4"
-                        >
-                          <div className="p-5 space-y-4">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex-1">
-                                <h3 style={{ fontFamily: "DM Sans, sans-serif", fontSize: "16px", fontWeight: "bold", color: "#1F2937", marginBottom: "8px" }}>
-                                  {selectedProcess.name} Details
-                                </h3>
-                              </div>
-                            </div>
-
-                            {/* STAGE */}
-                            <div className="flex flex-col gap-1.5">
-                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                                STAGE
-                              </label>
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center" style={{ gap: "4px" }}>
-                                  {stages.map((stage, index) => {
-                                    const isFilled = index <= currentIndex;
-                                    const stageKey = `${selectedProcess.id}-${index}`;
-                                    return (
-                                      <div key={stage.id} style={{ position: "relative" }}>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setDrawerProcessStages((prev) => ({ ...prev, [selectedProcess.id]: stage.label }));
-                                            toast.success(`Stage updated to ${stage.label}`);
-                                          }}
-                                          onMouseEnter={() => setHoveredStage(stageKey)}
-                                          onMouseLeave={() => setHoveredStage(null)}
-                                          style={{ width: "28px", height: "8px", borderRadius: "2px", backgroundColor: isFilled ? "#0EA5E9" : "#E5E7EB", border: isFilled ? "none" : "1px solid #D1D5DB", cursor: "pointer", transition: "all 0.2s", padding: 0 }}
-                                          className="hover:opacity-80"
-                                        />
-                                        {hoveredStage === stageKey && (
-                                          <div style={{ position: "absolute", bottom: "14px", left: "50%", transform: "translateX(-50%)", backgroundColor: "#1A2B4A", color: "#FFFFFF", fontSize: "11px", borderRadius: "4px", padding: "3px 8px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none", fontFamily: "Outfit, sans-serif" }}>
-                                            {stage.label}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                                <span style={{ fontSize: "14px", fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                  {currentStage}
-                                </span>
-                              </div>
-                            </div>
-
-                            {/* STATUS */}
-                            <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                                STATUS
-                              </label>
-                              <div className="relative inline-block" style={{ width: "fit-content" }}>
-                                <button
-                                  className="px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5"
-                                  style={{
-                                    backgroundColor: selectedProcess.status === "Completed" ? "#D1FAE5" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FEF3C7" : "#F3F4F6",
-                                    color: selectedProcess.status === "Completed" ? "#065F46" : selectedProcess.status === "In Progress" ? "#C2410C" : selectedProcess.status === "Pending" ? "#92400E" : "#6B7280",
-                                    border: `1px solid ${selectedProcess.status === "Completed" ? "#A7F3D0" : selectedProcess.status === "In Progress" ? "#FED7AA" : selectedProcess.status === "Pending" ? "#FDE68A" : "#E5E7EB"}`,
-                                    fontFamily: "Outfit, sans-serif",
-                                  }}
-                                >
-                                  {selectedProcess.status} <ChevronDown className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* DATE and TIME */}
-                            <div className="border-t border-border pt-4" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                              <div className="flex flex-col gap-1.5">
-                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>DATE</label>
-                                <input
-                                  type="date"
-                                  defaultValue={selectedProcess.created.split(" ")[0]}
-                                  className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                                  style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                                  onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                                  onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                                />
-                              </div>
-                              <div className="flex flex-col gap-1.5">
-                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>TIME</label>
-                                <input
-                                  type="time"
-                                  defaultValue={selectedProcess.created.split(" ")[1] || "09:30"}
-                                  className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                                  style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                                  onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                                  onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                                />
-                              </div>
-                            </div>
-
-                            {/* RESPONSIBLE */}
-                            <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                              <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>RESPONSIBLE</label>
-                              <div className="relative inline-block" style={{ width: "fit-content" }}>
-                                <button className="text-sm text-foreground hover:text-primary flex items-center gap-1.5" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
-                                  {selectedProcess.responsible || "John Smith"} <ChevronDown className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-
-                            {/* LAST ACTIVITY */}
-                            {lastActivity && (
-                              <div className="flex flex-col gap-1.5 border-t border-border pt-4">
-                                <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>LAST ACTIVITY</label>
-                                <div className="bg-muted/30 rounded-lg p-4 border border-border/50">
-                                  <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: "16px", rowGap: "8px", fontSize: "12px" }}>
-                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Date & Time:</div>
-                                    <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{lastActivity.date} at {lastActivity.time}</div>
-
-                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Created By:</div>
-                                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                      <div style={{ width: "20px", height: "20px", backgroundColor: "#4F8EF7", color: "#FFFFFF", borderRadius: "9999px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "9px", fontWeight: "bold", fontFamily: "DM Sans, sans-serif" }}>
-                                        {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI" : "JS"}
-                                      </div>
-                                      <span style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                        {lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "AI Agent" : "John Smith"}
-                                      </span>
-                                    </div>
-
-                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Event Type:</div>
-                                    <div>
-                                      <span style={{
-                                        padding: "2px 8px",
-                                        borderRadius: "4px",
-                                        fontSize: "10px",
-                                        fontWeight: "700",
-                                        backgroundColor: lastActivity.type === "stage_change" ? "#4F8EF7" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "#10B981" : "#F59E0B",
-                                        color: "#FFFFFF",
-                                        fontFamily: "Outfit, sans-serif",
-                                      }}>
-                                        {lastActivity.type === "stage_change" ? "Stage changed" : lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Activity created" : "Call scheduled"}
-                                      </span>
-                                    </div>
-
-                                    <div style={{ color: "#9CA3AF", fontWeight: "600", fontFamily: "Outfit, sans-serif" }}>Description:</div>
-                                    <div style={{ fontWeight: "600", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                                      {(lastActivity as any).description || (lastActivity.type === "outbound_call" || lastActivity.type === "inbound_call" ? "Contact customer: Call for update" : "New → Can't Contact")}
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
                 );
               })()}
@@ -1646,334 +1604,24 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {/* ── Activity Tab ── */}
           {activeProfileTab === "activity" && (
             <div className="space-y-6">
-              {/* Process Filter Chips */}
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => { setActiveProcessTabDrawer("all"); setShowCallDetailsFromProfile(false); }}
-                  className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${activeProcessTabDrawer === "all" ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80"}`}
-                  style={{ fontFamily: "Outfit, sans-serif", color: activeProcessTabDrawer === "all" ? undefined : "#6B7280" }}
-                >
-                  All
-                </button>
-                {drawerClientProcesses.map((process) => (
-                  <button
-                    key={process.id}
-                    onClick={() => { setActiveProcessTabDrawer(process.id); setShowCallDetailsFromProfile(false); }}
-                    className={`px-4 py-2 rounded-full font-medium text-sm transition-all ${activeProcessTabDrawer === process.id ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted hover:bg-muted/80"}`}
-                    style={{ fontFamily: "Outfit, sans-serif", color: activeProcessTabDrawer === process.id ? undefined : "#6B7280" }}
-                  >
-                    {process.name}
-                  </button>
-                ))}
-              </div>
-
-              {/* Activity List — Vertical Timeline matching ProcessDetailDrawer */}
-              <div className="relative p-2">
-                {filteredDrawerActivities.length === 0 ? (
-                  <div className="text-center py-8">
-                    <p className="text-sm" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>No activity for this process yet</p>
-                  </div>
-                ) : (
-                  filteredDrawerActivities.map((item, i) => {
-                    const isLast = i === filteredDrawerActivities.length - 1;
-                    const rawType = ((item as any).rawType || item.type) as string;
-                    const heading = HEADING_BY_TYPE[rawType] || HEADING_BY_TYPE[item.type] || (item as any).title;
-                    const timestampStr = (item as any).fullTimestamp || `${(item as any).date}, ${(item as any).time}`;
-
-                    return (
-                      <div key={item.id} className="relative flex gap-3 pb-4 last:pb-0">
-                        {/* Amazon-tracker connecting line — runs behind the node */}
-                        {!isLast && (
-                          <div
-                            className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0"
-                            style={{
-                              backgroundColor: item.status === "Pending" ? "transparent" : "#1E88E5",
-                              backgroundImage: item.status === "Pending"
-                                ? "repeating-linear-gradient(to bottom, #CBD5E1 0 4px, transparent 4px 8px)"
-                                : undefined,
-                            }}
-                          />
-                        )}
-
-                        {/* Node icon — sits on the line */}
-                        <div
-                          className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2"
-                          style={{
-                            backgroundColor: item.status === "Failed" ? "#FEE2E2" : ACTIVITY_ICON_BG[rawType] || ACTIVITY_ICON_BG[item.type] || "#F1F5F9",
-                            borderColor: item.status === "Failed" ? "#DC2626" : item.status === "Pending" ? "#CBD5E1" : "transparent",
-                          }}
-                        >
-                          {getDrawerActivityIcon(rawType || item.type)}
-                        </div>
-
-                        {/* Standalone card — heading + details */}
-                        <button
-                          onClick={() => {
-                            if (rawType === "whatsapp" || item.type === "whatsapp") {
-                              navigate("/chats", {
-                                state: {
-                                  clientId: client.id,
-                                  channel: "whatsapp",
-                                  threadId: (item as any).refId,
-                                },
-                              });
-                            } else if (rawType === "sms" || item.type === "sms") {
-                              navigate("/chats", {
-                                state: {
-                                  clientId: client.id,
-                                  channel: "sms",
-                                  threadId: (item as any).refId,
-                                },
-                              });
-                            } else if (rawType === "email" || item.type === "email") {
-                              navigate("/chats", {
-                                state: {
-                                  clientId: client.id,
-                                  channel: "email",
-                                  emailId: (item as any).refId,
-                                },
-                              });
-                            } else if (rawType === "website_message" || rawType === "website") {
-                              navigate("/chats", {
-                                state: {
-                                  clientId: client.id,
-                                  channel: "website",
-                                  threadId: (item as any).refId,
-                                },
-                              });
-                            } else if ((item as any).callId) {
-                              setSelectedCallId((item as any).callId);
-                              setShowCallDetailsFromProfile(true);
-                            }
-                          }}
-                          className="flex-1 text-left p-3 rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className="text-sm font-bold text-gray-900"
-                              style={{ fontFamily: "DM Sans, sans-serif" }}
-                            >
-                              {heading}
-                            </span>
-                            <span
-                              className="text-xs text-gray-400 whitespace-nowrap"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              {timestampStr}
-                            </span>
-                          </div>
-
-                          <div className="mt-1.5 space-y-0.5">
-                            <p
-                              className="text-xs text-gray-700 font-medium"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              {item.title}
-                            </p>
-                            {(item as any).description && (
-                              <p
-                                className="text-xs text-gray-500"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {(item as any).description}
-                              </p>
-                            )}
-                            {(item as any).sourceStepName && (
-                              <p className="text-[11px] text-gray-400">via {(item as any).sourceStepName}</p>
-                            )}
-                          </div>
-
-                          {(rawType === "website_message" ||
-                            item.type === "website_message" ||
-                            (item.title || "").toLowerCase().includes("website") ||
-                            ((item as any).description || "").toLowerCase().includes("website")) && (
-                              <div className="mt-2 text-left">
-                                <span
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigate("/chats", {
-                                      state: {
-                                        clientId: client.id,
-                                        channel: "website",
-                                      },
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  <Globe className="w-3.5 h-3.5 text-purple-600" />
-                                  View Website Chat
-                                </span>
-                              </div>
-                            )}
-                          <div className="flex flex-wrap items-center gap-2 mt-2">
-                            {activeProcessTabDrawer === "all" && item.processName && (
-                              <span className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                Process: <span className="font-medium text-primary">{item.processName}</span>
-                              </span>
-                            )}
-                            {item.status && item.status !== "Completed" && item.status !== "success" && (
-                              <span
-                                className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium"
-                                style={{
-                                  backgroundColor: item.status === "Failed" ? "#FEE2E2" : "#FEF3C7",
-                                  color: item.status === "Failed" ? "#DC2626" : "#CA8A04",
-                                }}
-                              >
-                                {item.status}
-                              </span>
-                            )}
-                            {item.status === "Completed" && (
-                              <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                Completed
-                              </span>
-                            )}
-                          </div>
-                        </button>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-
-              {/* Call Details — inline collapsible panel */}
-              {showCallDetailsFromProfile && selectedCallId && (
-                <div className="mt-4 space-y-6 border-t border-border pt-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <h2 className="text-xl font-semibold" style={{ fontFamily: "DM Sans, sans-serif", color: "#1F2937" }}>Call Details</h2>
-                      <span className="px-3 py-1 bg-primary/10 text-primary rounded-full text-sm font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        #{selectedCallId}
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => { setShowCallDetailsFromProfile(false); setSelectedCallId(null); setIsPlayingRecording(false); setPlaybackSpeed(1); }}
-                      className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors"
-                    >
-                      <X className="w-5 h-5" style={{ color: "#6B7280" }} />
-                    </button>
-                  </div>
-
-                  {/* Summary */}
-                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
-                    <h2 className="text-lg font-semibold mb-4" style={{ fontFamily: "DM Sans, sans-serif" }}>Summary</h2>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-4 gap-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Client</p>
-                          <p className="font-semibold text-sm">{client.name}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Call Time</p>
-                          <p className="font-semibold text-sm">Apr 10, 2:30 PM</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Type</p>
-                          <span className="inline-flex items-center px-2.5 py-0.5 bg-primary/10 text-primary rounded-full text-xs font-medium">Outbound</span>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Current Stage</p>
-                          <p className="font-semibold text-sm">{client.stage || "Insurance Verification"}</p>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Call Status</p>
-                          <span className="inline-flex items-center px-2.5 py-0.5 bg-success/10 text-success rounded-full text-xs font-medium">Completed</span>
-                        </div>
-                        <div>
-                          <p className="text-xs text-muted-foreground mb-1">Duration</p>
-                          <p className="font-semibold text-sm">4m 32s</p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Recording Player */}
-                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Recording</h2>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-muted-foreground mr-2">Speed:</span>
-                        {[0.5, 0.75, 1, 1.25, 1.5].map((speed) => (
-                          <button
-                            key={speed}
-                            onClick={() => setPlaybackSpeed(speed)}
-                            className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${playbackSpeed === speed ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/80"}`}
-                          >
-                            {speed}x
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex items-center gap-4 p-4 bg-muted rounded-xl">
-                        <button
-                          onClick={() => setIsPlayingRecording(!isPlayingRecording)}
-                          className="w-12 h-12 bg-primary text-primary-foreground rounded-full flex items-center justify-center hover:opacity-90 transition-opacity"
-                        >
-                          {isPlayingRecording ? (
-                            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-                              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                            </svg>
-                          ) : (
-                            <Play className="w-6 h-6 ml-1" />
-                          )}
-                        </button>
-                        <div className="flex-1">
-                          <div className="h-2 bg-border rounded-full overflow-hidden">
-                            <div className="h-full bg-primary w-1/3" />
-                          </div>
-                          <div className="flex justify-between mt-2 text-sm text-muted-foreground">
-                            <span>1:30</span>
-                            <span>4:32</span>
-                          </div>
-                        </div>
-                        <Tooltip text="Download Recording">
-                          <Button variant="ghost" size="sm">
-                            <Download className="w-4 h-4" />
-                          </Button>
-                        </Tooltip>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Transcript */}
-                  <div className="bg-card rounded-xl p-6 border border-border shadow-sm">
-                    <div className="flex items-center justify-between mb-4">
-                      <h2 className="text-lg font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>Transcript</h2>
-                      <Tooltip text="Download Transcript">
-                        <Button variant="outline" size="sm">
-                          <FileText className="w-4 h-4" />
-                        </Button>
-                      </Tooltip>
-                    </div>
-                    <div className="space-y-4 max-h-96 overflow-y-auto">
-                      <div className="space-y-4">
-                        {[
-                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:05", text: `Hello, this is MantraAssist calling for ${client.name}. Am I speaking with them?` },
-                          { role: "client", initials: client.name.split(" ").map((n) => n[0]).join("") || "CL", name: client.name, ts: "00:12", text: `Yes, this is ${client.name.split(" ")[0]} speaking.` },
-                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:16", text: "Great! I'm calling to help with your insurance verification. Do you have a few minutes to discuss?" },
-                          { role: "client", initials: client.name.split(" ").map((n) => n[0]).join("") || "CL", name: client.name, ts: "00:20", text: "Sure, I have some time now." },
-                          { role: "AI", initials: "AI", name: "AI Agent", ts: "00:24", text: "Perfect! I'll need to verify a few details about your insurance coverage..." },
-                        ].map((msg, i) => (
-                          <div key={i} className="flex gap-3">
-                            <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${msg.role === "AI" ? "bg-primary/10 text-primary" : "bg-secondary/10 text-secondary"}`}>
-                              {msg.initials}
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-semibold text-sm">{msg.name}</span>
-                                <span className="text-xs text-muted-foreground">{msg.ts}</span>
-                              </div>
-                              <p className="text-sm">{msg.text}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              <ActivityTab
+                activity={filteredDrawerActivities as any}
+                processTabs={[
+                  { id: "all", name: "All" },
+                  ...drawerClientProcesses.map((p) => ({ id: p.id, name: p.name })),
+                ]}
+                activeProcessTab={activeProcessTabDrawer}
+                onProcessTabChange={(tabId) => {
+                  setActiveProcessTabDrawer(tabId);
+                  setShowCallDetailsFromProfile(false);
+                }}
+                onOpenCallDetail={(callId) => {
+                  setSelectedCallId(callId);
+                  setShowCallDetailsFromProfile(true);
+                }}
+                clientId={client.id}
+                emptyMessage="No activity for this process yet"
+              />
             </div>
           )}
 
@@ -2057,8 +1705,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                             Status
                                           </span>
                                           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium w-fit ${submission.status === "completed" ? "bg-green-100 text-green-700"
-                                              : submission.status === "pending" ? "bg-amber-100 text-amber-700"
-                                                : "bg-red-100 text-red-700"
+                                            : submission.status === "pending" ? "bg-amber-100 text-amber-700"
+                                              : "bg-red-100 text-red-700"
                                             }`} style={{ fontFamily: "Outfit, sans-serif" }}>
                                             {submission.status.charAt(0).toUpperCase() + submission.status.slice(1)}
                                           </span>
@@ -2325,6 +1973,115 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               }}
             />
           )}
+
+          {/* Process Detail Drawer Component */}
+          <ProcessDetailDrawer
+            isOpen={showProcessDetailDrawer && selectedProcessLog !== null}
+            onClose={() => setShowProcessDetailDrawer(false)}
+            log={selectedProcessLog}
+            client={client}
+            activeTab={processDetailTab}
+            onTabChange={(tab) => setProcessDetailTab(tab)}
+            activity={(() => {
+              if (!selectedProcessLog || !client) return [];
+              const realEntries = getActivityForProcess(client.id, selectedProcessLog.process).map((r) => ({
+                id: r.id,
+                type: r.type,
+                timestamp: new Date(r.timestamp).toLocaleString(),
+                status: r.status,
+                refId: r.refId,
+                direction: r.direction,
+                sourceStepName: r.details.secondary,
+                details: r.details,
+              }));
+              if (realEntries.length > 0) return realEntries;
+              return [
+                {
+                  id: `act-entry-${selectedProcessLog.id}`,
+                  type: "process_entry",
+                  timestamp: "2024-04-08 09:00",
+                  status: "success",
+                  sourceStepName: "Process Intake",
+                  refId: selectedProcessLog.id,
+                  details: {
+                    primary: `Enrolled in "${selectedProcessLog.process}"`,
+                    secondary: `Initial Stage: ${selectedProcessLog.currentStage || "New"}`,
+                  },
+                },
+                {
+                  id: `act-stage-${selectedProcessLog.id}`,
+                  type: "stage_update",
+                  timestamp: "2024-04-10 14:00",
+                  status: "success",
+                  sourceStepName: "Pipeline Automation",
+                  refId: selectedProcessLog.id,
+                  details: {
+                    primary: `Moved to ${selectedProcessLog.currentStage || "Insurance Verification"}`,
+                    secondary: `Process: ${selectedProcessLog.process}`,
+                  },
+                },
+              ];
+            })()}
+            onOpenActivity={(entry) => {
+              if (entry.callId || entry.refId) {
+                setSelectedCallId(entry.callId || entry.refId);
+                setShowCallDetailsFromProfile(true);
+              }
+            }}
+            stageIdx={(() => {
+              if (!selectedProcessLog) return 0;
+              const stages = getStagesForProcess(selectedProcessLog.process);
+              const idx = stages.findIndex((s) => s.label === selectedProcessLog.currentStage);
+              return idx !== -1 ? idx + 1 : 1;
+            })()}
+            onStageChange={(idx) => {
+              if (selectedProcessLog) {
+                const stages = getStagesForProcess(selectedProcessLog.process);
+                const newStageLabel = stages[idx - 1]?.label || selectedProcessLog.currentStage;
+                setSelectedProcessLog({ ...selectedProcessLog, currentStage: newStageLabel });
+                setDrawerProcessStages((prev) => ({ ...prev, [selectedProcessLog.id]: newStageLabel }));
+                toast.success(`Stage updated to ${newStageLabel}`);
+              }
+            }}
+            visibleFieldKeys={drawerVisibleFields}
+            onVisibleFieldKeysChange={setDrawerVisibleFields}
+            editedValues={editedValues}
+            editingField={editingField}
+            onStartEditingField={setEditingField}
+            onFieldSave={(key, value) => {
+              setEditedValues((prev) => ({ ...prev, [key]: value }));
+              toast.success("Field saved");
+            }}
+            showResponsibleDropdown={showResponsibleDropdown}
+            onToggleResponsibleDropdown={setShowResponsibleDropdown}
+            onOpenTeamMember={() => {}}
+            isTeamMemberDrawerOpen={false}
+            fieldManagerOpen={processFieldManagerOpen}
+            fieldManagerMode={processFieldManagerMode}
+            onOpenFieldManager={(mode) => {
+              setProcessFieldManagerMode(mode);
+              setProcessFieldManagerOpen(true);
+            }}
+            onCloseFieldManager={() => setProcessFieldManagerOpen(false)}
+            teamMembersData={[]}
+            dealFields={getAllFields("deal")}
+            historyFilters={historyFilters}
+            onHistoryFiltersChange={(patch) => setHistoryFilters((prev) => ({ ...prev, ...patch }))}
+          />
+
+          {/* Call Details Drawer Component */}
+          <CallDetailDrawer
+            isOpen={showCallDetailsFromProfile}
+            onClose={() => {
+              setShowCallDetailsFromProfile(false);
+              setSelectedCallId(null);
+            }}
+            callId={selectedCallId}
+            callLogs={getStoredCallLogs()}
+            onSelectCallId={(targetId) => {
+              setSelectedCallId(targetId);
+            }}
+          />
         </div>
       </div>
     </>

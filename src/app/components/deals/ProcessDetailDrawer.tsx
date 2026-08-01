@@ -22,6 +22,7 @@ import {
   Globe,
 } from "lucide-react";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
+import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 
@@ -116,90 +117,7 @@ export interface ProcessDetailHistoryFilterState {
   selectedAddFields: string[];
 }
 
-export type ActivityType =
-  | "process_entry"       // bottom-most card — client's first-ever entry into this process
-  | "whatsapp"
-  | "sms"
-  | "email"
-  | "webhook_trigger"
-  | "field_update"
-  | "appointment_booked"
-  | "call"                 // outbound/inbound call triggered for stage
-  | "stage_update"         // transition to a new stage (exit + entry)
-  | "process_completed"    // top-most card — deal/process reached terminal state
-  | "website_message";
-
-export interface ActivityLogEntry {
-  id: string;
-  type: ActivityType;
-  timestamp: string;
-  status?: "success" | "failed" | "pending";
-  sourceStepName?: string;
-  refId: string;
-  direction?: "inbound" | "outbound";   // only used by `call`
-  details: {
-    primary: string;             // e.g. "Moved to Insurance Verification", "Duration 4:32"
-    secondary?: string;          // optional second line
-  };
-}
-
-const ACTIVITY_ICON_BG: Record<ActivityType, string> = {
-  process_entry: "#EFF6FF",
-  call: "#DBEAFE",
-  whatsapp: "#DCFCE7",
-  sms: "#E0E7FF",
-  email: "#FEF3C7",
-  stage_update: "#F3E8FF",
-  webhook_trigger: "#FFE4E6",
-  appointment_booked: "#CFFAFE",
-  field_update: "#F1F5F9",
-  process_completed: "#DCFCE7",
-  website_message: "#F3E8FF",
-};
-
-const ActivityIcon = ({ type }: { type: ActivityType }) => {
-  const iconClass = "w-4 h-4";
-  switch (type) {
-    case "process_entry":
-      return <LogIn className={`${iconClass} text-blue-600`} />;
-    case "stage_update":
-      return <ArrowRightCircle className={`${iconClass} text-purple-600`} />;
-    case "process_completed":
-      return <CheckCircle2 className={`${iconClass} text-emerald-600`} />;
-    case "call":
-      return <Phone className={`${iconClass} text-blue-600`} />;
-    case "whatsapp":
-      return <MessageCircle className={`${iconClass} text-emerald-600`} />;
-    case "sms":
-      return <MessageSquare className={`${iconClass} text-indigo-600`} />;
-    case "email":
-      return <Mail className={`${iconClass} text-amber-600`} />;
-    case "webhook_trigger":
-      return <Zap className={`${iconClass} text-rose-600`} />;
-    case "appointment_booked":
-      return <Calendar className={`${iconClass} text-cyan-600`} />;
-    case "field_update":
-      return <Pencil className={`${iconClass} text-slate-600`} />;
-    case "website_message":
-      return <Globe className={`${iconClass} text-purple-600`} />;
-    default:
-      return <Pencil className={`${iconClass} text-slate-600`} />;
-  }
-};
-
-const HEADING_BY_TYPE: Record<ActivityType, string> = {
-  process_entry: "Process Entered",
-  stage_update: "Stage Updated",
-  call: "Outbound Call Triggered",
-  whatsapp: "WhatsApp Message Triggered",
-  sms: "SMS Triggered",
-  email: "Email Triggered",
-  webhook_trigger: "Webhook Triggered",
-  field_update: "Field Updated",
-  appointment_booked: "Appointment Booked",
-  process_completed: "Process Completed",
-  website_message: "Website Message Received",
-};
+export type { ActivityLogEntry, ActivityType };
 
 export interface ProcessDetailDrawerProps {
   isOpen: boolean;
@@ -252,7 +170,7 @@ export default function ProcessDetailDrawer({
   activeTab,
   onTabChange,
   activity = [],
-  onOpenActivity = () => {},
+  onOpenActivity = () => { },
   stageIdx,
   onStageChange,
   visibleFieldKeys,
@@ -331,10 +249,10 @@ export default function ProcessDetailDrawer({
         else if (f.key === "start_date")
           val = log?.date
             ? new Date(log.date).toLocaleDateString("en-US", {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-              })
+              month: "long",
+              day: "numeric",
+              year: "numeric",
+            })
             : "—";
         else if (f.key === "end_date") val = "—";
         else if (f.key === "email_id") val = client?.email || "—";
@@ -485,8 +403,8 @@ export default function ProcessDetailDrawer({
                 {tab === "general"
                   ? "General Information"
                   : tab === "activity"
-                  ? "Activity"
-                  : "History"}
+                    ? "Activity"
+                    : "History"}
               </button>
             ))}
           </div>
@@ -536,167 +454,167 @@ export default function ProcessDetailDrawer({
                             {currentValue}
                           </span>
                         ) : /* Responsible */
-                        f.key === "responsible" ? (
-                          <div className="flex items-center gap-2 relative">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
-                              {(currentValue as string).charAt(0)}
-                            </div>
-                            <button
-                              onClick={() => onOpenTeamMember(currentValue as string)}
-                              className="hover:text-blue-600 hover:underline transition-colors"
-                              style={{ fontFamily: "DM Sans, sans-serif" }}
-                            >
-                              <span>{currentValue}</span>
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onToggleResponsibleDropdown(!showResponsibleDropdown);
-                              }}
-                              className="hover:bg-gray-100 rounded p-0.5 transition-colors"
-                            >
-                              <ChevronDown className="w-3 h-3 text-gray-400" />
-                            </button>
-                            {showResponsibleDropdown && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-40"
-                                  onClick={() => onToggleResponsibleDropdown(false)}
-                                />
-                                <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-2 w-56">
-                                  {[
-                                    "John Smith",
-                                    "Emily Davis",
-                                    "Michael Chen",
-                                    "Sarah Johnson",
-                                    "Robert Wilson",
-                                  ].map((person) => (
-                                    <button
-                                      key={person}
-                                      onClick={() => {
-                                        onFieldSave(f.key, person);
-                                        onToggleResponsibleDropdown(false);
-                                      }}
-                                      className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2"
-                                    >
-                                      <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
-                                        {person.charAt(0)}
-                                      </div>
-                                      <div className="flex flex-col">
-                                        <span className="text-sm font-medium">{person}</span>
-                                        <span className="text-xs text-gray-500">Team Member</span>
-                                      </div>
-                                    </button>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        ) : /* Select Fields */
-                        f.type === "dropdown" ? (
-                          <select
-                            value={currentValue}
-                            onChange={(e) => onFieldSave(f.key, e.target.value)}
-                            className="w-full px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                            style={{ fontFamily: "DM Sans, sans-serif", backgroundColor: "white" }}
-                          >
-                            {f.key === "deal_type" && (
-                              <>
-                                <option>Organic</option>
-                                <option>Paid</option>
-                                <option>Referral</option>
-                                <option>Web</option>
-                              </>
-                            )}
-                            {f.key === "country_code" && (
-                              <>
-                                <option>+1</option>
-                                <option>+44</option>
-                                <option>+91</option>
-                                <option>+971</option>
-                              </>
-                            )}
-                            {f.key === "country" && (
-                              <>
-                                <option>US</option>
-                                <option>GB</option>
-                                <option>IN</option>
-                                <option>AE</option>
-                              </>
-                            )}
-                            {f.key === "time_slot" && (
-                              <>
-                                <option>8AM – 8PM</option>
-                                <option>9AM – 5PM</option>
-                                <option>10AM – 6PM</option>
-                                <option>24/7</option>
-                              </>
-                            )}
-                            {f.key !== "deal_type" &&
-                              f.key !== "country_code" &&
-                              f.key !== "country" &&
-                              f.key !== "time_slot" && (
+                          f.key === "responsible" ? (
+                            <div className="flex items-center gap-2 relative">
+                              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
+                                {(currentValue as string).charAt(0)}
+                              </div>
+                              <button
+                                onClick={() => onOpenTeamMember(currentValue as string)}
+                                className="hover:text-blue-600 hover:underline transition-colors"
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                              >
+                                <span>{currentValue}</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleResponsibleDropdown(!showResponsibleDropdown);
+                                }}
+                                className="hover:bg-gray-100 rounded p-0.5 transition-colors"
+                              >
+                                <ChevronDown className="w-3 h-3 text-gray-400" />
+                              </button>
+                              {showResponsibleDropdown && (
                                 <>
-                                  <option value="">Select option</option>
-                                  <option value="Option 1">Option 1</option>
-                                  <option value="Option 2">Option 2</option>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={() => onToggleResponsibleDropdown(false)}
+                                  />
+                                  <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-2 w-56">
+                                    {[
+                                      "John Smith",
+                                      "Emily Davis",
+                                      "Michael Chen",
+                                      "Sarah Johnson",
+                                      "Robert Wilson",
+                                    ].map((person) => (
+                                      <button
+                                        key={person}
+                                        onClick={() => {
+                                          onFieldSave(f.key, person);
+                                          onToggleResponsibleDropdown(false);
+                                        }}
+                                        className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2"
+                                      >
+                                        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
+                                          {person.charAt(0)}
+                                        </div>
+                                        <div className="flex flex-col">
+                                          <span className="text-sm font-medium">{person}</span>
+                                          <span className="text-xs text-gray-500">Team Member</span>
+                                        </div>
+                                      </button>
+                                    ))}
+                                  </div>
                                 </>
                               )}
-                          </select>
-                        ) : /* Date fields */
-                        f.type === "date" ? (
-                          <input
-                            type="date"
-                            value={
-                              currentValue
-                                ? (() => {
-                                    const d = new Date(currentValue);
-                                    return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
-                                  })()
-                                : ""
-                            }
-                            onChange={(e) => {
-                              const d = new Date(e.target.value);
-                              const formatted =
-                                e.target.value && !isNaN(d.getTime())
-                                  ? d.toLocaleDateString("en-US", {
-                                      month: "long",
-                                      day: "numeric",
-                                      year: "numeric",
-                                    })
-                                  : "";
-                              onFieldSave(f.key, formatted);
-                            }}
-                            className="px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          />
-                        ) : /* Text Fields (inline editable) */
-                        isEditing ? (
-                          <input
-                            type="text"
-                            value={draftText}
-                            onChange={(e) => setDraftText(e.target.value)}
-                            onBlur={() => onFieldSave(f.key, draftText)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") {
-                                onFieldSave(f.key, draftText);
-                              }
-                              if (e.key === "Escape") {
-                                onStartEditingField(null);
-                              }
-                            }}
-                            autoFocus
-                            className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          />
-                        ) : (
-                          <div
-                            onClick={() => onStartEditingField(f.key)}
-                            className="cursor-pointer hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                          >
-                            {currentValue || "—"}
-                          </div>
-                        )}
+                            </div>
+                          ) : /* Select Fields */
+                            f.type === "dropdown" ? (
+                              <select
+                                value={currentValue}
+                                onChange={(e) => onFieldSave(f.key, e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                style={{ fontFamily: "DM Sans, sans-serif", backgroundColor: "white" }}
+                              >
+                                {f.key === "deal_type" && (
+                                  <>
+                                    <option>Organic</option>
+                                    <option>Paid</option>
+                                    <option>Referral</option>
+                                    <option>Web</option>
+                                  </>
+                                )}
+                                {f.key === "country_code" && (
+                                  <>
+                                    <option>+1</option>
+                                    <option>+44</option>
+                                    <option>+91</option>
+                                    <option>+971</option>
+                                  </>
+                                )}
+                                {f.key === "country" && (
+                                  <>
+                                    <option>US</option>
+                                    <option>GB</option>
+                                    <option>IN</option>
+                                    <option>AE</option>
+                                  </>
+                                )}
+                                {f.key === "time_slot" && (
+                                  <>
+                                    <option>8AM – 8PM</option>
+                                    <option>9AM – 5PM</option>
+                                    <option>10AM – 6PM</option>
+                                    <option>24/7</option>
+                                  </>
+                                )}
+                                {f.key !== "deal_type" &&
+                                  f.key !== "country_code" &&
+                                  f.key !== "country" &&
+                                  f.key !== "time_slot" && (
+                                    <>
+                                      <option value="">Select option</option>
+                                      <option value="Option 1">Option 1</option>
+                                      <option value="Option 2">Option 2</option>
+                                    </>
+                                  )}
+                              </select>
+                            ) : /* Date fields */
+                              f.type === "date" ? (
+                                <input
+                                  type="date"
+                                  value={
+                                    currentValue
+                                      ? (() => {
+                                        const d = new Date(currentValue);
+                                        return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
+                                      })()
+                                      : ""
+                                  }
+                                  onChange={(e) => {
+                                    const d = new Date(e.target.value);
+                                    const formatted =
+                                      e.target.value && !isNaN(d.getTime())
+                                        ? d.toLocaleDateString("en-US", {
+                                          month: "long",
+                                          day: "numeric",
+                                          year: "numeric",
+                                        })
+                                        : "";
+                                    onFieldSave(f.key, formatted);
+                                  }}
+                                  className="px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                                />
+                              ) : /* Text Fields (inline editable) */
+                                isEditing ? (
+                                  <input
+                                    type="text"
+                                    value={draftText}
+                                    onChange={(e) => setDraftText(e.target.value)}
+                                    onBlur={() => onFieldSave(f.key, draftText)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        onFieldSave(f.key, draftText);
+                                      }
+                                      if (e.key === "Escape") {
+                                        onStartEditingField(null);
+                                      }
+                                    }}
+                                    autoFocus
+                                    className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                                  />
+                                ) : (
+                                  <div
+                                    onClick={() => onStartEditingField(f.key)}
+                                    className="cursor-pointer hover:bg-blue-50 px-2 py-1 rounded transition-colors"
+                                  >
+                                    {currentValue || "—"}
+                                  </div>
+                                )}
                       </div>
                     </div>
                   );
@@ -751,156 +669,18 @@ export default function ProcessDetailDrawer({
 
             {activeTab === "activity" && (
               <div className="relative p-4">
-                {activity.length === 0 ? (
-                  <div className="text-center py-10 text-gray-400 italic text-sm">
-                    No activity yet for this process
-                  </div>
-                ) : (
-                  (() => {
-                    const CHRONO_RANK: Record<ActivityType, number> = {
-                      process_entry: 0,
-                      whatsapp: 1,
-                      sms: 1,
-                      email: 1,
-                      webhook_trigger: 1,
-                      field_update: 1,
-                      appointment_booked: 1,
-                      call: 2,
-                      stage_update: 3,
-                      process_completed: 4,
-                      website_message: 1,
-                    };
-
-                    const toChronologicalOrder = (entries: ActivityLogEntry[]) =>
-                      [...entries].sort((a, b) => {
-                        const t = new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-                        if (t !== 0) return t;
-                        return CHRONO_RANK[a.type] - CHRONO_RANK[b.type];
-                      });
-
-                    const displayOrder = [...toChronologicalOrder(activity)].reverse();
-
-                    return displayOrder.map((entry, i) => {
-                      const isLast = i === displayOrder.length - 1;
-                      const heading =
-                        entry.type === "call" && entry.direction === "inbound"
-                          ? "Inbound Call Received"
-                          : HEADING_BY_TYPE[entry.type];
-
-                      return (
-                        <div key={entry.id} className="relative flex gap-3 pb-4 last:pb-0">
-                          {/* Amazon-tracker connecting line — runs behind the node */}
-                          {!isLast && (
-                            <div
-                              className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0"
-                              style={{
-                                backgroundColor: entry.status === "pending" ? "transparent" : "#1E88E5",
-                                backgroundImage: entry.status === "pending"
-                                  ? "repeating-linear-gradient(to bottom, #CBD5E1 0 4px, transparent 4px 8px)"
-                                  : undefined,
-                              }}
-                            />
-                          )}
-
-                          {/* Node icon — sits on the line */}
-                          <div
-                            className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2"
-                            style={{
-                              backgroundColor:
-                                entry.status === "failed" ? "#FEE2E2" : ACTIVITY_ICON_BG[entry.type] || "#F1F5F9",
-                              borderColor:
-                                entry.status === "failed"
-                                  ? "#DC2626"
-                                  : entry.status === "pending"
-                                  ? "#CBD5E1"
-                                  : "transparent",
-                            }}
-                          >
-                            <ActivityIcon type={entry.type} />
-                          </div>
-
-                          {/* Standalone card — heading + details */}
-                          <button
-                            onClick={() => onOpenActivity(entry)}
-                            className="flex-1 text-left p-3 rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm transition-all cursor-pointer"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span
-                                className="text-sm font-bold text-gray-900"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
-                              >
-                                {heading}
-                              </span>
-                              <span
-                                className="text-xs text-gray-400 whitespace-nowrap"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {entry.timestamp}
-                              </span>
-                            </div>
-
-                            <div className="mt-1.5 space-y-0.5">
-                              <p
-                                className="text-xs text-gray-700"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {entry.details.primary}
-                              </p>
-                              {entry.details.secondary && (
-                                <p
-                                  className="text-xs text-gray-500"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  {entry.details.secondary}
-                                </p>
-                              )}
-                              {entry.sourceStepName && (
-                                <p className="text-[11px] text-gray-400">via {entry.sourceStepName}</p>
-                              )}
-                            </div>
-
-                            {(entry.type === "website_message" ||
-                              (entry.details?.primary || "").toLowerCase().includes("website") ||
-                              (entry.details?.secondary || "").toLowerCase().includes("website")) && (
-                              <div className="mt-2.5">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    e.preventDefault();
-                                    onClose();
-                                    navigate("/chats", {
-                                      state: {
-                                        clientId: log?.clientId || client?.id,
-                                        channel: "website",
-                                      },
-                                    });
-                                  }}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
-                                >
-                                  <Globe className="w-3.5 h-3.5 text-purple-600" />
-                                  View Website Chat
-                                </button>
-                              </div>
-                            )}
-
-                            {entry.status && entry.status !== "success" && (
-                              <span
-                                className="inline-block mt-2 text-[11px] px-2 py-0.5 rounded-full font-medium"
-                                style={{
-                                  backgroundColor: entry.status === "failed" ? "#FEE2E2" : "#FEF3C7",
-                                  color: entry.status === "failed" ? "#DC2626" : "#CA8A04",
-                                }}
-                              >
-                                {entry.status}
-                              </span>
-                            )}
-                          </button>
-                        </div>
-                      );
-                    });
-                  })()
-                )}
+                <ActivityTab
+                  activity={activity}
+                  onOpenActivity={onOpenActivity}
+                  onOpenCallDetail={(callId, entry) => {
+                    if (onOpenActivity && entry) {
+                      onOpenActivity(entry);
+                    }
+                  }}
+                  clientId={log?.clientId || client?.id}
+                  onCloseParentDrawer={onClose}
+                  emptyMessage="No activity yet for this process"
+                />
               </div>
             )}
 
@@ -1417,8 +1197,8 @@ export default function ProcessDetailDrawer({
                                 h.eventType === "View"
                                   ? "#9E9E9E"
                                   : h.eventType === "Stage changed"
-                                  ? "#1E88E5"
-                                  : "#2E7D32",
+                                    ? "#1E88E5"
+                                    : "#2E7D32",
                             }}
                           >
                             {h.eventType}

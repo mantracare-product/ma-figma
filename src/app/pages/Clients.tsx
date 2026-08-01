@@ -1181,7 +1181,7 @@ export default function Clients() {
         stage: "Insurance Verification",
         duration: "4:32",
         status: "Completed",
-        callId: "call-001",
+        callId: "CALL-001",
       },
       {
         id: "act-2",
@@ -1204,7 +1204,7 @@ export default function Clients() {
         stage: "Initial Contact",
         duration: "3:15",
         status: "Completed",
-        callId: "call-002",
+        callId: "CALL-002",
       },
       {
         id: "act-4",
@@ -1217,7 +1217,7 @@ export default function Clients() {
         stage: "Initial Contact",
         duration: "0:00",
         status: "Failed",
-        callId: "call-003",
+        callId: "CALL-003",
       },
       {
         id: "act-5",
@@ -1230,7 +1230,7 @@ export default function Clients() {
         stage: "Follow-up",
         duration: "5:05",
         status: "Completed",
-        callId: "call-006",
+        callId: "CALL-007",
       },
     ];
   })() : [];

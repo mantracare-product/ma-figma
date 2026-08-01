@@ -27,8 +27,6 @@ The **Appointments** screen manages your calendar booking logs and schedules. It
 - **Why it helps you:** Allows team members to block out slots for personal time, company meetings, or manually book phone appointments.
 - **How to use it:** Click the blue **+ Create Event** button or double-click a date cell, fill in the form, and save.
 
----
-
 ## Common workflows
 
 ### Workflow A: Rescheduling an appointment on the calendar
