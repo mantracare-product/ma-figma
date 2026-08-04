@@ -160,6 +160,9 @@ export interface ProcessDetailDrawerProps {
   // History tab
   historyFilters: ProcessDetailHistoryFilterState;
   onHistoryFiltersChange: (patch: Partial<ProcessDetailHistoryFilterState>) => void;
+
+  /** Bubbled from parent — opens ScheduleAppointmentDrawer for the Appointment action panel */
+  onOpenScheduleAppointment?: () => void;
 }
 
 export default function ProcessDetailDrawer({
@@ -191,6 +194,7 @@ export default function ProcessDetailDrawer({
   dealFields,
   historyFilters,
   onHistoryFiltersChange,
+  onOpenScheduleAppointment,
 }: ProcessDetailDrawerProps) {
   const navigate = useNavigate();
   const [draftText, setDraftText] = useState("");
@@ -677,9 +681,13 @@ export default function ProcessDetailDrawer({
                       onOpenActivity(entry);
                     }
                   }}
-                  clientId={log?.clientId || client?.id}
+                  clientId={log?.clientId ? String(log.clientId) : client?.id ? String(client.id) : "CL-001"}
+                  clientName={client?.name}
+                  clientEmail={client?.email}
+                  clientPhone={client?.phone}
                   onCloseParentDrawer={onClose}
                   emptyMessage="No activity yet for this process"
+                  onOpenScheduleAppointment={onOpenScheduleAppointment}
                 />
               </div>
             )}

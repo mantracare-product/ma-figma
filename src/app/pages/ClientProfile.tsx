@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
@@ -25,6 +25,8 @@ import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
+import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
+import { appendActivity } from "../../lib/activityEngine";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -454,6 +456,80 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+
+  // Schedule appointment from Activity tab
+  const [showScheduleApptFromActivity, setShowScheduleApptFromActivity] = useState(false);
+  const [activityBookingValues, setActivityBookingValues] = useState<BookingFormValues>({
+    title: "",
+    description: "",
+    note: "",
+    tags: "",
+    processId: "",
+    stageId: "",
+    date: new Date().toISOString().split("T")[0],
+    startHour: 9,
+    startMinute: 0,
+    sessionType: "video",
+    client: client ? {
+      id: 0,
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+    } : null,
+    provider: null,
+  });
+
+  const handleActivityBookingComplete = () => {
+    if (!activityBookingValues.client || !activityBookingValues.provider || !activityBookingValues.date || !activityBookingValues.title.trim()) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
+    const hh = String(activityBookingValues.startHour).padStart(2, "0");
+    const mm = String(activityBookingValues.startMinute).padStart(2, "0");
+    const timeStr = `${hh}:${mm}`;
+    const dateFormatted = new Date(activityBookingValues.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    // Save to appointments_v1
+    const stored = sessionStorage.getItem("appointments_v1");
+    const existing: any[] = stored ? JSON.parse(stored) : [];
+    const newAppt = {
+      id: existing.length > 0 ? Math.max(...existing.map((a: any) => a.id ?? 0)) + 1 : Date.now(),
+      clientName: activityBookingValues.client.name,
+      clientEmail: activityBookingValues.client.email,
+      clientPhone: activityBookingValues.client.phone,
+      employeeId: activityBookingValues.provider.id,
+      serviceId: 1,
+      date: activityBookingValues.date,
+      time: timeStr,
+      duration: 60,
+      status: "scheduled",
+      notes: activityBookingValues.note || activityBookingValues.description || undefined,
+      title: activityBookingValues.title.trim(),
+    };
+    sessionStorage.setItem("appointments_v1", JSON.stringify([...existing, newAppt]));
+    // Append activity entry
+    if (client) {
+      const pId = activityBookingValues.processId;
+      appendActivity({
+        type: "appointment_booked",
+        clientId: String(client.id),
+        processId: pId,
+        processName: pId,
+        timestamp: new Date().toISOString(),
+        status: "scheduled",
+        date: dateFormatted,
+        time: timeStr,
+        appointmentTitle: activityBookingValues.title.trim(),
+        location: activityBookingValues.sessionType === "inPerson" ? "In-Person" : "Video Call",
+        notes: activityBookingValues.note || undefined,
+        details: {
+          primary: activityBookingValues.title.trim(),
+          secondary: `${dateFormatted} at ${timeStr} · ${activityBookingValues.provider.name}`,
+        },
+      });
+    }
+    toast.success("Appointment scheduled successfully!");
+    setShowScheduleApptFromActivity(false);
+  };
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [processSearchQuery, setProcessSearchQuery] = useState("");
 
@@ -547,7 +623,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // ─── Derived data (verbatim from Clients.tsx) ─────────────────────────────
 
-  const drawerClientProcesses = (() => {
+  const drawerClientProcesses = useMemo(() => {
     const storedCallLogs = getStoredCallLogs().filter(
       (l) => l.clientId === client.id || l.client.toLowerCase() === client.name.toLowerCase()
     );
@@ -640,9 +716,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         source: (client as any).source ?? emailDomain,
       };
     });
-  })();
+  }, [client, drawerProcessStages]);
 
-  const drawerActivityItems = (() => {
+  const drawerActivityItems = useMemo(() => {
     const findProcessId = (heading: string) => {
       const process = drawerClientProcesses.find((p) => p.name === heading);
       return process?.id || "process-1";
@@ -652,12 +728,13 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-1",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "process_completed" as const,
-        timestamp: "2024-04-13 14:30",
+        timestamp: "2024-04-13T14:30:00",
         date: "Apr 13, 2024",
         time: "2:30 PM",
         title: "Process Completed",
-        status: "Completed",
+        status: "completed",
         sourceStepName: "Deal Closed",
         details: {
           primary: "Final Stage: Insurance Verification",
@@ -668,15 +745,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-2",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "appointment_booked" as const,
-        timestamp: "2024-04-12 15:00",
+        timestamp: "2024-04-12T15:00:00",
         date: "Apr 12, 2024",
-        time: "3:00 PM",
-        title: "Appointment Booked",
-        status: "Completed",
+        time: "10:00 AM",
+        status: "confirmed",
         sourceStepName: "Schedule Appointment Step",
+        appointmentTitle: "Initial Consultation",
+        location: "Main Clinic, Room 3",
+        notes: "First appointment – bring insurance card",
         details: {
-          primary: "Slot: 10:00 AM – 10:30 AM",
+          primary: "Apr 12, 2024 · 10:00 AM",
           secondary: "Location: Main Clinic",
         },
       },
@@ -684,29 +764,35 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-3",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "email" as const,
-        timestamp: "2024-04-12 09:30",
+        timestamp: "2024-04-12T09:30:00",
         date: "Apr 12, 2024",
         time: "9:30 AM",
-        title: "Email Triggered",
-        status: "Completed",
+        status: "delivered",
+        direction: "sent" as const,
+        subject: "Welcome to Patient Intake — Next Steps",
+        bodyPreview: "Hi there! We're excited to have you in the Patient Intake program. Please review the attached documents and complete your intake form before your first appointment.",
+        toOrFrom: client.email || "client@email.com",
         sourceStepName: "Welcome Email Campaign",
         details: {
-          primary: "Template: welcome_onboarding",
-          secondary: `Sent to ${client.email || "client"}`,
+          primary: "Welcome to Patient Intake — Next Steps",
+          secondary: `To: ${client.email || "client"}`,
         },
       },
       {
         id: "act-4",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "stage_update" as const,
-        timestamp: "2024-04-11 14:00",
+        timestamp: "2024-04-11T14:00:00",
         date: "Apr 11, 2024",
         time: "2:00 PM",
-        title: "Stage Updated",
-        status: "Completed",
+        status: "completed",
         sourceStepName: "Pipeline Automation",
+        fromStage: "Initial Contact",
+        toStage: "Insurance Verification",
         details: {
           primary: "Moved to Insurance Verification",
           secondary: "Process: Patient Intake",
@@ -716,13 +802,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-5",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "outbound_call" as const,
-        timestamp: "2024-04-10 11:30",
+        timestamp: "2024-04-10T11:30:00",
         date: "Apr 10, 2024",
         time: "11:30 AM",
-        title: "Outbound Call Completed",
-        status: "Completed",
+        status: "completed",
+        direction: "outbound" as const,
         callId: "CALL-001",
+        durationSeconds: 272,
+        outcomeSummary: "Client confirmed insurance details and appointment time.",
         sourceStepName: "Outbound Call Step",
         details: {
           primary: "Duration 4:32",
@@ -733,29 +822,35 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-6",
         processId: findProcessId("Patient Intake"),
         processName: "Patient Intake",
+        clientId: client.id,
         type: "whatsapp" as const,
-        timestamp: "2024-04-09 10:15",
+        refId: "conv-1",
+        timestamp: "2024-04-09T10:15:00",
         date: "Apr 9, 2024",
         time: "10:15 AM",
-        title: "WhatsApp Message Triggered",
-        status: "Completed",
+        status: "delivered",
+        direction: "sent" as const,
+        messageText: "Hi! Your appointment for Apr 12 at 10:00 AM has been confirmed at Main Clinic. Please bring your insurance card. See you then! 😊",
+        phoneNumber: client.phone || "+1 (555) 123-4567",
         sourceStepName: "Onboarding Flow",
         details: {
-          primary: "Template: appointment_reminder",
-          secondary: `Sent to ${client.phone || "phone"}`,
+          primary: "Appointment reminder sent",
+          secondary: `To: ${client.phone || "phone"}`,
         },
       },
       {
         id: "act-7",
         processId: findProcessId("Follow-up Calls"),
         processName: "Follow-up Calls",
+        clientId: client.id,
         type: "failed_call" as const,
-        timestamp: "2024-04-08 16:45",
+        timestamp: "2024-04-08T16:45:00",
         date: "Apr 8, 2024",
         time: "4:45 PM",
-        title: "Outbound Call Failed",
-        status: "Failed",
+        status: "no_answer",
+        direction: "outbound" as const,
         callId: "CALL-010",
+        durationSeconds: 0,
         sourceStepName: "Follow-up Dialer",
         details: {
           primary: "Duration 0:00",
@@ -766,13 +861,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         id: "act-8",
         processId: findProcessId("Follow-up Calls"),
         processName: "Follow-up Calls",
+        clientId: client.id,
         type: "inbound_call" as const,
-        timestamp: "2024-04-08 11:20",
+        timestamp: "2024-04-08T11:20:00",
         date: "Apr 8, 2024",
         time: "11:20 AM",
-        title: "Inbound Call Received",
-        status: "Completed",
+        status: "completed",
+        direction: "inbound" as const,
         callId: "CALL-007",
+        durationSeconds: 235,
+        outcomeSummary: "Client called to ask about insurance documentation requirements.",
         sourceStepName: "Inbound Hotline",
         details: {
           primary: "Duration 3:55",
@@ -782,9 +880,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     ];
 
     // Use real activity log when available; fall back to mock for demo clients
-    const realActivity = getActivityForClient(client.id).map((r) => ({
+    const realActivity = getActivityForClient(String(client.id)).map((r: any) => ({
+      ...r,
       id: r.id,
-      processId: drawerClientProcesses.find((p) => p.name === r.processName)?.id ?? "process-1",
+      processId: r.processId || drawerClientProcesses.find((p) => p.name === r.processName)?.id || "process-1",
       processName: r.processName,
       type: r.type,
       rawType: r.type,
@@ -794,10 +893,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       fullTimestamp: new Date(r.timestamp).toLocaleString(),
       date: new Date(r.timestamp).toLocaleDateString(),
       time: new Date(r.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      title: r.details?.primary || "Activity",
+      title: r.details?.primary || r.messageText || r.appointmentTitle || "Activity",
       description: r.details?.secondary,
-      details: r.details,
-      sourceStepName: r.details?.secondary,
+      details: r.details || { primary: r.messageText || "Activity" },
+      sourceStepName: r.sourceStepName || r.details?.secondary,
       status: r.status === "success" ? "Completed" : r.status,
     }));
 
@@ -815,19 +914,23 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       });
 
     return [...toChronologicalOrder(rawList)].reverse();
-  })();
+  }, [client?.id, drawerClientProcesses]);
 
   const getDrawerActivityCount = (processId: string) => {
     if (processId === "all") return drawerActivityItems.length;
     return drawerActivityItems.filter((item) => item.processId === processId).length;
   };
 
-  const filteredDrawerActivities =
-    activeProcessTabDrawer === "all"
-      ? drawerActivityItems
-      : drawerActivityItems.filter((item) => item.processId === activeProcessTabDrawer);
+  const selectedDrawerProcess = useMemo(() => {
+    return drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
+  }, [drawerClientProcesses, activeProcessTabDrawer]);
 
-  const selectedDrawerProcess = drawerClientProcesses.find((p) => p.id === activeProcessTabDrawer);
+  const filteredDrawerActivities = useMemo(() => {
+    if (activeProcessTabDrawer === "all") return drawerActivityItems;
+    return drawerActivityItems.filter(
+      (item: any) => item.processId === activeProcessTabDrawer || item.processName === selectedDrawerProcess?.name
+    );
+  }, [drawerActivityItems, activeProcessTabDrawer, selectedDrawerProcess]);
 
   const allSubmissions = loadClientSubmissions();
 
@@ -1619,8 +1722,23 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   setSelectedCallId(callId);
                   setShowCallDetailsFromProfile(true);
                 }}
-                clientId={client.id}
+                clientId={client?.id ? String(client.id) : "CL-001"}
+                clientName={client.name}
+                clientEmail={client.email}
+                clientPhone={client.phone}
                 emptyMessage="No activity for this process yet"
+                onOpenScheduleAppointment={() => {
+                  setActivityBookingValues((prev) => ({
+                    ...prev,
+                    client: {
+                      id: 0,
+                      name: client.name,
+                      email: client.email,
+                      phone: client.phone,
+                    },
+                  }));
+                  setShowScheduleApptFromActivity(true);
+                }}
               />
             </div>
           )}
@@ -1974,6 +2092,37 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             />
           )}
 
+          {/* Schedule Appointment from Activity tab */}
+          {showScheduleApptFromActivity && (
+            <ScheduleAppointmentDrawer
+              isOpen={showScheduleApptFromActivity}
+              onClose={() => setShowScheduleApptFromActivity(false)}
+              mode="create"
+              values={activityBookingValues}
+              onChange={(patch) => setActivityBookingValues((prev) => ({ ...prev, ...patch }))}
+              onSave={handleActivityBookingComplete}
+              employees={[
+                { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+                { id: 2, name: "Sarah Johnson", email: "sarah.j@healthcare.com" },
+                { id: 4, name: "Emily Davis", email: "emily.d@healthcare.com" },
+              ]}
+              clients={[
+                { id: 0, name: client.name, email: client.email, phone: client.phone },
+              ]}
+              processStages={{
+                "Patient Intake": ["Initial Contact", "Insurance Verification", "Scheduled"],
+                "Follow-up Calls": ["Post-Visit Check", "Medication Reminder", "Completed"],
+                "Appointment Scheduling": ["Slot Selection", "Confirmation", "Completed"],
+              }}
+              customFields={[]}
+              visibleCustomFieldKeys={[]}
+              customFieldValues={{}}
+              onCustomFieldChange={() => {}}
+              onOpenSelectFields={() => {}}
+              onOpenCreateField={() => {}}
+            />
+          )}
+
           {/* Process Detail Drawer Component */}
           <ProcessDetailDrawer
             isOpen={showProcessDetailDrawer && selectedProcessLog !== null}
@@ -2067,6 +2216,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             dealFields={getAllFields("deal")}
             historyFilters={historyFilters}
             onHistoryFiltersChange={(patch) => setHistoryFilters((prev) => ({ ...prev, ...patch }))}
+            onOpenScheduleAppointment={() => {
+              setActivityBookingValues((prev) => ({
+                ...prev,
+                client: {
+                  id: 0,
+                  name: client.name,
+                  email: client.email,
+                  phone: client.phone,
+                },
+              }));
+              setShowScheduleApptFromActivity(true);
+            }}
           />
 
           {/* Call Details Drawer Component */}

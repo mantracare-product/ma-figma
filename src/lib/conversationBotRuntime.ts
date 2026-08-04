@@ -13,7 +13,7 @@ export interface RuntimeMessage {
   text: string;
   sender: "contact" | "me";
   origin?: "human" | "bot" | "campaign" | "template" | "system";
-  buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+  buttons?: Array<{ label: string; nextNodeId?: string | null; actionType?: string; actionValue?: string }>;
   header?: {
     type?: "none" | "text" | "image" | "video" | "document";
     text?: string;
@@ -44,7 +44,7 @@ export interface ConversationShape {
     sender: "contact" | "me";
     status?: "sent" | "delivered" | "read";
     origin?: "human" | "bot" | "campaign" | "template" | "system";
-    buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
+    buttons?: Array<{ label: string; nextNodeId?: string | null; actionType?: string; actionValue?: string }>;
     header?: {
       type?: "none" | "text" | "image" | "video" | "document";
       text?: string;

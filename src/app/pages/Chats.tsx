@@ -58,6 +58,12 @@ import {
 import TemplateLibraryDrawer from "../components/chats/TemplateLibraryDrawer";
 import { LibraryTemplate } from "../../lib/templateLibrary";
 import { useWhatsappTemplates } from "../../lib/useWhatsappTemplates";
+import { useConversations, Message as ConvMessage, Conversation as ConvConversation, computeSessionWindow } from "../../lib/useConversations";
+import ConversationHeader from "../components/chats/ConversationHeader";
+import MessageThreadList from "../components/chats/MessageThreadList";
+import MessageComposerBar from "../components/chats/MessageComposerBar";
+export type Message = ConvMessage;
+export type Conversation = ConvConversation;
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
@@ -93,52 +99,7 @@ import TestWebsiteChatDrawer from "../components/chats/TestWebsiteChatDrawer";
 import { CHANNEL_LABELS, CHANNEL_CLASSES } from "../../constants/channels";
 import { getStoredWhatsAppNumbers, DEFAULT_MOCK_NUMBERS } from "../../lib/useWhatsAppNumbers";
 
-// ─── Type Definitions ────────────────────────────────────────────────────────
-
-interface Message {
-  id: string;
-  text: string;
-  timestamp: string;
-  sender: "contact" | "me";
-  status?: "sent" | "delivered" | "read";
-  origin?: "human" | "bot" | "campaign" | "template" | "system";
-  buttons?: Array<{ label: string; nextNodeId: string | null; actionType?: string; actionValue?: string }>;
-  header?: {
-    type?: "none" | "text" | "image" | "video" | "document";
-    text?: string;
-    mediaUrl?: string;
-    fileName?: string;
-  };
-  footerText?: string;
-}
-
-interface Conversation {
-  id: string;
-  contactName: string;
-  phoneNumber: string;
-  inboxNumber?: string;
-  channel: "whatsapp" | "sms" | "website";
-  lastMessage: string;
-  timestamp: string;
-  unreadCount: number;
-  status: "open" | "resolved";
-  messages: Message[];
-  botStatus?: "active" | "paused" | "off";
-  assignedPersonId?: string;
-  assignedBotId?: string;
-  botRuntime?: {
-    currentNodeId: string | null;
-    awaitingFreeText: boolean;
-    pendingHandoffNodeId: string | null;
-  };
-  campaignEnrollments?: Array<{
-    campaignId: string;
-    currentNodeIndex: number;
-    enrolledAt: string;
-    status: "active" | "completed" | "paused";
-    nextRunAt?: string;
-  }>;
-}
+// Types are imported from useConversations
 
 export interface WhatsappTemplate {
   id: string;
@@ -839,35 +800,7 @@ export default function Chats() {
   };
 
   // ── Chats State ──
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const validNumbers = new Set(DEFAULT_MOCK_NUMBERS.map((n) => n.displayPhoneNumber));
-    try {
-      const stored = localStorage.getItem("whatsappMockConversations");
-      if (stored) {
-        const parsed: Conversation[] = JSON.parse(stored);
-        const updated = parsed.map((c) => {
-          if (c.channel === "whatsapp" && (!c.inboxNumber || !validNumbers.has(c.inboxNumber))) {
-            return { ...c, inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber };
-          }
-          return c;
-        });
-
-        const hasNum1Open = updated.some(
-          (c) => c.channel === "whatsapp" && c.inboxNumber === DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber && c.status === "open"
-        );
-        const hasNum2Open = updated.some(
-          (c) => c.channel === "whatsapp" && c.inboxNumber === DEFAULT_MOCK_NUMBERS[1]?.displayPhoneNumber && c.status === "open"
-        );
-
-        if (hasNum1Open && hasNum2Open) {
-          return updated;
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return INITIAL_MOCK_CONVERSATIONS;
-  });
+  const { conversations, setConversations, sendMessage: storeSendMessage, sendTemplate: storeSendTemplate } = useConversations();
   const [selectedConversationId, setSelectedConversationId] = useState<string>("conv-1");
   const [chatSearch, setChatSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<"all" | "whatsapp" | "sms" | "website" | null>("whatsapp");
@@ -1175,37 +1108,13 @@ export default function Chats() {
 
   const handleSendTemplateDirectly = (template: WhatsappTemplate) => {
     if (!activeConversation) return;
-    const resolvedText = resolveTestVariables(template.bodyText || "");
-    const built = buildTemplateMessage(template, resolvedText);
-    const templateMsg: Message = {
-      id: `msg-${Date.now()}`,
-      text: built.text,
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      sender: "me",
-      origin: "template",
-      status: "read",
-      buttons: built.buttons,
-    };
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversationId
-          ? {
-            ...c,
-            lastMessage: resolvedText,
-            timestamp: "Just now",
-            messages: [...c.messages, templateMsg],
-          }
-          : c
-      )
-    );
+    storeSendTemplate(selectedConversationId, template);
     toast.success(`Template "${template.name}" sent`);
   };
 
   const handleSendMessage = () => {
     if (!composerText.trim() || !activeConversation) return;
-    const newMessage: Message = { id: `msg-${Date.now()}`, text: composerText, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), sender: "me", status: "read" };
-    setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, lastMessage: composerText, timestamp: "Just now", messages: [...c.messages, newMessage] } : c));
+    storeSendMessage(selectedConversationId, composerText);
     setComposerText("");
     toast.success("Message sent");
   };
@@ -1874,449 +1783,25 @@ export default function Chats() {
                 <div className="flex-1 flex flex-col h-full bg-white">
                   {activeConversation ? (
                     <>
-                      {/* Chat Header */}
-                      <div className="px-6 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white shadow-sm">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-sm">
-                            {getInitials(activeConversation.contactName)}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${!!activeConversation.assignedPersonId ? "bg-amber-500" :
-                                  activeConversation.botStatus === "active" ? "bg-blue-500" :
-                                    activeConversation.botStatus === "paused" ? "bg-amber-500" :
-                                      "bg-gray-400"
-                                }`} title={`Status dot`} />
-                              <h3 className="text-sm font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{activeConversation.contactName}</h3>
-                              {activeConversation.assignedPersonId && (() => {
-                                const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                                return emp ? (
-                                  <span className="text-[10px] text-gray-500 font-semibold bg-gray-100 px-2 py-0.5 rounded-full">
-                                    Assigned to {emp.name}
-                                  </span>
-                                ) : null;
-                              })()}
-                            </div>
-                            <p className="text-xs text-gray-400 font-mono">{activeConversation.phoneNumber}</p>
-                          </div>
-                          <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-full border uppercase ml-1 ${CHANNEL_CLASSES[activeConversation.channel]}`}>
-                            {CHANNEL_LABELS[activeConversation.channel]}
-                          </span>
-                          {activeConversation.inboxNumber && (
-                            <span className="text-xs text-gray-500 font-medium ml-1">
-                              via {activeConversation.inboxNumber}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {/* Unified Read-only status chip */}
-                          {(() => {
-                            const isHumanAssigned = !!activeConversation.assignedPersonId;
-                            const isBotActive = !isHumanAssigned && activeConversation.botStatus === "active";
-                            if (isBotActive) {
-                              return (
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-200 text-blue-700 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  <Bot className="w-3.5 h-3.5 text-blue-600" />
-                                  <span>🤖 Bot Active</span>
-                                </div>
-                              );
-                            } else if (isHumanAssigned) {
-                              const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                              const name = emp ? emp.name : "Agent";
-                              return (
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  <UserCheck className="w-3.5 h-3.5 text-amber-600" />
-                                  <span>👤 Bot Paused / Assigned to {name}</span>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="flex items-center gap-1.5 px-3 py-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-full text-xs font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  <span className="w-1.5 h-1.5 rounded-full bg-gray-400 shrink-0" />
-                                  <span>⚪ Unassigned (Bot Off)</span>
-                                </div>
-                              );
-                            }
-                          })()}
-
-                        </div>
-                      </div>
-
-                      {/* Hand-off / Paused Bot warning banner */}
-                      {activeConversation.assignedPersonId && (() => {
-                        const emp = AVAILABLE_EMPLOYEES.find(e => e.id === activeConversation.assignedPersonId);
-                        const name = emp ? emp.name : "Agent";
-                        return (
-                          <div className="bg-amber-50 border-b border-amber-100 px-6 py-2.5 flex items-center justify-between flex-shrink-0 text-xs text-amber-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            <div className="flex items-center gap-1.5 font-medium">
-                              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                              <span>Bot is paused. Conversation is assigned to <strong>{name}</strong>.</span>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "active", assignedPersonId: "" } : c));
-                                toast.success("Bot resumed and human assignment cleared");
-                              }}
-                              className="text-xs font-bold text-amber-900 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-md transition-colors"
-                              style={{ fontFamily: "DM Sans, sans-serif" }}
-                            >
-                              Resume Bot
-                            </button>
-                          </div>
-                        );
-                      })()}
-
-                      {/* Messages */}
-                      <div className="flex-1 overflow-y-auto p-5 space-y-3" style={{ backgroundColor: '#F1F5F9' }}>
-                        {activeConversation.messages.map(msg => {
-                          const isMe = msg.sender === "me";
-                          return (
-                            <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
-                              <div className="max-w-[68%] space-y-1">
-                                <div className={`px-4 py-2.5 rounded-2xl text-sm shadow-sm ${isMe ? "bg-blue-600 text-white rounded-tr-none" : "bg-white text-gray-800 border border-gray-100 rounded-tl-none"}`}
-                                  style={{ fontFamily: "Outfit, sans-serif" }}>
-                                  {msg.header?.type && msg.header.type !== "none" && (
-                                    <div className="mb-1">
-                                      {msg.header.type === "text" && msg.header.text && (
-                                        <p className="font-bold text-sm leading-tight">{msg.header.text}</p>
-                                      )}
-                                      {msg.header.type === "image" && (
-                                        <div className="w-full h-20 bg-gray-100 rounded flex items-center justify-center text-xs text-gray-400 mb-1">
-                                          Image{msg.header.fileName ? `: ${msg.header.fileName}` : ""}
-                                        </div>
-                                      )}
-                                      {msg.header.type === "video" && (
-                                        <div className="w-full h-20 bg-gray-900 rounded flex items-center justify-center text-xs text-white mb-1">
-                                          Video{msg.header.fileName ? `: ${msg.header.fileName}` : ""}
-                                        </div>
-                                      )}
-                                      {msg.header.type === "document" && (
-                                        <div className="flex items-center gap-1.5 bg-gray-100 rounded px-2 py-1 text-xs text-gray-700 mb-1">
-                                          📄 {msg.header.fileName || "document"}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-                                  {msg.footerText && (
-                                    <p className="text-[10px] text-gray-400 mt-1">{msg.footerText}</p>
-                                  )}
-                                </div>
-                                {msg.buttons && msg.buttons.length > 0 && (
-                                  <div className="bg-white rounded-b-xl shadow-sm border border-t-0 border-gray-100 overflow-hidden mt-0.5">
-                                    {msg.buttons.map((btn, bi) => (
-                                      <div
-                                        key={bi}
-                                        className={`px-3 py-2 text-xs font-semibold text-center text-blue-600 ${bi > 0 ? "border-t border-gray-100" : ""
-                                          }`}
-                                      >
-                                        {btn.label}{" "}
-                                        {btn.actionType && btn.actionType !== "quick_reply" && (
-                                          <span className="text-[9px] text-gray-400 ml-1">↗</span>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                                <div className={`flex items-center gap-1 text-[10px] text-gray-400 px-1 ${isMe ? "justify-end" : "justify-start"}`}>
-                                  <span>{msg.timestamp}</span>
-                                  {isMe && (msg.status === "read" ? <CheckCheck className="w-3 h-3 text-blue-500" /> : <Check className="w-3 h-3 text-gray-400" />)}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {/* Composer */}
-                      <div className="p-3 border-t border-gray-200 bg-white">
-                        <div className="flex gap-2 items-center">
-                          <button type="button" onClick={() => { const i = document.createElement("input"); i.type = "file"; i.click(); }}
-                            className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600 rounded-lg transition-all flex-shrink-0"
-                            title="Attach file">
-                            <Paperclip className="w-4 h-4" />
-                          </button>
-
-                          {/* Gear Menu Trigger and Upward Dropdowns */}
-                          <div className="relative flex-shrink-0" ref={gearMenuRef}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowComposerGearMenu((v) => !v);
-                                setShowUseTemplateDropdown(false);
-                              }}
-                              className={`p-2 rounded-lg transition-all flex-shrink-0 ${showComposerGearMenu
-                                  ? "bg-gray-200 text-gray-800"
-                                  : "text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-                                }`}
-                              title="Conversation Actions"
-                            >
-                              <Settings className="w-4 h-4" />
-                            </button>
-
-                            {/* Upward-expanding Gear Menu */}
-                            {showComposerGearMenu && (
-                              <div className="absolute bottom-full mb-2 left-0 w-60 bg-white border border-gray-200 rounded-xl shadow-xl z-50 py-1.5 text-xs font-medium text-gray-700 animate-in fade-in slide-in-from-bottom-2 duration-150">
-                                {assignAgentMenuOpen ? (
-                                  <div className="flex flex-col">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100 font-bold text-gray-900 bg-gray-50 text-[10px] uppercase tracking-wider">
-                                      <button
-                                        type="button"
-                                        onClick={() => setAssignAgentMenuOpen(false)}
-                                        className="p-1 -ml-1 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded transition-colors text-xs font-bold font-mono"
-                                      >
-                                        &lt;
-                                      </button>
-                                      <span>Assign Responsible</span>
-                                    </div>
-                                    <div className="max-h-56 overflow-y-auto py-1">
-                                      {AVAILABLE_EMPLOYEES.map(emp => (
-                                        <button
-                                          key={emp.id}
-                                          type="button"
-                                          onClick={() => {
-                                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, botStatus: "paused", assignedPersonId: emp.id } : c));
-                                            toast.success(`Assigned to ${emp.name}. Bot paused.`);
-                                            setShowComposerGearMenu(false);
-                                            setAssignAgentMenuOpen(false);
-                                          }}
-                                          className={`w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors ${activeConversation.assignedPersonId === emp.id ? "bg-amber-50 text-amber-900 font-semibold" : "text-gray-700"
-                                            }`}
-                                        >
-                                          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeConversation.assignedPersonId === emp.id ? "bg-amber-500" : "bg-gray-300"}`} />
-                                          <span>{emp.name}</span>
-                                        </button>
-                                      ))}
-                                      {activeConversation.assignedPersonId && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setConversations(prev => prev.map(c => c.id === selectedConversationId ? { ...c, assignedPersonId: "" } : c));
-                                            toast.success(`Cleared assignment`);
-                                            setShowComposerGearMenu(false);
-                                            setAssignAgentMenuOpen(false);
-                                          }}
-                                          className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-red-50 text-red-600 text-left font-semibold border-t border-gray-100 transition-colors"
-                                        >
-                                          <span>Clear Assignment</span>
-                                        </button>
-                                      )}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <>
-                                    {/* 1. Templates */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setShowComposerGearMenu(false);
-                                          setShowUseTemplateDropdown(true);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                      >
-                                        <FileText className="w-4 h-4 text-amber-600 shrink-0" />
-                                        <span>Templates</span>
-                                      </button>
-                                    )}
-
-                                    {/* 2. Assign Chatbot */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setShowComposerGearMenu(false);
-                                          setShowAssignBotModal(true);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                      >
-                                        <Bot className="w-4 h-4 text-blue-600 shrink-0" />
-                                        <span>Assign Chatbot</span>
-                                      </button>
-                                    )}
-
-                                    {/* 3. Enroll in Campaign */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setShowComposerGearMenu(false);
-                                          setShowEnrollCampaignModal(true);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                      >
-                                        <Zap className="w-4 h-4 text-purple-600 shrink-0" />
-                                        <span>Enroll in Campaign</span>
-                                      </button>
-                                    )}
-
-                                    {/* 4. Assign Responsible */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setAssignAgentMenuOpen(true);
-                                      }}
-                                      className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-gray-50 text-left transition-colors"
-                                    >
-                                      <UserCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                                      <span>Assign Responsible</span>
-                                    </button>
-
-                                    <div className="my-1 border-t border-gray-100" />
-
-                                    {/* 5. Take Over from Bot */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
-                                      (() => {
-                                        const isBotActive =
-                                          activeConversation.assignedBotId &&
-                                          (activeConversation.botStatus ?? "off") === "active" &&
-                                          !activeConversation.assignedPersonId;
-                                        return (
-                                          <button
-                                            type="button"
-                                            disabled={!isBotActive}
-                                            onClick={() => {
-                                              setShowComposerGearMenu(false);
-                                              setConversations((prev) =>
-                                                prev.map((c) =>
-                                                  c.id === selectedConversationId
-                                                    ? { ...c, botStatus: "paused", assignedPersonId: "1" }
-                                                    : c
-                                                )
-                                              );
-                                              toast.success("Bot paused. You took over the conversation.");
-                                            }}
-                                            className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${isBotActive
-                                                ? "hover:bg-gray-50 text-gray-700 cursor-pointer"
-                                                : "opacity-40 cursor-not-allowed text-gray-400"
-                                              }`}
-                                          >
-                                            <UserCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                                            <span>Take Over from Bot</span>
-                                          </button>
-                                        );
-                                      })()
-                                    )}
-
-                                    {/* 6. Test (DEV-only) */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setShowComposerGearMenu(false);
-                                          setShowTestProcessDrawer(true);
-                                        }}
-                                        className="w-full flex items-center gap-2.5 px-3.5 py-2 hover:bg-purple-50 text-purple-700 font-semibold text-left transition-colors"
-                                      >
-                                        <FlaskConical className="w-4 h-4 text-purple-600 shrink-0" />
-                                        <span>Test</span>
-                                        <span className="ml-auto text-[9px] font-mono bg-purple-100 text-purple-700 px-1 rounded">DEV</span>
-                                      </button>
-                                    )}
-
-                                    {/* 7. Pause / Resume Bot */}
-                                    {LEGACY_CHATBOT_MODULE_ENABLED && (activeConversation.botStatus ?? "off") !== "off" && (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setShowComposerGearMenu(false);
-                                          handleToggleBotStatus();
-                                        }}
-                                        className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${(activeConversation.botStatus ?? "off") === "paused"
-                                            ? "hover:bg-amber-50 text-amber-700 font-semibold"
-                                            : "hover:bg-gray-50 text-gray-700"
-                                          }`}
-                                      >
-                                        {(activeConversation.botStatus ?? "off") === "active" ? (
-                                          <>
-                                            <Pause className="w-4 h-4 text-amber-600 shrink-0" />
-                                            <span>Pause Bot</span>
-                                          </>
-                                        ) : (
-                                          <>
-                                            <Play className="w-4 h-4 text-emerald-600 shrink-0" />
-                                            <span>Resume Bot</span>
-                                          </>
-                                        )}
-                                      </button>
-                                    )}
-
-                                    {/* 8. Mark Resolved / Re-open */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setShowComposerGearMenu(false);
-                                        handleMarkResolved();
-                                      }}
-                                      className={`w-full flex items-center gap-2.5 px-3.5 py-2 text-left transition-colors ${activeConversation.status === "resolved"
-                                          ? "hover:bg-green-50 text-green-700 font-semibold"
-                                          : "hover:bg-gray-50 text-gray-700"
-                                        }`}
-                                    >
-                                      <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                                      <span>{activeConversation.status === "resolved" ? "Re-open Conversation" : "Mark Resolved"}</span>
-                                    </button>
-                                  </>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Upward-expanding Template Picker Menu */}
-                            {LEGACY_CHATBOT_MODULE_ENABLED && showUseTemplateDropdown && (
-                              <div className="absolute bottom-full mb-2 left-0 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150">
-                                <div className="p-2.5 bg-gray-50 flex items-center justify-between border-b border-gray-100">
-                                  <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Select Template</span>
-                                  <button onClick={() => setShowUseTemplateDropdown(false)}><X className="w-3.5 h-3.5 text-gray-400 hover:text-gray-600" /></button>
-                                </div>
-                                <div className="max-h-56 overflow-y-auto py-1">
-                                  {globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").length === 0 ? (
-                                    <div className="p-4 text-center text-xs text-gray-500">No approved templates yet. Create and submit a template for approval first, or clone one from the Template Library.</div>
-                                  ) : (
-                                    globalTemplates.filter(t => !t.approvalStatus || t.approvalStatus === "approved").map((t) => (
-                                      <div key={t.id} className="flex items-center justify-between px-3 py-2 text-xs hover:bg-blue-50 transition-colors group">
-                                        <button
-                                          onClick={() => {
-                                            setComposerText(t.bodyText);
-                                            setShowUseTemplateDropdown(false);
-                                          }}
-                                          className="flex-1 text-left text-gray-700 font-medium truncate mr-2 group-hover:text-blue-600"
-                                          title="Insert text into composer"
-                                        >
-                                          {t.name}
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            handleSendTemplateDirectly(t);
-                                            setShowUseTemplateDropdown(false);
-                                          }}
-                                          className="px-2 py-1 text-[10px] font-bold bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors shrink-0"
-                                          title="Send template directly with buttons"
-                                        >
-                                          Send
-                                        </button>
-                                      </div>
-                                    ))
-                                  )}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="relative flex-1">
-                            <input type="text" value={composerText} onChange={e => setComposerText(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                              placeholder="Type a message..." className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              style={{ fontFamily: "Outfit, sans-serif" }} />
-                          </div>
-
-                          <button type="button" onClick={handleSendMessage}
-                            className="p-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-xl transition-colors flex-shrink-0 cursor-pointer"
-                          >
-                            <Send className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
+                      {/* Shared Chat Subcomponents */}
+                      <ConversationHeader
+                        conversation={activeConversation}
+                        onToggleBotStatus={handleToggleBotStatus}
+                        onOpenAssignBotModal={() => setShowAssignBotModal(true)}
+                        onOpenAssignPersonModal={() => setAssignAgentMenuOpen(true)}
+                        availableEmployees={AVAILABLE_EMPLOYEES}
+                      />
+                      <MessageThreadList
+                        messages={activeConversation.messages}
+                        emptyMessage="No messages in this conversation yet."
+                      />
+                      <MessageComposerBar
+                        conversation={activeConversation}
+                        session={computeSessionWindow(activeConversation)}
+                        onSendMessage={handleSendMessage}
+                        onSendTemplate={handleSendTemplateDirectly}
+                        onEnrollCampaign={handleEnrollCampaign}
+                      />
                     </>
                   ) : (
                     <div className="flex-1 flex items-center justify-center text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>

@@ -43,6 +43,7 @@ export interface ScheduleAppointmentDrawerProps {
   values: BookingFormValues;
   onChange: (patch: Partial<BookingFormValues>) => void;
   onSave: () => void;             // = handleBookingComplete
+  isSaving?: boolean;
 
   employees: Employee[];
   clients: ClientOption[];
@@ -73,6 +74,7 @@ export default function ScheduleAppointmentDrawer({
   onCustomFieldChange,
   onOpenSelectFields,
   onOpenCreateField,
+  isSaving = false,
 }: ScheduleAppointmentDrawerProps) {
   const isValid = !!(values.title.trim() && values.provider && values.client && values.date);
   const endHour = (values.startHour + 1) % 24;
@@ -114,17 +116,17 @@ export default function ScheduleAppointmentDrawer({
       footer={
         <button
           onClick={onSave}
-          disabled={!isValid}
+          disabled={!isValid || isSaving}
           className="w-full py-3 rounded-xl font-semibold text-sm transition-all"
           style={{
             fontFamily: "Outfit, sans-serif",
-            backgroundColor: isValid ? "#1e293b" : "#E5E7EB",
-            color: isValid ? "#ffffff" : "#9CA3AF",
-            cursor: isValid ? "pointer" : "not-allowed",
+            backgroundColor: isValid && !isSaving ? "#1e293b" : "#E5E7EB",
+            color: isValid && !isSaving ? "#ffffff" : "#9CA3AF",
+            cursor: isValid && !isSaving ? "pointer" : "not-allowed",
             border: "none",
           }}
         >
-          {mode === "reschedule" ? "Save Changes" : "Schedule Appointment"}
+          {isSaving ? "Saving..." : mode === "reschedule" ? "Save Changes" : "Schedule Appointment"}
         </button>
       }
     >

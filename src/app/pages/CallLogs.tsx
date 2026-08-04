@@ -17,6 +17,7 @@ import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
+import ScheduleCallDrawer, { ScheduleCallClientOption } from "../components/telephony/ScheduleCallDrawer";
 
 interface CallLog {
   id: string;
@@ -794,6 +795,102 @@ export default function CallLogs() {
   const [hoverRating, setHoverRating] = useState(0);
   const [callFeedback, setCallFeedback] = useState("");
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
+
+  // Schedule Call Drawer
+  const [showScheduleCallDrawer, setShowScheduleCallDrawer] = useState(false);
+  const [scClientSearch, setScClientSearch] = useState('');
+  const [scSelectedClient, setScSelectedClient] = useState<Client | null>(null);
+  const [scSelectedProcess, setScSelectedProcess] = useState('');
+  const [scSelectedStage, setScSelectedStage] = useState('');
+  const [scCalendarMonth, setScCalendarMonth] = useState(() => new Date());
+  const [scSelectedDate, setScSelectedDate] = useState<Date | null>(null);
+  const [scHour, setScHour] = useState(() => new Date().getHours());
+  const [scMinute, setScMinute] = useState(() => new Date().getMinutes());
+  const [scIsScheduling, setScIsScheduling] = useState(false);
+
+  // Process → Stages map for Schedule Call
+  const processStagesMap: Record<string, string[]> = {
+    'Patient Intake': ['Initial Contact', 'Insurance Verify', 'Schedule Appointment'],
+    'Follow-up Calls': ['Post-Visit Check', 'Medication Reminder', 'Follow-up'],
+    'Payment Reminder': ['Billing Inquiry', 'Issue Resolution', 'Payment Notice', 'Payment Collected'],
+    'Appointment Scheduling': ['Slot Selection', 'Confirmation'],
+    'Insurance Verification': ['Document Check', 'Verification', 'Approval'],
+  };
+
+  // Filtered clients for Schedule Call search
+  const scFilteredClients = Object.values(mockClients).filter(c =>
+    scClientSearch.length > 0 &&
+    (c.name.toLowerCase().includes(scClientSearch.toLowerCase()) ||
+      c.email.toLowerCase().includes(scClientSearch.toLowerCase()) ||
+      c.phone.includes(scClientSearch))
+  );
+
+  // Calendar helpers
+  const getDaysInMonth = (year: number, month: number) => new Date(year, month + 1, 0).getDate();
+  const getFirstDayOfMonth = (year: number, month: number) => new Date(year, month, 1).getDay();
+
+  const scYear = scCalendarMonth.getFullYear();
+  const scMonth = scCalendarMonth.getMonth();
+  const scDaysInMonth = getDaysInMonth(scYear, scMonth);
+  const scFirstDay = getFirstDayOfMonth(scYear, scMonth);
+  const scMonthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const handleScPrevMonth = () => setScCalendarMonth(new Date(scYear, scMonth - 1, 1));
+  const handleScNextMonth = () => setScCalendarMonth(new Date(scYear, scMonth + 1, 1));
+
+  const handleScSelectClient = (client: Client) => {
+    setScSelectedClient(client);
+    setScClientSearch('');
+    // Clear process/stage — user must pick from the dropdown
+    setScSelectedProcess('');
+    setScSelectedStage('');
+  };
+
+  const handleScProcessChange = (process: string) => {
+    setScSelectedProcess(process);
+    const stages = processStagesMap[process] || [];
+    setScSelectedStage(stages[0] || '');
+  };
+
+  const handleScheduleCall = () => {
+    if (!scSelectedClient || !scSelectedDate) {
+      toast.error('Please select a client and a date/time');
+      return;
+    }
+    setScIsScheduling(true);
+    setTimeout(() => {
+      const dateStr = `${scSelectedDate.getFullYear()}-${String(scSelectedDate.getMonth()+1).padStart(2,'0')}-${String(scSelectedDate.getDate()).padStart(2,'0')}`;
+      const timeStr = `${String(scHour).padStart(2,'0')}:${String(scMinute).padStart(2,'0')}`;
+      const newCall: CallLog = {
+        id: `CALL-${Date.now()}`,
+        client: scSelectedClient.name,
+        clientId: scSelectedClient.id,
+        process: scSelectedProcess,
+        lastStage: '',
+        type: 'Outbound',
+        status: 'Pending',
+        currentStage: scSelectedStage || scSelectedClient.stage,
+        duration: '',
+        date: `${dateStr} ${timeStr}`,
+        hasRecording: false,
+        hasTranscript: false,
+        hasScheduledCall: true,
+      };
+      setCallLogs(prev => [newCall, ...prev]);
+      toast.success(`Call scheduled for ${scSelectedClient.name} on ${dateStr} at ${timeStr}`);
+      setScIsScheduling(false);
+      setShowScheduleCallDrawer(false);
+      setScSelectedClient(null);
+      setScSelectedProcess('');
+      setScSelectedStage('');
+      setScSelectedDate(null);
+      setScCalendarMonth(new Date());
+      setScHour(new Date().getHours());
+      setScMinute(new Date().getMinutes());
+    }, 900);
+  };
 
   // Apply client filter from navigation state
   useEffect(() => {
@@ -1610,67 +1707,21 @@ export default function CallLogs() {
               )}
             </div>
 
-            {/* Processes Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowProcessesDropdown(!showProcessesDropdown)}
-                className="flex items-center gap-2 px-3 py-2 bg-white border transition-colors rounded-lg"
-                style={{
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  color: '#374151',
-                  borderColor: '#D1D5DB'
-                }}
-              >
-                {selectedProcessFilter ? selectedProcessFilter : "Process"}
-                <ChevronDown className="w-4 h-4" />
-              </button>
-              <InfoTooltip text="Only show calls that belong to this workflow." />
-
-              {/* Processes Dropdown Menu */}
-              {showProcessesDropdown && (
-                <>
-                  {/* Backdrop */}
-                  <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowProcessesDropdown(false)}
-                  />
-
-                  {/* Dropdown Panel */}
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-white border border-border rounded-lg shadow-xl z-50 py-2">
-                    <button
-                      onClick={() => {
-                        setSelectedProcessFilter(null);
-                        setShowProcessesDropdown(false);
-                      }}
-                      className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${!selectedProcessFilter ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                        }`}
-                    >
-                      All
-                    </button>
-                    {[
-                      'Patient Intake',
-                      'Follow-up Calls',
-                      'Insurance Verification',
-                      'Appointment Scheduling',
-                      'Payment Reminder'
-                    ].map((process) => (
-                      <button
-                        key={process}
-                        onClick={() => {
-                          setSelectedProcessFilter(process);
-                          setShowProcessesDropdown(false);
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm rounded transition-colors ${selectedProcessFilter === process ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted'
-                          }`}
-                      >
-                        {process}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Schedule Call Button */}
+            <button
+              id="schedule-call-btn"
+              onClick={() => setShowScheduleCallDrawer(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 whitespace-nowrap"
+              style={{
+                background: 'linear-gradient(135deg, #6366F1 0%, #4F46E5 100%)',
+                color: '#ffffff',
+                boxShadow: '0 2px 8px rgba(99,102,241,0.35)',
+                border: 'none',
+              }}
+            >
+              <CalendarClock className="w-4 h-4" />
+              Schedule Call
+            </button>
           </div>
         </div>
 
@@ -2384,6 +2435,78 @@ export default function CallLogs() {
           "See call scores and AI sentiment analysis",
         ]}
         guideUrl="/guide/call-logs"
+      />
+
+      {/* ───── Schedule Call Drawer ───── */}
+      <ScheduleCallDrawer
+        isOpen={showScheduleCallDrawer}
+        onClose={() => setShowScheduleCallDrawer(false)}
+        mode="schedule"
+        values={{
+          client: scSelectedClient
+            ? {
+                id: scSelectedClient.id,
+                name: scSelectedClient.name,
+                email: scSelectedClient.email,
+                phone: scSelectedClient.phone,
+                countryCode: scSelectedClient.countryCode,
+                countryFlag: scSelectedClient.countryFlag,
+                country: scSelectedClient.country,
+                status: scSelectedClient.status,
+                processes: scSelectedClient.processes,
+              }
+            : null,
+          clientSearch: scClientSearch,
+          process: scSelectedProcess,
+          stage: scSelectedStage,
+          calendarMonth: scCalendarMonth,
+          selectedDate: scSelectedDate,
+          hour: scHour,
+          minute: scMinute,
+        }}
+        onChange={(patch) => {
+          if (patch.client !== undefined) {
+            if (patch.client) {
+              const origClient = mockClients[patch.client.id] || {
+                id: patch.client.id,
+                name: patch.client.name,
+                email: patch.client.email,
+                phone: patch.client.phone,
+                country: patch.client.country || "US",
+                countryCode: patch.client.countryCode || "+1",
+                countryFlag: patch.client.countryFlag || "🇺🇸",
+                processes: patch.client.processes || [],
+                stage: patch.client.status || "",
+                lastContact: "",
+                status: patch.client.status || "Active",
+              };
+              setScSelectedClient(origClient);
+            } else {
+              setScSelectedClient(null);
+            }
+          }
+          if (patch.clientSearch !== undefined) setScClientSearch(patch.clientSearch);
+          if (patch.process !== undefined) setScSelectedProcess(patch.process);
+          if (patch.stage !== undefined) setScSelectedStage(patch.stage);
+          if (patch.calendarMonth !== undefined) setScCalendarMonth(patch.calendarMonth);
+          if (patch.selectedDate !== undefined) setScSelectedDate(patch.selectedDate);
+          if (patch.hour !== undefined) setScHour(patch.hour);
+          if (patch.minute !== undefined) setScMinute(patch.minute);
+        }}
+        onSave={handleScheduleCall}
+        isSaving={scIsScheduling}
+        clients={Object.values(mockClients).map((c) => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          phone: c.phone,
+          countryCode: c.countryCode,
+          countryFlag: c.countryFlag,
+          country: c.country,
+          status: c.status,
+          processes: c.processes,
+        }))}
+        processStagesMap={processStagesMap}
       />
     </div>
   );
