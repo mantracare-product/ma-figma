@@ -48,22 +48,22 @@ const CHRONO_RANK: Record<string, number> = {
 };
 
 const ACTIVITY_ICON_BG: Record<string, string> = {
-  process_entry: "#EFF6FF",
-  call: "#DBEAFE",
-  whatsapp: "#DCFCE7",
-  sms: "#E0E7FF",
-  email: "#FEF3C7",
-  stage_update: "#F3E8FF",
-  stage_change: "#F3E8FF",
-  webhook_trigger: "#FFE4E6",
-  appointment_booked: "#CFFAFE",
-  field_update: "#F1F5F9",
-  process_completed: "#DCFCE7",
-  website_message: "#F3E8FF",
-  website: "#F3E8FF",
-  outbound_call: "#DBEAFE",
-  inbound_call: "#DBEAFE",
-  failed_call: "#FEE2E2",
+  process_entry: "#1F2937",
+  call: "#1F2937",
+  whatsapp: "#1F2937",
+  sms: "#1F2937",
+  email: "#1F2937",
+  stage_update: "#1F2937",
+  stage_change: "#1F2937",
+  webhook_trigger: "#1F2937",
+  appointment_booked: "#1F2937",
+  field_update: "#1F2937",
+  process_completed: "#1F2937",
+  website_message: "#1F2937",
+  website: "#1F2937",
+  outbound_call: "#1F2937",
+  inbound_call: "#1F2937",
+  failed_call: "#1F2937",
 };
 
 const HEADING_BY_TYPE: Record<string, string> = {
@@ -839,6 +839,26 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         },
       },
       {
+        id: "act-sms-1",
+        processId: findProcessId("Follow-up Calls"),
+        processName: "Follow-up Calls",
+        clientId: client.id,
+        type: "sms" as const,
+        refId: "conv-sms-1",
+        timestamp: "2024-04-09T08:30:00",
+        date: "Apr 9, 2024",
+        time: "8:30 AM",
+        status: "delivered",
+        direction: "sent" as const,
+        messageText: "Hi! This is an SMS reminder regarding your upcoming appointment. Reply YES to confirm or call us if you need to reschedule.",
+        phoneNumber: client.phone || "+1 (555) 123-4567",
+        sourceStepName: "SMS Automation",
+        details: {
+          primary: "Hi! This is an SMS reminder regarding your upcoming appointment. Reply YES to confirm or call us if you need to reschedule.",
+          secondary: `To: ${client.phone || "phone"}`,
+        },
+      },
+      {
         id: "act-7",
         processId: findProcessId("Follow-up Calls"),
         processName: "Follow-up Calls",
@@ -1112,20 +1132,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "processes" as const, label: "Processes" },
                 { id: "activity" as const, label: "Activity" },
                 { id: "forms" as const, label: "Forms" },
-                { id: "appointments" as const, label: "Appointments" },
                 { id: "notes" as const, label: "Notes" },
+                { id: "appointments" as const, label: "Appointments" },
               ] as const
             ).map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveProfileTab(tab.id)}
                 className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${activeProfileTab === tab.id
-                  ? "border-b-2 border-primary text-primary"
+                  ? "border-b-2 border-[#1F2937] text-[#1F2937] font-semibold"
                   : "hover:text-foreground"
                   }`}
                 style={{
                   fontFamily: "Outfit, sans-serif",
-                  color: activeProfileTab === tab.id ? undefined : "#6B7280",
+                  color: activeProfileTab === tab.id ? "#1F2937" : "#6B7280",
                 }}
               >
                 {tab.label}

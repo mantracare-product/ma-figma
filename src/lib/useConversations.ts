@@ -4,7 +4,7 @@ import { TEST_CHAT_SYNC_EVENT } from "./testConversationSync";
 import { DEFAULT_MOCK_NUMBERS } from "./useWhatsAppNumbers";
 import { resolveTestVariables } from "./chatbotTestReply";
 import { buildTemplateMessage } from "./conversationBotRuntime";
-import { appendActivity } from "./activityEngine";
+import { appendActivity, getActivity } from "./activityEngine";
 
 export interface Message {
   id: string;
@@ -66,8 +66,8 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
   {
     id: "conv-1",
     clientId: "CL-001",
-    contactName: "Sarah Jenkins",
-    phoneNumber: "+1 (555) 234-5678",
+    contactName: "Sarah Johnson",
+    phoneNumber: "5551234567",
     inboxNumber: "+1 (555) 123-4567",
     channel: "whatsapp",
     lastMessage: "I wanted to change my appointment slot to 3:00 PM if possible.",
@@ -78,6 +78,24 @@ export const INITIAL_MOCK_CONVERSATIONS: Conversation[] = [
       { id: "msg-1-1", text: "Hello! Thank you for contacting Mantra Health.", timestamp: new Date(Date.now() - 3600000).toISOString(), sender: "me", status: "read" },
       { id: "msg-1-2", text: "Could I reschedule my appointment for tomorrow?", timestamp: new Date(Date.now() - 1800000).toISOString(), sender: "contact" },
       { id: "msg-1-3", text: "I wanted to change my appointment slot to 3:00 PM if possible.", timestamp: new Date(Date.now() - 900000).toISOString(), sender: "contact" },
+    ],
+    botStatus: "off",
+    assignedPersonId: "",
+  },
+  {
+    id: "conv-sms-1",
+    clientId: "CL-001",
+    contactName: "Sarah Johnson",
+    phoneNumber: "5551234567",
+    inboxNumber: "+1 (555) 123-4567",
+    channel: "sms",
+    lastMessage: "YES, I will be there on time!",
+    timestamp: "Yesterday",
+    unreadCount: 0,
+    status: "open",
+    messages: [
+      { id: "msg-sms-1-1", text: "Hi! This is an SMS reminder regarding your upcoming appointment. Reply YES to confirm or call us if you need to reschedule.", timestamp: new Date(Date.now() - 86400000).toISOString(), sender: "me", status: "delivered" },
+      { id: "msg-sms-1-2", text: "YES, I will be there on time!", timestamp: new Date(Date.now() - 43200000).toISOString(), sender: "contact", status: "delivered" },
     ],
     botStatus: "off",
     assignedPersonId: "",
@@ -181,7 +199,10 @@ export function getStoredConversations(): Conversation[] {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed: Conversation[] = JSON.parse(raw);
-      const updated = parsed.map((c) => {
+      const parsedIds = new Set(parsed.map((c) => c.id));
+      const missingInitial = INITIAL_MOCK_CONVERSATIONS.filter((c) => !parsedIds.has(c.id));
+      const merged = [...parsed, ...missingInitial];
+      const updated = merged.map((c) => {
         if (c.channel === "whatsapp" && (!c.inboxNumber || !validNumbers.has(c.inboxNumber))) {
           return { ...c, inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber };
         }
@@ -289,21 +310,30 @@ export function useConversations() {
     return conversations.find((c) => c.id === id);
   };
 
-  const findConversationForClient = (opts: { clientId?: string; phone?: string; name?: string }): Conversation | undefined => {
+  const findConversationForClient = (opts: {
+    clientId?: string;
+    phone?: string;
+    name?: string;
+    channel?: "whatsapp" | "sms" | "website";
+  }): Conversation | undefined => {
+    let candidates = conversations;
+    if (opts.channel) {
+      candidates = candidates.filter((c) => c.channel === opts.channel);
+    }
     if (opts.clientId) {
-      const match = conversations.find((c) => (c as any).clientId === opts.clientId || c.id === opts.clientId);
+      const match = candidates.find((c) => (c as any).clientId === opts.clientId || c.id === opts.clientId);
       if (match) return match;
     }
     if (opts.phone) {
       const cleanTarget = opts.phone.replace(/\D/g, "");
       if (cleanTarget) {
-        const match = conversations.find((c) => c.phoneNumber.replace(/\D/g, "").includes(cleanTarget) || cleanTarget.includes(c.phoneNumber.replace(/\D/g, "")));
+        const match = candidates.find((c) => c.phoneNumber.replace(/\D/g, "").includes(cleanTarget) || cleanTarget.includes(c.phoneNumber.replace(/\D/g, "")));
         if (match) return match;
       }
     }
     if (opts.name) {
       const targetName = opts.name.toLowerCase();
-      const match = conversations.find((c) => c.contactName.toLowerCase().includes(targetName) || targetName.includes(c.contactName.toLowerCase()));
+      const match = candidates.find((c) => c.contactName.toLowerCase().includes(targetName) || targetName.includes(c.contactName.toLowerCase()));
       if (match) return match;
     }
     return undefined;
@@ -315,22 +345,53 @@ export function useConversations() {
     name?: string;
     channel?: "whatsapp" | "sms" | "website";
   }): Conversation => {
-    const existing = findConversationForClient(opts);
-    if (existing) return existing;
-
     const channel = opts.channel || "whatsapp";
+    const existing = findConversationForClient({ ...opts, channel });
+    if (existing) {
+      // Enrich existing conversation if name or clientId was updated
+      if ((opts.clientId && !existing.clientId) || (opts.name && existing.contactName !== opts.name && opts.name !== "Client")) {
+        const updated = {
+          ...existing,
+          clientId: opts.clientId || existing.clientId,
+          contactName: opts.name || existing.contactName,
+          phoneNumber: opts.phone || existing.phoneNumber,
+        };
+        setConversations((prev) => prev.map((c) => (c.id === existing.id ? updated : c)));
+        return updated;
+      }
+      return existing;
+    }
+
+    // Build initial seed messages from activity engine for this client & channel
+    const activityEntries = opts.clientId ? getActivity(opts.clientId) : [];
+    const matchingActivities = activityEntries.filter((a: any) => {
+      const rawType = a.rawType || a.type;
+      if (channel === "sms") return rawType === "sms";
+      if (channel === "whatsapp") return rawType === "whatsapp";
+      if (channel === "website") return rawType === "website_message" || rawType === "website";
+      return false;
+    });
+
+    const seedMessages: Message[] = matchingActivities.map((a: any, idx: number) => ({
+      id: `msg-act-${a.id || idx}`,
+      text: a.messageText || a.details?.primary || "Message",
+      timestamp: a.timestamp ? new Date(a.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Recently",
+      sender: (a.direction === "outbound" || a.direction === "sent" ? "me" : "contact") as "me" | "contact",
+      status: "delivered" as const,
+    })).reverse();
+
     const newConv: Conversation = {
-      id: `conv-auto-${Date.now()}`,
+      id: `conv-auto-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
       clientId: opts.clientId,
       contactName: opts.name || "Client",
       phoneNumber: opts.phone || "+1 (555) 010-0100",
       inboxNumber: DEFAULT_MOCK_NUMBERS[0].displayPhoneNumber,
       channel,
-      lastMessage: "",
-      timestamp: "Just now",
+      lastMessage: seedMessages.length > 0 ? seedMessages[seedMessages.length - 1].text : "",
+      timestamp: seedMessages.length > 0 ? seedMessages[seedMessages.length - 1].timestamp : "Just now",
       unreadCount: 0,
       status: "open",
-      messages: [],
+      messages: seedMessages,
       botStatus: "off",
       assignedPersonId: "",
     };

@@ -372,7 +372,7 @@ export default function ProcessDetailDrawer({
                       className="flex-1 min-w-[100px] flex items-center justify-center px-2 text-center transition-all hover:opacity-90"
                       style={{
                         height: "40px",
-                        backgroundColor: isCompleted || isActive ? "#1E88E5" : "transparent",
+                        backgroundColor: isCompleted || isActive ? "#1F2937" : "transparent",
                         color: isCompleted || isActive ? "#FFFFFF" : "#9E9E9E",
                         fontSize: "12px",
                         fontWeight: isActive ? 600 : 500,
@@ -399,8 +399,8 @@ export default function ProcessDetailDrawer({
                 onClick={() => onTabChange(tab)}
                 className="py-3 mr-6 text-sm font-medium transition-colors"
                 style={{
-                  color: activeTab === tab ? "#1E88E5" : "#9E9E9E",
-                  borderBottom: activeTab === tab ? "2px solid #1E88E5" : "2px solid transparent",
+                  color: activeTab === tab ? "#1F2937" : "#9E9E9E",
+                  borderBottom: activeTab === tab ? "2px solid #1F2937" : "2px solid transparent",
                   fontFamily: "Outfit, sans-serif",
                 }}
               >

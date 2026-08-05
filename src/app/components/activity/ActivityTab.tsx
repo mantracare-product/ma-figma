@@ -15,6 +15,7 @@ import {
 import { useConversations } from "../../../lib/useConversations";
 import { useWhatsappTemplates } from "../../../lib/useWhatsappTemplates";
 import ConversationThreadDrawer from "../chats/ConversationThreadDrawer";
+import EmailThreadDrawer from "../chats/EmailThreadDrawer";
 import { AlertTriangle } from "lucide-react";
 import { resolveTestVariables } from "../../../lib/chatbotTestReply";
 import ScheduleCallDrawer, {
@@ -77,12 +78,12 @@ export interface ActivityLogEntry {
 // ─── Static maps ──────────────────────────────────────────────────────────────
 
 const ACTIVITY_ICON_BG: Record<string, string> = {
-  process_entry: "#EFF6FF", call: "#DBEAFE", outbound_call: "#DBEAFE",
-  inbound_call: "#DBEAFE", failed_call: "#FEE2E2", whatsapp: "#DCFCE7",
-  sms: "#E0E7FF", email: "#FEF3C7", stage_update: "#F3E8FF", stage_change: "#F3E8FF",
-  webhook_trigger: "#FFE4E6", appointment_booked: "#CFFAFE", field_update: "#F1F5F9",
-  process_completed: "#DCFCE7", website_message: "#F3E8FF", website: "#F3E8FF",
-  form_submitted: "#F0FDF4",
+  process_entry: "#1F2937", call: "#1F2937", outbound_call: "#1F2937",
+  inbound_call: "#1F2937", failed_call: "#1F2937", whatsapp: "#1F2937",
+  sms: "#1F2937", email: "#1F2937", stage_update: "#1F2937", stage_change: "#1F2937",
+  webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
+  process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
+  form_submitted: "#1F2937",
 };
 
 const HEADING_BY_TYPE: Record<string, string> = {
@@ -135,29 +136,29 @@ function StatusPill({ status }: { status?: string }) {
 // ─── Activity icon ────────────────────────────────────────────────────────────
 
 function ActivityIcon({ type, direction, status }: { type: string; direction?: string; status?: string }) {
-  const cls = "w-4 h-4";
+  const cls = "w-4 h-4 text-white";
   if (type === "inbound_call" || (type === "call" && direction === "inbound"))
-    return <PhoneIncoming className={`${cls} text-blue-600`} />;
+    return <PhoneIncoming className={cls} />;
   if (type === "outbound_call" || (type === "call" && direction === "outbound"))
-    return <PhoneOutgoing className={`${cls} text-blue-600`} />;
+    return <PhoneOutgoing className={cls} />;
   if (type === "failed_call" || status === "failed" || status === "Failed")
-    return <PhoneOff className={`${cls} text-red-600`} />;
+    return <PhoneOff className={cls} />;
   switch (type) {
-    case "process_entry":  return <LogIn className={`${cls} text-blue-600`} />;
+    case "process_entry":     return <LogIn className={cls} />;
     case "stage_update":
-    case "stage_change":   return <ArrowRightCircle className={`${cls} text-purple-600`} />;
-    case "process_completed": return <CheckCircle2 className={`${cls} text-emerald-600`} />;
-    case "call":           return <Phone className={`${cls} text-blue-600`} />;
-    case "whatsapp":       return <MessageCircle className={`${cls} text-emerald-600`} />;
-    case "sms":            return <MessageSquare className={`${cls} text-indigo-600`} />;
-    case "email":          return <Mail className={`${cls} text-amber-600`} />;
-    case "webhook_trigger": return <Zap className={`${cls} text-rose-600`} />;
-    case "appointment_booked": return <Calendar className={`${cls} text-cyan-600`} />;
-    case "field_update":   return <Pencil className={`${cls} text-slate-600`} />;
-    case "form_submitted": return <FileText className={`${cls} text-green-600`} />;
+    case "stage_change":      return <ArrowRightCircle className={cls} />;
+    case "process_completed": return <CheckCircle2 className={cls} />;
+    case "call":              return <Phone className={cls} />;
+    case "whatsapp":          return <MessageCircle className={cls} />;
+    case "sms":               return <MessageSquare className={cls} />;
+    case "email":             return <Mail className={cls} />;
+    case "webhook_trigger":   return <Zap className={cls} />;
+    case "appointment_booked": return <Calendar className={cls} />;
+    case "field_update":      return <Pencil className={cls} />;
+    case "form_submitted":    return <FileText className={cls} />;
     case "website_message":
-    case "website":        return <Globe className={`${cls} text-purple-600`} />;
-    default:               return <Pencil className={`${cls} text-slate-600`} />;
+    case "website":           return <Globe className={cls} />;
+    default:                  return <Pencil className={cls} />;
   }
 }
 
@@ -348,7 +349,13 @@ function CallBlock({ entry }: { entry: ActivityLogEntry }) {
   );
 }
 
-function WhatsAppSmsBlock({ entry }: { entry: ActivityLogEntry }) {
+function WhatsAppSmsBlock({
+  entry,
+  onOpenThreadDrawer,
+}: {
+  entry: ActivityLogEntry;
+  onOpenThreadDrawer?: (convId: string) => void;
+}) {
   const dir = (entry.direction as "sent" | "received") || "sent";
   const text = entry.messageText || entry.details?.primary || "";
   const phone = entry.phoneNumber || entry.details?.secondary || "";
@@ -468,11 +475,18 @@ function WhatsAppSmsBlock({ entry }: { entry: ActivityLogEntry }) {
           )}
         </div>
       )}
+
     </div>
   );
 }
 
-function EmailBlock({ entry }: { entry: ActivityLogEntry }) {
+function EmailBlock({
+  entry,
+  onOpenEmailThreadDrawer,
+}: {
+  entry: ActivityLogEntry;
+  onOpenEmailThreadDrawer?: (convId: string, subject?: string) => void;
+}) {
   const subject = entry.subject || entry.details?.primary || "";
   const preview = entry.bodyPreview || entry.details?.secondary || "";
   const addr = entry.toOrFrom || "";
@@ -617,7 +631,8 @@ interface ActivityCardProps {
   onOpenScheduleFollowUp: () => void;
   onOpenRescheduleAppointment?: () => void;
   onOpenComposePanel: (type: "whatsapp" | "sms" | "email") => void;
-  onOpenThreadDrawer?: (conversationId: string) => void;
+  onOpenThreadDrawer?: (conversationId: string, channel?: "whatsapp" | "sms" | "website") => void;
+  onOpenEmailThreadDrawer?: (conversationId: string, subject?: string) => void;
   navigate: ReturnType<typeof useNavigate>;
 }
 
@@ -636,6 +651,7 @@ function ActivityCard({
   onOpenRescheduleAppointment,
   onOpenComposePanel,
   onOpenThreadDrawer,
+  onOpenEmailThreadDrawer,
   navigate,
 }: ActivityCardProps) {
   const rawType = (entry as any).rawType || entry.type;
@@ -657,9 +673,9 @@ function ActivityCard({
   const ts = entry.timestamp || (entry.date ? `${entry.date}${entry.time ? " " + entry.time : ""}` : "");
   const displayTs = ts ? formatTimestamp(ts) : "";
 
-  // Background + border color for icon
-  const iconBg = isFailed ? "#FEE2E2" : ACTIVITY_ICON_BG[rawType] || ACTIVITY_ICON_BG[entry.type] || "#F1F5F9";
-  const iconBorder = isFailed ? "#DC2626" : isPending ? "#CBD5E1" : "transparent";
+  // Background + border color for icon (Client Table Header background #1F2937)
+  const iconBg = "#1F2937";
+  const iconBorder = isFailed ? "#EF4444" : isPending ? "#64748B" : "#374151";
 
   // Build kebab actions
   const kebabActions: MenuAction[] = [];
@@ -695,11 +711,11 @@ function ActivityCard({
 
   if (rawType === "whatsapp") {
     kebabActions.push({
-      label: "Reply on WhatsApp",
+      label: "Reply",
       icon: <MessageCircle className="w-3.5 h-3.5" />,
       onClick: () => {
         if (onOpenThreadDrawer) {
-          onOpenThreadDrawer(entry.refId || entry.id);
+          onOpenThreadDrawer(entry.refId || entry.id, "whatsapp");
         } else {
           onOpenComposePanel("whatsapp");
         }
@@ -709,11 +725,11 @@ function ActivityCard({
 
   if (rawType === "sms") {
     kebabActions.push({
-      label: "Reply via SMS",
+      label: "Reply",
       icon: <MessageSquare className="w-3.5 h-3.5" />,
       onClick: () => {
         if (onOpenThreadDrawer) {
-          onOpenThreadDrawer(entry.refId || entry.id);
+          onOpenThreadDrawer(entry.refId || entry.id, "sms");
         } else {
           onOpenComposePanel("sms");
         }
@@ -723,9 +739,15 @@ function ActivityCard({
 
   if (rawType === "email") {
     kebabActions.push({
-      label: "Reply via Email",
+      label: "Reply",
       icon: <Mail className="w-3.5 h-3.5" />,
-      onClick: () => onOpenComposePanel("email"),
+      onClick: () => {
+        if (onOpenEmailThreadDrawer) {
+          onOpenEmailThreadDrawer(entry.refId || entry.id, entry.subject || entry.details?.primary);
+        } else {
+          onOpenComposePanel("email");
+        }
+      },
     });
   }
 
@@ -787,9 +809,9 @@ function ActivityCard({
     if (t === "call" || t === "outbound_call" || t === "inbound_call" || t === "failed_call")
       return <CallBlock entry={entry} />;
     if (t === "whatsapp" || t === "sms")
-      return <WhatsAppSmsBlock entry={entry} />;
+      return <WhatsAppSmsBlock entry={entry} onOpenThreadDrawer={onOpenThreadDrawer} />;
     if (t === "email")
-      return <EmailBlock entry={entry} />;
+      return <EmailBlock entry={entry} onOpenEmailThreadDrawer={onOpenEmailThreadDrawer} />;
     if (t === "appointment_booked")
       return <AppointmentBlock entry={entry} />;
     if (t === "form_submitted")
@@ -828,7 +850,7 @@ function ActivityCard({
         <div
           className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0"
           style={{
-            backgroundColor: isPending ? "transparent" : "#1E88E5",
+            backgroundColor: isPending ? "transparent" : "#1F2937",
             backgroundImage: isPending
               ? "repeating-linear-gradient(to bottom, #CBD5E1 0 4px, transparent 4px 8px)"
               : undefined,
@@ -839,14 +861,14 @@ function ActivityCard({
       {/* Icon node */}
       <div
         className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2"
-        style={{ backgroundColor: iconBg, borderColor: iconBorder }}
+        style={{ backgroundColor: iconBg, borderColor: iconBorder, boxShadow: "0 2px 6px rgba(0, 0, 0, 0.18)" }}
       >
         <ActivityIcon type={rawType || entry.type} direction={entry.direction} status={entry.status} />
       </div>
 
       {/* Card */}
       <div
-        className="flex-1 p-3 rounded-xl border border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm transition-all select-none"
+        className="flex-1 p-3 rounded-xl border border-gray-200 bg-white hover:border-[#1F2937] hover:shadow-md transition-all select-none"
       >
         {/* Header row */}
         <div className="flex items-start justify-between gap-2">
@@ -874,7 +896,9 @@ function ActivityCard({
             >
               {displayTs}
             </span>
-            <KebabMenu actions={kebabActions} />
+            {!["process_entry", "stage_update", "stage_change", "process_completed"].includes(rawType) && kebabActions.length > 0 && (
+              <KebabMenu actions={kebabActions} />
+            )}
           </div>
         </div>
 
@@ -967,7 +991,7 @@ function ThreadedCard({
   group: ThreadGroup;
   isLast: boolean;
   onOpenComposePanel: (type: "whatsapp" | "sms" | "email") => void;
-  onOpenThreadDrawer?: (convId: string) => void;
+  onOpenThreadDrawer?: (convId: string, channel?: "whatsapp" | "sms" | "website") => void;
 }) {
   const isWhatsapp = group.type === "whatsapp";
   const title = isWhatsapp ? "WhatsApp Conversation" : "SMS Conversation";
@@ -976,11 +1000,11 @@ function ThreadedCard({
 
   const kebabActions: MenuAction[] = [
     {
-      label: isWhatsapp ? "Reply on WhatsApp" : "Reply via SMS",
+      label: "Reply",
       icon: isWhatsapp ? <MessageCircle className="w-3.5 h-3.5" /> : <MessageSquare className="w-3.5 h-3.5" />,
       onClick: () => {
         if (onOpenThreadDrawer) {
-          onOpenThreadDrawer(group.refId);
+          onOpenThreadDrawer(group.refId, group.type);
         } else {
           onOpenComposePanel(group.type);
         }
@@ -990,12 +1014,12 @@ function ThreadedCard({
 
   return (
     <div className="relative flex gap-3 pb-4 last:pb-0">
-      {!isLast && <div className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0 bg-[#1E88E5]" />}
-      <div className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2 border-transparent" style={{ backgroundColor: iconBg }}>
-        {isWhatsapp ? <MessageCircle className="w-4 h-4 text-emerald-600" /> : <MessageSquare className="w-4 h-4 text-indigo-600" />}
+      {!isLast && <div className="absolute left-[17px] top-9 bottom-0 w-[2px] z-0 bg-[#1F2937]" />}
+      <div className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 border-2" style={{ backgroundColor: "#1F2937", borderColor: "#374151", boxShadow: "0 2px 6px rgba(0, 0, 0, 0.18)" }}>
+        {isWhatsapp ? <MessageCircle className="w-4 h-4 text-white" /> : <MessageSquare className="w-4 h-4 text-white" />}
       </div>
 
-      <div className="flex-1 p-3 rounded-xl border border-gray-200 bg-white shadow-sm transition-all select-none space-y-2">
+      <div className="flex-1 p-3 rounded-xl border border-gray-200 bg-white hover:border-[#1F2937] hover:shadow-md transition-all select-none space-y-2">
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
@@ -1118,6 +1142,12 @@ export default function ActivityTab({
   // Conversation Thread Drawer state
   const [showThreadDrawer, setShowThreadDrawer] = useState(false);
   const [threadDrawerConversationId, setThreadDrawerConversationId] = useState<string>("");
+  const [threadDrawerChannel, setThreadDrawerChannel] = useState<"whatsapp" | "sms" | "website">("whatsapp");
+
+  // Email Thread Drawer state
+  const [showEmailThreadDrawer, setShowEmailThreadDrawer] = useState(false);
+  const [emailThreadId, setEmailThreadId] = useState<string>("");
+  const [emailThreadSubject, setEmailThreadSubject] = useState<string>("");
 
   // Live activity from engine (starts from prop, updates on appendActivity)
   const [liveActivity, setLiveActivity] = useState<ActivityLogEntry[]>(activity);
@@ -1402,11 +1432,13 @@ export default function ActivityTab({
     }
     if (rawType === "whatsapp" || entry.type === "whatsapp") {
       setThreadDrawerConversationId(entry.refId || entry.id);
+      setThreadDrawerChannel("whatsapp");
       setShowThreadDrawer(true);
       return;
     }
     if (rawType === "sms" || entry.type === "sms") {
       setThreadDrawerConversationId(entry.refId || entry.id);
+      setThreadDrawerChannel("sms");
       setShowThreadDrawer(true);
       return;
     }
@@ -1464,7 +1496,7 @@ export default function ActivityTab({
                   setActiveCategoryTab(cat.id);
                 }}
                 className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  isActive ? "bg-blue-600 text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  isActive ? "bg-[#1F2937] text-white shadow-sm font-semibold" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
@@ -1477,13 +1509,13 @@ export default function ActivityTab({
 
       {/* ── WhatsApp compose panel ── */}
       {activeCategoryTab === "whatsapp" && (
-        <div className="mb-4 p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/50 shadow-sm space-y-3">
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-emerald-800 font-semibold text-xs uppercase tracking-wider">
-              <MessageCircle className="w-4 h-4 text-emerald-600" />
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <MessageCircle className="w-4 h-4 text-[#1F2937]" />
               <span>Send WhatsApp Message</span>
             </div>
-            <span className="text-xs text-emerald-700 font-medium bg-emerald-100/80 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
               {clientPhone || clientEmail || "WhatsApp Direct"}
             </span>
           </div>
@@ -1493,19 +1525,19 @@ export default function ActivityTab({
             placeholder={`Type WhatsApp message for ${clientName || "client"}...`}
             value={actionText}
             onChange={(e) => setActionText(e.target.value)}
-            className="w-full text-xs p-2.5 bg-white border border-emerald-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-gray-800"
+            className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/10 focus:border-[#1F2937] transition-all text-gray-800"
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
 
           {/* Template inline selector when gear menu option toggled */}
           {showWpTemplateModal && (
-            <div className="p-3 bg-white border border-emerald-200 rounded-xl space-y-2 text-xs">
-              <p className="font-semibold text-emerald-900">Select Approved WhatsApp Template</p>
+            <div className="p-3 bg-white border border-gray-200 rounded-xl space-y-2 text-xs">
+              <p className="font-semibold text-gray-900">Select Approved WhatsApp Template</p>
               <div className="flex items-center gap-2">
                 <select
                   value={wpSelectedTplId || (approvedTemplates[0]?.id || "")}
                   onChange={(e) => setWpSelectedTplId(e.target.value)}
-                  className="flex-1 text-xs px-2.5 py-1.5 bg-emerald-50/50 border border-emerald-200 rounded-lg focus:outline-none"
+                  className="flex-1 text-xs px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none"
                 >
                   {approvedTemplates.map((t) => (
                     <option key={t.id} value={t.id}>
@@ -1544,7 +1576,7 @@ export default function ActivityTab({
                       setShowWpTemplateModal(false);
                     }
                   }}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm"
+                  className="px-3 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white font-semibold rounded-lg shadow-sm"
                 >
                   Send Template
                 </button>
@@ -1563,7 +1595,7 @@ export default function ActivityTab({
             <div className="flex items-center gap-1.5 relative">
               {/* Paperclip attach button */}
               <label
-                className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer"
+                className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
                 title="Attach Document / Link"
               >
                 <Paperclip className="w-4 h-4" />
@@ -1585,23 +1617,23 @@ export default function ActivityTab({
                 <button
                   type="button"
                   onClick={() => setShowWpGearMenu(!showWpGearMenu)}
-                  className="p-1.5 rounded-lg text-emerald-700 hover:bg-emerald-100 transition-colors cursor-pointer flex items-center gap-1 text-xs"
+                  className="p-1.5 rounded-lg text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer flex items-center gap-1 text-xs"
                   title="WhatsApp Settings & Templates"
                 >
                   <Settings className="w-4 h-4" />
                 </button>
 
                 {showWpGearMenu && (
-                  <div className="absolute left-0 top-full mt-1 bg-white rounded-xl border border-emerald-200 shadow-xl py-1 z-50 min-w-[200px]">
+                  <div className="absolute left-0 top-full mt-1 bg-white rounded-xl border border-gray-200 shadow-xl py-1 z-50 min-w-[200px]">
                     <button
                       type="button"
                       onClick={() => {
                         setShowWpGearMenu(false);
                         setShowWpTemplateModal(true);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left text-gray-700 hover:bg-emerald-50"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left text-gray-700 hover:bg-gray-50"
                     >
-                      <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                      <FileText className="w-3.5 h-3.5 text-gray-700" />
                       <span>Send WhatsApp Template</span>
                     </button>
                     <button
@@ -1624,9 +1656,9 @@ export default function ActivityTab({
                         }
                         toast.success(`Client ${clientName || ""} enrolled in Intake Onboarding Campaign`);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left text-gray-700 hover:bg-emerald-50"
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-left text-gray-700 hover:bg-gray-50"
                     >
-                      <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                      <Zap className="w-3.5 h-3.5 text-gray-700" />
                       <span>Enroll in Automation Campaign</span>
                     </button>
                   </div>
@@ -1664,7 +1696,7 @@ export default function ActivityTab({
                 toast.success(`WhatsApp message sent to ${clientName || "client"}`);
                 setActionText("");
               }}
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <MessageCircle className="w-3.5 h-3.5" /> Send WhatsApp
@@ -1675,24 +1707,24 @@ export default function ActivityTab({
 
       {/* ── Call panel ── */}
       {activeCategoryTab === "call" && (
-        <div className="mb-4 p-3.5 rounded-xl border border-blue-200 bg-blue-50/50 shadow-sm space-y-3">
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-blue-800 font-semibold text-xs uppercase tracking-wider">
-              <Phone className="w-4 h-4 text-blue-600" />
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <Phone className="w-4 h-4 text-[#1F2937]" />
               <span>Outbound Call & AI Dialer</span>
             </div>
-            <span className="text-xs text-blue-700 font-medium bg-blue-100/80 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
               {clientPhone || "+1 (555) 123-4567"}
             </span>
           </div>
-          <p className="text-xs text-blue-700/90" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <p className="text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
             Schedule a follow-up call or initiate an immediate phone call with {clientName || "the client"}.
           </p>
           <div className="flex items-center justify-end gap-2 pt-1 flex-wrap">
             <button
               type="button"
               onClick={() => handleOpenScheduleCall("schedule")}
-              className="px-3.5 py-1.5 bg-white border border-blue-300 text-blue-700 hover:bg-blue-100 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-3.5 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <CalendarClock className="w-3.5 h-3.5" /> Schedule Call
@@ -1714,7 +1746,7 @@ export default function ActivityTab({
                 }
                 toast.success(`Outbound call initiated to ${clientName || "client"}`);
               }}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Phone className="w-3.5 h-3.5" /> Trigger Call
@@ -1725,13 +1757,13 @@ export default function ActivityTab({
 
       {/* ── SMS compose panel ── */}
       {activeCategoryTab === "sms" && (
-        <div className="mb-4 p-3.5 rounded-xl border border-purple-200 bg-purple-50/50 shadow-sm space-y-3">
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-purple-800 font-semibold text-xs uppercase tracking-wider">
-              <MessageSquare className="w-4 h-4 text-purple-600" />
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <MessageSquare className="w-4 h-4 text-[#1F2937]" />
               <span>Send SMS Message</span>
             </div>
-            <span className="text-xs text-purple-700 font-medium bg-purple-100/80 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
               {clientPhone || "+1 (555) 123-4567"}
             </span>
           </div>
@@ -1740,11 +1772,11 @@ export default function ActivityTab({
             placeholder={`Type SMS message for ${clientName || "client"}...`}
             value={actionText}
             onChange={(e) => setActionText(e.target.value)}
-            className="w-full text-xs p-2.5 bg-white border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-800"
+            className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/10 focus:border-[#1F2937] transition-all text-gray-800"
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-[11px] text-purple-600 font-mono">{actionText.length} / 160 chars</span>
+            <span className="text-[11px] text-gray-500 font-mono">{actionText.length} / 160 chars</span>
             <button
               type="button"
               onClick={() => {
@@ -1775,7 +1807,7 @@ export default function ActivityTab({
                 toast.success(`SMS sent to ${clientName || "client"}`);
                 setActionText("");
               }}
-              className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <MessageSquare className="w-3.5 h-3.5" /> Send SMS
@@ -1786,13 +1818,13 @@ export default function ActivityTab({
 
       {/* ── Email compose panel ── */}
       {activeCategoryTab === "email" && (
-        <div className="mb-4 p-3.5 rounded-xl border border-amber-200 bg-amber-50/50 shadow-sm space-y-3">
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-amber-800 font-semibold text-xs uppercase tracking-wider">
-              <Mail className="w-4 h-4 text-amber-600" />
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <Mail className="w-4 h-4 text-[#1F2937]" />
               <span>Compose Email</span>
             </div>
-            <span className="text-xs text-amber-700 font-medium bg-amber-100/80 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
               {clientEmail || "client@email.com"}
             </span>
           </div>
@@ -1801,7 +1833,7 @@ export default function ActivityTab({
             placeholder="Subject line..."
             value={emailSubject}
             onChange={(e) => setEmailSubject(e.target.value)}
-            className="w-full text-xs px-2.5 py-1.5 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-gray-800"
+            className="w-full text-xs px-2.5 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/10 focus:border-[#1F2937] transition-all text-gray-800"
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
           <textarea
@@ -1809,7 +1841,7 @@ export default function ActivityTab({
             placeholder={`Type email content for ${clientName || "client"}...`}
             value={actionText}
             onChange={(e) => setActionText(e.target.value)}
-            className="w-full text-xs p-2.5 bg-white border border-amber-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-all text-gray-800"
+            className="w-full text-xs p-2.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#1F2937]/10 focus:border-[#1F2937] transition-all text-gray-800"
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
           <div className="flex items-center justify-end gap-2">
@@ -1839,7 +1871,7 @@ export default function ActivityTab({
                 setEmailSubject("");
                 setActionText("");
               }}
-              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+              className="px-4 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Mail className="w-3.5 h-3.5" /> Send Email
@@ -1850,17 +1882,17 @@ export default function ActivityTab({
 
       {/* ── Appointment panel — opens real drawer ── */}
       {activeCategoryTab === "appointment" && (
-        <div className="mb-4 p-3.5 rounded-xl border border-cyan-200 bg-cyan-50/50 shadow-sm space-y-3">
+        <div className="mb-4 p-3.5 rounded-xl border border-gray-200 bg-gray-50/70 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-cyan-800 font-semibold text-xs uppercase tracking-wider">
-              <Calendar className="w-4 h-4 text-cyan-600" />
+            <div className="flex items-center gap-2 text-gray-900 font-semibold text-xs uppercase tracking-wider">
+              <Calendar className="w-4 h-4 text-[#1F2937]" />
               <span>Book Appointment</span>
             </div>
-            <span className="text-xs text-cyan-700 font-medium bg-cyan-100/80 px-2.5 py-0.5 rounded-full">
+            <span className="text-xs text-gray-800 font-medium bg-gray-200/80 px-2.5 py-0.5 rounded-full">
               {clientName || "Client"}
             </span>
           </div>
-          <p className="text-xs text-cyan-700/90" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <p className="text-xs text-gray-600" style={{ fontFamily: "Outfit, sans-serif" }}>
             Schedule a new appointment with {clientName || "the client"} using the full booking flow.
           </p>
           <div className="flex items-center justify-center">
@@ -1873,7 +1905,7 @@ export default function ActivityTab({
                   handleOpenScheduleAppt("create");
                 }
               }}
-              className="px-5 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2 cursor-pointer"
+              className="px-5 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-2 cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <Calendar className="w-3.5 h-3.5" /> Create New Appointment
@@ -1900,8 +1932,9 @@ export default function ActivityTab({
                     setActiveCategoryTab(type);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
-                  onOpenThreadDrawer={(convId) => {
+                  onOpenThreadDrawer={(convId, channel = "whatsapp") => {
                     setThreadDrawerConversationId(convId);
+                    setThreadDrawerChannel(channel);
                     setShowThreadDrawer(true);
                   }}
                 />
@@ -1928,9 +1961,15 @@ export default function ActivityTab({
                     setActiveCategoryTab(type);
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
-                  onOpenThreadDrawer={(convId) => {
+                  onOpenThreadDrawer={(convId, channel = "whatsapp") => {
                     setThreadDrawerConversationId(convId);
+                    setThreadDrawerChannel(channel);
                     setShowThreadDrawer(true);
+                  }}
+                  onOpenEmailThreadDrawer={(convId, subject) => {
+                    setEmailThreadId(convId);
+                    setEmailThreadSubject(subject || "");
+                    setShowEmailThreadDrawer(true);
                   }}
                   navigate={navigate}
                 />
@@ -1984,6 +2023,21 @@ export default function ActivityTab({
         isOpen={showThreadDrawer}
         onClose={() => setShowThreadDrawer(false)}
         conversationId={threadDrawerConversationId}
+        channel={threadDrawerChannel}
+        clientId={normalizedClientId}
+        clientName={clientName}
+        clientPhone={clientPhone}
+      />
+
+      {/* ── Email Thread Drawer ── */}
+      <EmailThreadDrawer
+        isOpen={showEmailThreadDrawer}
+        onClose={() => setShowEmailThreadDrawer(false)}
+        clientId={clientId}
+        clientName={clientName}
+        clientEmail={clientEmail}
+        threadId={emailThreadId}
+        initialSubject={emailThreadSubject}
       />
     </div>
   );

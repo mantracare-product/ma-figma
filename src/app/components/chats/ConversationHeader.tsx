@@ -39,7 +39,7 @@ export default function ConversationHeader({
   return (
     <div className="px-6 py-3.5 border-b border-gray-200 flex items-center justify-between bg-white shrink-0">
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
+        <div className="w-10 h-10 rounded-full bg-[#1F2937] text-white flex items-center justify-center font-bold text-sm shrink-0">
           {initials}
         </div>
         <div>

@@ -304,15 +304,20 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
     setHasUnsavedChanges(true);
   };
 
-  // Permissions State
-  const [permissions, setPermissions] = useState<Record<string, "view" | "write">>({
-    Core: "write",
-    Operations: "write",
-    System: "write",
+  // Permissions State (per individual item)
+  const [itemPermissions, setItemPermissions] = useState<Record<string, "view" | "write">>({
+    Dashboard: "view",
+    Clients: "view",
+    Calls: "view",
+    Processes: "view",
+    Numbers: "view",
+    Billing: "view",
+    Webhooks: "view",
+    Settings: "view",
   });
 
-  const setPermissionLevel = (section: string, level: "view" | "write") => {
-    setPermissions((prev) => ({ ...prev, [section]: level }));
+  const setItemPermissionLevel = (item: string, level: "view" | "write") => {
+    setItemPermissions((prev) => ({ ...prev, [item]: level }));
     setHasUnsavedChanges(true);
   };
 
@@ -375,12 +380,15 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                 />
                 <div
                   onClick={() => profilePictureInputRef.current?.click()}
-                  className="w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/5 rounded-xl flex items-center justify-center relative overflow-hidden transition-all group-hover:opacity-80"
+                  className="w-16 h-16 rounded-xl flex items-center justify-center relative overflow-hidden transition-all group-hover:opacity-90 cursor-pointer shadow-md"
+                  style={{ backgroundColor: "#1F2937" }}
                 >
                   {profilePicture ? (
                     <img src={profilePicture} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
-                    <User className="w-8 h-8 text-primary" />
+                    <span className="text-white text-xl font-bold select-none">
+                      {(member?.name || "?").split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                    </span>
                   )}
                   <div className="absolute bottom-0 right-0 w-5 h-5 bg-white rounded-full flex items-center justify-center border-2 border-gray-200 shadow-sm">
                     <svg className="w-3 h-3 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -425,7 +433,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("personal-info")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "personal-info"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
@@ -434,7 +442,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("calendar")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "calendar"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
@@ -443,7 +451,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("availability")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "availability"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
@@ -452,7 +460,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("days-off")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "days-off"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
@@ -461,7 +469,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("services")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "services"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
@@ -470,14 +478,13 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     <button
                       onClick={() => setActiveTab("permissions")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "permissions"
-                          ? "border-primary text-primary"
+                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
                       Permissions
                     </button>
                   </div>
-                  <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none" />
                 </div>
               </div>
 
@@ -1035,7 +1042,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                       );
                     })}
                   </div>
-                  <Button variant="primary" className="w-full" onClick={() => setShowAddSlotModal(true)}>
+                  <Button variant="primary" className="w-full bg-[#1F2937] hover:bg-gray-800 text-white" onClick={() => setShowAddSlotModal(true)}>
                     Add Time Slots
                   </Button>
                 </div>
@@ -1073,7 +1080,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                       )}
                     </div>
                   </div>
-                  <Button variant="primary" className="w-full" onClick={() => setShowAddDayOffModal(true)}>
+                  <Button variant="primary" className="w-full bg-[#1F2937] hover:bg-gray-800 text-white" onClick={() => setShowAddDayOffModal(true)}>
                     Add Day Off
                   </Button>
                 </div>
@@ -1128,49 +1135,66 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
 
               {/* Permissions Tab */}
               {activeTab === "permissions" && (
-                <div className="space-y-6">
-                  <div className="flex items-center gap-3 p-4 bg-purple-50 rounded-lg">
-                    <div className="w-10 h-10 bg-purple-100 rounded-xl flex items-center justify-center">
-                      <Shield className="w-5 h-5 text-purple-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-base font-semibold text-gray-900">Permissions</h3>
-                      <p className="text-xs text-gray-600">Manage access levels across the platform</p>
-                    </div>
-                  </div>
+                <div className="space-y-4">
+                  <p className="text-xs text-gray-500 mb-2">
+                    Configure what this team member can access and edit.
+                  </p>
 
-                  <div className="space-y-6">
+                  <div className="space-y-4">
                     {[
-                      { title: "Core", items: ["dashboard", "clients", "calls"] },
-                      { title: "Operations", items: ["processes", "numbers"] },
-                      { title: "System", items: ["billing", "webhooks", "settings"] },
-                    ].map((section) => (
-                      <div key={section.title} className="space-y-4">
-                        <div className="flex items-center justify-between pb-3 border-b-2 border-gray-200">
-                          <div>
-                            <h4 className="text-sm font-bold text-gray-900">{section.title}</h4>
-                            <p className="text-xs text-gray-500 mt-0.5">{section.items.join(", ")}</p>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={() => setPermissionLevel(section.title, "view")}
-                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${permissions[section.title] === "view"
-                                  ? "bg-primary text-white"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                }`}
-                            >
-                              View
-                            </button>
-                            <button
-                              onClick={() => setPermissionLevel(section.title, "write")}
-                              className={`px-4 py-2 rounded-lg text-xs font-semibold transition-colors ${permissions[section.title] === "write"
-                                  ? "bg-primary text-white"
-                                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-                                }`}
-                            >
-                              Write
-                            </button>
-                          </div>
+                      { title: "Core", items: ["Dashboard", "Clients", "Calls"] },
+                      { title: "Operations", items: ["Processes", "Numbers"] },
+                      { title: "System", items: ["Billing", "Webhooks", "Settings"] },
+                    ].map((group) => (
+                      <div
+                        key={group.title}
+                        className="border border-gray-200 rounded-xl p-4 bg-white space-y-3"
+                      >
+                        <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
+                          {group.title}
+                        </h4>
+                        <div className="space-y-2.5">
+                          {group.items.map((item) => {
+                            const val = itemPermissions[item] || "view";
+                            return (
+                              <div
+                                key={item}
+                                className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0"
+                              >
+                                <span className="text-xs font-medium text-gray-700">
+                                  {item}
+                                </span>
+                                <div className="flex items-center gap-4 text-xs">
+                                  <label
+                                    onClick={() => setItemPermissionLevel(item, "view")}
+                                    className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`perm-${item}`}
+                                      checked={val === "view"}
+                                      onChange={() => setItemPermissionLevel(item, "view")}
+                                      className="w-3.5 h-3.5 text-[#1F2937] focus:ring-[#1F2937] border-gray-300"
+                                    />
+                                    <span>View</span>
+                                  </label>
+                                  <label
+                                    onClick={() => setItemPermissionLevel(item, "write")}
+                                    className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none"
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`perm-${item}`}
+                                      checked={val === "write"}
+                                      onChange={() => setItemPermissionLevel(item, "write")}
+                                      className="w-3.5 h-3.5 text-[#1F2937] focus:ring-[#1F2937] border-gray-300"
+                                    />
+                                    <span>Write</span>
+                                  </label>
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -1768,7 +1792,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                 toast.success("Profile updated successfully");
                 setTimeout(() => setSaveStatus("idle"), 2500);
               }}
-              className={`w-full text-sm transition-all ${hasUnsavedChanges ? "bg-blue-600 hover:bg-blue-700" : "bg-blue-500 hover:bg-blue-600"
+              className={`w-full text-sm transition-all ${hasUnsavedChanges ? "bg-[#1F2937] hover:bg-gray-800" : "bg-[#1F2937]/80 hover:bg-[#1F2937]"
                 }`}
             >
               {saveStatus === "saved" ? (

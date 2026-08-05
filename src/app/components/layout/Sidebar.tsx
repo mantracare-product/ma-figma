@@ -30,7 +30,7 @@ import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { useSidebar } from "../../context/SidebarContext";
 import logo from "../../../imports/ma_logo-1.png";
-import ProfileDrawer from "../profile/ProfileDrawer";
+import { TeamMemberDrawer } from "../TeamMemberDrawer";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -362,10 +362,16 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
       </aside>
 
-      {/* Profile Drawer */}
-      <ProfileDrawer
+      {/* Profile Drawer — reuses TeamMemberDrawer with admin data */}
+      <TeamMemberDrawer
         isOpen={isProfileDrawerOpen}
         onClose={() => setIsProfileDrawerOpen(false)}
+        member={{
+          name: "Admin User",
+          email: "admin@healthcare.com",
+          phone: "+1 (555) 123-4567",
+          role: "Admin",
+        }}
       />
     </>
   );
