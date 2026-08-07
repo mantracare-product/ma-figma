@@ -77,6 +77,7 @@ import {
   INDUSTRIES,
 } from "./settings-constants";
 import PageHeader from "../components/layout/PageHeader";
+import { HowItWorksButton } from "../components/help/HowItWorksModal";
 import { LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, Legend, ResponsiveContainer } from "recharts";
 import {
   Select,
@@ -98,18 +99,21 @@ import VoiceCard from "../components/settings/VoiceCard";
 import BusinessProfileModal from "../components/settings/BusinessProfileModal";
 import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
+import { RolesPermissionsDrawer, Role, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
-interface ItemPermissions {
-  dashboard: "view" | "write";
-  clients: "view" | "write";
-  calls: "view" | "write";
-  processes: "view" | "write";
-  numbers: "view" | "write";
-  billing: "view" | "write";
-  webhooks: "view" | "write";
-  settings: "view" | "write";
+export type PermissionLevel = "none" | "view" | "write" | "all";
+
+export interface ItemPermissions {
+  dashboard: PermissionLevel;
+  clients: PermissionLevel;
+  calls: PermissionLevel;
+  processes: PermissionLevel;
+  numbers: PermissionLevel;
+  billing: PermissionLevel;
+  webhooks: PermissionLevel;
+  settings: PermissionLevel;
 }
 
 export interface DaySchedule {
@@ -1043,20 +1047,16 @@ export default function Settings() {
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [userFormData, setUserFormData] = useState({
+  const [userFormData, setUserFormData] = useState<{
+    name: string;
+    email: string;
+    role: string;
+    permissions: ItemPermissions;
+  }>({
     name: "",
     email: "",
     role: "Agent",
-    permissions: {
-      dashboard: "view" as "view" | "write",
-      clients: "view" as "view" | "write",
-      calls: "view" as "view" | "write",
-      processes: "view" as "view" | "write",
-      numbers: "view" as "view" | "write",
-      billing: "view" as "view" | "write",
-      webhooks: "view" as "view" | "write",
-      settings: "view" as "view" | "write",
-    },
+    permissions: createDefaultPermissions(),
   });
 
   // Permission radio states for Add User modal (empty string = none selected)
@@ -1064,8 +1064,36 @@ export default function Settings() {
   const [operationsPermission, setOperationsPermission] = useState<"" | "view" | "write">("");
   const [systemPermission, setSystemPermission] = useState<"" | "view" | "write">("");
 
-  // Available roles
-  const availableRoles = ["Admin", "Manager", "Agent"];
+  // Roles & Permissions state
+  const [roles, setRoles] = useState<Role[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("settings_roles");
+      return raw ? JSON.parse(raw) : DEFAULT_ROLES;
+    } catch {
+      return DEFAULT_ROLES;
+    }
+  });
+  const [showRolesDrawer, setShowRolesDrawer] = useState(false);
+
+  const handleSaveRoles = (updatedRoles: Role[]) => {
+    setRoles(updatedRoles);
+    try {
+      sessionStorage.setItem("settings_roles", JSON.stringify(updatedRoles));
+    } catch {}
+  };
+
+  const assignedUserCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    allUsers.forEach((u) => {
+      if (u.role) {
+        counts[u.role] = (counts[u.role] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allUsers]);
+
+  // Available roles dynamically sourced from roles state
+  const availableRoles = useMemo(() => roles.map((r) => r.name), [roles]);
 
   // Manage Team Member tab state
   const [manageTeamTab, setManageTeamTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services" | "permissions">("personal-info");
@@ -3113,7 +3141,9 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
   return (
     <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
       <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Settings" subtitle="Manage your application settings" />
+        <PageHeader title="Settings" subtitle="Manage your application settings">
+          <HowItWorksButton label="How it works" onClick={() => openHowItWorks(activeTab)} />
+        </PageHeader>
 
         <div className="flex gap-6">
           {/* Left Navigation */}
@@ -3460,9 +3490,9 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     <p className="text-sm mt-1" style={TEXT_STYLES.subtext}>Manage team members for {activeOrganization.name}</p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <Button variant="outline" onClick={() => openHowItWorks("users")}>
-                      <Play className="w-4 h-4" />
-                      How it works
+                    <Button variant="outline" onClick={() => setShowRolesDrawer(true)} className="flex items-center gap-1.5 font-semibold">
+                      <Shield className="w-4 h-4 text-blue-600" />
+                      Roles & Permissions
                     </Button>
                     <Button variant="primary" onClick={() => setShowAddUserModal(true)}>
                       <Plus className="w-4 h-4" />
@@ -3471,20 +3501,20 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <div className="bg-white rounded-xl border border-border overflow-hidden shadow-sm">
                   <table className="w-full">
-                    <thead className="bg-muted/30 border-b border-border">
+                    <thead style={{ backgroundColor: '#1F2937' }} className="border-b border-border">
                       <tr>
-                        <th className="text-left px-4 py-3 text-sm font-medium" style={{ ...TEXT_STYLES.subtext, width: '40px' }}></th>
-                        <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Name</th>
-                        <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Email</th>
-                        <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Role</th>
-                        <th className="text-left px-6 py-3 text-sm font-medium" style={TEXT_STYLES.subtext}>Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', width: '40px' }}></th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Name</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Email</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Role</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-border">
                       {users.map((user) => (
-                        <tr key={user.id} className="border-b border-border hover:bg-muted/10 transition-colors group">
+                        <tr key={user.id} className="border-b border-border hover:bg-[#F1F5F9] transition-colors group">
                           <td className="px-4 py-4">
                             <div className="relative org-dropdown-menu-container">
                               <button
@@ -3520,25 +3550,16 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleEditUser(user)}
-                                className="text-sm font-medium text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0"
-                              >
-                                {user.name}
-                              </button>
-                              {user.calendarConnected && (
-                                <Tooltip text={`${user.connectedCalendar === 'google' ? 'Google' : 'Outlook'} Calendar Connected`}>
-                                  <div className="flex items-center gap-1 px-2 py-0.5 bg-green-100 text-green-700 rounded-full">
-                                    <Calendar className="w-3 h-3" />
-                                    <span className="text-xs font-medium">Cal</span>
-                                  </div>
-                                </Tooltip>
-                              )}
-                            </div>
+                            <button
+                              onClick={() => handleEditUser(user)}
+                              className="text-sm font-semibold text-[#2563EB] hover:underline cursor-pointer bg-transparent border-none p-0"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            >
+                              {user.name}
+                            </button>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-sm" style={TEXT_STYLES.subtext}>{user.email}</p>
+                            <p className="text-sm text-[#6B7280]" style={{ fontFamily: 'Outfit, sans-serif' }}>{user.email}</p>
                           </td>
                           <td className="px-6 py-4">
                             <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${user.role === "Admin"
@@ -5477,10 +5498,6 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                       </svg>
                       Reset columns
                     </button>
-                    <Button variant="outline" onClick={() => openHowItWorks("numbers")}>
-                      <Play className="w-4 h-4" />
-                      How it works
-                    </Button>
                     <Button variant="primary" onClick={() => setShowBuyNumberModal(true)}>
                       <Plus className="w-4 h-4" />
                       Add Number
@@ -6526,10 +6543,6 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     <h2 className="text-xl font-bold">Integrations</h2>
                     <p className="text-sm text-muted-foreground mt-1">Connect your tools to sync data and automate workflows</p>
                   </div>
-                  <Button variant="outline" onClick={() => openHowItWorks("integrations")}>
-                    <Play className="w-4 h-4" />
-                    How it works
-                  </Button>
                 </div>
 
                 {/* Integration Category Tabs */}
@@ -7309,7 +7322,19 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
               <div className="relative">
                 <select
                   value={userFormData.role}
-                  onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                  onChange={(e) => {
+                    const selectedRoleName = e.target.value;
+                    const matchedRole = roles.find((r) => r.name === selectedRoleName);
+                    if (matchedRole) {
+                      setUserFormData({
+                        ...userFormData,
+                        role: selectedRoleName,
+                        permissions: { ...matchedRole.permissions },
+                      });
+                    } else {
+                      setUserFormData({ ...userFormData, role: selectedRoleName });
+                    }
+                  }}
                   className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-white"
                   style={{ appearance: "none" }}
                 >
@@ -7720,289 +7745,89 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
 
             {/* TAB 5 - Permissions */}
             {manageTeamTab === "permissions" && (
-              <div className="space-y-8">
-                {/* Core Section */}
-                <div className="space-y-6">
-                  <div className="pb-4 border-b border-border">
-                    <div>
-                      <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Core</h3>
-                      <p className="text-sm text-muted-foreground mt-1">Dashboard, Clients, Calls</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pl-6">
-                    {/* Dashboard */}
-                    <div className="flex items-center justify-between py-3 border-b border-border/50">
-                      <span className="text-sm font-medium">Dashboard</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="dashboard-permission"
-                            checked={userFormData.permissions.dashboard === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, dashboard: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="dashboard-permission"
-                            checked={userFormData.permissions.dashboard === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, dashboard: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Clients */}
-                    <div className="flex items-center justify-between py-3 border-b border-border/50">
-                      <span className="text-sm font-medium">Clients</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="clients-permission"
-                            checked={userFormData.permissions.clients === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, clients: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="clients-permission"
-                            checked={userFormData.permissions.clients === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, clients: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Calls */}
-                    <div className="flex items-center justify-between py-3">
-                      <span className="text-sm font-medium">Calls</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="calls-permission"
-                            checked={userFormData.permissions.calls === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, calls: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="calls-permission"
-                            checked={userFormData.permissions.calls === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, calls: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
+              <div className="space-y-4">
+                <div className="pb-2 border-b border-border flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Module Access Control</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Select Read / Write / All for each module (unselected = No Access)</p>
                   </div>
                 </div>
 
-                {/* Operations Section */}
-                <div className="space-y-6">
-                  <div className="pb-4 border-b border-border">
-                    <div>
-                      <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Operations</h3>
-                      <p className="text-sm text-muted-foreground mt-1">Processes, Numbers</p>
-                    </div>
-                  </div>
+                <div className="border border-border rounded-xl overflow-hidden bg-white divide-y divide-border">
+                  {[
+                    { key: "dashboard", label: "Dashboard", desc: "Analytics and widgets" },
+                    { key: "clients", label: "Clients", desc: "Client directory and profiles" },
+                    { key: "calls", label: "Calls", desc: "Call logs, recordings and transcripts" },
+                    { key: "processes", label: "Processes", desc: "Workflows and stage pipelines" },
+                    { key: "numbers", label: "Numbers", desc: "Phone numbers and IVR rules" },
+                    { key: "billing", label: "Billing", desc: "Invoices and subscription" },
+                    { key: "webhooks", label: "Webhooks", desc: "API keys and integrations" },
+                    { key: "settings", label: "Settings", desc: "Organization and team settings" },
+                  ].map((mod) => {
+                    const key = mod.key as keyof ItemPermissions;
+                    const val = userFormData.permissions[key] || "none";
 
-                  <div className="space-y-4 pl-6">
-                    {/* Processes */}
-                    <div className="flex items-center justify-between py-3 border-b border-border/50">
-                      <span className="text-sm font-medium">Processes</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="processes-permission"
-                            checked={userFormData.permissions.processes === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, processes: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="processes-permission"
-                            checked={userFormData.permissions.processes === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, processes: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
+                    return (
+                      <div key={mod.key} className="p-3.5 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
+                        <div>
+                          <h5 className="text-xs font-bold text-gray-900">{mod.label}</h5>
+                          <p className="text-[11px] text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            {mod.desc}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-4 flex-shrink-0">
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
+                            <input
+                              type="radio"
+                              name={`edit-user-perm-${mod.key}`}
+                              checked={val === "view"}
+                              onChange={() =>
+                                setUserFormData({
+                                  ...userFormData,
+                                  permissions: { ...userFormData.permissions, [key]: "view" },
+                                })
+                              }
+                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                            />
+                            <span className="font-medium">Read</span>
+                          </label>
+
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
+                            <input
+                              type="radio"
+                              name={`edit-user-perm-${mod.key}`}
+                              checked={val === "write"}
+                              onChange={() =>
+                                setUserFormData({
+                                  ...userFormData,
+                                  permissions: { ...userFormData.permissions, [key]: "write" },
+                                })
+                              }
+                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                            />
+                            <span className="font-medium">Write</span>
+                          </label>
+
+                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
+                            <input
+                              type="radio"
+                              name={`edit-user-perm-${mod.key}`}
+                              checked={val === "all"}
+                              onChange={() =>
+                                setUserFormData({
+                                  ...userFormData,
+                                  permissions: { ...userFormData.permissions, [key]: "all" },
+                                })
+                              }
+                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                            />
+                            <span className="font-medium">All</span>
+                          </label>
+                        </div>
                       </div>
-                    </div>
-
-                    {/* Numbers */}
-                    <div className="flex items-center justify-between py-3">
-                      <span className="text-sm font-medium">Numbers</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="numbers-permission"
-                            checked={userFormData.permissions.numbers === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, numbers: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="numbers-permission"
-                            checked={userFormData.permissions.numbers === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, numbers: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* System Section */}
-                <div className="space-y-6">
-                  <div className="pb-4 border-b border-border">
-                    <div>
-                      <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>System</h3>
-                      <p className="text-sm text-muted-foreground mt-1">Billing, Webhooks, Settings</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4 pl-6">
-                    {/* Billing */}
-                    <div className="flex items-center justify-between py-3 border-b border-border/50">
-                      <span className="text-sm font-medium">Billing</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="billing-permission"
-                            checked={userFormData.permissions.billing === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, billing: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="billing-permission"
-                            checked={userFormData.permissions.billing === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, billing: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Webhooks */}
-                    <div className="flex items-center justify-between py-3 border-b border-border/50">
-                      <span className="text-sm font-medium">Webhooks</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="webhooks-permission"
-                            checked={userFormData.permissions.webhooks === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, webhooks: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="webhooks-permission"
-                            checked={userFormData.permissions.webhooks === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, webhooks: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-
-                    {/* Settings */}
-                    <div className="flex items-center justify-between py-3">
-                      <span className="text-sm font-medium">Settings</span>
-                      <div className="flex gap-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="settings-permission"
-                            checked={userFormData.permissions.settings === "view"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, settings: "view" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">View</span>
-                        </label>
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="radio"
-                            name="settings-permission"
-                            checked={userFormData.permissions.settings === "write"}
-                            onChange={() =>
-                              setUserFormData({ ...userFormData, permissions: { ...userFormData.permissions, settings: "write" } })
-                            }
-                            className="w-4 h-4 text-primary"
-                          />
-                          <span className="text-sm">Write</span>
-                        </label>
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -11848,6 +11673,13 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
           );
         })()}
 
+        <RolesPermissionsDrawer
+          isOpen={showRolesDrawer}
+          onClose={() => setShowRolesDrawer(false)}
+          roles={roles}
+          onSaveRoles={handleSaveRoles}
+          assignedUserCounts={assignedUserCounts}
+        />
       </div>
     </div>
   );

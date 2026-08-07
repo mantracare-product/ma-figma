@@ -19,16 +19,29 @@ export const createDefaultAvailability = (): WeeklyAvailability => ({
   sunday: { enabled: false, start: "09:00", end: "17:00" },
 });
 
+export type PermissionLevel = "none" | "view" | "write" | "all";
+
+export interface ItemPermissions {
+  dashboard: PermissionLevel;
+  clients: PermissionLevel;
+  calls: PermissionLevel;
+  processes: PermissionLevel;
+  numbers: PermissionLevel;
+  billing: PermissionLevel;
+  webhooks: PermissionLevel;
+  settings: PermissionLevel;
+}
+
 // Default permissions helper
-export const createDefaultPermissions = () => ({
-  dashboard: "view" as const,
-  clients: "view" as const,
-  calls: "view" as const,
-  processes: "view" as const,
-  numbers: "view" as const,
-  billing: "view" as const,
-  webhooks: "view" as const,
-  settings: "view" as const,
+export const createDefaultPermissions = (): ItemPermissions => ({
+  dashboard: "view",
+  clients: "view",
+  calls: "view",
+  processes: "view",
+  numbers: "view",
+  billing: "view",
+  webhooks: "view",
+  settings: "view",
 });
 
 // Static country pricing data

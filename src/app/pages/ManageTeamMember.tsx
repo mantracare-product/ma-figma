@@ -36,15 +36,17 @@ interface WeeklyAvailability {
   sunday: DaySchedule;
 }
 
+export type PermissionLevel = "none" | "view" | "write" | "all";
+
 interface ItemPermissions {
-  dashboard: "view" | "write";
-  clients: "view" | "write";
-  calls: "view" | "write";
-  processes: "view" | "write";
-  numbers: "view" | "write";
-  billing: "view" | "write";
-  webhooks: "view" | "write";
-  settings: "view" | "write";
+  dashboard: PermissionLevel;
+  clients: PermissionLevel;
+  calls: PermissionLevel;
+  processes: PermissionLevel;
+  numbers: PermissionLevel;
+  billing: PermissionLevel;
+  webhooks: PermissionLevel;
+  settings: PermissionLevel;
 }
 
 interface Service {

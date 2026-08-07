@@ -435,21 +435,16 @@ export default function ProfileDrawer({ isOpen, onClose }: ProfileDrawerProps) {
               ))}
 
               {/* Add Field Actions */}
-              <div className="border-t border-gray-200 pt-4 flex items-center gap-3">
-                <button
-                  onClick={() => setShowSelectFieldModal(true)}
-                  className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Select Field
-                </button>
-                <button
-                  onClick={() => setShowCreateFieldModal(true)}
-                  className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium"
-                >
-                  <Plus className="w-4 h-4" />
-                  Create Field
-                </button>
+              <div className="pt-6 mt-6 border-t border-gray-200">
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setShowSelectFieldModal(true)}
+                    className="text-sm font-medium transition-colors cursor-pointer"
+                    style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+                  >
+                    Select field
+                  </button>
+                </div>
               </div>
             </div>
           )}

@@ -1410,16 +1410,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     >
                       Select field
                     </button>
-                    <button
-                      onClick={() => {
-                        setFieldManagerMode("create");
-                        setFieldManagerOpen(true);
-                      }}
-                      className="text-sm font-medium transition-colors cursor-pointer"
-                      style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
-                    >
-                      Create field
-                    </button>
                   </div>
                 </div>
 

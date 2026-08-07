@@ -29,7 +29,7 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   teamMember: "Team Member Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember"];
 
 import { resolveVisibility } from "../../context/FieldRegistryContext";
 

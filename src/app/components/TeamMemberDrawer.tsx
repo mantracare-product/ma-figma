@@ -152,7 +152,10 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
   });
   const [selectFieldSearch, setSelectFieldSearch] = useState("");
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const availableFields = ["Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process"];
+  const [availableFields, setAvailableFields] = useState<string[]>([
+    "Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process",
+    "Gender", "Date of Birth", "Language", "Country", "Timezone", "Assigned Service"
+  ]);
 
   // Calendar View State
   const [calendarView, setCalendarView] = useState<"day" | "week" | "month" | "schedule">("month");
@@ -305,7 +308,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
   };
 
   // Permissions State (per individual item)
-  const [itemPermissions, setItemPermissions] = useState<Record<string, "view" | "write">>({
+  const [itemPermissions, setItemPermissions] = useState<Record<string, "none" | "view" | "write" | "all">>({
     Dashboard: "view",
     Clients: "view",
     Calls: "view",
@@ -316,7 +319,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
     Settings: "view",
   });
 
-  const setItemPermissionLevel = (item: string, level: "view" | "write") => {
+  const setItemPermissionLevel = (item: string, level: "none" | "view" | "write" | "all") => {
     setItemPermissions((prev) => ({ ...prev, [item]: level }));
     setHasUnsavedChanges(true);
   };
@@ -428,11 +431,11 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
             <div className="space-y-6 pb-20">
               {/* Tabs */}
               <div className="border-b border-gray-200 relative">
-                <div className="overflow-x-auto scrollbar-hide relative">
-                  <div className="flex items-center gap-1 whitespace-nowrap">
+                <div className="overflow-x-auto scrollbar-none flex items-center relative py-0.5">
+                  <div className="flex items-center gap-1 whitespace-nowrap min-w-max">
                     <button
                       onClick={() => setActiveTab("personal-info")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "personal-info"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "personal-info"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -441,7 +444,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("calendar")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "calendar"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "calendar"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -450,7 +453,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("availability")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "availability"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "availability"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -459,7 +462,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("days-off")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "days-off"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "days-off"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -468,7 +471,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("services")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "services"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "services"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -477,7 +480,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("permissions")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${activeTab === "permissions"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "permissions"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
@@ -650,22 +653,17 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </div>
                   ))}
 
-                  {/* Add Field Actions */}
-                  <div className="border-t border-gray-200 pt-4 flex items-center gap-3">
-                    <button
-                      onClick={() => setShowSelectFieldModal(true)}
-                      className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Select Field
-                    </button>
-                    <button
-                      onClick={() => setShowCreateFieldModal(true)}
-                      className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 font-medium"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Create Field
-                    </button>
+                  {/* Field action links */}
+                  <div className="pt-6 mt-6 border-t border-gray-200">
+                    <div className="flex items-center gap-4">
+                      <button
+                        onClick={() => setShowSelectFieldModal(true)}
+                        className="text-sm font-medium transition-colors cursor-pointer"
+                        style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+                      >
+                        Select field
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1137,67 +1135,64 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
               {activeTab === "permissions" && (
                 <div className="space-y-4">
                   <p className="text-xs text-gray-500 mb-2">
-                    Configure what this team member can access and edit.
+                    Configure what this team member can access and edit. Select Read, Write, or All (unselected = No Access).
                   </p>
 
-                  <div className="space-y-4">
+                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white divide-y divide-gray-100">
                     {[
-                      { title: "Core", items: ["Dashboard", "Clients", "Calls"] },
-                      { title: "Operations", items: ["Processes", "Numbers"] },
-                      { title: "System", items: ["Billing", "Webhooks", "Settings"] },
-                    ].map((group) => (
-                      <div
-                        key={group.title}
-                        className="border border-gray-200 rounded-xl p-4 bg-white space-y-3"
-                      >
-                        <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wider mb-2">
-                          {group.title}
-                        </h4>
-                        <div className="space-y-2.5">
-                          {group.items.map((item) => {
-                            const val = itemPermissions[item] || "view";
-                            return (
-                              <div
-                                key={item}
-                                className="flex items-center justify-between py-1 border-b border-gray-50 last:border-0"
-                              >
-                                <span className="text-xs font-medium text-gray-700">
-                                  {item}
-                                </span>
-                                <div className="flex items-center gap-4 text-xs">
-                                  <label
-                                    onClick={() => setItemPermissionLevel(item, "view")}
-                                    className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none"
-                                  >
-                                    <input
-                                      type="radio"
-                                      name={`perm-${item}`}
-                                      checked={val === "view"}
-                                      onChange={() => setItemPermissionLevel(item, "view")}
-                                      className="w-3.5 h-3.5 text-[#1F2937] focus:ring-[#1F2937] border-gray-300"
-                                    />
-                                    <span>View</span>
-                                  </label>
-                                  <label
-                                    onClick={() => setItemPermissionLevel(item, "write")}
-                                    className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none"
-                                  >
-                                    <input
-                                      type="radio"
-                                      name={`perm-${item}`}
-                                      checked={val === "write"}
-                                      onChange={() => setItemPermissionLevel(item, "write")}
-                                      className="w-3.5 h-3.5 text-[#1F2937] focus:ring-[#1F2937] border-gray-300"
-                                    />
-                                    <span>Write</span>
-                                  </label>
-                                </div>
-                              </div>
-                            );
-                          })}
+                      "Dashboard",
+                      "Clients",
+                      "Calls",
+                      "Processes",
+                      "Numbers",
+                      "Billing",
+                      "Webhooks",
+                      "Settings",
+                    ].map((item) => {
+                      const val = itemPermissions[item] || "none";
+                      return (
+                        <div
+                          key={item}
+                          className="p-3.5 flex items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors"
+                        >
+                          <span className="text-xs font-bold text-gray-900">
+                            {item}
+                          </span>
+                          <div className="flex items-center gap-4 text-xs flex-shrink-0">
+                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
+                              <input
+                                type="radio"
+                                name={`drawer-perm-${item}`}
+                                checked={val === "view"}
+                                onChange={() => setItemPermissionLevel(item, "view")}
+                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                              />
+                              <span className="font-medium">Read</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
+                              <input
+                                type="radio"
+                                name={`drawer-perm-${item}`}
+                                checked={val === "write"}
+                                onChange={() => setItemPermissionLevel(item, "write")}
+                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                              />
+                              <span className="font-medium">Write</span>
+                            </label>
+                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
+                              <input
+                                type="radio"
+                                name={`drawer-perm-${item}`}
+                                checked={val === "all"}
+                                onChange={() => setItemPermissionLevel(item, "all")}
+                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
+                              />
+                              <span className="font-medium">All</span>
+                            </label>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1233,11 +1228,11 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </div>
                     <div>
                       <h4 className="text-xs font-semibold text-gray-700 mb-3">About Team Member</h4>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-2 gap-3 max-h-[240px] overflow-y-auto pr-1">
                         {availableFields
                           .filter(field => field.toLowerCase().includes(selectFieldSearch.toLowerCase()))
                           .map((field) => (
-                            <label key={field} className="flex items-center gap-2 cursor-pointer">
+                            <label key={field} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded-md transition-colors">
                               <input
                                 type="checkbox"
                                 checked={selectedFields.includes(field)}
@@ -1254,12 +1249,25 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                             </label>
                           ))}
                       </div>
+                      <div className="pt-3 mt-3 border-t border-gray-100 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSelectFieldModal(false);
+                            setShowCreateFieldModal(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50/80 rounded-md border border-dashed border-blue-200 transition-colors cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Create Field
+                        </button>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                       <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
-                          checked={selectedFields.length === availableFields.length}
+                          checked={selectedFields.length === availableFields.length && availableFields.length > 0}
                           onChange={(e) => {
                             if (e.target.checked) {
                               setSelectedFields([...availableFields]);
@@ -1287,18 +1295,20 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                           variant="primary"
                           onClick={() => {
                             selectedFields.forEach(field => {
-                              setCustomPersonalFields(prev => [...prev, {
-                                id: Date.now().toString() + field,
-                                label: field,
-                                type: "Text",
-                                value: ""
-                              }]);
+                              if (!customPersonalFields.some(f => f.label === field)) {
+                                setCustomPersonalFields(prev => [...prev, {
+                                  id: Date.now().toString() + field,
+                                  label: field,
+                                  type: "Text",
+                                  value: ""
+                                }]);
+                              }
                             });
                             setShowSelectFieldModal(false);
                             setSelectFieldSearch("");
                             setSelectedFields([]);
                             setHasUnsavedChanges(true);
-                            toast.success(`${selectedFields.length} field(s) added`);
+                            toast.success(`${selectedFields.length} field(s) selected`);
                           }}
                           className="text-sm"
                         >
@@ -1428,16 +1438,20 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                       <Button
                         variant="primary"
                         onClick={() => {
-                          if (!newCustomField.label) {
+                          if (!newCustomField.label.trim()) {
                             toast.error("Please enter a field name");
                             return;
                           }
-                          setCustomPersonalFields([...customPersonalFields, {
+                          const fieldLabel = newCustomField.label.trim();
+                          setCustomPersonalFields(prev => [...prev, {
                             id: Date.now().toString(),
-                            label: newCustomField.label,
+                            label: fieldLabel,
                             type: newCustomField.type,
                             value: ""
                           }]);
+                          if (!availableFields.includes(fieldLabel)) {
+                            setAvailableFields(prev => [...prev, fieldLabel]);
+                          }
                           setShowCreateFieldModal(false);
                           setNewCustomField({
                             label: "",
