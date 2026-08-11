@@ -204,11 +204,7 @@ function ActionSegment({ value, onChange }: ActionSegmentProps) {
             onClick={() => onChange(opt)}
             className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-1 cursor-pointer select-none ${
               isSelected
-                ? opt === "deny"
-                  ? "bg-rose-600 text-white shadow-xs scale-[1.02] ring-1 ring-rose-700/20"
-                  : opt === "own"
-                  ? "bg-amber-500 text-white shadow-xs scale-[1.02] ring-1 ring-amber-600/20"
-                  : "bg-indigo-600 text-white shadow-xs scale-[1.02] ring-1 ring-indigo-700/20"
+                ? "bg-slate-900 text-white shadow-xs scale-[1.02] ring-1 ring-slate-900/20"
                 : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
             }`}
           >
@@ -255,6 +251,7 @@ export function RolesPermissionsDrawer({
 
   // Dynamic process instances list
   const [storedProcesses, setStoredProcesses] = useState<Process[]>([]);
+  const [isProcessOverridesExpanded, setIsProcessOverridesExpanded] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -266,6 +263,7 @@ export function RolesPermissionsDrawer({
       setBillingExpandedInDrawer(true);
       setSelectedProcessInstanceId(null);
       setEditExpandedKeys(new Set());
+      setIsProcessOverridesExpanded(false);
       setFormErrors({});
       try {
         setStoredProcesses(getStoredProcesses());
@@ -324,7 +322,7 @@ export function RolesPermissionsDrawer({
     const updated = roles.map((r) => {
       if (r.id !== roleId) return r;
       const currentInstance =
-        r.permissions.processInstances?.[processId] ?? { ...r.permissions.processes };
+        r.permissions.processInstances?.[processId] ?? { ...r.permissions.processSettings };
       return {
         ...r,
         permissions: {
@@ -397,7 +395,7 @@ export function RolesPermissionsDrawer({
   ) => {
     setRoleFormData((prev) => {
       const currentInstance =
-        prev.permissions.processInstances?.[processId] ?? { ...prev.permissions.processes };
+        prev.permissions.processInstances?.[processId] ?? { ...prev.permissions.processSettings };
       return {
         ...prev,
         permissions: {
@@ -463,7 +461,7 @@ export function RolesPermissionsDrawer({
 
   const renderEditModule = (mod: ModuleRow) => {
     const isExpanded = editExpandedKeys.has(mod.key);
-    const isProcesses = mod.key === "processes";
+    const isProcessSettings = mod.key === "processSettings";
 
     return (
       <div key={mod.key} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
@@ -495,7 +493,7 @@ export function RolesPermissionsDrawer({
             })}
 
             {/* Dynamic Process Instances Override in Edit Form */}
-            {isProcesses && storedProcesses.length > 0 && (
+            {isProcessSettings && storedProcesses.length > 0 && (
               <div className="p-3 bg-blue-50/30 space-y-3">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">
                   Process Instances Overrides
@@ -521,7 +519,7 @@ export function RolesPermissionsDrawer({
                           {ACTIONS.map((action) => {
                             const scope =
                               roleFormData.permissions.processInstances?.[proc.id]?.[action] ??
-                              roleFormData.permissions.processes[action];
+                              roleFormData.permissions.processSettings[action];
                             return (
                               <div key={action} className="flex items-center justify-between px-4 py-2">
                                 <span className="text-[11px] font-medium text-gray-700">{ACTION_LABELS[action]}</span>
@@ -745,7 +743,7 @@ export function RolesPermissionsDrawer({
 
                 {/* ── CASE 2: DEFAULT MODULES (Clients, Processes, Calls, Chats, Process Settings, etc.) ── */}
                 {selectedModuleKey !== "settings" && (
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto divide-y divide-slate-200">
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="bg-slate-900 text-white sticky top-0 z-10">
@@ -782,6 +780,66 @@ export function RolesPermissionsDrawer({
                         ))}
                       </tbody>
                     </table>
+
+                    {/* Dynamic Process Instances Overrides under Process Settings */}
+                    {selectedModuleKey === "processSettings" && storedProcesses.length > 0 && (
+                      <div className="bg-slate-50/50">
+                        <button
+                          type="button"
+                          onClick={() => setIsProcessOverridesExpanded((prev) => !prev)}
+                          className="w-full px-5 py-2.5 text-[10px] font-bold uppercase tracking-wider text-indigo-900 bg-indigo-50/80 hover:bg-indigo-100/80 border-y border-indigo-100 flex items-center justify-between transition-colors cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-2">
+                            <ChevronDown
+                              className={`w-4 h-4 text-indigo-700 transition-transform duration-200 ${
+                                isProcessOverridesExpanded ? "" : "-rotate-90"
+                              }`}
+                            />
+                            <span>Specific Process Overrides</span>
+                          </div>
+                          <span className="text-[10px] font-normal text-indigo-700">
+                            {storedProcesses.length} available process{storedProcesses.length > 1 ? "es" : ""}
+                          </span>
+                        </button>
+
+                        {isProcessOverridesExpanded && (
+                          <div className="pb-4">
+                            {storedProcesses.map((proc) => (
+                              <div key={proc.id} className="border-b border-slate-200/80 last:border-0">
+                                <div className="bg-slate-100/90 px-5 py-2 text-xs font-bold text-slate-800 border-b border-slate-200/50 flex items-center gap-2">
+                                  <span>Process: {proc.name}</span>
+                                </div>
+                                <table className="w-full text-left border-collapse bg-white">
+                                  <tbody>
+                                    {ACTIONS.map((action) => (
+                                      <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                        <td className="p-3.5 pl-8 text-xs font-medium text-slate-600">
+                                          {ACTION_LABELS[action]}
+                                        </td>
+                                        {filteredRoles.map((role) => (
+                                          <td key={role.id} className="p-2.5 text-center align-middle min-w-[170px]">
+                                            <ActionSegment
+                                              value={
+                                                role.permissions.processInstances?.[proc.id]?.[action] ??
+                                                role.permissions.processSettings?.[action] ??
+                                                "deny"
+                                              }
+                                              onChange={(v) =>
+                                                handleUpdateProcessInstanceAction(role.id, proc.id, action, v)
+                                              }
+                                            />
+                                          </td>
+                                        ))}
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
 
