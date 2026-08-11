@@ -2,96 +2,225 @@ import React, { useState, useEffect } from "react";
 import { Drawer } from "../ui/drawer";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
-import { Shield, Plus, Edit2, Trash2, ArrowLeft, AlertCircle, Search, X } from "lucide-react";
+import { Shield, Plus, Edit2, Trash2, ArrowLeft, AlertCircle, Search, X, ChevronRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import type {
+  ActionScope,
+  Action,
+  ModulePermissions,
+  ItemPermissions,
+  Role,
+} from "../../../types/permissions";
+import { ACTIONS } from "../../../types/permissions";
+import { createDefaultPermissions, DEFAULT_MODULE_PERMISSIONS } from "../../pages/settings-constants";
+import { getStoredProcesses, Process } from "../../../lib/useProcessStore";
 
-export type PermissionLevel = "none" | "view" | "write" | "all";
+export type { ActionScope, Action, ModulePermissions, ItemPermissions, Role };
+export { ACTIONS };
 
-export interface ItemPermissions {
-  dashboard: PermissionLevel;
-  clients: PermissionLevel;
-  calls: PermissionLevel;
-  processes: PermissionLevel;
-  numbers: PermissionLevel;
-  billing: PermissionLevel;
-  webhooks: PermissionLevel;
-  settings: PermissionLevel;
-}
+// ─── DEFAULT ROLES ────────────────────────────────────────────────────────────
 
-export interface Role {
-  id: string;
-  name: string;
-  description?: string;
-  isDefault?: boolean;
-  permissions: ItemPermissions;
-}
+const makeModulePerms = (
+  read: ActionScope,
+  add: ActionScope,
+  edit: ActionScope,
+  del: ActionScope,
+  exp: ActionScope,
+  imp: ActionScope
+): ModulePermissions => ({
+  read,
+  add,
+  edit,
+  delete: del,
+  export: exp,
+  import: imp,
+});
+
+const ALL_PERMS = makeModulePerms("all", "all", "all", "all", "all", "all");
+const OPERATIONAL_PERMS = makeModulePerms("all", "all", "all", "own", "all", "all");
+const OWN_PERMS = makeModulePerms("own", "own", "own", "deny", "deny", "deny");
+const DENY_PERMS = makeModulePerms("deny", "deny", "deny", "deny", "deny", "deny");
 
 export const DEFAULT_ROLES: Role[] = [
   {
     id: "admin",
     name: "Admin",
-    description: "Full read and write access to all modules and system settings",
+    description: "Full access to every module and action",
     isDefault: true,
     permissions: {
-      dashboard: "write",
-      clients: "write",
-      calls: "write",
-      processes: "write",
-      numbers: "write",
-      billing: "write",
-      webhooks: "write",
-      settings: "write",
+      clients: { ...ALL_PERMS },
+      processes: { ...ALL_PERMS },
+      calls: { ...ALL_PERMS },
+      chats: { ...ALL_PERMS },
+      knowledgeBase: { ...ALL_PERMS },
+      settings: { ...ALL_PERMS },
+      processSettings: { ...ALL_PERMS },
+      webForms: { ...ALL_PERMS },
+      appointments: { ...ALL_PERMS },
+      services: { ...ALL_PERMS },
+      processInstances: {},
     },
   },
   {
     id: "manager",
     name: "Manager",
-    description: "Full write access to operational modules and view access to system settings",
+    description: "Operational access across all modules, restricted system settings",
     isDefault: true,
     permissions: {
-      dashboard: "write",
-      clients: "write",
-      calls: "write",
-      processes: "write",
-      numbers: "write",
-      billing: "view",
-      webhooks: "view",
-      settings: "view",
+      clients: { ...OPERATIONAL_PERMS },
+      processes: { ...OPERATIONAL_PERMS },
+      calls: { ...OPERATIONAL_PERMS },
+      chats: { ...OPERATIONAL_PERMS },
+      knowledgeBase: { ...OPERATIONAL_PERMS },
+      settings: { ...DENY_PERMS },
+      processSettings: { ...OPERATIONAL_PERMS },
+      webForms: { ...OPERATIONAL_PERMS },
+      appointments: { ...OPERATIONAL_PERMS },
+      services: { ...OPERATIONAL_PERMS },
+      processInstances: {},
     },
   },
   {
-    id: "supervisor",
-    name: "Supervisor",
-    description: "Write access to core communications and processes with limited system access",
+    id: "reception",
+    name: "Reception",
+    description: "Own record access for front-desk operations",
     isDefault: true,
     permissions: {
-      dashboard: "write",
-      clients: "write",
-      calls: "write",
-      processes: "write",
-      numbers: "view",
-      billing: "none",
-      webhooks: "none",
-      settings: "view",
+      clients: { ...OWN_PERMS },
+      processes: { ...OWN_PERMS },
+      calls: { ...OWN_PERMS },
+      chats: { ...OWN_PERMS },
+      knowledgeBase: { ...OWN_PERMS },
+      settings: { ...DENY_PERMS },
+      processSettings: { ...DENY_PERMS },
+      webForms: { ...OWN_PERMS },
+      appointments: { ...OWN_PERMS },
+      services: { ...OWN_PERMS },
+      processInstances: {},
     },
   },
   {
-    id: "agent",
-    name: "Agent",
-    description: "View access to core dashboard and clients with write access to calls",
+    id: "sales",
+    name: "Sales",
+    description: "Own record access for sales deals and customer calls",
     isDefault: true,
     permissions: {
-      dashboard: "view",
-      clients: "view",
-      calls: "write",
-      processes: "view",
-      numbers: "none",
-      billing: "none",
-      webhooks: "none",
-      settings: "none",
+      clients: { ...OWN_PERMS },
+      processes: { ...OWN_PERMS },
+      calls: { ...OWN_PERMS },
+      chats: { ...OWN_PERMS },
+      knowledgeBase: { ...OWN_PERMS },
+      settings: { ...DENY_PERMS },
+      processSettings: { ...DENY_PERMS },
+      webForms: { ...DENY_PERMS },
+      appointments: { ...OWN_PERMS },
+      services: { ...DENY_PERMS },
+      processInstances: {},
     },
   },
 ];
+
+// ─── FIXED MODULE CONFIG ──────────────────────────────────────────────────────
+
+export interface ModuleRow {
+  key: keyof Omit<ItemPermissions, "processInstances">;
+  label: string;
+  route: string;
+}
+
+export const MODULES: ModuleRow[] = [
+  { key: "clients", label: "Clients", route: "/clients" },
+  { key: "processes", label: "Processes", route: "/deals" },
+  { key: "calls", label: "Calls", route: "/call-logs" },
+  { key: "chats", label: "Chats", route: "/chats" },
+  { key: "knowledgeBase", label: "Knowledge Base", route: "/knowledge-base" },
+  { key: "settings", label: "Settings", route: "/settings" },
+  { key: "processSettings", label: "Process Settings", route: "/process" },
+  { key: "webForms", label: "Web Forms", route: "/web-forms" },
+  { key: "appointments", label: "Appointments", route: "/appointments" },
+  { key: "services", label: "Services", route: "/services" },
+];
+
+// ─── SETTINGS SUB-PAGES CONFIG ────────────────────────────────────────────────
+
+interface SettingsPageRow {
+  key: string;
+  label: string;
+  children?: { key: string; label: string }[];
+}
+
+const SETTINGS_PAGES: SettingsPageRow[] = [
+  { key: "organization", label: "Organization" },
+  { key: "users", label: "Team" },
+  {
+    key: "billing-parent",
+    label: "Billing",
+    children: [
+      { key: "plans", label: "Plans" },
+      { key: "payments", label: "Payments" },
+      { key: "credit-usage", label: "Credit Usage" },
+    ],
+  },
+  { key: "voice-config", label: "AI Voices / Models" },
+  { key: "numbers", label: "Numbers" },
+  { key: "custom-fields", label: "Custom Fields" },
+  { key: "integrations", label: "Integrations" },
+  { key: "audit-logs", label: "Audit Logs" },
+  { key: "security", label: "Security" },
+];
+
+const ACTION_LABELS: Record<Action, string> = {
+  read: "Read",
+  add: "Add",
+  edit: "Edit",
+  delete: "Delete",
+  export: "Export",
+  import: "Import",
+};
+
+const SCOPE_LABELS: Record<ActionScope, string> = {
+  deny: "Deny",
+  own: "Own",
+  all: "All",
+};
+
+// ─── INLINE SEGMENT CONTROL ───────────────────────────────────────────────────
+
+interface ActionSegmentProps {
+  value: ActionScope;
+  onChange: (v: ActionScope) => void;
+}
+
+function ActionSegment({ value, onChange }: ActionSegmentProps) {
+  return (
+    <div className="inline-flex p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-inner gap-1 transition-all">
+      {(["deny", "own", "all"] as ActionScope[]).map((opt) => {
+        const isSelected = value === opt;
+
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onChange(opt)}
+            className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-1 cursor-pointer select-none ${
+              isSelected
+                ? opt === "deny"
+                  ? "bg-rose-600 text-white shadow-xs scale-[1.02] ring-1 ring-rose-700/20"
+                  : opt === "own"
+                  ? "bg-amber-500 text-white shadow-xs scale-[1.02] ring-1 ring-amber-600/20"
+                  : "bg-indigo-600 text-white shadow-xs scale-[1.02] ring-1 ring-indigo-700/20"
+                : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
+            }`}
+          >
+            {SCOPE_LABELS[opt]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 
 interface RolesPermissionsDrawerProps {
   isOpen: boolean;
@@ -101,24 +230,6 @@ interface RolesPermissionsDrawerProps {
   assignedUserCounts?: Record<string, number>;
   zIndex?: number;
 }
-
-interface ModuleMeta {
-  key: keyof ItemPermissions;
-  label: string;
-  description: string;
-  category: "core" | "operations" | "system";
-}
-
-const MODULES_META: ModuleMeta[] = [
-  { key: "dashboard", label: "Dashboard", description: "Analytics, summary widgets and performance metrics", category: "core" },
-  { key: "clients", label: "Clients", description: "Client directory, profiles, custom fields and timeline", category: "core" },
-  { key: "calls", label: "Calls", description: "Call logs, recordings, AI transcripts and dialer", category: "core" },
-  { key: "processes", label: "Processes", description: "Workflow automation, pipelines, and stage management", category: "operations" },
-  { key: "numbers", label: "Numbers", description: "Phone number purchasing, routing and IVR rules", category: "operations" },
-  { key: "billing", label: "Billing", description: "Subscription plans, credit usage, invoices and payment methods", category: "system" },
-  { key: "webhooks", label: "Webhooks", description: "API keys, webhook endpoints and developer integrations", category: "system" },
-  { key: "settings", label: "Settings", description: "Organization profile, team members, roles and general settings", category: "system" },
-];
 
 export function RolesPermissionsDrawer({
   isOpen,
@@ -132,13 +243,37 @@ export function RolesPermissionsDrawer({
   const [editingRoleId, setEditingRoleId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  const [activePopoverCell, setActivePopoverCell] = useState<{
-    roleId: string;
-    roleName: string;
-    moduleKey: keyof ItemPermissions;
-    moduleLabel: string;
-    currentLevel: PermissionLevel;
-  } | null>(null);
+  // Navigation Selection States
+  const [selectedModuleKey, setSelectedModuleKey] =
+    useState<keyof Omit<ItemPermissions, "processInstances">>("clients");
+  const [selectedSettingsPage, setSelectedSettingsPage] = useState("organization");
+  const [billingExpandedInDrawer, setBillingExpandedInDrawer] = useState(true);
+  const [selectedProcessInstanceId, setSelectedProcessInstanceId] = useState<string | null>(null);
+
+  // Expanded states in Edit Role view
+  const [editExpandedKeys, setEditExpandedKeys] = useState<Set<string>>(new Set());
+
+  // Dynamic process instances list
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>([]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setViewMode("list");
+      setEditingRoleId(null);
+      setSearchQuery("");
+      setSelectedModuleKey("clients");
+      setSelectedSettingsPage("organization");
+      setBillingExpandedInDrawer(true);
+      setSelectedProcessInstanceId(null);
+      setEditExpandedKeys(new Set());
+      setFormErrors({});
+      try {
+        setStoredProcesses(getStoredProcesses());
+      } catch {
+        setStoredProcesses([]);
+      }
+    }
+  }, [isOpen]);
 
   const [roleFormData, setRoleFormData] = useState<{
     name: string;
@@ -147,50 +282,82 @@ export function RolesPermissionsDrawer({
   }>({
     name: "",
     description: "",
-    permissions: {
-      dashboard: "view",
-      clients: "view",
-      calls: "view",
-      processes: "view",
-      numbers: "none",
-      billing: "none",
-      webhooks: "none",
-      settings: "none",
-    },
+    permissions: createDefaultPermissions(),
   });
 
   const [formErrors, setFormErrors] = useState<{ name?: string }>({});
 
-  // Reset drawer state when opened
-  useEffect(() => {
-    if (isOpen) {
-      setViewMode("list");
-      setEditingRoleId(null);
-      setSearchQuery("");
-      setActivePopoverCell(null);
-      setFormErrors({});
-    }
-  }, [isOpen]);
+  const filteredRoles = roles.filter((r) =>
+    r.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const filteredRoles = roles.filter((r) => r.name.toLowerCase().includes(searchQuery.toLowerCase()));
+  // ── MATRIX UPDATE HANDLERS ──────────────────────────────────────────────────
+
+  const handleUpdateModuleAction = (
+    roleId: string,
+    moduleKey: keyof Omit<ItemPermissions, "processInstances">,
+    action: Action,
+    scope: ActionScope
+  ) => {
+    const updated = roles.map((r) => {
+      if (r.id !== roleId) return r;
+      return {
+        ...r,
+        permissions: {
+          ...r.permissions,
+          [moduleKey]: {
+            ...r.permissions[moduleKey],
+            [action]: scope,
+          },
+        },
+      };
+    });
+    onSaveRoles(updated);
+  };
+
+  const handleUpdateProcessInstanceAction = (
+    roleId: string,
+    processId: string,
+    action: Action,
+    scope: ActionScope
+  ) => {
+    const updated = roles.map((r) => {
+      if (r.id !== roleId) return r;
+      const currentInstance =
+        r.permissions.processInstances?.[processId] ?? { ...r.permissions.processes };
+      return {
+        ...r,
+        permissions: {
+          ...r.permissions,
+          processInstances: {
+            ...r.permissions.processInstances,
+            [processId]: {
+              ...currentInstance,
+              [action]: scope,
+            },
+          },
+        },
+      };
+    });
+    onSaveRoles(updated);
+  };
+
+  const toggleEditExpand = (key: string) => {
+    setEditExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // ── FORM HANDLERS ───────────────────────────────────────────────────────────
 
   const handleStartCreateRole = () => {
     setEditingRoleId(null);
-    setRoleFormData({
-      name: "",
-      description: "",
-      permissions: {
-        dashboard: "view",
-        clients: "view",
-        calls: "view",
-        processes: "view",
-        numbers: "none",
-        billing: "none",
-        webhooks: "none",
-        settings: "none",
-      },
-    });
+    setRoleFormData({ name: "", description: "", permissions: createDefaultPermissions() });
     setFormErrors({});
+    setEditExpandedKeys(new Set());
     setViewMode("edit");
   };
 
@@ -199,48 +366,52 @@ export function RolesPermissionsDrawer({
     setRoleFormData({
       name: role.name,
       description: role.description || "",
-      permissions: { ...role.permissions },
+      permissions: JSON.parse(JSON.stringify(role.permissions)),
     });
     setFormErrors({});
+    setEditExpandedKeys(new Set());
     setViewMode("edit");
   };
 
-  const handleDeleteRole = (role: Role) => {
-    if (role.isDefault) {
-      toast.error(`System default role "${role.name}" cannot be deleted.`);
-      return;
-    }
-    const count = assignedUserCounts[role.name] || 0;
-    if (count > 0) {
-      toast.error(`Cannot delete role "${role.name}" — ${count} user(s) are assigned to it.`);
-      return;
-    }
-
-    const updated = roles.filter((r) => r.id !== role.id);
-    onSaveRoles(updated);
-    toast.success(`Role "${role.name}" deleted successfully.`);
+  const handleFormUpdateModuleAction = (
+    moduleKey: keyof Omit<ItemPermissions, "processInstances">,
+    action: Action,
+    scope: ActionScope
+  ) => {
+    setRoleFormData((prev) => ({
+      ...prev,
+      permissions: {
+        ...prev.permissions,
+        [moduleKey]: {
+          ...prev.permissions[moduleKey],
+          [action]: scope,
+        },
+      },
+    }));
   };
 
-  const handleUpdateCellPermission = (roleId: string, moduleKey: keyof ItemPermissions, level: PermissionLevel) => {
-    const updatedRoles = roles.map((r) => {
-      if (r.id === roleId) {
-        return {
-          ...r,
-          permissions: {
-            ...r.permissions,
-            [moduleKey]: level,
+  const handleFormUpdateProcessInstanceAction = (
+    processId: string,
+    action: Action,
+    scope: ActionScope
+  ) => {
+    setRoleFormData((prev) => {
+      const currentInstance =
+        prev.permissions.processInstances?.[processId] ?? { ...prev.permissions.processes };
+      return {
+        ...prev,
+        permissions: {
+          ...prev.permissions,
+          processInstances: {
+            ...prev.permissions.processInstances,
+            [processId]: {
+              ...currentInstance,
+              [action]: scope,
+            },
           },
-        };
-      }
-      return r;
+        },
+      };
     });
-
-    onSaveRoles(updatedRoles);
-    setActivePopoverCell(null);
-    const matchedRole = roles.find((r) => r.id === roleId);
-    const matchedMod = MODULES_META.find((m) => m.key === moduleKey);
-    const displayLevel = level === "none" ? "No Access" : level === "view" ? "Read" : "Write";
-    toast.success(`Updated ${matchedMod?.label || ""} for ${matchedRole?.name || ""} to ${displayLevel}.`);
   };
 
   const handleSaveRoleForm = () => {
@@ -250,8 +421,6 @@ export function RolesPermissionsDrawer({
       toast.error("Please enter a role name.");
       return;
     }
-
-    // Check duplicate name
     const duplicate = roles.find(
       (r) => r.name.toLowerCase() === trimmedName.toLowerCase() && r.id !== editingRoleId
     );
@@ -290,20 +459,104 @@ export function RolesPermissionsDrawer({
     setViewMode("list");
   };
 
-  const setCategoryBulkPermission = (category: "core" | "operations" | "system", level: PermissionLevel) => {
-    const nextPermissions = { ...roleFormData.permissions };
-    MODULES_META.filter((m) => m.category === category).forEach((m) => {
-      nextPermissions[m.key] = level;
-    });
-    setRoleFormData((prev) => ({ ...prev, permissions: nextPermissions }));
+  // ── EDIT FORM MODULE RENDERER ────────────────────────────────────────────────
+
+  const renderEditModule = (mod: ModuleRow) => {
+    const isExpanded = editExpandedKeys.has(mod.key);
+    const isProcesses = mod.key === "processes";
+
+    return (
+      <div key={mod.key} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+        <button
+          type="button"
+          onClick={() => toggleEditExpand(mod.key)}
+          className="w-full flex items-center justify-between p-3.5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+        >
+          <div className="flex items-center gap-2">
+            {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+            <span className="text-xs font-bold text-gray-900">{mod.label}</span>
+            <span className="text-[10px] text-gray-400 font-medium">· {mod.route} · 6 actions</span>
+          </div>
+        </button>
+
+        {isExpanded && (
+          <div className="divide-y divide-gray-100">
+            {ACTIONS.map((action) => {
+              const scope = roleFormData.permissions[mod.key]?.[action] ?? "deny";
+              return (
+                <div key={action} className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-xs font-semibold text-gray-700">{ACTION_LABELS[action]}</span>
+                  <ActionSegment
+                    value={scope}
+                    onChange={(v) => handleFormUpdateModuleAction(mod.key, action, v)}
+                  />
+                </div>
+              );
+            })}
+
+            {/* Dynamic Process Instances Override in Edit Form */}
+            {isProcesses && storedProcesses.length > 0 && (
+              <div className="p-3 bg-blue-50/30 space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                  Process Instances Overrides
+                </p>
+                {storedProcesses.map((proc) => {
+                  const procKey = `edit_proc_${proc.id}`;
+                  const isProcExpanded = editExpandedKeys.has(procKey);
+                  return (
+                    <div key={proc.id} className="border border-blue-200 rounded-lg overflow-hidden bg-white">
+                      <button
+                        type="button"
+                        onClick={() => toggleEditExpand(procKey)}
+                        className="w-full flex items-center justify-between p-2.5 bg-blue-50/50 hover:bg-blue-100/50 transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          {isProcExpanded ? <ChevronDown className="w-3.5 h-3.5 text-blue-600" /> : <ChevronRight className="w-3.5 h-3.5 text-blue-600" />}
+                          <span className="text-xs font-semibold text-blue-950">{proc.name}</span>
+                        </div>
+                      </button>
+
+                      {isProcExpanded && (
+                        <div className="divide-y divide-gray-100">
+                          {ACTIONS.map((action) => {
+                            const scope =
+                              roleFormData.permissions.processInstances?.[proc.id]?.[action] ??
+                              roleFormData.permissions.processes[action];
+                            return (
+                              <div key={action} className="flex items-center justify-between px-4 py-2">
+                                <span className="text-[11px] font-medium text-gray-700">{ACTION_LABELS[action]}</span>
+                                <ActionSegment
+                                  value={scope}
+                                  onChange={(v) =>
+                                    handleFormUpdateProcessInstanceAction(proc.id, action, v)
+                                  }
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
   };
+
+  // ── MAIN RENDER ──────────────────────────────────────────────────────────────
+
+  const selectedModuleObj = MODULES.find((m) => m.key === selectedModuleKey);
 
   return (
     <Drawer
       isOpen={isOpen}
       onClose={onClose}
       zIndex={zIndex}
-      maxWidth="sm:max-w-[60vw] w-[60vw]"
+      maxWidth="sm:max-w-[92vw] w-[92vw]"
       title={
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
@@ -314,17 +567,18 @@ export function RolesPermissionsDrawer({
               Roles & Permissions
             </h3>
             <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Manage access levels and module permissions across team members
+              Sidebar module navigation · Uniform 6 actions (Deny / Own / All) · Dynamic process overrides
             </p>
           </div>
         </div>
       }
     >
       <div className="p-6 space-y-6 pb-20 relative">
-        {/* VIEW 1: MATRIX TABLE (DEFAULT) */}
+
+        {/* ── VIEW 1: MATRIX / LIST VIEW WITH SIDEBAR ── */}
         {viewMode === "list" && (
           <div className="space-y-4">
-            {/* Top Toolbar: Search & Create Role */}
+            {/* Top Toolbar */}
             <div className="flex items-center justify-between gap-4 bg-white p-3 border border-gray-200 rounded-xl shadow-xs">
               <div className="relative flex-1 max-w-sm">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -344,7 +598,6 @@ export function RolesPermissionsDrawer({
                   </button>
                 )}
               </div>
-
               <Button
                 variant="primary"
                 onClick={handleStartCreateRole}
@@ -355,167 +608,189 @@ export function RolesPermissionsDrawer({
               </Button>
             </div>
 
-            {/* Matrix Table */}
-            <div className="border border-gray-200 rounded-xl overflow-x-auto bg-white shadow-xs max-h-[calc(100vh-250px)] overflow-y-auto">
-              <table className="w-full text-left border-collapse min-w-max">
-                <thead>
-                  <tr className="bg-[#1F2937] text-white border-b border-gray-700 sticky top-0 z-30">
-                    <th className="sticky left-0 bg-[#1F2937] text-white z-40 w-64 p-3.5 border-r border-gray-700 text-xs font-bold uppercase tracking-wider">
-                      MODULE
-                    </th>
-                    {filteredRoles.map((role) => {
-                      const assignedCount = assignedUserCounts[role.name] || 0;
-                      return (
-                        <th key={role.id} className="p-3.5 border-r border-gray-700 min-w-[140px] max-w-[180px] text-center bg-[#1F2937] text-white">
-                          <div className="font-bold text-sm text-white truncate">{role.name}</div>
-                          <div className="text-[11px] text-gray-300 font-medium mt-0.5">
-                            {assignedCount} {assignedCount === 1 ? "user" : "users"}
-                          </div>
-                        </th>
-                      );
-                    })}
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRoles.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="p-8 text-center text-xs text-gray-400">
-                        No roles match "{searchQuery}"
-                      </td>
-                    </tr>
-                  ) : (
-                    MODULES_META.map((mod) => (
-                      <tr key={mod.key} className="hover:bg-blue-50/20 transition-colors border-b border-gray-100 group">
-                        <td className="sticky left-0 bg-white group-hover:bg-blue-50/20 z-20 p-3.5 border-r border-gray-200 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)]">
-                          <div className="font-bold text-xs text-gray-900">{mod.label}</div>
-                          <div className="text-[10px] text-gray-500 line-clamp-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            {mod.description}
-                          </div>
-                        </td>
-
-                        {filteredRoles.map((role) => {
-                          const level = role.permissions[mod.key] || "none";
-
-                          return (
-                            <td key={role.id} className="p-3 text-center border-r border-gray-100">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setActivePopoverCell({
-                                    roleId: role.id,
-                                    roleName: role.name,
-                                    moduleKey: mod.key,
-                                    moduleLabel: mod.label,
-                                    currentLevel: level,
-                                  })
-                                }
-                                className="w-full flex items-center justify-center cursor-pointer py-1 text-center"
-                              >
-                                {level === "all" && (
-                                  <span className="text-xs font-bold text-[#1E40AF]">All</span>
-                                )}
-                                {level === "write" && (
-                                  <span className="text-xs font-bold text-[#2563EB]">Write</span>
-                                )}
-                                {level === "view" && (
-                                  <span className="text-xs font-semibold text-[#4B5563]">Read</span>
-                                )}
-                                {level === "none" && (
-                                  <span className="text-xs font-medium text-gray-300 hover:text-gray-500 transition-colors">
-                                    —
-                                  </span>
-                                )}
-                              </button>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Cell Edit Popover Modal */}
-            {activePopoverCell && (
-              <div
-                className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20 backdrop-blur-[1px]"
-                onClick={() => setActivePopoverCell(null)}
-              >
-                <div
-                  className="bg-white rounded-xl shadow-2xl border border-gray-200 p-5 w-80 space-y-4 animate-in fade-in zoom-in-95 duration-150"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            {/* Two-Pane Layout */}
+            <div className="flex gap-4 items-start">
+              {/* First-level Module Sidebar */}
+              <div className="w-56 flex-shrink-0 border border-slate-200/90 rounded-2xl overflow-hidden bg-white sticky top-0 shadow-xs">
+                <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200/80 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  Modules Navigation
+                </div>
+                {MODULES.map((mod) => (
+                  <button
+                    key={mod.key}
+                    type="button"
+                    onClick={() => setSelectedModuleKey(mod.key)}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-all flex items-center justify-between ${
+                      selectedModuleKey === mod.key
+                        ? "bg-indigo-50/80 text-indigo-900 font-bold border-l-4 border-l-indigo-600 shadow-2xs"
+                        : "text-slate-700 hover:bg-slate-50/80 hover:text-slate-900"
+                    }`}
+                  >
                     <div>
-                      <h4 className="text-sm font-bold text-gray-900">{activePopoverCell.moduleLabel}</h4>
-                      <p className="text-xs text-blue-600 font-semibold">{activePopoverCell.roleName} Role</p>
+                      <div className="text-xs font-semibold">{mod.label}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">{mod.route}</div>
                     </div>
-                    <button
-                      onClick={() => setActivePopoverCell(null)}
-                      className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
+                    {selectedModuleKey === mod.key && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
+                    )}
+                  </button>
+                ))}
+              </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider block">
-                      Select Access Level
-                    </label>
+              {/* Right Content Pane */}
+              <div className="flex-1 min-w-0 border border-slate-200/90 rounded-2xl bg-white overflow-hidden shadow-xs">
 
-                    <div className="space-y-2">
-                      {[
-                        { key: "view" as PermissionLevel, label: "Read", desc: "Users can read and view module data" },
-                        { key: "write" as PermissionLevel, label: "Write", desc: "Users can create and edit module data" },
-                        { key: "all" as PermissionLevel, label: "All", desc: "Full access — able to read, write, as well as delete module data" },
-                      ].map((opt) => {
-                        const isSelected = activePopoverCell.currentLevel === opt.key;
-
-                        return (
+                {/* ── CASE 1: SETTINGS MODULE (Nested Settings Pages Sidebar) ── */}
+                {selectedModuleKey === "settings" && (
+                  <div className="flex min-h-[480px]">
+                    {/* Second-level Sidebar: Settings Pages */}
+                    <div className="w-52 flex-shrink-0 border-r border-slate-200/80 bg-slate-50/50">
+                      <div className="px-3.5 py-2.5 bg-slate-100/70 border-b border-slate-200 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                        Settings Sub-Pages
+                      </div>
+                      {SETTINGS_PAGES.map((page) => (
+                        <div key={page.key}>
                           <button
-                            key={opt.key}
                             type="button"
-                            onClick={() =>
-                              handleUpdateCellPermission(
-                                activePopoverCell.roleId,
-                                activePopoverCell.moduleKey,
-                                opt.key
-                              )
-                            }
-                            className={`w-full text-left p-3 rounded-lg border transition-all flex items-start gap-3 cursor-pointer ${
-                              isSelected
-                                ? "border-blue-500 bg-blue-50/70 shadow-xs"
-                                : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                            onClick={() => {
+                              if (page.children) {
+                                setBillingExpandedInDrawer((v) => !v);
+                                setSelectedSettingsPage(page.children[0].key);
+                              } else {
+                                setSelectedSettingsPage(page.key);
+                              }
+                            }}
+                            className={`w-full text-left px-3.5 py-2.5 text-xs font-medium border-b border-slate-100 transition-colors flex items-center justify-between ${
+                              selectedSettingsPage === page.key ||
+                              page.children?.some((c) => c.key === selectedSettingsPage)
+                                ? "bg-indigo-100/60 text-indigo-900 font-bold"
+                                : "text-slate-600 hover:bg-slate-100/60"
                             }`}
                           >
-                            <div
-                              className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center flex-shrink-0 ${
-                                isSelected ? "border-blue-600 bg-blue-600 text-white" : "border-gray-300 bg-white"
-                              }`}
-                            >
-                              {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center justify-between">
-                                <span className={`text-xs font-bold ${isSelected ? "text-blue-900" : "text-gray-900"}`}>
-                                  {opt.label}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-gray-500 mt-0.5 leading-snug">{opt.desc}</p>
-                            </div>
+                            <span>{page.label}</span>
+                            {page.children && (
+                              <ChevronDown
+                                className={`w-3.5 h-3.5 transition-transform ${
+                                  billingExpandedInDrawer ? "" : "-rotate-90"
+                                }`}
+                              />
+                            )}
                           </button>
-                        );
-                      })}
+                          {page.children && billingExpandedInDrawer && (
+                            <div className="bg-slate-100/40">
+                              {page.children.map((child) => (
+                                <button
+                                  key={child.key}
+                                  type="button"
+                                  onClick={() => setSelectedSettingsPage(child.key)}
+                                  className={`w-full text-left pl-6 pr-3 py-2 text-[11px] border-b border-slate-100 transition-colors ${
+                                    selectedSettingsPage === child.key
+                                      ? "bg-indigo-200/60 text-indigo-900 font-bold"
+                                      : "text-slate-500 hover:bg-slate-100"
+                                  }`}
+                                >
+                                  {child.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Settings Action Table */}
+                    <div className="flex-1 overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-900 text-white sticky top-0 z-10">
+                            <th className="p-3.5 pl-5 text-xs font-bold uppercase tracking-wider w-56 text-slate-200">
+                              {SETTINGS_PAGES.flatMap((p) => p.children ?? [p]).find(
+                                (p) => p.key === selectedSettingsPage
+                              )?.label ?? "Settings"}{" "}
+                              — Action
+                            </th>
+                            {filteredRoles.map((role) => (
+                              <th key={role.id} className="p-3.5 text-center min-w-[170px]">
+                                <div className="font-bold text-sm text-white">{role.name}</div>
+                                <div className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700/50">
+                                  {assignedUserCounts[role.name] || 0} users
+                                </div>
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ACTIONS.map((action) => (
+                            <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                              <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
+                                {ACTION_LABELS[action]}
+                              </td>
+                              {filteredRoles.map((role) => (
+                                <td key={role.id} className="p-2.5 text-center align-middle">
+                                  <ActionSegment
+                                    value={role.permissions.settings?.[action] ?? "deny"}
+                                    onChange={(v) =>
+                                      handleUpdateModuleAction(role.id, "settings", action, v)
+                                    }
+                                  />
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
-                </div>
+                )}
+
+                {/* ── CASE 2: DEFAULT MODULES (Clients, Processes, Calls, Chats, Process Settings, etc.) ── */}
+                {selectedModuleKey !== "settings" && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-900 text-white sticky top-0 z-10">
+                          <th className="p-3.5 pl-5 text-xs font-bold uppercase tracking-wider w-56 text-slate-200">
+                            {selectedModuleObj?.label ?? selectedModuleKey} — Action
+                          </th>
+                          {filteredRoles.map((role) => (
+                            <th key={role.id} className="p-3.5 text-center min-w-[170px]">
+                              <div className="font-bold text-sm text-white">{role.name}</div>
+                              <div className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700/50">
+                                {assignedUserCounts[role.name] || 0} users
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ACTIONS.map((action) => (
+                          <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                            <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
+                              {ACTION_LABELS[action]}
+                            </td>
+                            {filteredRoles.map((role) => (
+                              <td key={role.id} className="p-2.5 text-center align-middle">
+                                <ActionSegment
+                                  value={role.permissions[selectedModuleKey]?.[action] ?? "deny"}
+                                  onChange={(v) =>
+                                    handleUpdateModuleAction(role.id, selectedModuleKey, action, v)
+                                  }
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
               </div>
-            )}
+            </div>
           </div>
         )}
 
-        {/* VIEW 2: CREATE / EDIT ROLE */}
+        {/* ── VIEW 2: ROLE EDIT FORM ── */}
         {viewMode === "edit" && (
           <div className="space-y-6">
             <button
@@ -525,6 +800,7 @@ export function RolesPermissionsDrawer({
               <ArrowLeft className="w-4 h-4" /> Back to Roles list
             </button>
 
+            {/* Role Name & Description */}
             <div className="space-y-4 bg-gray-50/50 p-4 rounded-xl border border-gray-200">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
@@ -536,7 +812,7 @@ export function RolesPermissionsDrawer({
                     setRoleFormData({ ...roleFormData, name: e.target.value });
                     if (formErrors.name) setFormErrors({});
                   }}
-                  placeholder="e.g. Sales Manager, Support Specialist"
+                  placeholder="e.g. Sales Manager, Reception"
                   className="w-full text-sm bg-white"
                 />
                 {formErrors.name && (
@@ -545,7 +821,6 @@ export function RolesPermissionsDrawer({
                   </p>
                 )}
               </div>
-
               <div>
                 <label className="block text-xs font-semibold text-gray-700 mb-1">
                   Description <span className="text-gray-400 font-normal">(optional)</span>
@@ -561,83 +836,19 @@ export function RolesPermissionsDrawer({
               </div>
             </div>
 
-            {/* PERMISSIONS RADIO FORM */}
+            {/* Permissions list */}
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-gray-200 pb-2">
                 <h4 className="text-sm font-bold text-gray-900">Module Access Control</h4>
-                <span className="text-xs text-gray-500">Select Read / Write / All (unselected = No Access)</span>
+                <span className="text-xs text-gray-500">Deny / Own / All per action</span>
               </div>
 
-              <div className="border border-gray-200 rounded-xl overflow-hidden bg-white divide-y divide-gray-100">
-                {MODULES_META.map((mod) => {
-                  const currentPerm = roleFormData.permissions[mod.key] || "none";
-
-                  return (
-                    <div key={mod.key} className="p-3.5 flex items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors">
-                      <div className="min-w-0 flex-1">
-                        <h5 className="text-xs font-bold text-gray-900">{mod.label}</h5>
-                        <p className="text-[11px] text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {mod.description}
-                        </p>
-                      </div>
-
-                      {/* 3 Radio Values: Read / Write / All */}
-                      <div className="flex items-center gap-4 flex-shrink-0">
-                        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 hover:text-gray-900">
-                          <input
-                            type="radio"
-                            name={`perm-${mod.key}`}
-                            checked={currentPerm === "view"}
-                            onChange={() =>
-                              setRoleFormData({
-                                ...roleFormData,
-                                permissions: { ...roleFormData.permissions, [mod.key]: "view" },
-                              })
-                            }
-                            className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="font-medium">Read</span>
-                        </label>
-
-                        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 hover:text-gray-900">
-                          <input
-                            type="radio"
-                            name={`perm-${mod.key}`}
-                            checked={currentPerm === "write"}
-                            onChange={() =>
-                              setRoleFormData({
-                                ...roleFormData,
-                                permissions: { ...roleFormData.permissions, [mod.key]: "write" },
-                              })
-                            }
-                            className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="font-medium">Write</span>
-                        </label>
-
-                        <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 hover:text-gray-900">
-                          <input
-                            type="radio"
-                            name={`perm-${mod.key}`}
-                            checked={currentPerm === "all"}
-                            onChange={() =>
-                              setRoleFormData({
-                                ...roleFormData,
-                                permissions: { ...roleFormData.permissions, [mod.key]: "all" },
-                              })
-                            }
-                            className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="font-medium">All</span>
-                        </label>
-                      </div>
-                    </div>
-                  );
-                })}
+              <div className="space-y-3">
+                {MODULES.map((mod) => renderEditModule(mod))}
               </div>
             </div>
 
-            {/* FORM FOOTER BUTTONS */}
+            {/* Footer buttons */}
             <div className="flex items-center justify-end gap-3 pt-6 border-t border-gray-200">
               <Button variant="outline" onClick={() => setViewMode("list")} className="text-xs">
                 Cancel

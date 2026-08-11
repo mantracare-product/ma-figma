@@ -32,6 +32,7 @@ export interface Process {
   id: string;
   name: string;
   description: string;
+  assignedToUserId: number; // who this record is assigned to — used for "own" checks
   stages: Stage[];
   aiSettings: AISettings;
 }
@@ -45,6 +46,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     id: "1",
     name: "Patient Intake",
     description: "Initial patient onboarding and verification process",
+    assignedToUserId: 1,
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -62,6 +64,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     id: "2",
     name: "Follow-up Calls",
     description: "Post-visit follow-up and medication reminders",
+    assignedToUserId: 2,
     aiSettings: {
       platform: "Anthropic Claude",
       voiceSpeed: 1.2,
@@ -105,7 +108,7 @@ export function saveStoredProcesses(processes: Process[]) {
   try {
     localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(processes));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-  } catch {}
+  } catch { }
 }
 
 export function getStoredWorkflowSteps(): Record<string, WorkflowStep[]> {
@@ -121,7 +124,7 @@ export function saveStoredWorkflowSteps(steps: Record<string, WorkflowStep[]>) {
   try {
     localStorage.setItem(STEPS_STORAGE_KEY, JSON.stringify(steps));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
-  } catch {}
+  } catch { }
 }
 
 export function getWorkflowStepsForStage(processId: string, stageId: string): WorkflowStep[] {

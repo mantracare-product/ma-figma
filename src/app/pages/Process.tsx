@@ -72,6 +72,7 @@ export interface Process {
   id: string;
   name: string;
   description: string;
+  assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
 }
@@ -1791,6 +1792,7 @@ export default function Process() {
       const process: Process = {
         id: String(processes.length + 1),
         ...newProcess,
+        assignedToUserId: 1,
         stages: [],
         aiSettings: {
           platform: "OpenAI - GPT-4o",
@@ -1834,6 +1836,7 @@ export default function Process() {
         id: processId,
         name: template.name,
         description: template.description,
+        assignedToUserId: 1,
         stages,
         aiSettings: {
           platform: "OpenAI - GPT-4o",

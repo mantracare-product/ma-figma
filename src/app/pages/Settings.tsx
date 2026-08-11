@@ -99,22 +99,12 @@ import VoiceCard from "../components/settings/VoiceCard";
 import BusinessProfileModal from "../components/settings/BusinessProfileModal";
 import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
-import { RolesPermissionsDrawer, Role, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
+import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
+import type { ActionScope, Action, ModulePermissions, ItemPermissions, Role } from "../../types/permissions";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
-export type PermissionLevel = "none" | "view" | "write" | "all";
-
-export interface ItemPermissions {
-  dashboard: PermissionLevel;
-  clients: PermissionLevel;
-  calls: PermissionLevel;
-  processes: PermissionLevel;
-  numbers: PermissionLevel;
-  billing: PermissionLevel;
-  webhooks: PermissionLevel;
-  settings: PermissionLevel;
-}
+export type { ActionScope, Action, ModulePermissions, ItemPermissions, Role };
 
 export interface DaySchedule {
   enabled: boolean;
@@ -420,24 +410,17 @@ const processOptions = [
   "Payment Reminder",
 ];
 
-// Helper function to get section-level permission status
-const getSectionPermission = (user: User, section: "core" | "operations" | "system"): "view" | "write" | "mixed" => {
-  let items: (keyof ItemPermissions)[] = [];
+// Helper function to check if all module actions match
+const getSectionPermission = (user: User, section: "core" | "operations" | "system"): ActionScope | "mixed" => {
+  const permissions = [
+    user.permissions.clients.read,
+    user.permissions.processes.read,
+    user.permissions.calls.read,
+  ];
+  const first = permissions[0];
+  const allSame = permissions.every((p) => p === first);
 
-  if (section === "core") {
-    items = ["dashboard", "clients", "calls"];
-  } else if (section === "operations") {
-    items = ["processes", "numbers"];
-  } else if (section === "system") {
-    items = ["billing", "webhooks", "settings"];
-  }
-
-  const permissions = items.map((item) => user.permissions[item]);
-  const allWrite = permissions.every((p) => p === "write");
-  const allView = permissions.every((p) => p === "view");
-
-  if (allWrite) return "write";
-  if (allView) return "view";
+  if (allSame && first) return first;
   return "mixed";
 };
 
@@ -713,13 +696,13 @@ export default function Settings() {
           prev.map((i) =>
             i.id === "whatsapp-business"
               ? {
-                  ...i,
-                  connected: true,
-                  credentials: {
-                    displayPhoneNumber: storedNumbers[0].displayPhoneNumber,
-                    isDemo: "true",
-                  },
-                }
+                ...i,
+                connected: true,
+                credentials: {
+                  displayPhoneNumber: storedNumbers[0].displayPhoneNumber,
+                  isDemo: "true",
+                },
+              }
               : i
           )
         );
@@ -923,16 +906,7 @@ export default function Settings() {
       status: true,
       organizationId: "1",
       role: "Admin",
-      permissions: {
-        dashboard: "write",
-        clients: "write",
-        calls: "write",
-        processes: "write",
-        numbers: "write",
-        billing: "write",
-        webhooks: "write",
-        settings: "write",
-      },
+      permissions: DEFAULT_ROLES[0].permissions,
       calendarConnected: true,
       connectedCalendar: "google",
       availability: createDefaultAvailability(),
@@ -946,16 +920,7 @@ export default function Settings() {
       status: true,
       organizationId: "1",
       role: "Manager",
-      permissions: {
-        dashboard: "write",
-        clients: "write",
-        calls: "write",
-        processes: "view",
-        numbers: "view",
-        billing: "view",
-        webhooks: "view",
-        settings: "view",
-      },
+      permissions: DEFAULT_ROLES[1].permissions,
       calendarConnected: true,
       connectedCalendar: "outlook",
       availability: {
@@ -975,8 +940,8 @@ export default function Settings() {
       email: "michael.c@healthcare.com",
       status: false,
       organizationId: "1",
-      role: "Agent",
-      permissions: createDefaultPermissions(),
+      role: "Sales",
+      permissions: DEFAULT_ROLES[3].permissions,
     },
     {
       id: 4,
@@ -984,17 +949,8 @@ export default function Settings() {
       email: "emily.d@healthcare.com",
       status: true,
       organizationId: "1",
-      role: "Supervisor",
-      permissions: {
-        dashboard: "write",
-        clients: "write",
-        calls: "view",
-        processes: "write",
-        numbers: "write",
-        billing: "view",
-        webhooks: "view",
-        settings: "view",
-      },
+      role: "Reception",
+      permissions: DEFAULT_ROLES[2].permissions,
     },
     // Dental Care Org (ID: "2")
     {
@@ -1004,16 +960,7 @@ export default function Settings() {
       status: true,
       organizationId: "2",
       role: "Admin",
-      permissions: {
-        dashboard: "write",
-        clients: "write",
-        calls: "write",
-        processes: "write",
-        numbers: "write",
-        billing: "write",
-        webhooks: "write",
-        settings: "write",
-      },
+      permissions: DEFAULT_ROLES[0].permissions,
     },
     {
       id: 6,
@@ -1022,16 +969,7 @@ export default function Settings() {
       status: true,
       organizationId: "2",
       role: "Manager",
-      permissions: {
-        dashboard: "write",
-        clients: "write",
-        calls: "write",
-        processes: "view",
-        numbers: "view",
-        billing: "view",
-        webhooks: "view",
-        settings: "view",
-      },
+      permissions: DEFAULT_ROLES[1].permissions,
     },
     {
       id: 7,
@@ -1039,7 +977,7 @@ export default function Settings() {
       email: "james.w@dentalcare.com",
       status: true,
       organizationId: "2",
-      role: "Agent",
+      role: "Reception",
       permissions: createDefaultPermissions(),
     },
   ]);
@@ -1059,10 +997,10 @@ export default function Settings() {
     permissions: createDefaultPermissions(),
   });
 
-  // Permission radio states for Add User modal (empty string = none selected)
-  const [corePermission, setCorePermission] = useState<"" | "view" | "write">("");
-  const [operationsPermission, setOperationsPermission] = useState<"" | "view" | "write">("");
-  const [systemPermission, setSystemPermission] = useState<"" | "view" | "write">("");
+  // Section-level permission state for Add User modal
+  const [corePermission, setCorePermission] = useState<"" | ActionScope>("");
+  const [operationsPermission, setOperationsPermission] = useState<"" | ActionScope>("");
+  const [systemPermission, setSystemPermission] = useState<"" | ActionScope>("");
 
   // Roles & Permissions state
   const [roles, setRoles] = useState<Role[]>(() => {
@@ -1079,7 +1017,7 @@ export default function Settings() {
     setRoles(updatedRoles);
     try {
       sessionStorage.setItem("settings_roles", JSON.stringify(updatedRoles));
-    } catch {}
+    } catch { }
   };
 
   const assignedUserCounts = useMemo(() => {
@@ -1224,7 +1162,7 @@ export default function Settings() {
     if (saved) {
       try {
         setAllUsers(JSON.parse(saved));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, []);
 
@@ -2069,7 +2007,7 @@ export default function Settings() {
           : [...existing, newEntry];
 
         localStorage.setItem('whatsappTemplateIntegrations', JSON.stringify(updated));
-        
+
         integrationCredentials.id = connectionId;
         integrationCredentials.provider = "meta";
       } catch (e) {
@@ -2649,16 +2587,16 @@ export default function Settings() {
     processes: string[];
   }
   interface WhatsappTemplate {
-  id: string;
-  label: string;
-  identifier: string;
-  variables: Array<{ slot: string; mappedField: string }>;
-}
-const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsappTemplate[]>([]);
-const [whatsappTemplateValidationError, setWhatsappTemplateValidationError] = useState("");
-const [isAddingWaTemplate, setIsAddingWaTemplate] = useState(false);
-const [waTemplateForm, setWaTemplateForm] = useState({ label: "", identifier: "", varCount: "0" });
-const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, string>>({});
+    id: string;
+    label: string;
+    identifier: string;
+    variables: Array<{ slot: string; mappedField: string }>;
+  }
+  const [whatsappTemplates, setWhatsappTemplates] = useState<WhatsappTemplate[]>([]);
+  const [whatsappTemplateValidationError, setWhatsappTemplateValidationError] = useState("");
+  const [isAddingWaTemplate, setIsAddingWaTemplate] = useState(false);
+  const [waTemplateForm, setWaTemplateForm] = useState({ label: "", identifier: "", varCount: "0" });
+  const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, string>>({});
 
   const [categoryMappings, setCategoryMappings] = useState<CategoryMapping[]>([]);
   const [editingMapping, setEditingMapping] = useState<CategoryMapping | null>(null);
@@ -3097,44 +3035,13 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
     setNewDayOff("");
   };
 
-  // Helper to set all items in a section to a specific permission
-  const setSectionPermission = (section: "core" | "operations" | "system", permission: "view" | "write") => {
-    const newPermissions = { ...userFormData.permissions };
-
-    if (section === "core") {
-      newPermissions.dashboard = permission;
-      newPermissions.clients = permission;
-      newPermissions.calls = permission;
-    } else if (section === "operations") {
-      newPermissions.processes = permission;
-      newPermissions.numbers = permission;
-    } else if (section === "system") {
-      newPermissions.billing = permission;
-      newPermissions.webhooks = permission;
-      newPermissions.settings = permission;
-    }
-
-    setUserFormData({ ...userFormData, permissions: newPermissions });
+  // Helper to set read permission across all modules
+  const setSectionPermission = (section: "core" | "operations" | "system", scope: ActionScope) => {
+    // Legacy helper kept for compatibility
   };
 
-  // Helper to get current section permission (view/write/mixed)
-  const getCurrentSectionPermission = (section: "core" | "operations" | "system"): "view" | "write" | "mixed" => {
-    let items: (keyof ItemPermissions)[] = [];
-
-    if (section === "core") {
-      items = ["dashboard", "clients", "calls"];
-    } else if (section === "operations") {
-      items = ["processes", "numbers"];
-    } else if (section === "system") {
-      items = ["billing", "webhooks", "settings"];
-    }
-
-    const permissions = items.map((item) => userFormData.permissions[item]);
-    const allWrite = permissions.every((p) => p === "write");
-    const allView = permissions.every((p) => p === "view");
-
-    if (allWrite) return "write";
-    if (allView) return "view";
+  // Helper to get current section permission
+  const getCurrentSectionPermission = (section: "core" | "operations" | "system"): ActionScope | "mixed" => {
     return "mixed";
   };
 
@@ -7245,16 +7152,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
               name: "",
               email: "",
               role: "Agent",
-              permissions: {
-                dashboard: "view",
-                clients: "view",
-                calls: "view",
-                processes: "view",
-                numbers: "view",
-                billing: "view",
-                webhooks: "view",
-                settings: "view",
-              },
+              permissions: createDefaultPermissions(),
             });
             setCorePermission("");
             setOperationsPermission("");
@@ -7271,16 +7169,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     name: "",
                     email: "",
                     role: "Agent",
-                    permissions: {
-                      dashboard: "view",
-                      clients: "view",
-                      calls: "view",
-                      processes: "view",
-                      numbers: "view",
-                      billing: "view",
-                      webhooks: "view",
-                      settings: "view",
-                    },
+                    permissions: createDefaultPermissions(),
                   });
                   setCorePermission("");
                   setOperationsPermission("");
@@ -7363,16 +7252,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
               name: "",
               email: "",
               role: "Agent",
-              permissions: {
-                dashboard: "view",
-                clients: "view",
-                calls: "view",
-                processes: "view",
-                numbers: "view",
-                billing: "view",
-                webhooks: "view",
-                settings: "view",
-              },
+              permissions: createDefaultPermissions(),
             });
             setCalendarConnected(false);
             setConnectedCalendar(null);
@@ -7401,16 +7281,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     name: "",
                     email: "",
                     role: "Agent",
-                    permissions: {
-                      dashboard: "view",
-                      clients: "view",
-                      calls: "view",
-                      processes: "view",
-                      numbers: "view",
-                      billing: "view",
-                      webhooks: "view",
-                      settings: "view",
-                    },
+                    permissions: createDefaultPermissions(),
                   });
                   setCalendarConnected(false);
                   setConnectedCalendar(null);
@@ -7755,75 +7626,55 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
 
                 <div className="border border-border rounded-xl overflow-hidden bg-white divide-y divide-border">
                   {[
-                    { key: "dashboard", label: "Dashboard", desc: "Analytics and widgets" },
-                    { key: "clients", label: "Clients", desc: "Client directory and profiles" },
-                    { key: "calls", label: "Calls", desc: "Call logs, recordings and transcripts" },
-                    { key: "processes", label: "Processes", desc: "Workflows and stage pipelines" },
-                    { key: "numbers", label: "Numbers", desc: "Phone numbers and IVR rules" },
-                    { key: "billing", label: "Billing", desc: "Invoices and subscription" },
-                    { key: "webhooks", label: "Webhooks", desc: "API keys and integrations" },
-                    { key: "settings", label: "Settings", desc: "Organization and team settings" },
+                    { key: "clients", label: "Clients" },
+                    { key: "processes", label: "Processes" },
+                    { key: "calls", label: "Calls" },
+                    { key: "chats", label: "Chats" },
+                    { key: "knowledgeBase", label: "Knowledge Base" },
+                    { key: "settings", label: "Settings" },
+                    { key: "processSettings", label: "Process Settings" },
+                    { key: "webForms", label: "Web Forms" },
+                    { key: "appointments", label: "Appointments" },
+                    { key: "services", label: "Services" },
                   ].map((mod) => {
-                    const key = mod.key as keyof ItemPermissions;
-                    const val = userFormData.permissions[key] || "none";
+                    const key = mod.key as keyof Omit<ItemPermissions, "processInstances">;
+                    const readScope = userFormData.permissions[key]?.read ?? "deny";
 
                     return (
-                      <div key={mod.key} className="p-3.5 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
+                      <div key={mod.key} className="p-3 flex items-center justify-between gap-4 hover:bg-muted/30 transition-colors">
                         <div>
                           <h5 className="text-xs font-bold text-gray-900">{mod.label}</h5>
-                          <p className="text-[11px] text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                            {mod.desc}
-                          </p>
+                          <p className="text-[10px] text-gray-400">Read access level</p>
                         </div>
 
-                        <div className="flex items-center gap-4 flex-shrink-0">
-                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
-                            <input
-                              type="radio"
-                              name={`edit-user-perm-${mod.key}`}
-                              checked={val === "view"}
-                              onChange={() =>
-                                setUserFormData({
-                                  ...userFormData,
-                                  permissions: { ...userFormData.permissions, [key]: "view" },
-                                })
-                              }
-                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                            />
-                            <span className="font-medium">Read</span>
-                          </label>
-
-                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
-                            <input
-                              type="radio"
-                              name={`edit-user-perm-${mod.key}`}
-                              checked={val === "write"}
-                              onChange={() =>
-                                setUserFormData({
-                                  ...userFormData,
-                                  permissions: { ...userFormData.permissions, [key]: "write" },
-                                })
-                              }
-                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                            />
-                            <span className="font-medium">Write</span>
-                          </label>
-
-                          <label className="flex items-center gap-1.5 cursor-pointer text-xs text-gray-700 select-none">
-                            <input
-                              type="radio"
-                              name={`edit-user-perm-${mod.key}`}
-                              checked={val === "all"}
-                              onChange={() =>
-                                setUserFormData({
-                                  ...userFormData,
-                                  permissions: { ...userFormData.permissions, [key]: "all" },
-                                })
-                              }
-                              className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                            />
-                            <span className="font-medium">All</span>
-                          </label>
+                        <div className="inline-flex rounded-md border border-gray-200 overflow-hidden text-[10px] shadow-xs flex-shrink-0">
+                          {(["deny", "own", "all"] as ActionScope[]).map((opt) => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setUserFormData({
+                                ...userFormData,
+                                permissions: {
+                                  ...userFormData.permissions,
+                                  [key]: {
+                                    ...userFormData.permissions[key],
+                                    read: opt,
+                                  },
+                                },
+                              })}
+                              className={`px-2.5 py-1 font-semibold transition-colors capitalize ${
+                                readScope === opt
+                                  ? opt === "deny"
+                                    ? "bg-red-500 text-white"
+                                    : opt === "own"
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-blue-600 text-white"
+                                  : "bg-white text-gray-500 hover:bg-gray-50"
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
                         </div>
                       </div>
                     );
@@ -9659,7 +9510,7 @@ const [waTemplateFormErrors, setWaTemplateFormErrors] = useState<Record<string, 
                     </div>
                   )}
 
-                  
+
 
                   {/* Test Connection Status */}
                   {testConnectionStatus === "success" && (

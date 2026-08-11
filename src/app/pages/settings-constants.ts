@@ -19,30 +19,34 @@ export const createDefaultAvailability = (): WeeklyAvailability => ({
   sunday: { enabled: false, start: "09:00", end: "17:00" },
 });
 
-export type PermissionLevel = "none" | "view" | "write" | "all";
+import type { ActionScope, Action, ModulePermissions, ItemPermissions } from "../../types/permissions";
 
-export interface ItemPermissions {
-  dashboard: PermissionLevel;
-  clients: PermissionLevel;
-  calls: PermissionLevel;
-  processes: PermissionLevel;
-  numbers: PermissionLevel;
-  billing: PermissionLevel;
-  webhooks: PermissionLevel;
-  settings: PermissionLevel;
-}
+export type { ActionScope, Action, ModulePermissions, ItemPermissions };
+
+export const DEFAULT_MODULE_PERMISSIONS: ModulePermissions = {
+  read: "deny",
+  add: "deny",
+  edit: "deny",
+  delete: "deny",
+  export: "deny",
+  import: "deny",
+};
 
 // Default permissions helper
 export const createDefaultPermissions = (): ItemPermissions => ({
-  dashboard: "view",
-  clients: "view",
-  calls: "view",
-  processes: "view",
-  numbers: "view",
-  billing: "view",
-  webhooks: "view",
-  settings: "view",
+  clients: { ...DEFAULT_MODULE_PERMISSIONS },
+  processes: { ...DEFAULT_MODULE_PERMISSIONS },
+  calls: { ...DEFAULT_MODULE_PERMISSIONS },
+  chats: { ...DEFAULT_MODULE_PERMISSIONS },
+  knowledgeBase: { ...DEFAULT_MODULE_PERMISSIONS },
+  settings: { ...DEFAULT_MODULE_PERMISSIONS },
+  processSettings: { ...DEFAULT_MODULE_PERMISSIONS },
+  webForms: { ...DEFAULT_MODULE_PERMISSIONS },
+  appointments: { ...DEFAULT_MODULE_PERMISSIONS },
+  services: { ...DEFAULT_MODULE_PERMISSIONS },
+  processInstances: {},
 });
+
 
 // Static country pricing data
 export const COUNTRY_PRICING = [
