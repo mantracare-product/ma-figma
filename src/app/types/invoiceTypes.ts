@@ -55,6 +55,32 @@ export interface ReportDefinition {
   description?: string;
   templateKey?: string; // e.g. "call_performance", "appointments_bookings", "revenue_invoicing", "client_funnel", "team_performance", "messaging_chat"
   selectedFields?: string[];
+  fieldCalculations?: Record<string, "sum" | "avg" | "count" | "min" | "max">;
+  reportingPeriod?: {
+    type: "this_month" | "last_month" | "this_week" | "custom";
+    customDays?: number;
+  };
+  calculatedColumns?: Array<{
+    id: string;
+    field: string;
+    func: "sum" | "avg" | "count" | "min" | "max";
+    label?: string;
+  }>;
+  sortBy?: {
+    field: string;
+    direction: "asc" | "desc";
+  };
+  filterConditions?: {
+    matchType: "AND" | "OR";
+    conditions: Array<{
+      id: string;
+      field: string;
+      operator: "equals" | "contains" | "gt" | "lt";
+      value: string;
+    }>;
+  };
+  showChart?: boolean;
+  sharedWith?: string[];
   filters?: Record<string, any>;
   viewType?: "table" | "table_chart";
   chartType?: "bar" | "line" | "pie";

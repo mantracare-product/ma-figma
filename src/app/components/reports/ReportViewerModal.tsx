@@ -122,10 +122,20 @@ export default function ReportViewerModal({ isOpen, onClose, report }: ReportVie
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 uppercase font-mono">
                   {report.dataSource}
                 </span>
+                {report.sharedWith && report.sharedWith.length > 0 && (
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                    Shared with {report.sharedWith.length} member{report.sharedWith.length > 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
                 {report.description || `Live aggregation from ${report.dataSource.toUpperCase()} data source`}
               </p>
+              {report.sharedWith && report.sharedWith.length > 0 && (
+                <div className="flex items-center gap-1.5 mt-1 text-[11px] text-purple-700">
+                  <span className="font-semibold">Shared with:</span> {report.sharedWith.join(", ")}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -166,6 +176,33 @@ export default function ReportViewerModal({ isOpen, onClose, report }: ReportVie
       }
     >
       <div className="space-y-6 max-h-[78vh] overflow-y-auto pr-1">
+        {/* Stacked Calculated Columns Summary Panel */}
+        {report.calculatedColumns && report.calculatedColumns.length > 0 && (
+          <div className="p-4 bg-purple-50/60 border border-purple-200 rounded-2xl space-y-2">
+            <span className="text-xs font-bold text-purple-900 uppercase tracking-wider block">
+              Stacked Calculated Summary Rows
+            </span>
+            <div className="grid grid-cols-3 gap-3">
+              {report.calculatedColumns.map((calc) => (
+                <div key={calc.id} className="p-3 bg-white border border-purple-200 rounded-xl space-y-1">
+                  <span className="text-[11px] font-semibold text-slate-500 block">{calc.label}</span>
+                  <span className="text-lg font-bold text-purple-700">
+                    {calc.func === "sum"
+                      ? "$842.00"
+                      : calc.func === "avg"
+                      ? "$140.33"
+                      : calc.func === "min"
+                      ? "$81.00"
+                      : calc.func === "max"
+                      ? "$216.00"
+                      : "10 records"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* KPI Cards Grid */}
         {reportData.kpis && reportData.kpis.length > 0 && (
           <div className="grid grid-cols-4 gap-4">

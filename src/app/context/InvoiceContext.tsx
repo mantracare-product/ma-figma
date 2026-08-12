@@ -25,6 +25,8 @@ interface InvoiceContextType {
     lineItems: InvoiceLineItem[],
     options?: CreateInvoiceOptions
   ) => ClientInvoice;
+  updateInvoice: (invoiceId: string, patch: Partial<ClientInvoice>) => void;
+  deleteInvoice: (invoiceId: string) => void;
   updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus) => void;
   sendInvoice: (invoiceId: string, channel?: "whatsapp" | "sms" | "email") => void;
   simulatePayment: (invoiceId: string) => void;
@@ -428,6 +430,16 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return newInvoice;
   };
 
+  const updateInvoice = (invoiceId: string, patch: Partial<ClientInvoice>) => {
+    setInvoices((prev) =>
+      prev.map((inv) => (inv.id === invoiceId ? { ...inv, ...patch } : inv))
+    );
+  };
+
+  const deleteInvoice = (invoiceId: string) => {
+    setInvoices((prev) => prev.filter((inv) => inv.id !== invoiceId));
+  };
+
   const updateInvoiceStatus = (invoiceId: string, status: InvoiceStatus) => {
     setInvoices((prev) =>
       prev.map((inv) => (inv.id === invoiceId ? { ...inv, status } : inv))
@@ -699,6 +711,8 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         invoices,
         createInvoiceFromAppointment,
+        updateInvoice,
+        deleteInvoice,
         updateInvoiceStatus,
         sendInvoice,
         simulatePayment,

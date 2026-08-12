@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { useInvoices } from "../../context/InvoiceContext";
 import { getClientList, ClientItem } from "../../../lib/getClientList";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
-import { InvoiceLineItem } from "../../types/invoiceTypes";
+import { ClientInvoice, InvoiceLineItem } from "../../types/invoiceTypes";
 import { toast } from "sonner";
 import {
   FileText,
@@ -18,10 +18,15 @@ import {
 interface CreateInvoiceDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  editingInvoice?: ClientInvoice | null;
 }
 
-export default function CreateInvoiceDrawer({ isOpen, onClose }: CreateInvoiceDrawerProps) {
-  const { createInvoiceFromAppointment } = useInvoices();
+export default function CreateInvoiceDrawer({
+  isOpen,
+  onClose,
+  editingInvoice,
+}: CreateInvoiceDrawerProps) {
+  const { createInvoiceFromAppointment, updateInvoice } = useInvoices();
   const clientsList = getClientList();
 
   const [selectedClientId, setSelectedClientId] = useState<string>(clientsList[0]?.id || "c-1");
@@ -42,6 +47,31 @@ export default function CreateInvoiceDrawer({ isOpen, onClose }: CreateInvoiceDr
     },
   ]);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
+
+  useEffect(() => {
+    if (editingInvoice) {
+      setSelectedClientId(editingInvoice.clientId || clientsList[0]?.id || "c-1");
+      setDueDate(editingInvoice.dueDate || new Date().toISOString().split("T")[0]);
+      setLineItems(editingInvoice.lineItems || []);
+      setDiscountAmount(editingInvoice.discountAmount || 0);
+    } else {
+      setSelectedClientId(clientsList[0]?.id || "c-1");
+      const d = new Date();
+      d.setDate(d.getDate() + 14);
+      setDueDate(d.toISOString().split("T")[0]);
+      setLineItems([
+        {
+          id: "li-init-1",
+          source: "service",
+          serviceId: MOCK_SERVICES[0].id,
+          description: MOCK_SERVICES[0].name,
+          quantity: 1,
+          unitPrice: MOCK_SERVICES[0].price,
+        },
+      ]);
+      setDiscountAmount(0);
+    }
+  }, [editingInvoice, isOpen]);
 
   const selectedClient = clientsList.find((c) => c.id === selectedClientId) || clientsList[0];
 
@@ -100,22 +130,37 @@ export default function CreateInvoiceDrawer({ isOpen, onClose }: CreateInvoiceDr
       return;
     }
 
-    const created = createInvoiceFromAppointment(
-      {
+    if (editingInvoice) {
+      updateInvoice(editingInvoice.id, {
         clientId: selectedClient.id,
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phoneNumber,
-      },
-      lineItems,
-      {
-        createdBy: "Admin User",
+        lineItems,
+        subtotal,
         discountAmount,
+        taxAmount,
+        total: totalAmount,
         dueDate,
-      }
-    );
-
-    toast.success(`Standalone invoice ${created.id} generated!`);
+      });
+      toast.success(`Invoice ${editingInvoice.id} updated!`);
+    } else {
+      const created = createInvoiceFromAppointment(
+        {
+          clientId: selectedClient.id,
+          clientName: selectedClient.name,
+          clientEmail: selectedClient.email,
+          clientPhone: selectedClient.phoneNumber,
+        },
+        lineItems,
+        {
+          createdBy: "Admin User",
+          discountAmount,
+          dueDate,
+        }
+      );
+      toast.success(`Standalone invoice ${created.id} generated!`);
+    }
     onClose();
   };
 
@@ -131,9 +176,11 @@ export default function CreateInvoiceDrawer({ isOpen, onClose }: CreateInvoiceDr
           </div>
           <div>
             <h3 className="text-xl font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Create Standalone Invoice
+              {editingInvoice ? `Edit Invoice ${editingInvoice.id}` : "Create Standalone Invoice"}
             </h3>
-            <p className="text-xs text-slate-500">Generate a direct client invoice without an appointment link</p>
+            <p className="text-xs text-slate-500">
+              {editingInvoice ? "Modify line items, due date, and client details" : "Generate a direct client invoice without an appointment link"}
+            </p>
           </div>
         </div>
       }
@@ -150,7 +197,7 @@ export default function CreateInvoiceDrawer({ isOpen, onClose }: CreateInvoiceDr
             className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-all shadow-sm"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
-            Save & Generate Invoice
+            {editingInvoice ? "Update Invoice" : "Save & Generate Invoice"}
           </button>
         </div>
       }

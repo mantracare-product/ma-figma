@@ -29,34 +29,19 @@ interface InvoiceDetailDrawerProps {
   onOpenDocument?: (invoice: ClientInvoice) => void;
 }
 
+import InvoiceProgressBar from "./InvoiceProgressBar";
+
 export default function InvoiceDetailDrawer({
   isOpen,
   onClose,
   invoice,
   onOpenDocument,
 }: InvoiceDetailDrawerProps) {
-  const { sendInvoice, simulatePayment, voidInvoice } = useInvoices();
+  const { updateInvoiceStatus, sendInvoice, simulatePayment, voidInvoice } = useInvoices();
   const [copied, setCopied] = useState(false);
   const [showSendOptions, setShowSendOptions] = useState(false);
 
   if (!invoice) return null;
-
-  const getStatusBadge = (status: InvoiceStatus) => {
-    switch (status) {
-      case "paid":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">Paid</span>;
-      case "sent":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">Sent</span>;
-      case "viewed":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700 border border-purple-200">Viewed</span>;
-      case "overdue":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-100 text-rose-700 border border-rose-200">Overdue</span>;
-      case "void":
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-600 border border-gray-200">Void</span>;
-      default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">Draft</span>;
-    }
-  };
 
   const isAutomated = invoice.createdBy === "system";
 
@@ -101,7 +86,12 @@ export default function InvoiceDetailDrawer({
                 <span className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                   {invoice.id}
                 </span>
-                {getStatusBadge(invoice.status)}
+                <InvoiceProgressBar
+                  status={invoice.status}
+                  onStatusChange={(newSt) => updateInvoiceStatus(invoice.id, newSt)}
+                  interactive={true}
+                  size="sm"
+                />
               </div>
               <p className="text-xs text-slate-500 mt-0.5">Created on {invoice.createdAt.split("T")[0]}</p>
             </div>
