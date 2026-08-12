@@ -20,11 +20,40 @@ import {
   ArrowRightCircle,
   CheckCircle2,
   Globe,
+  FileText,
+  FileSpreadsheet,
+  FileImage,
+  File,
+  Download,
+  Eye,
+  Trash2,
+  UploadCloud,
+  Clock,
+  XCircle,
+  Check,
+  ExternalLink,
+  ShieldCheck,
+  FileCheck,
 } from "lucide-react";
+
+export interface ProcessDocument {
+  id: string;
+  name: string;
+  category: "Identification" | "Financial" | "Contract" | "Medical / Intake" | "General";
+  fileType: "pdf" | "image" | "doc" | "sheet";
+  fileSize: string;
+  uploadedDate: string;
+  uploadedBy: string;
+  status: "Verified" | "Pending Review" | "Rejected";
+  url?: string;
+  notes?: string;
+}
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
+import DocumentsTab from "../profile/DocumentsTab";
+import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 
 export const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
@@ -126,8 +155,8 @@ export interface ProcessDetailDrawerProps {
   log: CallLog | null;
   client: Client | undefined;        // mockClients[log.clientId], resolved by parent
 
-  activeTab: "general" | "activity" | "history";
-  onTabChange: (tab: "general" | "activity" | "history") => void;
+  activeTab: "general" | "activity" | "history" | "documents";
+  onTabChange: (tab: "general" | "activity" | "history" | "documents") => void;
 
   activity?: ActivityLogEntry[];
   onOpenActivity?: (entry: ActivityLogEntry) => void;
@@ -198,6 +227,7 @@ export default function ProcessDetailDrawer({
 }: ProcessDetailDrawerProps) {
   const navigate = useNavigate();
   const [draftText, setDraftText] = useState("");
+
 
   const mockHistory = [
     {
@@ -303,7 +333,7 @@ export default function ProcessDetailDrawer({
         <div
           className="flex flex-col bg-white"
           style={{
-            width: "600px",
+            width: "60vw",
             height: "100vh",
             borderRadius: "16px 0 0 16px",
             boxShadow: "-8px 0 40px rgba(0,0,0,0.18)",
@@ -393,22 +423,37 @@ export default function ProcessDetailDrawer({
 
           {/* Tabs */}
           <div className="flex-shrink-0 flex border-b border-gray-200 px-6">
-            {(["general", "activity", "history"] as const).map((tab) => (
+            {(["general", "activity", "history", "documents"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => onTabChange(tab)}
-                className="py-3 mr-6 text-sm font-medium transition-colors"
+                className="py-3 mr-6 text-sm font-medium transition-colors flex items-center gap-1.5"
                 style={{
                   color: activeTab === tab ? "#1F2937" : "#9E9E9E",
                   borderBottom: activeTab === tab ? "2px solid #1F2937" : "2px solid transparent",
                   fontFamily: "Outfit, sans-serif",
                 }}
               >
-                {tab === "general"
-                  ? "General Information"
-                  : tab === "activity"
-                    ? "Activity"
-                    : "History"}
+                <span>
+                  {tab === "general"
+                    ? "General Information"
+                    : tab === "activity"
+                      ? "Activity"
+                      : tab === "history"
+                        ? "History"
+                        : "Documents"}
+                </span>
+                {tab === "documents" && (
+                  <span
+                    className="px-2 py-0.5 text-xs font-semibold rounded-full"
+                    style={{
+                      backgroundColor: activeTab === "documents" ? "#EBF4FF" : "#F3F4F6",
+                      color: activeTab === "documents" ? "#1E88E5" : "#6B7280",
+                    }}
+                  >
+                    {getStoredClientDocuments(client?.id || log?.clientId).length}
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -1223,6 +1268,23 @@ export default function ProcessDetailDrawer({
                   </tbody>
                 </table>
               </div>
+            )}
+
+            {activeTab === "documents" && (
+              <DocumentsTab
+                client={{
+                  id: client?.id || log?.clientId || "CL-001",
+                  name: client?.name || log?.client || "Client Name",
+                  email: client?.email || "client@email.com",
+                  phone: client?.phone || "—",
+                  companyName: client?.companyName,
+                  jobPosition: client?.jobPosition,
+                  location: client?.location,
+                  responsible: client?.responsible || (log as any)?.responsible,
+                  status: client?.status || log?.status,
+                }}
+                processName={log?.process}
+              />
             )}
           </div>
         </div>

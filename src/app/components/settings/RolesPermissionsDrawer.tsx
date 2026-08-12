@@ -202,11 +202,10 @@ function ActionSegment({ value, onChange }: ActionSegmentProps) {
             key={opt}
             type="button"
             onClick={() => onChange(opt)}
-            className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-1 cursor-pointer select-none ${
-              isSelected
-                ? "bg-slate-900 text-white shadow-xs scale-[1.02] ring-1 ring-slate-900/20"
-                : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
-            }`}
+            className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all duration-150 flex items-center justify-center gap-1 cursor-pointer select-none ${isSelected
+              ? "bg-slate-900 text-white shadow-xs scale-[1.02] ring-1 ring-slate-900/20"
+              : "text-slate-500 hover:text-slate-900 hover:bg-white/60"
+              }`}
           >
             {SCOPE_LABELS[opt]}
           </button>
@@ -433,11 +432,11 @@ export function RolesPermissionsDrawer({
       updatedRoles = roles.map((r) =>
         r.id === editingRoleId
           ? {
-              ...r,
-              name: trimmedName,
-              description: roleFormData.description.trim(),
-              permissions: { ...roleFormData.permissions },
-            }
+            ...r,
+            name: trimmedName,
+            description: roleFormData.description.trim(),
+            permissions: { ...roleFormData.permissions },
+          }
           : r
       );
       toast.success(`Role "${trimmedName}" updated successfully.`);
@@ -618,11 +617,10 @@ export function RolesPermissionsDrawer({
                     key={mod.key}
                     type="button"
                     onClick={() => setSelectedModuleKey(mod.key)}
-                    className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-all flex items-center justify-between ${
-                      selectedModuleKey === mod.key
-                        ? "bg-indigo-50/80 text-indigo-900 font-bold border-l-4 border-l-indigo-600 shadow-2xs"
-                        : "text-slate-700 hover:bg-slate-50/80 hover:text-slate-900"
-                    }`}
+                    className={`w-full text-left px-4 py-3 border-b border-slate-100 last:border-0 transition-all flex items-center justify-between ${selectedModuleKey === mod.key
+                      ? "bg-indigo-50/80 text-indigo-900 font-bold border-l-4 border-l-indigo-600 shadow-2xs"
+                      : "text-slate-700 hover:bg-slate-50/80 hover:text-slate-900"
+                      }`}
                   >
                     <div>
                       <div className="text-xs font-semibold">{mod.label}</div>
@@ -658,19 +656,17 @@ export function RolesPermissionsDrawer({
                                 setSelectedSettingsPage(page.key);
                               }
                             }}
-                            className={`w-full text-left px-3.5 py-2.5 text-xs font-medium border-b border-slate-100 transition-colors flex items-center justify-between ${
-                              selectedSettingsPage === page.key ||
+                            className={`w-full text-left px-3.5 py-2.5 text-xs font-medium border-b border-slate-100 transition-colors flex items-center justify-between ${selectedSettingsPage === page.key ||
                               page.children?.some((c) => c.key === selectedSettingsPage)
-                                ? "bg-indigo-100/60 text-indigo-900 font-bold"
-                                : "text-slate-600 hover:bg-slate-100/60"
-                            }`}
+                              ? "bg-indigo-100/60 text-indigo-900 font-bold"
+                              : "text-slate-600 hover:bg-slate-100/60"
+                              }`}
                           >
                             <span>{page.label}</span>
                             {page.children && (
                               <ChevronDown
-                                className={`w-3.5 h-3.5 transition-transform ${
-                                  billingExpandedInDrawer ? "" : "-rotate-90"
-                                }`}
+                                className={`w-3.5 h-3.5 transition-transform ${billingExpandedInDrawer ? "" : "-rotate-90"
+                                  }`}
                               />
                             )}
                           </button>
@@ -681,11 +677,10 @@ export function RolesPermissionsDrawer({
                                   key={child.key}
                                   type="button"
                                   onClick={() => setSelectedSettingsPage(child.key)}
-                                  className={`w-full text-left pl-6 pr-3 py-2 text-[11px] border-b border-slate-100 transition-colors ${
-                                    selectedSettingsPage === child.key
-                                      ? "bg-indigo-200/60 text-indigo-900 font-bold"
-                                      : "text-slate-500 hover:bg-slate-100"
-                                  }`}
+                                  className={`w-full text-left pl-6 pr-3 py-2 text-[11px] border-b border-slate-100 transition-colors ${selectedSettingsPage === child.key
+                                    ? "bg-indigo-200/60 text-indigo-900 font-bold"
+                                    : "text-slate-500 hover:bg-slate-100"
+                                    }`}
                                 >
                                   {child.label}
                                 </button>
@@ -791,9 +786,8 @@ export function RolesPermissionsDrawer({
                         >
                           <div className="flex items-center gap-2">
                             <ChevronDown
-                              className={`w-4 h-4 text-indigo-700 transition-transform duration-200 ${
-                                isProcessOverridesExpanded ? "" : "-rotate-90"
-                              }`}
+                              className={`w-4 h-4 text-indigo-700 transition-transform duration-200 ${isProcessOverridesExpanded ? "" : "-rotate-90"
+                                }`}
                             />
                             <span>Specific Process Overrides</span>
                           </div>

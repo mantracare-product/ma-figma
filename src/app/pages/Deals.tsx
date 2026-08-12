@@ -478,7 +478,7 @@ export default function Deals() {
   const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
   const [showViewDrawer, setShowViewDrawer] = useState(false);
   const [selectedLogForView, setSelectedLogForView] = useState<CallLog | null>(null);
-  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "activity" | "history">("general");
+  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "activity" | "history" | "documents">("general");
   const [historyFilter, setHistoryFilter] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<{ [key: string]: string }>({});

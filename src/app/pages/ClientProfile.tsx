@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
-  Play, ChevronDown, Download, ArrowLeft, Check, Globe
+  Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -27,6 +27,7 @@ import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
+import DocumentsTab from "../components/profile/DocumentsTab";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -293,9 +294,6 @@ const getProcessFromDealStage = (stage: string): string => {
   return mainStage;
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-
 interface ClientProfileProps {
   clientIdProp?: string;
   onCloseOverride?: () => void;
@@ -388,7 +386,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   };
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "documents">("overview");
+  
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
   const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
@@ -449,6 +448,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setDynamicFieldValues(values);
     }
   }, [id, client]);
+
+  // Documents initialization & action handlers with clientDocumentsStore sync
+
 
   // appointments tab
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -535,7 +537,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const [showProcessDetailDrawer, setShowProcessDetailDrawer] = useState(false);
   const [selectedProcessLog, setSelectedProcessLog] = useState<CallLog | null>(null);
-  const [processDetailTab, setProcessDetailTab] = useState<"general" | "activity" | "history">("general");
+  const [processDetailTab, setProcessDetailTab] = useState<"general" | "activity" | "history" | "documents">("general");
   const [drawerVisibleFields, setDrawerVisibleFields] = useState<string[]>([
     "currentStage",
     "status",
@@ -1084,7 +1086,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       />
 
       {/* Drawer panel */}
-      <div className="fixed right-0 top-0 h-full w-[40%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-[60%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
 
         {/* Hero: client identity */}
         <div className="p-6 border-b border-border flex-shrink-0">
@@ -1134,6 +1136,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "forms" as const, label: "Forms" },
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
+                { id: "documents" as const, label: "Documents" },
               ] as const
             ).map((tab) => (
               <button
@@ -2079,6 +2082,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               </div>
             );
           })()}
+
+          {/* ── Documents Tab ── */}
+          {activeProfileTab === "documents" && (
+            <DocumentsTab client={client} />
+          )}
 
           {/* ── Select/Create Field Modals ── */}
           {fieldManagerOpen && fieldManagerMode === "select" && (
