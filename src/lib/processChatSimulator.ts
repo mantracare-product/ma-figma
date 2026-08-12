@@ -182,6 +182,66 @@ function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "web
       }
       return { text: emailText };
     }
+    case "scheduleappointment":
+    case "book-appointment": {
+      const serviceId = p.serviceToBillId || "srv-1";
+      const autoGen = p.autoGenerateInvoice ?? true;
+      const invId = `INV-CL-${Math.floor(1050 + Math.random() * 900)}`;
+
+      if (autoGen) {
+        try {
+          const raw = localStorage.getItem("mantra_invoices_v1");
+          const invoices = raw ? JSON.parse(raw) : [];
+          const newInv = {
+            id: invId,
+            clientId: "c-1",
+            clientName: "Sarah Jenkins",
+            clientEmail: "sarah.j@example.com",
+            clientPhone: "+1 (555) 234-5678",
+            appointmentId: `appt-sim-${Date.now()}`,
+            appointmentTitle: "AI Automated Consultation",
+            status: "draft",
+            currency: "$",
+            lineItems: [{ id: `li-${Date.now()}`, source: "service", serviceId, description: "Initial Consultation", quantity: 1, unitPrice: p.serviceFeeOverride || 150 }],
+            subtotal: p.serviceFeeOverride || 150,
+            discountAmount: 0,
+            taxAmount: 12,
+            total: (p.serviceFeeOverride || 150) + 12,
+            createdAt: new Date().toISOString(),
+            createdBy: "system",
+            dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+            paymentLinkUrl: `https://pay.mantraassist.mock/${invId.toLowerCase()}`,
+          };
+          invoices.unshift(newInv);
+          localStorage.setItem("mantra_invoices_v1", JSON.stringify(invoices));
+        } catch (e) {
+          console.error(e);
+        }
+        return { text: `✅ Appointment booked · ✅ Invoice ${invId} generated` };
+      }
+      return { text: "✅ Appointment booked successfully" };
+    }
+    case "send-invoice":
+    case "sendinvoice": {
+      const channel = p.invoiceChannel || "whatsapp";
+      let sentInvId = "INV-CL-1041";
+      try {
+        const raw = localStorage.getItem("mantra_invoices_v1");
+        if (raw) {
+          const invoices = JSON.parse(raw);
+          if (invoices.length > 0) {
+            invoices[0].status = "sent";
+            invoices[0].sentAt = new Date().toISOString();
+            invoices[0].sentVia = channel;
+            sentInvId = invoices[0].id;
+            localStorage.setItem("mantra_invoices_v1", JSON.stringify(invoices));
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      return { text: `✅ Invoice ${sentInvId} sent via ${channel.toUpperCase()}` };
+    }
     default:
       return { text: `Okay, I've noted that (${step.name}).` };
   }

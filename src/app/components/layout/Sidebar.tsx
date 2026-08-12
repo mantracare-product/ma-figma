@@ -24,6 +24,8 @@ import {
   MessageCircle,
   Database,
   Gift,
+  Receipt,
+  BarChart3,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -62,6 +64,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/deals", label: "Processes", icon: Workflow },
     { path: "/call-logs", label: "Calls", icon: Phone },
     { path: "/chats", label: "Chats", icon: MessageCircle },
+    { path: "/invoices", label: "Invoices", icon: Receipt },
+    { path: "/reports", label: "Reports", icon: BarChart3 },
     { path: "/knowledge-base", label: "Knowledge Base", icon: Database },
     { path: "/settings", label: "Settings", icon: Settings },
   ];

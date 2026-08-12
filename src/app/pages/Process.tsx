@@ -445,6 +445,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" 
   "whatsapp": ["stage", "incall", "inchat", "postcall"],
   "sms": ["stage", "incall", "inchat", "postcall"],
   "email": ["stage", "incall", "inchat", "postcall"],
+  "send-invoice": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
   "endworkflow": ["stage", "inchat", "postcall"],
   "fieldupdate": ["stage", "inchat", "postcall"],
@@ -5472,7 +5473,7 @@ export default function Process() {
                               </div>
 
                               {/* Right Steps List */}
-                              <div className="flex-1 overflow-y-auto">
+                                  <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
                                     { key: "processmovement", name: "Process/Stage Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
@@ -5483,6 +5484,7 @@ export default function Process() {
                                     { key: "whatsapp", name: "WhatsApp", desc: "Send WhatsApp messages to contacts using pre-configured templates.", iconKey: "messagecircle", cats: ["all", "communication"], popular: true },
                                     { key: "sms", name: "SMS", desc: "Send SMS text messages to contacts using pre-configured templates.", iconKey: "messagesquare", cats: ["all", "communication"], popular: false },
                                     { key: "email", name: "Email", desc: "Send email notifications to contacts using pre-configured templates.", iconKey: "mail", cats: ["all", "communication"], popular: false },
+                                    { key: "send-invoice", name: "Send Invoice", desc: "Send the generated invoice to the client via WhatsApp, SMS, or Email.", iconKey: "filetext", cats: ["all", "communication"], popular: false },
                                     { key: "fieldupdate", name: "Field Update", desc: "Update a specific field value for the contact or record.", iconKey: "edit", cats: ["all", "data"], popular: false },
                                     { key: "assignhuman", name: "Assign to a Human", desc: "Assign a human team member to review or handle this contact.", iconKey: "usercheck", cats: ["all", "data"], popular: false },
                                     { key: "wh_trigger", name: "API Automation", desc: "Trigger actions in external systems using your connected API integrations.", iconKey: "globe", cats: ["all", "webhook"], popular: false },

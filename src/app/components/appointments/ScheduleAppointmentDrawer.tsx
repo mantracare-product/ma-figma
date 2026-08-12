@@ -1,9 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
+import { MOCK_SERVICES } from "../../../lib/mockServicesData";
+import { InvoiceLineItem } from "../../types/invoiceTypes";
+import { ChevronDown, ChevronUp, Plus, Trash2, Receipt } from "lucide-react";
 
 export interface ClientOption {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
   phone: string;
@@ -16,7 +19,7 @@ export interface ClientOption {
 }
 
 export interface Employee {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
 }
@@ -34,6 +37,10 @@ export interface BookingFormValues {
   sessionType: "video" | "inPerson";
   client: ClientOption | null;
   provider: Employee | null;
+  serviceId?: string;
+  generateInvoice?: boolean;
+  lineItems?: InvoiceLineItem[];
+  discountAmount?: number;
 }
 
 export interface ScheduleAppointmentDrawerProps {
@@ -76,6 +83,8 @@ export default function ScheduleAppointmentDrawer({
   onOpenCreateField,
   isSaving = false,
 }: ScheduleAppointmentDrawerProps) {
+  const [invoiceSectionExpanded, setInvoiceSectionExpanded] = useState(true);
+
   const isValid = !!(values.title.trim() && values.provider && values.client && values.date);
   const endHour = (values.startHour + 1) % 24;
   const endMin = values.startMinute;
@@ -92,6 +101,63 @@ export default function ScheduleAppointmentDrawer({
     );
   };
 
+  const handleServiceSelect = (serviceId: string) => {
+    const srv = MOCK_SERVICES.find((s) => s.id === serviceId);
+    if (srv) {
+      const newLineItem: InvoiceLineItem = {
+        id: `li-${Date.now()}`,
+        source: "service",
+        serviceId: srv.id,
+        description: srv.name,
+        quantity: 1,
+        unitPrice: srv.price,
+      };
+
+      onChange({
+        serviceId: srv.id,
+        title: values.title.trim() ? values.title : `${srv.name} Appointment`,
+        generateInvoice: values.generateInvoice ?? true,
+        lineItems: [newLineItem],
+      });
+    } else {
+      onChange({ serviceId: "", lineItems: [] });
+    }
+  };
+
+  const handleAddManualLineItem = () => {
+    const newLineItem: InvoiceLineItem = {
+      id: `li-${Date.now()}`,
+      source: "manual",
+      description: "Additional Consultation / Service",
+      quantity: 1,
+      unitPrice: 50,
+    };
+    const current = values.lineItems || [];
+    onChange({ lineItems: [...current, newLineItem] });
+  };
+
+  const handleUpdateLineItem = (index: number, patch: Partial<InvoiceLineItem>) => {
+    const current = [...(values.lineItems || [])];
+    if (current[index]) {
+      current[index] = { ...current[index], ...patch };
+      onChange({ lineItems: current });
+    }
+  };
+
+  const handleRemoveLineItem = (index: number) => {
+    const current = [...(values.lineItems || [])];
+    current.splice(index, 1);
+    onChange({ lineItems: current });
+  };
+
+  // Computations for invoice summary
+  const currentLineItems = values.lineItems || [];
+  const subtotal = currentLineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const discount = values.discountAmount || 0;
+  const taxableSubtotal = Math.max(0, subtotal - discount);
+  const tax = Math.round(taxableSubtotal * 0.08 * 100) / 100;
+  const total = Math.round((taxableSubtotal + tax) * 100) / 100;
+
   const inputCls =
     "w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white";
   const labelCls = "block text-xs font-semibold text-slate-700 mb-1.5";
@@ -100,7 +166,7 @@ export default function ScheduleAppointmentDrawer({
     <CustomSideDrawer
       isOpen={isOpen}
       onClose={onClose}
-      maxWidth="sm:max-w-[480px]"
+      maxWidth="sm:max-w-[540px]"
       title={
         <div>
           <p className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -131,7 +197,27 @@ export default function ScheduleAppointmentDrawer({
       }
     >
       <div className="space-y-5">
-        {/* ① Title */}
+        {/* Service Selection */}
+        <div>
+          <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
+            Select Service
+          </label>
+          <select
+            value={values.serviceId || ""}
+            onChange={(e) => handleServiceSelect(e.target.value)}
+            className={inputCls}
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <option value="">Select a service (optional)</option>
+            {MOCK_SERVICES.map((srv) => (
+              <option key={srv.id} value={srv.id}>
+                {srv.name} (${srv.price} · {srv.duration} mins)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Title */}
         <div>
           <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
             Title <span className="text-red-500">*</span>
@@ -146,7 +232,7 @@ export default function ScheduleAppointmentDrawer({
           />
         </div>
 
-        {/* ② Description */}
+        {/* Description */}
         <div>
           <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
             Description
@@ -155,13 +241,13 @@ export default function ScheduleAppointmentDrawer({
             placeholder="Add appointment details..."
             value={values.description}
             onChange={(e) => onChange({ description: e.target.value })}
-            rows={3}
+            rows={2}
             className={inputCls + " resize-none"}
             style={{ fontFamily: "Outfit, sans-serif" }}
           />
         </div>
 
-        {/* ③ Schedule For / Schedule With */}
+        {/* Schedule For / Schedule With */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -170,7 +256,7 @@ export default function ScheduleAppointmentDrawer({
             <select
               value={values.provider?.id ?? ""}
               onChange={(e) => {
-                const emp = employees.find((x) => x.id === Number(e.target.value));
+                const emp = employees.find((x) => String(x.id) === String(e.target.value));
                 onChange({ provider: emp || null });
               }}
               className={inputCls}
@@ -191,7 +277,7 @@ export default function ScheduleAppointmentDrawer({
             <select
               value={values.client?.id ?? ""}
               onChange={(e) => {
-                const cl = clients.find((x) => x.id === Number(e.target.value));
+                const cl = clients.find((x) => String(x.id) === String(e.target.value));
                 onChange({ client: cl || null });
               }}
               className={inputCls}
@@ -207,7 +293,7 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </div>
 
-        {/* ④ Process / Stage */}
+        {/* Process / Stage */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -250,7 +336,7 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </div>
 
-        {/* ⑤ Date / Note */}
+        {/* Date / Note */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -279,7 +365,7 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </div>
 
-        {/* ⑥ Times in client timezone */}
+        {/* Times in client timezone */}
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
           <p
             className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-3"
@@ -296,7 +382,6 @@ export default function ScheduleAppointmentDrawer({
             </p>
           ) : (
             <div className="grid grid-cols-2 gap-4">
-              {/* Start */}
               <div>
                 <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
                   Start
@@ -332,7 +417,6 @@ export default function ScheduleAppointmentDrawer({
                   </p>
                 )}
               </div>
-              {/* End (auto = start + 60 min) */}
               <div>
                 <p className="text-xs font-semibold text-slate-600 mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>
                   End
@@ -362,7 +446,139 @@ export default function ScheduleAppointmentDrawer({
           )}
         </div>
 
-        {/* ⑦ Session Type */}
+        {/* Section: Invoice Generation (PRD 4.1) */}
+        {(values.serviceId || (currentLineItems && currentLineItems.length > 0)) && (
+          <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-4 h-4 text-blue-600" />
+                <span className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Invoice Details
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInvoiceSectionExpanded(!invoiceSectionExpanded)}
+                className="text-slate-500 hover:text-slate-700"
+              >
+                {invoiceSectionExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+
+            {invoiceSectionExpanded && (
+              <div className="space-y-4 pt-1">
+                {/* Toggle: Generate Invoice */}
+                <div className="flex items-center justify-between bg-white p-3 rounded-lg border border-slate-200">
+                  <div>
+                    <p className="text-xs font-semibold text-slate-800">Generate invoice for this appointment</p>
+                    <p className="text-[11px] text-slate-500">Automatically creates an invoice upon booking</p>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={values.generateInvoice ?? true}
+                    onChange={(e) => onChange({ generateInvoice: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                  />
+                </div>
+
+                {values.generateInvoice && (
+                  <>
+                    {/* Line Items Table */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
+                        <span>Line Items</span>
+                        <button
+                          type="button"
+                          onClick={handleAddManualLineItem}
+                          className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Add line item
+                        </button>
+                      </div>
+
+                      <div className="space-y-2">
+                        {currentLineItems.map((item, idx) => (
+                          <div key={item.id} className="flex items-center gap-2 bg-white p-2.5 rounded-lg border border-slate-200 text-xs">
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => handleUpdateLineItem(idx, { description: e.target.value })}
+                              placeholder="Description"
+                              className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                            <div className="w-16 flex items-center gap-1">
+                              <span className="text-slate-400">Qty:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.quantity}
+                                onChange={(e) => handleUpdateLineItem(idx, { quantity: Math.max(1, parseInt(e.target.value) || 1) })}
+                                className="w-full text-center py-1 border border-slate-200 rounded text-xs"
+                              />
+                            </div>
+                            <div className="w-20 flex items-center gap-1">
+                              <span className="text-slate-400">$</span>
+                              <input
+                                type="number"
+                                min={0}
+                                value={item.unitPrice}
+                                onChange={(e) => handleUpdateLineItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })}
+                                className="w-full text-right py-1 border border-slate-200 rounded text-xs"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveLineItem(idx)}
+                              className="text-slate-400 hover:text-red-500 p-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Discount Input */}
+                    <div className="flex items-center justify-between gap-4">
+                      <label className="text-xs font-semibold text-slate-700">Discount Amount ($)</label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={values.discountAmount || 0}
+                        onChange={(e) => onChange({ discountAmount: parseFloat(e.target.value) || 0 })}
+                        className="w-28 px-2 py-1 text-right border border-slate-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    {/* Computed Breakdown Card */}
+                    <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1.5 text-xs text-slate-600">
+                      <div className="flex justify-between">
+                        <span>Subtotal</span>
+                        <span className="font-semibold text-slate-800">${subtotal.toFixed(2)}</span>
+                      </div>
+                      {discount > 0 && (
+                        <div className="flex justify-between text-green-600">
+                          <span>Discount</span>
+                          <span>-${discount.toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>Tax (8% mock rate)</span>
+                        <span>${tax.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1.5 border-t border-slate-100 text-sm font-bold text-slate-900">
+                        <span>Total Invoice Amount</span>
+                        <span className="text-blue-600">${total.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Session Type */}
         <div>
           <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
             Session Type
@@ -395,7 +611,7 @@ export default function ScheduleAppointmentDrawer({
           </div>
         </div>
 
-        {/* ⑧ Tags */}
+        {/* Tags */}
         <div>
           <label className={labelCls} style={{ fontFamily: "Outfit, sans-serif" }}>
             Tags
@@ -410,7 +626,7 @@ export default function ScheduleAppointmentDrawer({
           />
         </div>
 
-        {/* ⑨ Custom Fields */}
+        {/* Custom Fields */}
         {(visibleCustomFieldKeys.length > 0 || customFields.length > 0) && (
           <div className="border-t border-slate-200 pt-4 space-y-3">
             <div className="flex items-center justify-between">

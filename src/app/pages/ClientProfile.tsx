@@ -27,6 +27,9 @@ import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
+import { useInvoices } from "../context/InvoiceContext";
+import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
+import { ClientInvoice } from "../types/invoiceTypes";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -387,8 +390,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     toast.success("Changes saved successfully");
   };
 
+  const { getInvoicesByClient, simulatePayment } = useInvoices();
+  const [selectedInvoiceForDrawer, setSelectedInvoiceForDrawer] = useState<ClientInvoice | null>(null);
+  const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
+
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices">("overview");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
   const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
@@ -1134,6 +1141,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "forms" as const, label: "Forms" },
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
+                { id: "invoices" as const, label: "Invoices" },
               ] as const
             ).map((tab) => (
               <button
@@ -2069,9 +2077,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                         <p className="text-xs mt-1" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
                           {[appt.date, appt.time].filter(Boolean).join(" · ")}
                         </p>
-                        {appt.notes && (
-                          <p className="text-xs mt-1 italic" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>{appt.notes}</p>
-                        )}
                       </div>
                     </div>
                   ))
@@ -2079,6 +2084,105 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               </div>
             );
           })()}
+
+          {/* ── Invoices Tab ── */}
+          {activeProfileTab === "invoices" && (() => {
+            const clientInvoices = getInvoicesByClient(client.id);
+            const totalInvoiced = clientInvoices.filter(i => i.status !== "void").reduce((sum, i) => sum + i.total, 0);
+            const totalPaid = clientInvoices.filter(i => i.status === "paid").reduce((sum, i) => sum + i.total, 0);
+            const totalOutstanding = clientInvoices.filter(i => i.status === "sent" || i.status === "viewed" || i.status === "overdue").reduce((sum, i) => sum + i.total, 0);
+
+            return (
+              <div className="space-y-4">
+                {/* Summary stat strip */}
+                <div className="grid grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+                  <div>
+                    <span className="text-slate-400 font-medium block">Total Invoiced</span>
+                    <span className="text-sm font-bold text-slate-900">${totalInvoiced.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Paid</span>
+                    <span className="text-sm font-bold text-emerald-600">${totalPaid.toFixed(2)}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium block">Outstanding</span>
+                    <span className="text-sm font-bold text-amber-600">${totalOutstanding.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* List of client invoices */}
+                <div className="space-y-2">
+                  {clientInvoices.length === 0 ? (
+                    <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-200 p-6">
+                      <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                      <p className="text-sm font-semibold text-slate-700">No invoices for this client</p>
+                      <p className="text-xs text-slate-400 mt-1">Book an appointment or generate an invoice to get started.</p>
+                    </div>
+                  ) : (
+                    clientInvoices.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="flex items-center justify-between p-3.5 bg-white border border-slate-200 rounded-xl hover:border-blue-300 transition-all text-xs"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-semibold">
+                            <FileText className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  setSelectedInvoiceForDrawer(inv);
+                                  setIsInvoiceDrawerOpen(true);
+                                }}
+                                className="font-bold text-blue-600 hover:underline"
+                              >
+                                {inv.id}
+                              </button>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                inv.status === "paid"
+                                  ? "bg-emerald-100 text-emerald-700"
+                                  : inv.status === "sent"
+                                  ? "bg-blue-100 text-blue-700"
+                                  : inv.status === "overdue"
+                                  ? "bg-rose-100 text-rose-700"
+                                  : "bg-amber-100 text-amber-700"
+                              }`}>
+                                {inv.status.toUpperCase()}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 mt-0.5">
+                              {inv.appointmentTitle || "Direct Invoice"} · Due {inv.dueDate}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-slate-900 text-sm">${inv.total.toFixed(2)}</span>
+                          <button
+                            onClick={() => {
+                              setSelectedInvoiceForDrawer(inv);
+                              setIsInvoiceDrawerOpen(true);
+                            }}
+                            className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
+                          >
+                            View
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Invoice Detail Drawer */}
+          <InvoiceDetailDrawer
+            isOpen={isInvoiceDrawerOpen}
+            onClose={() => setIsInvoiceDrawerOpen(false)}
+            invoice={selectedInvoiceForDrawer}
+          />
 
           {/* ── Select/Create Field Modals ── */}
           {fieldManagerOpen && fieldManagerMode === "select" && (

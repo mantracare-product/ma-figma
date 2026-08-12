@@ -9,6 +9,7 @@ import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButto
 import { InfoTooltip } from "../help/InfoTooltip";
 
 import { getStoredTemplates } from "../../../lib/useWhatsappTemplates";
+import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 
 const availableEmployees = [
   { id: "1", name: "Sarah Johnson" },
@@ -1774,15 +1775,91 @@ export default function StepParametersFields({
               <div className="space-y-4">
                 {renderField("Appointment Booking Method",
                   <select
-                    value={appointmentBookingMethod}
+                    value={params.appointmentBookingMethod || ""}
                     onChange={e => onChange({ appointmentBookingMethod: e.target.value })}
-                    className="w-full px-3 py-2.5 border rounded-md bg-white"
+                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
                   >
                     <option value="">Select a booking method...</option>
                     <option value="text-link">Text Booking Link</option>
                     <option value="collect-request">Collect Booking Request</option>
                     <option value="schedule-phone">Schedule Over Phone</option>
                   </select>
+                )}
+
+                {/* PRD 4.2: Auto-generate invoice on booking toggle */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">Auto-generate invoice on booking</p>
+                      <p className="text-[11px] text-slate-500">Automatically creates an invoice when the AI books this appointment</p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={params.autoGenerateInvoice ?? true}
+                      onChange={e => onChange({ autoGenerateInvoice: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+                    />
+                  </div>
+
+                  {(params.autoGenerateInvoice ?? true) && (
+                    <div className="space-y-3 pt-1 border-t border-slate-200">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Service to bill *</label>
+                        <select
+                          value={params.serviceToBillId || "srv-1"}
+                          onChange={e => onChange({ serviceToBillId: e.target.value })}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-md bg-white text-xs"
+                        >
+                          {MOCK_SERVICES.map(srv => (
+                            <option key={srv.id} value={srv.id}>
+                              {srv.name} (${srv.price})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">Flat Fee Override ($)</label>
+                        <input
+                          type="number"
+                          placeholder="Default service price"
+                          value={params.serviceFeeOverride || ""}
+                          onChange={e => onChange({ serviceFeeOverride: parseFloat(e.target.value) || 0 })}
+                          className="w-full px-3 py-1.5 border border-slate-200 rounded-md bg-white text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* PRD 4.3: Send Invoice Workflow Step */}
+            {(stepKey === "send-invoice" || stepKey === "sendinvoice") && (
+              <div className="space-y-4">
+                {renderField("Delivery Channel",
+                  <select
+                    value={params.invoiceChannel || "whatsapp"}
+                    onChange={e => onChange({ invoiceChannel: e.target.value })}
+                    className="w-full px-3 py-2.5 border rounded-md bg-white text-sm"
+                  >
+                    <option value="whatsapp">WhatsApp (Recommended)</option>
+                    <option value="sms">SMS Text</option>
+                    <option value="email">Email</option>
+                    <option value="auto">Auto (WhatsApp with SMS fallback)</option>
+                  </select>
+                )}
+
+                {renderField("Payment Link Template",
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1 text-xs">
+                    <div className="font-semibold text-slate-800">lib-tpl-invoice-payment</div>
+                    <div className="text-slate-600 italic">
+                      "Hi &#123;&#123;contact_name&#125;&#125;, your invoice &#123;&#123;invoice_number&#125;&#125; for &#123;&#123;invoice_amount&#125;&#125; is ready. Due &#123;&#123;due_date&#125;&#125;."
+                    </div>
+                    <div className="text-blue-600 font-medium text-[11px] pt-1">
+                      Button: [Pay Invoice Now] (URL: &#123;&#123;payment_link&#125;&#125;)
+                    </div>
+                  </div>
                 )}
               </div>
             )}
