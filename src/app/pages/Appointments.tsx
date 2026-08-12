@@ -33,6 +33,7 @@ import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryCon
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 import { useSearchParams } from "react-router";
+import { useInvoices } from "../context/InvoiceContext";
 
 interface Appointment {
   id: number;
