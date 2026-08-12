@@ -197,7 +197,11 @@ export default function InvoiceDetailDrawer({
         <div className="grid grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs">
           <div>
             <span className="text-slate-400 font-medium block mb-1">Client</span>
-            <Link to={`/clients/${invoice.clientId}`} className="font-semibold text-blue-600 hover:underline flex items-center gap-1">
+            <Link
+              to={`/clients/${invoice.clientId}`}
+              onClick={onClose}
+              className="font-semibold text-blue-600 hover:underline flex items-center gap-1"
+            >
               <User className="w-3.5 h-3.5" /> {invoice.clientName}
             </Link>
             {invoice.clientEmail && <p className="text-slate-500 mt-0.5">{invoice.clientEmail}</p>}
@@ -208,6 +212,7 @@ export default function InvoiceDetailDrawer({
             {invoice.appointmentId ? (
               <Link
                 to={`/appointments?id=${invoice.appointmentId}`}
+                onClick={onClose}
                 className="font-semibold text-blue-600 hover:underline flex items-center gap-1"
               >
                 <Calendar className="w-3.5 h-3.5 text-blue-500" /> {invoice.appointmentTitle || `Appointment #${invoice.appointmentId}`}

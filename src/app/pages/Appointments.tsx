@@ -215,10 +215,11 @@ export default function Appointments() {
       const matched = appointments.find((a) => String(a.id) === String(linkedApptId));
       if (matched) {
         setSearchQuery(matched.clientName);
-        toast.info(`Showing linked appointment for ${matched.clientName}`);
+      } else {
+        setSearchQuery(linkedApptId);
       }
     }
-  }, [linkedApptId, appointments]);
+  }, [linkedApptId]);
 
 
   // Booking workflow state (single-page form)
