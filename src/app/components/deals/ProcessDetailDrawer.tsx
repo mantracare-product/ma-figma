@@ -354,8 +354,13 @@ export default function ProcessDetailDrawer({
             <div className="flex items-center justify-between">
               <div>
                 <h2
-                  className="text-lg font-bold"
+                  onClick={() => {
+                    onClose();
+                    navigate(`/clients/${client?.id || log?.clientId || "CL-001"}`);
+                  }}
+                  className="text-lg font-bold cursor-pointer hover:text-blue-600 hover:underline transition-colors"
                   style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
+                  title="Click to view Client Profile"
                 >
                   {log.client}
                 </h2>
@@ -497,8 +502,13 @@ export default function ProcessDetailDrawer({
                         {/* Client Name */}
                         {f.key === "client_name" ? (
                           <span
-                            className="text-blue-600 text-left font-medium"
+                            onClick={() => {
+                              onClose();
+                              navigate(`/clients/${client?.id || log?.clientId || "CL-001"}`);
+                            }}
+                            className="text-blue-600 text-left font-medium cursor-pointer hover:underline"
                             style={{ fontFamily: "DM Sans, sans-serif" }}
+                            title="Click to view Client Profile"
                           >
                             {currentValue}
                           </span>

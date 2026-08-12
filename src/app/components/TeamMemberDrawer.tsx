@@ -359,6 +359,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
       <Drawer
         isOpen={isOpen}
         onClose={onClose}
+        maxWidth="max-w-[60vw]"
         title={
           <div className="w-full">
             <div className="flex items-center gap-4 mb-4">

@@ -113,7 +113,7 @@ export default function GenerateDocumentModal({
       id: `doc-${Date.now()}`,
       clientId: client.id,
       name: docName,
-      category: selectedTemplate.category,
+      category: selectedTemplate.category as StoredClientDocument["category"],
       fileType: "pdf",
       fileSize: `${(Math.random() * 1.5 + 0.8).toFixed(1)} MB`,
       uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),

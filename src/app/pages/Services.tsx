@@ -1,682 +1,321 @@
-import { useState } from "react";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Modal } from "../components/ui/Modal";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
-  Plus,
-  Edit,
-  Trash2,
-  Search,
-  Briefcase,
-  Clock,
-  DollarSign,
-  Users,
-  Package,
-  ChevronDown,
-  Check,
+  Plus, Edit2, Trash2, Search, Clock,
+  ChevronDown, Check, MoreVertical, ToggleLeft, ToggleRight, Briefcase,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
-import { InfoTooltip } from "../components/help/InfoTooltip";
+import DrawerShell from "../components/ui/DrawerShell";
+import {
+  Service, EMPLOYEES, CURRENCIES, INIT_FORM, getCurrencySymbol,
+  getStoredServices, addService, updateService, deleteService,
+  toggleServiceActive, onServicesChanged,
+} from "../../lib/servicesStore";
 
-interface Service {
-  id: number;
-  name: string;
-  description: string;
-  duration: number; // in minutes
-  price: number;
-  category: string;
-  isActive: boolean;
-  assignedEmployees?: number[]; // employee IDs
-}
+// Re-export for any other file that imports Service from here
+export type { Service };
 
 export default function Services() {
-  const [services, setServices] = useState<Service[]>([
-    {
-      id: 1,
-      name: "Initial Consultation",
-      description: "Comprehensive first-time patient consultation and assessment",
-      duration: 60,
-      price: 150,
-      category: "Consultation",
-      isActive: true,
-      assignedEmployees: [1, 2],
-    },
-    {
-      id: 2,
-      name: "Follow-up Visit",
-      description: "Regular follow-up appointment for existing patients",
-      duration: 30,
-      price: 75,
-      category: "Consultation",
-      isActive: true,
-      assignedEmployees: [1, 2, 4],
-    },
-    {
-      id: 3,
-      name: "Dental Cleaning",
-      description: "Professional teeth cleaning and oral hygiene maintenance",
-      duration: 45,
-      price: 120,
-      category: "Dental",
-      isActive: true,
-      assignedEmployees: [5, 6],
-    },
-    {
-      id: 4,
-      name: "X-Ray Imaging",
-      description: "Digital radiographic imaging for diagnostic purposes",
-      duration: 20,
-      price: 80,
-      category: "Diagnostic",
-      isActive: true,
-      assignedEmployees: [1],
-    },
-  ]);
+  const [services, setServices] = useState<Service[]>(getStoredServices);
+
+  // Keep in sync with changes made from other pages (e.g. ClientProfile)
+  useEffect(() => {
+    return onServicesChanged(() => setServices(getStoredServices()));
+  }, []);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [showHelp, setShowHelp] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedService, setSelectedService] = useState<Service | null>(null);
-  const [showEmployeeDropdown, setShowEmployeeDropdown] = useState(false);
-  const [employeeSearchQuery, setEmployeeSearchQuery] = useState("");
-  const [serviceFormData, setServiceFormData] = useState({
-    name: "",
-    description: "",
-    duration: 30,
-    price: 0,
-    category: "",
-    isActive: true,
-    selectedEmployee: null as { id: number; name: string; initials: string; color: string; role: string } | null,
-  });
+  const [showAddDrawer, setShowAddDrawer] = useState(false);
+  const [showEditDrawer, setShowEditDrawer] = useState(false);
+  const [editingService, setEditingService] = useState<Service | null>(null);
+  const [form, setForm] = useState({ ...INIT_FORM });
+  const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [empSearch, setEmpSearch] = useState("");
+  const [showEmpDrop, setShowEmpDrop] = useState(false);
 
-  const categories = ["Consultation", "Dental", "Diagnostic", "Treatment", "Therapy", "Other"];
-
-  const employees = [
-    { id: 1, name: "James Davis", initials: "JD", color: "#3B82F6", role: "Senior Agent" },
-    { id: 2, name: "Sarah Miller", initials: "SM", color: "#10B981", role: "Agent" },
-    { id: 3, name: "Rachel Park", initials: "RP", color: "#8B5CF6", role: "Manager" },
-    { id: 4, name: "Tom Kumar", initials: "TK", color: "#F97316", role: "Agent" },
-    { id: 5, name: "Amy Lee", initials: "AL", color: "#3B82F6", role: "Senior Agent" },
-    { id: 6, name: "David Chen", initials: "DC", color: "#EC4899", role: "Agent" },
-    { id: 7, name: "Emma Wilson", initials: "EW", color: "#14B8A6", role: "Senior Agent" },
-    { id: 8, name: "Michael Brown", initials: "MB", color: "#F59E0B", role: "Supervisor" },
-  ];
-
-  const filteredEmployees = employees.filter((emp) =>
-    emp.name.toLowerCase().includes(employeeSearchQuery.toLowerCase())
+  const filteredEmps = EMPLOYEES.filter((e) =>
+    e.name.toLowerCase().includes(empSearch.toLowerCase())
   );
-
   const filteredServices = services.filter(
-    (service) =>
-      service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      service.category.toLowerCase().includes(searchQuery.toLowerCase())
+    (s) =>
+      s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      s.description.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddService = () => {
-    if (!serviceFormData.name || !serviceFormData.selectedEmployee) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
+  const resetForm = () => {
+    setForm({ ...INIT_FORM });
+    setEmpSearch("");
+    setShowEmpDrop(false);
+    setEditingService(null);
+  };
 
-    const newService: Service = {
-      id: Math.max(...services.map((s) => s.id)) + 1,
-      ...serviceFormData,
-      assignedEmployees: [],
-    };
-
-    setServices([...services, newService]);
-    toast.success("Service added successfully");
-    setShowAddModal(false);
+  const handleAdd = () => {
+    if (!form.name.trim()) { toast.error("Service name is required"); return; }
+    if (!form.currency) { toast.error("Please select a currency"); return; }
+    const s = addService({
+      name: form.name.trim(),
+      description: form.description,
+      duration: form.duration,
+      price: form.price,
+      currency: form.currency,
+      isActive: form.isActive,
+      assignedEmployees: form.assignedEmployeeIds,
+    });
+    setServices(getStoredServices());
+    toast.success(`"${s.name}" added`);
+    setShowAddDrawer(false);
     resetForm();
   };
 
-  const handleEditService = () => {
-    if (!selectedService) return;
-
-    setServices(
-      services.map((s) =>
-        s.id === selectedService.id
-          ? {
-              ...s,
-              ...serviceFormData,
-            }
-          : s
-      )
-    );
-    toast.success("Service updated successfully");
-    setShowEditModal(false);
+  const handleEdit = () => {
+    if (!editingService || !form.name.trim()) { toast.error("Service name is required"); return; }
+    if (!form.currency) { toast.error("Please select a currency"); return; }
+    updateService(editingService.id, {
+      name: form.name.trim(),
+      description: form.description,
+      duration: form.duration,
+      price: form.price,
+      currency: form.currency,
+      isActive: form.isActive,
+      assignedEmployees: form.assignedEmployeeIds,
+    });
+    setServices(getStoredServices());
+    toast.success(`"${form.name}" updated`);
+    setShowEditDrawer(false);
     resetForm();
   };
 
-  const handleDeleteService = (serviceId: number) => {
-    setServices(services.filter((s) => s.id !== serviceId));
-    toast.success("Service deleted successfully");
-  };
-
-  const openEditModal = (service: Service) => {
-    setSelectedService(service);
-    setServiceFormData({
+  const openEdit = (service: Service) => {
+    setEditingService(service);
+    setForm({
       name: service.name,
       description: service.description,
       duration: service.duration,
       price: service.price,
-      category: service.category,
+      currency: service.currency || "USD",
       isActive: service.isActive,
-      selectedEmployee: null,
+      assignedEmployeeIds: service.assignedEmployees || [],
     });
-    setShowEditModal(true);
+    setShowEditDrawer(true);
+    setOpenMenuId(null);
   };
 
-  const resetForm = () => {
-    setServiceFormData({
-      name: "",
-      description: "",
-      duration: 30,
-      price: 0,
-      category: "",
-      isActive: true,
-      selectedEmployee: null,
-    });
-    setSelectedService(null);
-    setEmployeeSearchQuery("");
+  const handleDelete = (id: number, name: string) => {
+    deleteService(id);
+    setServices(getStoredServices());
+    toast.success(`"${name}" deleted`);
+    setOpenMenuId(null);
   };
 
-  const toggleServiceStatus = (serviceId: number) => {
-    setServices(
-      services.map((s) => (s.id === serviceId ? { ...s, isActive: !s.isActive } : s))
-    );
-    const service = services.find((s) => s.id === serviceId);
-    toast.success(`Service ${service?.isActive ? "deactivated" : "activated"} successfully`);
+  const handleToggleActive = (id: number) => {
+    const s = services.find((sv) => sv.id === id);
+    toggleServiceActive(id);
+    setServices(getStoredServices());
+    toast.success(`"${s?.name}" ${s?.isActive ? "deactivated" : "activated"}`);
+    setOpenMenuId(null);
   };
+
+  const toggleEmp = (id: number) =>
+    setForm((f) => ({
+      ...f,
+      assignedEmployeeIds: f.assignedEmployeeIds.includes(id)
+        ? f.assignedEmployeeIds.filter((e) => e !== id)
+        : [...f.assignedEmployeeIds, id],
+    }));
+
+  const ServiceForm = () => (
+    <div className="space-y-5">
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Service Name *</label>
+        <input type="text" placeholder="e.g. Initial Consultation" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Description</label>
+        <textarea rows={3} placeholder="Brief description..." value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none" style={{ fontFamily: "DM Sans, sans-serif" }} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Duration (min) *</label>
+          <div className="relative"><Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" /><input type="number" min={5} value={form.duration} onChange={(e) => setForm({ ...form, duration: parseInt(e.target.value) || 0 })} className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} /></div>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Pricing & Currency *</label>
+          <div className="flex gap-2">
+            <select value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} className="w-28 px-2.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 bg-gray-50 focus:outline-none focus:border-blue-500 transition-all cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}>
+              <option value="">Currency</option>
+              {CURRENCIES.map((c) => (<option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>))}
+            </select>
+            <div className="relative flex-1">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500">{form.currency ? getCurrencySymbol(form.currency) : "#"}</span>
+              <input type="number" min={0} placeholder="0" value={form.price} onChange={(e) => setForm({ ...form, price: parseFloat(e.target.value) || 0 })} className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
+            </div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Assigned Employees</label>
+        {form.assignedEmployeeIds.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {form.assignedEmployeeIds.map((eid) => { const emp = EMPLOYEES.find((e) => e.id === eid); if (!emp) return null; return (
+              <span key={eid} onClick={() => toggleEmp(eid)} title="Click to remove" className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{emp.initials} <span className="opacity-70">x</span></span>
+            ); })}
+          </div>
+        )}
+        <div className="relative">
+          <button type="button" onClick={() => setShowEmpDrop(!showEmpDrop)} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm flex items-center justify-between focus:outline-none focus:border-blue-500 transition-all bg-white cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
+            <span className="text-gray-400">{form.assignedEmployeeIds.length === 0 ? "Select employees..." : `${form.assignedEmployeeIds.length} selected`}</span>
+            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEmpDrop ? "rotate-180" : ""}`} />
+          </button>
+          {showEmpDrop && (<>
+            <div className="fixed inset-0 z-[5]" onClick={() => { setShowEmpDrop(false); setEmpSearch(""); }} />
+            <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="border-b border-gray-100 bg-gray-50"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" /><input type="text" placeholder="Search..." value={empSearch} onChange={(e) => setEmpSearch(e.target.value)} onClick={(e) => e.stopPropagation()} className="w-full h-9 pl-9 pr-3 bg-transparent text-xs placeholder:text-gray-400 focus:outline-none" /></div></div>
+              <div className="max-h-48 overflow-y-auto">
+                {filteredEmps.map((emp) => (
+                  <button key={emp.id} type="button" onClick={(e) => { e.stopPropagation(); toggleEmp(emp.id); }} className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors cursor-pointer ${form.assignedEmployeeIds.includes(emp.id) ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: "#1F2937" }}>{emp.initials}</div>
+                    <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{emp.name}</p><p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{emp.role}</p></div>
+                    {form.assignedEmployeeIds.includes(emp.id) && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                  </button>
+                ))}
+                {filteredEmps.length === 0 && <p className="text-center text-xs text-gray-400 py-5">No employees found</p>}
+              </div>
+            </div>
+          </>)}
+        </div>
+      </div>
+      <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
+        <div><p className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>Active Service</p><p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Available for scheduling and booking</p></div>
+        <button type="button" onClick={() => setForm({ ...form, isActive: !form.isActive })} className="cursor-pointer hover:opacity-80 transition-opacity">{form.isActive ? <ToggleRight className="w-9 h-9 text-blue-600" /> : <ToggleLeft className="w-9 h-9 text-gray-400" />}</button>
+      </div>
+    </div>
+  );
+
+  const FooterBtns = ({ onSave, label, icon }: { onSave: () => void; label: string; icon: React.ReactNode }) => (
+    <div className="flex items-center gap-2 w-full justify-end">
+      <button onClick={() => { setShowAddDrawer(false); setShowEditDrawer(false); resetForm(); }} className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}>Cancel</button>
+      <button onClick={onSave} className="flex items-center gap-1.5 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer shadow-xs" style={{ fontFamily: "Outfit, sans-serif" }}>{icon}{label}</button>
+    </div>
+  );
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Services" subtitle="Define what you offer, how long it takes, and who's qualified to deliver it">
-          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Services Works" />
+      <div className="py-6 px-[150px] space-y-7">
+        <PageHeader title="Products & Services" subtitle="Define what you offer, how long it takes, and who is qualified to deliver it">
+          <HowItWorksButton onClick={() => setShowHelp(true)} label="How Products & Services Works" />
         </PageHeader>
 
-        {/* Stats Capsules */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <Package className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{services.length}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Total Services</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              borderColor: 'rgba(16, 185, 129, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <Check className="w-4 h-4" style={{ color: '#10B981' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{services.filter((s) => s.isActive).length}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Active Services</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <DollarSign className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>${services.reduce((acc, s) => acc + s.price, 0)}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Revenue Potential</span>
-            <InfoTooltip text="Sum of all active service prices — a rough estimate, not actual revenue." />
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(139, 92, 246, 0.1)',
-              borderColor: 'rgba(139, 92, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <Users className="w-4 h-4" style={{ color: '#8B5CF6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{new Set(services.flatMap((s) => s.assignedEmployees || [])).size}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Assigned Employees</span>
-            <InfoTooltip text="Number of team members who can be booked for this service." />
-          </div>
-        </div>
-
-        {/* Search and Add */}
+        {/* Toolbar */}
         <div className="flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search services..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
+          <div className="relative max-w-sm w-full">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input type="text" placeholder="Search services..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all shadow-xs" style={{ fontFamily: "DM Sans, sans-serif" }} />
           </div>
-          <Button
-            variant="primary"
-            onClick={() => {
-              resetForm();
-              setShowAddModal(true);
-            }}
-          >
-            <Plus className="w-4 h-4" />
-            Add Service
-          </Button>
+          <button onClick={() => { resetForm(); setShowAddDrawer(true); }} className="flex items-center gap-2 px-4 py-2.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors shadow-xs cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <Plus className="w-4 h-4" /> Add Service
+          </button>
         </div>
 
-        {/* Services Grid */}
-        <div className="grid grid-cols-2 gap-6">
-          {filteredServices.map((service) => (
-            <div
-              key={service.id}
-              className="bg-white rounded-2xl border border-border shadow-sm p-6 hover:shadow-lg transition-all"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {service.name}
-                    </h3>
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
-                        service.isActive
-                          ? "bg-green-100 text-green-700"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
-                    >
-                      {service.isActive ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">{service.description}</p>
-                  <div className="inline-block px-3 py-1 bg-primary/10 text-primary rounded-lg text-xs font-medium">
-                    {service.category}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-6 mb-4 pt-4 border-t border-border">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium" style={{ color: "#020817" }}>
-                    {service.duration} min
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <DollarSign className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium" style={{ color: "#020817" }}>
-                    ${service.price}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm font-medium" style={{ color: "#020817" }}>
-                    {service.assignedEmployees?.length || 0} assigned
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleServiceStatus(service.id)}
-                  className="flex-1"
-                >
-                  {service.isActive ? "Deactivate" : "Activate"}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => openEditModal(service)}>
-                  <Edit className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDeleteService(service.id)}
-                  className="hover:bg-red-50 hover:border-red-300 hover:text-red-600"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
+        {/* Table View */}
+        {filteredServices.length > 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead style={{ backgroundColor: "#1F2937" }}>
+                  <tr className="border-b border-gray-700">
+                    <th className="py-3.5 px-5 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Service</th>
+                    <th className="py-3.5 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Duration</th>
+                    <th className="py-3.5 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Price</th>
+                    <th className="py-3.5 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Assigned Staff</th>
+                    <th className="py-3.5 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                    <th className="py-3.5 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredServices.map((service) => {
+                    const assignedEmps = EMPLOYEES.filter((e) => service.assignedEmployees?.includes(e.id));
+                    return (
+                      <tr key={service.id} className="hover:bg-gray-50/80 transition-colors group">
+                        <td className="py-4 px-5 min-w-[240px]">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600"><Briefcase className="w-4 h-4" /></div>
+                            <div className="min-w-0">
+                              <h4 className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{service.name}</h4>
+                              <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{service.description || "No description provided"}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                            <Clock className="w-3.5 h-3.5 text-gray-400" />
+                            <span className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>{service.duration} min</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                            <span className="text-xs font-bold text-gray-600">{getCurrencySymbol(service.currency)}</span>
+                            <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{service.price}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          {assignedEmps.length > 0 ? (
+                            <div className="flex -space-x-1.5 items-center">
+                              {assignedEmps.slice(0, 4).map((emp) => (
+                                <div key={emp.id} title={emp.name} className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white text-[10px] font-bold shadow-xs cursor-pointer hover:scale-105 transition-transform" style={{ backgroundColor: "#1F2937" }}>{emp.initials}</div>
+                              ))}
+                              {assignedEmps.length > 4 && <div className="w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-gray-600 text-[10px] font-bold shadow-xs">+{assignedEmps.length - 4}</div>}
+                            </div>
+                          ) : <span className="text-xs text-gray-400 italic" style={{ fontFamily: "Outfit, sans-serif" }}>Unassigned</span>}
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${service.isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-600 border border-gray-200"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${service.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
+                            {service.isActive ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="py-4 px-4 whitespace-nowrap text-right">
+                          <div className="relative inline-block text-left">
+                            <button onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === service.id ? null : service.id); }} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 hover:text-gray-900 transition-colors cursor-pointer">
+                              <MoreVertical className="w-4 h-4" />
+                            </button>
+                            {openMenuId === service.id && (<>
+                              <div className="fixed inset-0 z-[5]" onClick={() => setOpenMenuId(null)} />
+                              <div className="absolute right-0 top-9 z-10 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[160px] text-left" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                <button onClick={() => openEdit(service)} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"><Edit2 className="w-3.5 h-3.5 text-gray-400" /> Edit Service</button>
+                                <button onClick={() => handleToggleActive(service.id)} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer">{service.isActive ? <><ToggleLeft className="w-3.5 h-3.5 text-gray-400" /> Deactivate</> : <><ToggleRight className="w-3.5 h-3.5 text-blue-500" /> Activate</>}</button>
+                                <div className="border-t border-gray-100 my-1" />
+                                <button onClick={() => handleDelete(service.id, service.name)} className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
+                              </div>
+                            </>)}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
-
-        {filteredServices.length === 0 && (
-          <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-border">
-            <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Package className="w-10 h-10 text-muted-foreground" />
-            </div>
-            <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-              No services found
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {searchQuery ? "Try adjusting your search" : "Get started by adding your first service"}
-            </p>
-            {!searchQuery && (
-              <Button
-                variant="primary"
-                onClick={() => {
-                  resetForm();
-                  setShowAddModal(true);
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Add Service
-              </Button>
-            )}
+          </div>
+        ) : (
+          <div className="text-center py-20 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4"><Briefcase className="w-8 h-8 text-gray-400" /></div>
+            <h3 className="text-base font-bold text-gray-800 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>{searchQuery ? "No services match your search" : "No services yet"}</h3>
+            <p className="text-sm text-gray-500 mb-5" style={{ fontFamily: "Outfit, sans-serif" }}>{searchQuery ? "Try a different keyword" : "Add your first service to get started"}</p>
+            {!searchQuery && <button onClick={() => { resetForm(); setShowAddDrawer(true); }} className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}><Plus className="w-4 h-4" /> Add Service</button>}
           </div>
         )}
       </div>
 
-      {/* Add Service Modal */}
-      <Modal
-        isOpen={showAddModal}
-        onClose={() => {
-          setShowAddModal(false);
-          setShowEmployeeDropdown(false);
-          resetForm();
-        }}
-        title="Add New Service"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowAddModal(false);
-                setShowEmployeeDropdown(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleAddService}>
-              <Plus className="w-4 h-4" />
-              Add Service
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Service Name *</label>
-            <Input
-              type="text"
-              placeholder="e.g., Initial Consultation"
-              value={serviceFormData.name}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })}
-            />
-          </div>
+      <DrawerShell isOpen={showAddDrawer} onClose={() => { setShowAddDrawer(false); resetForm(); }} title="Add New Service" subtitle="Define a service offering for your team" icon={<Plus className="w-4 h-4 text-blue-600" />} width="max-w-lg" zIndex={600} footer={<FooterBtns onSave={handleAdd} label="Add Service" icon={<Plus className="w-4 h-4" />} />}>
+        <ServiceForm />
+      </DrawerShell>
 
-          <div>
-            <label className="block text-sm font-medium mb-2">Description</label>
-            <textarea
-              placeholder="Brief description of the service"
-              value={serviceFormData.description}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              rows={3}
-            />
-          </div>
+      <DrawerShell isOpen={showEditDrawer} onClose={() => { setShowEditDrawer(false); resetForm(); }} title="Edit Service" subtitle={editingService?.name} icon={<Edit2 className="w-4 h-4 text-blue-600" />} width="max-w-lg" zIndex={600} footer={<FooterBtns onSave={handleEdit} label="Save Changes" icon={<Check className="w-4 h-4" />} />}>
+        <ServiceForm />
+      </DrawerShell>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Duration (minutes) *</label>
-              <Input
-                type="number"
-                placeholder="30"
-                value={serviceFormData.duration}
-                onChange={(e) => setServiceFormData({ ...serviceFormData, duration: parseInt(e.target.value) || 0 })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Price ($) *</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={serviceFormData.price}
-                onChange={(e) => setServiceFormData({ ...serviceFormData, price: parseFloat(e.target.value) || 0 })}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Employee *</label>
-            <button
-              type="button"
-              onClick={() => setShowEmployeeDropdown(!showEmployeeDropdown)}
-              className="w-full h-10 px-3 border border-[#D1D5DB] rounded-lg bg-white flex items-center justify-between text-sm focus:outline-none focus:ring-[3px] focus:ring-[rgba(37,99,235,0.1)] focus:border-[1.5px] focus:border-[#2563EB] transition-all"
-            >
-              {serviceFormData.selectedEmployee ? (
-                <span className="text-[#111827]">{serviceFormData.selectedEmployee.name}</span>
-              ) : (
-                <span className="text-[#9CA3AF]">Select employee</span>
-              )}
-              <ChevronDown className={`w-4 h-4 text-[#6B7280] transition-transform ${showEmployeeDropdown ? "rotate-180" : ""}`} />
-            </button>
-
-            {/* Employee Dropdown - Normal Flow Inside Modal */}
-            {showEmployeeDropdown && (
-              <>
-                {/* Invisible backdrop for outside clicks */}
-                <div
-                  className="fixed inset-0 z-[5]"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowEmployeeDropdown(false);
-                    setEmployeeSearchQuery("");
-                  }}
-                />
-                <div className="relative z-10 w-full mt-1 bg-white border border-[#E5E7EB] rounded-lg shadow-[0px_4px_16px_rgba(0,0,0,0.12)] max-h-[220px] overflow-hidden flex flex-col">
-                  {/* Search Input - Sticky */}
-                  <div className="flex-shrink-0 bg-[#FAFAFA] border-b border-[#F3F4F6]">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[#9CA3AF]" />
-                      <input
-                        type="text"
-                        placeholder="Search employee..."
-                        value={employeeSearchQuery}
-                        onChange={(e) => setEmployeeSearchQuery(e.target.value)}
-                        className="w-full h-9 pl-9 pr-3 bg-transparent text-[13px] placeholder:text-[#9CA3AF] focus:outline-none"
-                        onClick={(e) => e.stopPropagation()}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Employee List - Scrollable */}
-                  <div className="overflow-y-auto flex-1">
-                    {filteredEmployees.map((employee) => (
-                      <button
-                        key={employee.id}
-                        type="button"
-                        onClick={() => {
-                          setServiceFormData({ ...serviceFormData, selectedEmployee: employee });
-                          setShowEmployeeDropdown(false);
-                          setEmployeeSearchQuery("");
-                        }}
-                        className={`w-full h-[42px] px-3.5 flex items-center gap-2.5 text-left transition-colors ${
-                          serviceFormData.selectedEmployee?.id === employee.id
-                            ? "bg-[#EFF6FF]"
-                            : "hover:bg-[#F9FAFB]"
-                        }`}
-                      >
-                        <div className="flex-1">
-                          <span
-                            className={`text-[13px] font-medium ${
-                              serviceFormData.selectedEmployee?.id === employee.id
-                                ? "text-[#2563EB]"
-                                : "text-[#111827]"
-                            }`}
-                          >
-                            {employee.name}
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-[#6B7280]">{employee.role}</span>
-                        {serviceFormData.selectedEmployee?.id === employee.id && (
-                          <Check className="w-4 h-4 text-[#2563EB]" />
-                        )}
-                      </button>
-                    ))}
-
-                    {filteredEmployees.length === 0 && (
-                      <div className="px-3.5 py-6 text-center text-sm text-[#9CA3AF]">
-                        No employees found
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <input
-              type="checkbox"
-              id="isActive"
-              checked={serviceFormData.isActive}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, isActive: e.target.checked })}
-              className="w-4 h-4 text-primary rounded"
-            />
-            <label htmlFor="isActive" className="text-sm font-medium cursor-pointer">
-              Service is active and available for booking
-            </label>
-          </div>
-        </div>
-      </Modal>
-
-      {/* Edit Service Modal */}
-      <Modal
-        isOpen={showEditModal}
-        onClose={() => {
-          setShowEditModal(false);
-          resetForm();
-        }}
-        title="Edit Service"
-        footer={
-          <>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setShowEditModal(false);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleEditService}>
-              <Edit className="w-4 h-4" />
-              Save Changes
-            </Button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-2">Service Name *</label>
-            <Input
-              type="text"
-              placeholder="e.g., Initial Consultation"
-              value={serviceFormData.name}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, name: e.target.value })}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Description</label>
-            <textarea
-              placeholder="Brief description of the service"
-              value={serviceFormData.description}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, description: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-              rows={3}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Duration (minutes) *</label>
-              <Input
-                type="number"
-                placeholder="30"
-                value={serviceFormData.duration}
-                onChange={(e) => setServiceFormData({ ...serviceFormData, duration: parseInt(e.target.value) || 0 })}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">Price ($) *</label>
-              <Input
-                type="number"
-                placeholder="0"
-                value={serviceFormData.price}
-                onChange={(e) => setServiceFormData({ ...serviceFormData, price: parseFloat(e.target.value) || 0 })}
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-2">Category *</label>
-            <select
-              value={serviceFormData.category}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, category: e.target.value })}
-              className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-            >
-              <option value="">Select a category</option>
-              {categories.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <input
-              type="checkbox"
-              id="isActiveEdit"
-              checked={serviceFormData.isActive}
-              onChange={(e) => setServiceFormData({ ...serviceFormData, isActive: e.target.checked })}
-              className="w-4 h-4 text-primary rounded"
-            />
-            <label htmlFor="isActiveEdit" className="text-sm font-medium cursor-pointer">
-              Service is active and available for booking
-            </label>
-          </div>
-        </div>
-      </Modal>
-
-      <HowItWorksModal
-        isOpen={showHelp}
-        onClose={() => setShowHelp(false)}
-        title="How Services Works"
-        summary="Services are the offerings your team delivers. Define each service's name, duration, price, and category, then assign the staff members who provide it."
-        bullets={[
-          "Create and categorise services (e.g. Consultation, Dental, Therapy)",
-          "Set duration and price for each service",
-          "Assign one or more team members per service",
-          "Toggle services active/inactive without deleting them",
-        ]}
-        guideUrl="/guide/services"
-      />
+      <HowItWorksModal isOpen={showHelp} onClose={() => setShowHelp(false)} title="How Products & Services Works" summary="Products & Services are the offerings your team delivers. Define each offering's name, duration, price, and currency, then assign the staff members who provide it." bullets={["Create and manage products & services", "Set duration, price, and currency for each offering", "Assign one or more team members per item", "Toggle items active/inactive without deleting them"]} guideUrl="/guide/services" />
     </div>
   );
 }
