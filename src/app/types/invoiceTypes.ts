@@ -1,4 +1,4 @@
-export type InvoiceStatus = "draft" | "sent" | "viewed" | "paid" | "overdue" | "void";
+export type InvoiceStatus = "draft" | "sent" | "viewed" | "partial" | "paid" | "overdue" | "void";
 
 export interface InvoiceLineItem {
   id: string;
@@ -22,9 +22,13 @@ export interface ClientInvoice {
   currency: string;           // default "$"
   lineItems: InvoiceLineItem[];
   subtotal: number;
+  discountType?: "amount" | "percent";
+  discountValue?: number;
   discountAmount: number;
   taxAmount: number;
   total: number;
+  amountPaid: number;         // sum of all Payment records against this invoice
+  paymentType?: "self_pay" | "insurance" | "write_off";
   createdAt: string;
   createdBy: "system" | string;   // "system" = call-flow/automated, else a user id/name
   dueDate: string;
@@ -32,7 +36,55 @@ export interface ClientInvoice {
   sentVia?: "whatsapp" | "sms" | "email";
   paidAt?: string;
   paymentLinkUrl?: string;    // e.g. "https://pay.mantraassist.mock/inv-1042"
+  paymentMode?: string;       // e.g. "Bank Transfer", "Cash", "Card", "Insurance-EMI"
 }
+
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  clientId: string;
+  amount: number;
+  method: "card_on_file" | "cash" | "check" | "external_terminal" | "payment_link";
+  paymentType: "self_pay" | "insurance" | "write_off";
+  paymentDate: string;   // ISO date
+  note?: string;
+  createdAt: string;
+}
+
+export interface InvoiceTemplate {
+  id: string;
+  name: string;              // e.g. "Standard Invoice", "Tax Invoice", "Receipt"
+  isDefault: boolean;
+  accentColor: string;       // e.g. "#2563EB"
+  logoPlaceholder?: string;  // mock text/brand label
+  headerLogoUrl?: string;    // Base64 or uploaded image URL for header logo
+  headerContent?: string;    // Custom HTML/Text for Header section
+  headerAlignment?: "left" | "center" | "right";
+  headerFields: string[];    // e.g. ["businessName", "address", "phone", "email"]
+  billToFields: string[];    // e.g. ["name", "email", "phone"]
+  lineItemColumns: string[]; // e.g. ["description", "quantity", "unitPrice", "amount"]
+  showTaxBreakdown: boolean;
+  footerNotes: string;       // payment terms / thank you note
+  footerContent?: string;    // Custom HTML/Text for Footer section (bank details, UPI, etc.)
+  footerLogoUrl?: string;    // Base64 or uploaded image URL for footer signature/stamp
+  footerAlignment?: "left" | "center" | "right";
+  uploadedFileName?: string; // Name of uploaded template file (.docx / .txt / .html)
+  rawTemplateText?: string;  // Extracted or uploaded template string with {placeholders}
+  customCss?: string;        // Optional custom styling
+}
+
+export type RequiredStage = "draft" | "sent" | "viewed" | "paid" | "never";
+
+export interface InvoiceFieldRule {
+  fieldKey: string;
+  fieldName: string;
+  requiredAtStage: RequiredStage;
+  showAlways: boolean;
+  enableTooltip: boolean;
+  visibleToUserIds: string[];
+}
+
+export type InvoiceFieldRulesMap = Record<string, InvoiceFieldRule>;
 
 export interface MockService {
   id: string;

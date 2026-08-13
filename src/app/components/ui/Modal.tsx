@@ -6,12 +6,13 @@ interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: ReactNode;
+  headerAction?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: "sm" | "md" | "md-plus" | "lg" | "xl" | "2xl" | "voice-lib" | "custom-field";
 }
 
-export function Modal({ isOpen, onClose, title, children, footer, maxWidth = "md" }: ModalProps) {
+export function Modal({ isOpen, onClose, title, headerAction, children, footer, maxWidth = "md" }: ModalProps) {
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -54,14 +55,17 @@ export function Modal({ isOpen, onClose, title, children, footer, maxWidth = "md
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header - Fixed, no bottom padding */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 pt-5 pb-0 flex-shrink-0 gap-4">
             <h2 className="text-base font-semibold text-foreground">{title}</h2>
-            <button
-              onClick={onClose}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-3">
+              {headerAction}
+              <button
+                onClick={onClose}
+                className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
           </div>
 
           {/* Body - Scrollable */}
@@ -89,14 +93,17 @@ export function Modal({ isOpen, onClose, title, children, footer, maxWidth = "md
         className={`bg-card rounded-xl shadow-lg ${maxWidthClasses[maxWidth]} w-full mb-8`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between p-6 border-b border-border gap-4">
           <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-          <button
-            onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-3">
+            {headerAction}
+            <button
+              onClick={onClose}
+              className="text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-slate-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="p-6">{children}</div>
         {footer && (

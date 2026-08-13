@@ -6,6 +6,8 @@ import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import InvoiceDocumentModal from "../components/invoices/InvoiceDocumentModal";
 import InvoiceProgressBar from "../components/invoices/InvoiceProgressBar";
+import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
+import AddInvoiceTemplateDrawer from "../components/invoices/AddInvoiceTemplateDrawer";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { toast } from "sonner";
@@ -17,6 +19,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Plus,
+  CreditCard,
   List,
   LayoutGrid,
   MoreVertical,
@@ -31,11 +34,13 @@ import {
 } from "lucide-react";
 
 export default function Invoices() {
-  const { invoices, updateInvoiceStatus, deleteInvoice, voidInvoice } = useInvoices();
+  const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
+  const [paymentModalInvoice, setPaymentModalInvoice] = useState<ClientInvoice | null>(null);
+  const [isAddTemplateDrawerOpen, setIsAddTemplateDrawerOpen] = useState(false);
   
   // Selection state (matching Deals.tsx)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -44,7 +49,9 @@ export default function Invoices() {
   const [showColumnToggle, setShowColumnToggle] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
     client: true,
+    type: true,
     amount: true,
+    balance: true,
     stage: true,
     status: true,
     dueDate: true,
@@ -97,9 +104,9 @@ export default function Invoices() {
   // Compute stat capsule metrics
   const totalInvoiced = invoices.filter((i) => i.status !== "void").reduce((sum, i) => sum + i.total, 0);
   const totalOutstanding = invoices
-    .filter((i) => i.status === "sent" || i.status === "viewed" || i.status === "overdue")
-    .reduce((sum, i) => sum + i.total, 0);
-  const totalPaidThisMonth = invoices.filter((i) => i.status === "paid").reduce((sum, i) => sum + i.total, 0);
+    .filter((i) => i.status === "sent" || i.status === "viewed" || i.status === "overdue" || i.status === "partial")
+    .reduce((sum, i) => sum + Math.max(0, i.total - (i.amountPaid || 0)), 0);
+  const totalPaidThisMonth = invoices.reduce((sum, i) => sum + (i.amountPaid || (i.status === "paid" ? i.total : 0)), 0);
   const overdueCount = invoices.filter((i) => i.status === "overdue").length;
 
   // Filter invoices
@@ -191,6 +198,8 @@ export default function Invoices() {
     switch (status) {
       case "paid":
         return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Paid</span>;
+      case "partial":
+        return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 font-bold whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Partial</span>;
       case "sent":
         return <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 whitespace-nowrap" style={{ fontFamily: 'Outfit, sans-serif' }}>Sent</span>;
       case "viewed":
@@ -208,10 +217,12 @@ export default function Invoices() {
     { id: "draft", title: "Draft", headerBg: "#1C2B4A", badgeColor: "bg-amber-100 text-amber-800" },
     { id: "sent", title: "Sent", headerBg: "#1C2B4A", badgeColor: "bg-blue-100 text-blue-800" },
     { id: "viewed", title: "Viewed", headerBg: "#1C2B4A", badgeColor: "bg-purple-100 text-purple-800" },
+    { id: "partial", title: "Partial", headerBg: "#D97706", badgeColor: "bg-amber-100 text-amber-800" },
     { id: "paid", title: "Paid", headerBg: "#1C2B4A", badgeColor: "bg-emerald-100 text-emerald-800" },
     { id: "overdue", title: "Overdue", headerBg: "#881337", badgeColor: "bg-rose-100 text-rose-800" },
     { id: "void", title: "Void", headerBg: "#334155", badgeColor: "bg-slate-200 text-slate-700" },
   ];
+
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -222,6 +233,26 @@ export default function Invoices() {
         >
           <div className="flex items-center gap-3">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
+            <button
+              onClick={() => {
+                if (invoices.length > 0) {
+                  setPaymentModalInvoice(invoices.find((i) => i.status !== "paid" && i.status !== "void") || invoices[0]);
+                } else {
+                  toast.info("No active invoices available for recording payment");
+                }
+              }}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-2 shadow-sm"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <CreditCard className="w-4 h-4" /> + Record Payment
+            </button>
+            <button
+              onClick={() => setIsAddTemplateDrawerOpen(true)}
+              className="px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5 shadow-2xs"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <FileText className="w-4 h-4 text-blue-600" /> + New Template
+            </button>
             <button
               onClick={handleCreateInvoice}
               className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-all flex items-center gap-2 shadow-sm"
@@ -348,13 +379,15 @@ export default function Invoices() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 bg-white focus:outline-none"
             >
-              <option value="all">All Statuses (Draft, Sent, Viewed, Paid, Overdue, Void)</option>
+              <option value="all">All Statuses (Draft, Sent, Viewed, Partial, Paid, Overdue, Void)</option>
               <option value="draft">Draft</option>
               <option value="sent">Sent</option>
               <option value="viewed">Viewed</option>
+              <option value="partial">Partial</option>
               <option value="paid">Paid</option>
               <option value="overdue">Overdue</option>
               <option value="void">Void</option>
+
             </select>
           </div>
         </div>
@@ -425,6 +458,11 @@ export default function Invoices() {
                     {visibleColumns.amount && (
                       <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
                         AMOUNT
+                      </th>
+                    )}
+                    {visibleColumns.balance && (
+                      <th className="px-4 py-2.5 text-right text-xs font-semibold uppercase tracking-wider" style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}>
+                        BALANCE
                       </th>
                     )}
                     {visibleColumns.stage && (
@@ -503,8 +541,20 @@ export default function Invoices() {
                               <div className="fixed inset-0 z-40" onClick={() => setOpenRowMenuId(null)} />
                               <div
                                 className="absolute left-8 top-0 z-50 bg-white rounded-lg overflow-hidden border border-slate-200"
-                                style={{ width: "140px", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
+                                style={{ width: "155px", boxShadow: "0 4px 12px rgba(0,0,0,0.12)" }}
                               >
+                                {inv.status !== "paid" && inv.status !== "void" && (
+                                  <button
+                                    onClick={() => {
+                                      setOpenRowMenuId(null);
+                                      setPaymentModalInvoice(inv);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-3 text-sm text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
+                                    style={{ height: "36px", fontSize: "13px" }}
+                                  >
+                                    <CreditCard className="w-4 h-4 text-emerald-600" /> Record Payment
+                                  </button>
+                                )}
                                 <button
                                   onClick={() => handleOpenDocument(inv)}
                                   className="w-full flex items-center gap-2.5 px-3 text-sm text-gray-700 transition-colors hover:bg-[#F0F4FF]"
@@ -561,6 +611,13 @@ export default function Invoices() {
                         {visibleColumns.amount && (
                           <td className="px-4 py-2.5 text-right font-bold text-sm text-slate-900 font-mono">
                             ${inv.total.toFixed(2)}
+                          </td>
+                        )}
+
+                        {/* BALANCE Column */}
+                        {visibleColumns.balance && (
+                          <td className="px-4 py-2.5 text-right font-bold text-xs text-slate-700 font-mono">
+                            ${(inv.status === "paid" || inv.status === "void" ? 0 : Math.max(0, inv.total - (inv.amountPaid || 0))).toFixed(2)}
                           </td>
                         )}
 
@@ -756,12 +813,47 @@ export default function Invoices() {
                       e.preventDefault();
                       e.currentTarget.style.borderColor = "transparent";
                       e.currentTarget.style.borderStyle = "solid";
-                      if (draggedInvoiceId) {
-                        updateInvoiceStatus(draggedInvoiceId, col.id);
-                        toast.success(`Invoice moved to ${col.title}`);
+                      if (!draggedInvoiceId) return;
+
+                      const targetInv = invoices.find((i) => i.id === draggedInvoiceId);
+                      if (!targetInv) return;
+
+                      if (col.id === "overdue") {
+                        toast.error("Overdue status is system-derived from due date and cannot be set manually.");
                         setDraggedInvoiceId(null);
+                        return;
                       }
+
+                      if (col.id === "sent") {
+                        sendInvoice(targetInv.id, "whatsapp");
+                        toast.success(`Invoice ${targetInv.id} sent via WhatsApp`);
+                      } else if (col.id === "paid") {
+                        const remaining = Math.max(0, targetInv.total - (targetInv.amountPaid || 0));
+                        recordPayment([
+                          {
+                            invoiceId: targetInv.id,
+                            clientId: targetInv.clientId,
+                            amount: remaining,
+                            method: "cash",
+                            paymentType: "self_pay",
+                            paymentDate: new Date().toISOString().split("T")[0],
+                            note: "Settled via Kanban drag-to-Paid",
+                          },
+                        ]);
+                        toast.success(`Invoice ${targetInv.id} remaining balance ($${remaining.toFixed(2)}) paid`);
+                      } else if (col.id === "partial") {
+                        setPaymentModalInvoice(targetInv);
+                      } else if (col.id === "void") {
+                        voidInvoice(targetInv.id);
+                        toast.success(`Invoice ${targetInv.id} voided`);
+                      } else {
+                        updateInvoiceStatus(targetInv.id, col.id);
+                        toast.success(`Invoice moved to ${col.title}`);
+                      }
+
+                      setDraggedInvoiceId(null);
                     }}
+
                   >
                     {/* Column Header (Matching Deals.tsx line 2566) */}
                     <div className="px-3 py-3" style={{ backgroundColor: col.headerBg }}>
@@ -964,6 +1056,22 @@ export default function Invoices() {
         ]}
         guideUrl="/guide/invoices"
       />
+      {paymentModalInvoice && (
+        <RecordPaymentModal
+          isOpen={!!paymentModalInvoice}
+          onClose={() => setPaymentModalInvoice(null)}
+          clientId={paymentModalInvoice.clientId}
+          clientName={paymentModalInvoice.clientName}
+          preSelectedInvoiceId={paymentModalInvoice.id}
+        />
+      )}
+      {isAddTemplateDrawerOpen && (
+        <AddInvoiceTemplateDrawer
+          isOpen={isAddTemplateDrawerOpen}
+          onClose={() => setIsAddTemplateDrawerOpen(false)}
+        />
+      )}
     </div>
   );
 }
+

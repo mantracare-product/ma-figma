@@ -92,7 +92,17 @@ function formatWhatsappTemplateMessage(template: any): FormattedTemplateMessage 
   };
 }
 
-function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "website"): {
+export interface SimOptions {
+  createInvoiceFn?: (appointment: any, lineItems: any[], options?: any) => any;
+  sendInvoiceFn?: (invoiceId: string, channel?: any) => void;
+  clientContext?: { id: string; name: string; email?: string; phone?: string };
+}
+
+function resolveAutomationMessage(
+  step: any,
+  channel?: "whatsapp" | "sms" | "website",
+  simOptions?: SimOptions
+): {
   text: string;
   header?: ProcessSimTurn["header"];
   footerText?: string;
@@ -186,18 +196,44 @@ function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "web
     case "book-appointment": {
       const serviceId = p.serviceToBillId || "srv-1";
       const autoGen = p.autoGenerateInvoice ?? true;
-      const invId = `INV-CL-${Math.floor(1050 + Math.random() * 900)}`;
 
       if (autoGen) {
+        if (simOptions?.createInvoiceFn) {
+          const clientToUse = simOptions.clientContext || { id: "c-1", name: "Client" };
+          const createdInv = simOptions.createInvoiceFn(
+            {
+              clientId: clientToUse.id,
+              clientName: clientToUse.name,
+              clientEmail: (clientToUse as any).email || "",
+              clientPhone: (clientToUse as any).phone || "",
+              title: "AI Automated Consultation",
+            },
+            [
+              {
+                id: `li-${Date.now()}`,
+                source: "service",
+                serviceId,
+                description: "Initial Consultation",
+                quantity: 1,
+                unitPrice: p.serviceFeeOverride || 150,
+              },
+            ],
+            { createdBy: "system" }
+          );
+          return { text: `✅ Appointment booked · ✅ Invoice ${createdInv.id} generated` };
+        }
+
+        const invId = `INV-CL-${Math.floor(1050 + Math.random() * 900)}`;
         try {
           const raw = localStorage.getItem("mantra_invoices_v1");
           const invoices = raw ? JSON.parse(raw) : [];
+          const clientToUse = simOptions?.clientContext || { id: "c-1", name: "James Wilson", email: "james.w@example.com", phone: "+1 (555) 123-4567" };
           const newInv = {
             id: invId,
-            clientId: "c-1",
-            clientName: "Sarah Jenkins",
-            clientEmail: "sarah.j@example.com",
-            clientPhone: "+1 (555) 234-5678",
+            clientId: clientToUse.id,
+            clientName: clientToUse.name,
+            clientEmail: (clientToUse as any).email || "",
+            clientPhone: (clientToUse as any).phone || "",
             appointmentId: `appt-sim-${Date.now()}`,
             appointmentTitle: "AI Automated Consultation",
             status: "draft",
@@ -207,6 +243,7 @@ function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "web
             discountAmount: 0,
             taxAmount: 12,
             total: (p.serviceFeeOverride || 150) + 12,
+            amountPaid: 0,
             createdAt: new Date().toISOString(),
             createdBy: "system",
             dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
@@ -223,24 +260,28 @@ function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "web
     }
     case "send-invoice":
     case "sendinvoice": {
-      const channel = p.invoiceChannel || "whatsapp";
+      const channelChoice = p.invoiceChannel || "whatsapp";
       let sentInvId = "INV-CL-1041";
-      try {
-        const raw = localStorage.getItem("mantra_invoices_v1");
-        if (raw) {
-          const invoices = JSON.parse(raw);
-          if (invoices.length > 0) {
-            invoices[0].status = "sent";
-            invoices[0].sentAt = new Date().toISOString();
-            invoices[0].sentVia = channel;
-            sentInvId = invoices[0].id;
-            localStorage.setItem("mantra_invoices_v1", JSON.stringify(invoices));
+      if (simOptions?.sendInvoiceFn) {
+        simOptions.sendInvoiceFn(sentInvId, channelChoice);
+      } else {
+        try {
+          const raw = localStorage.getItem("mantra_invoices_v1");
+          if (raw) {
+            const invoices = JSON.parse(raw);
+            if (invoices.length > 0) {
+              invoices[0].status = "sent";
+              invoices[0].sentAt = new Date().toISOString();
+              invoices[0].sentVia = channelChoice;
+              sentInvId = invoices[0].id;
+              localStorage.setItem("mantra_invoices_v1", JSON.stringify(invoices));
+            }
           }
+        } catch (e) {
+          console.error(e);
         }
-      } catch (e) {
-        console.error(e);
       }
-      return { text: `✅ Invoice ${sentInvId} sent via ${channel.toUpperCase()}` };
+      return { text: `✅ Invoice ${sentInvId} sent via ${channelChoice.toUpperCase()}` };
     }
     default:
       return { text: `Okay, I've noted that (${step.name}).` };
@@ -248,9 +289,6 @@ function resolveAutomationMessage(step: any, channel?: "whatsapp" | "sms" | "web
 }
 
 // ─── Hardcoded scripted flow ────────────────────────────────────────────────
-// Turn-based canned script — no external API calls. Uses the stage's own
-// configured greeting/objective/business info as the source of truth for
-// what to say first; falls back to a generic flow after that.
 function scriptedReply(stage: any, turnIndex: number): string {
   const isFirstTurn = turnIndex === 0;
 
@@ -264,7 +302,6 @@ function scriptedReply(stage: any, turnIndex: number): string {
     return `Hi, thanks for reaching out! This is regarding ${stage.name}. How can I help you today?`;
   }
 
-  // Generic follow-up script cycling through acknowledgement + probing questions
   const followUps = [
     "Got it, thank you. Could you share a bit more detail?",
     "Understood — noting that down. Is there anything else you'd like to add?",
@@ -279,11 +316,11 @@ export function generateProcessStageReply(
   workflowSteps: any[],
   userMessage: string,
   history: ProcessSimTurn[],
-  channel?: "whatsapp" | "sms" | "website"
+  channel?: "whatsapp" | "sms" | "website",
+  simOptions?: SimOptions
 ): ProcessSimResult {
   const inChatSteps = workflowSteps.filter((s) => s.trigger === "inchat");
 
-  // 1. Intent-based automation matching — evaluates configured intentConditions
   for (const step of inChatSteps) {
     if (!stepMatchesMessage(step, userMessage)) continue;
 
@@ -299,7 +336,7 @@ export function generateProcessStageReply(
       }
     }
 
-    const resolved = resolveAutomationMessage(step, channel);
+    const resolved = resolveAutomationMessage(step, channel, simOptions);
     return {
       ...resolved,
       matchedReason: `Matched intent condition on '${step.name}'`,
@@ -307,7 +344,6 @@ export function generateProcessStageReply(
     };
   }
 
-  // 2. No automation matched — fall back to the hardcoded scripted flow
   const contactTurnCount = history.filter((h) => h.role === "contact").length;
   return {
     text: scriptedReply(stage, contactTurnCount),

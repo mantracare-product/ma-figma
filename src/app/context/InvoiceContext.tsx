@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource } from "../types/invoiceTypes";
+import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment, InvoiceTemplate } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
 import { MOCK_SERVICES } from "../../lib/mockServicesData";
 
@@ -7,12 +7,19 @@ interface CreateInvoiceOptions {
   appointmentId?: string;
   appointmentTitle?: string;
   createdBy?: "system" | string;
+  discountType?: "amount" | "percent";
+  discountValue?: number;
   discountAmount?: number;
   dueDate?: string;
+  paymentMode?: string;
 }
 
 interface InvoiceContextType {
   invoices: ClientInvoice[];
+  payments: Payment[];
+  invoiceTemplates: InvoiceTemplate[];
+  fieldRules: InvoiceFieldRulesMap;
+  updateFieldRule: (rule: InvoiceFieldRule) => void;
   createInvoiceFromAppointment: (
     appointment: {
       id?: string | number;
@@ -30,6 +37,13 @@ interface InvoiceContextType {
   updateInvoiceStatus: (invoiceId: string, status: InvoiceStatus) => void;
   sendInvoice: (invoiceId: string, channel?: "whatsapp" | "sms" | "email") => void;
   simulatePayment: (invoiceId: string) => void;
+  recordPayment: (paymentParamsList: Omit<Payment, "id" | "createdAt">[]) => void;
+  getPaymentsByInvoice: (invoiceId: string) => Payment[];
+  getPaymentsByClient: (clientId: string) => Payment[];
+  saveInvoiceTemplate: (template: Omit<InvoiceTemplate, "id"> & { id?: string }) => InvoiceTemplate;
+  deleteInvoiceTemplate: (templateId: string) => void;
+  setDefaultInvoiceTemplate: (templateId: string) => void;
+  getDefaultTemplate: () => InvoiceTemplate;
   voidInvoice: (invoiceId: string) => void;
   getInvoiceById: (invoiceId: string) => ClientInvoice | undefined;
   getInvoicesByClient: (clientId: string) => ClientInvoice[];
@@ -38,6 +52,56 @@ interface InvoiceContextType {
   saveReport: (report: Omit<ReportDefinition, "id" | "lastRun"> & { id?: string }) => ReportDefinition;
   deleteReport: (reportId: string) => void;
 }
+
+const DEFAULT_FIELD_RULES: InvoiceFieldRulesMap = {
+  paymentMode: {
+    fieldKey: "paymentMode",
+    fieldName: "Payment mode",
+    requiredAtStage: "sent",
+    showAlways: false,
+    enableTooltip: false,
+    visibleToUserIds: [],
+  },
+};
+
+const DEFAULT_INVOICE_TEMPLATES: InvoiceTemplate[] = [
+  {
+    id: "tpl-standard",
+    name: "Standard Invoice",
+    isDefault: true,
+    accentColor: "#2563EB",
+    logoPlaceholder: "MantraAssist RCM",
+    headerFields: ["businessName", "address", "phone", "email"],
+    billToFields: ["name", "email", "phone"],
+    lineItemColumns: ["description", "quantity", "unitPrice", "amount"],
+    showTaxBreakdown: true,
+    footerNotes: "Payment is due within 14 days of issue. Thank you for choosing MantraAssist RCM Healthcare Services.",
+  },
+  {
+    id: "tpl-receipt",
+    name: "Receipt",
+    isDefault: false,
+    accentColor: "#059669",
+    logoPlaceholder: "MantraCare Health Receipt",
+    headerFields: ["businessName", "phone", "email"],
+    billToFields: ["name", "email"],
+    lineItemColumns: ["description", "quantity", "amount"],
+    showTaxBreakdown: false,
+    footerNotes: "Payment Received in Full. Thank you for your visit!",
+  },
+  {
+    id: "tpl-tax-invoice",
+    name: "Tax Invoice",
+    isDefault: false,
+    accentColor: "#7C3AED",
+    logoPlaceholder: "MantraAssist Healthcare Services",
+    headerFields: ["businessName", "address", "phone", "email"],
+    billToFields: ["name", "email", "phone"],
+    lineItemColumns: ["description", "quantity", "unitPrice", "amount"],
+    showTaxBreakdown: true,
+    footerNotes: "Official Tax Invoice for healthcare services rendered. Tax Reg #HC-884920.",
+  },
+];
 
 const INITIAL_INVOICES: ClientInvoice[] = [
   {
@@ -50,6 +114,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     appointmentTitle: "Initial Consultation",
     status: "paid",
     currency: "$",
+    paymentMode: "Card",
     lineItems: [
       { id: "li-1", source: "service", serviceId: "srv-1", description: "Initial Consultation", quantity: 1, unitPrice: 150 },
     ],
@@ -57,6 +122,8 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 0,
     taxAmount: 12,
     total: 162,
+    amountPaid: 162,
+    paymentType: "self_pay",
     createdAt: "2026-05-12T09:00:00Z",
     createdBy: "Admin User",
     dueDate: "2026-05-26",
@@ -75,6 +142,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     appointmentTitle: "Follow-up Visit",
     status: "sent",
     currency: "$",
+    paymentMode: "Bank Transfer",
     lineItems: [
       { id: "li-2", source: "service", serviceId: "srv-2", description: "Follow-up Visit", quantity: 1, unitPrice: 75 },
     ],
@@ -82,6 +150,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 0,
     taxAmount: 6,
     total: 81,
+    amountPaid: 0,
     createdAt: "2026-05-12T10:30:00Z",
     createdBy: "system",
     dueDate: "2026-05-26",
@@ -107,6 +176,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 5,
     taxAmount: 8,
     total: 108,
+    amountPaid: 0,
     createdAt: "2026-05-13T14:00:00Z",
     createdBy: "Admin User",
     dueDate: "2026-05-27",
@@ -129,6 +199,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 10,
     taxAmount: 8.8,
     total: 118.8,
+    amountPaid: 0,
     createdAt: "2026-08-10T15:00:00Z",
     createdBy: "Admin User",
     dueDate: "2026-08-25",
@@ -149,6 +220,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 20,
     taxAmount: 16,
     total: 216,
+    amountPaid: 0,
     createdAt: "2026-08-05T08:45:00Z",
     createdBy: "system",
     dueDate: "2026-08-19",
@@ -171,6 +243,8 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 0,
     taxAmount: 7.6,
     total: 102.6,
+    amountPaid: 102.6,
+    paymentType: "self_pay",
     createdAt: "2026-07-20T14:20:00Z",
     createdBy: "system",
     dueDate: "2026-08-04",
@@ -194,6 +268,8 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 15,
     taxAmount: 10.8,
     total: 145.8,
+    amountPaid: 145.8,
+    paymentType: "self_pay",
     createdAt: "2026-06-15T11:00:00Z",
     createdBy: "Admin User",
     dueDate: "2026-06-30",
@@ -217,6 +293,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 0,
     taxAmount: 6,
     total: 81,
+    amountPaid: 0,
     createdAt: "2026-06-10T09:00:00Z",
     createdBy: "Admin User",
     dueDate: "2026-06-24",
@@ -238,6 +315,8 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 20,
     taxAmount: 14.4,
     total: 194.4,
+    amountPaid: 194.4,
+    paymentType: "self_pay",
     createdAt: "2026-07-28T16:30:00Z",
     createdBy: "system",
     dueDate: "2026-08-11",
@@ -261,6 +340,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     discountAmount: 0,
     taxAmount: 12,
     total: 162,
+    amountPaid: 0,
     createdAt: "2026-08-08T13:10:00Z",
     createdBy: "Admin User",
     dueDate: "2026-08-22",
@@ -269,6 +349,7 @@ const INITIAL_INVOICES: ClientInvoice[] = [
     paymentLinkUrl: "https://pay.mantraassist.mock/inv-1049",
   },
 ];
+
 
 const INITIAL_REPORTS: ReportDefinition[] = [
   {
@@ -351,6 +432,48 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return INITIAL_INVOICES;
   });
 
+  const [fieldRules, setFieldRules] = useState<InvoiceFieldRulesMap>(() => {
+    const saved = localStorage.getItem("mantra_invoice_field_rules_v1");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return DEFAULT_FIELD_RULES;
+  });
+
+  const [payments, setPayments] = useState<Payment[]>(() => {
+    const saved = localStorage.getItem("mantra_payments_v1");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return [
+      {
+        id: "pmt-init-1040",
+        invoiceId: "INV-CL-1040",
+        clientId: "c-1",
+        amount: 162,
+        method: "card_on_file",
+        paymentType: "self_pay",
+        paymentDate: "2026-05-14",
+        note: "Initial payment on file",
+        createdAt: "2026-05-14T14:30:00Z",
+      },
+    ];
+  });
+
+  const [invoiceTemplates, setInvoiceTemplates] = useState<InvoiceTemplate[]>(() => {
+    const saved = localStorage.getItem("mantra_invoice_templates_v1");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return DEFAULT_INVOICE_TEMPLATES;
+  });
+
   const [reports, setReports] = useState<ReportDefinition[]>(() => {
     const saved = localStorage.getItem("mantra_reports_v1");
     if (saved) {
@@ -366,8 +489,24 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [invoices]);
 
   useEffect(() => {
+    localStorage.setItem("mantra_payments_v1", JSON.stringify(payments));
+  }, [payments]);
+
+  useEffect(() => {
+    localStorage.setItem("mantra_invoice_templates_v1", JSON.stringify(invoiceTemplates));
+  }, [invoiceTemplates]);
+
+  useEffect(() => {
+    localStorage.setItem("mantra_invoice_field_rules_v1", JSON.stringify(fieldRules));
+  }, [fieldRules]);
+
+  useEffect(() => {
     localStorage.setItem("mantra_reports_v1", JSON.stringify(reports));
   }, [reports]);
+
+  const updateFieldRule = (rule: InvoiceFieldRule) => {
+    setFieldRules((prev) => ({ ...prev, [rule.fieldKey]: rule }));
+  };
 
   const createInvoiceFromAppointment = (
     appointment: {
@@ -381,8 +520,19 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     lineItems: InvoiceLineItem[],
     options?: CreateInvoiceOptions
   ): ClientInvoice => {
-    const subtotal = lineItems.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
-    const discount = options?.discountAmount || 0;
+    const subtotal = lineItems.reduce(
+      (acc, item) => acc + (item.unitPrice * item.quantity - (item.discountAmount || 0)),
+      0
+    );
+
+    let discount = options?.discountAmount || 0;
+    if (options?.discountType === "percent" && options.discountValue !== undefined) {
+      discount = (subtotal * options.discountValue) / 100;
+    } else if (options?.discountValue !== undefined && options?.discountAmount === undefined) {
+      discount = options.discountValue;
+    }
+
+    discount = Math.round(discount * 100) / 100;
     const taxableSubtotal = Math.max(0, subtotal - discount);
     const tax = Math.round(taxableSubtotal * 0.08 * 100) / 100;
     const total = Math.round((taxableSubtotal + tax) * 100) / 100;
@@ -400,12 +550,16 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       currency: "$",
       lineItems,
       subtotal,
+      discountType: options?.discountType || "amount",
+      discountValue: options?.discountValue || discount,
       discountAmount: discount,
       taxAmount: tax,
       total,
+      amountPaid: 0,
       createdAt: new Date().toISOString(),
       createdBy: options?.createdBy || "Admin User",
       dueDate: options?.dueDate || new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+      paymentMode: options?.paymentMode,
       paymentLinkUrl: `https://pay.mantraassist.mock/inv-${nextIdNumber}`,
     };
 
@@ -493,6 +647,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           };
 
           if (updated.clientId) {
+            const modeText = updated.paymentMode ? ` via ${updated.paymentMode}` : "";
             addActivityEntry({
               clientId: updated.clientId,
               processId: "billing",
@@ -501,8 +656,8 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
               status: "success",
               refId: updated.id,
               details: {
-                primary: `Invoice ${updated.id} paid`,
-                secondary: `Amount: $${updated.total.toFixed(2)} received`,
+                primary: `Invoice ${updated.id} marked Paid${modeText}`,
+                secondary: `Amount: $${updated.total.toFixed(2)} received${modeText}`,
               },
             });
           }
@@ -514,9 +669,139 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     );
   };
 
+  const recordPayment = (paymentDataList: Omit<Payment, "id" | "createdAt">[]) => {
+    const now = new Date().toISOString();
+    const createdPayments: Payment[] = paymentDataList.map((p, idx) => ({
+      ...p,
+      id: `pmt-${Date.now()}-${idx}-${Math.random().toString(36).substr(2, 4)}`,
+      createdAt: now,
+    }));
+
+    setPayments((prev) => [...createdPayments, ...prev]);
+
+    setInvoices((prev) =>
+      prev.map((inv) => {
+        const matchPmt = createdPayments.find((p) => p.invoiceId === inv.id);
+        if (!matchPmt) return inv;
+
+        const newAmountPaid = (inv.amountPaid || 0) + matchPmt.amount;
+        const isPaidFull = newAmountPaid >= inv.total;
+        const newStatus: InvoiceStatus = isPaidFull
+          ? "paid"
+          : newAmountPaid > 0
+          ? "partial"
+          : inv.status;
+
+        const updated: ClientInvoice = {
+          ...inv,
+          amountPaid: newAmountPaid,
+          status: newStatus,
+          paymentType: matchPmt.paymentType,
+          paidAt: isPaidFull ? now : inv.paidAt,
+          paymentMode: matchPmt.method === "card_on_file"
+            ? "Card on File"
+            : matchPmt.method === "cash"
+            ? "Cash"
+            : matchPmt.method === "check"
+            ? "Check"
+            : matchPmt.method === "external_terminal"
+            ? "External Terminal"
+            : matchPmt.method === "payment_link"
+            ? "Payment Link"
+            : inv.paymentMode,
+        };
+
+        if (updated.clientId) {
+          const methodFormatted = matchPmt.method.replace("_", " ");
+          addActivityEntry({
+            clientId: updated.clientId,
+            processId: "billing",
+            processName: "Billing & Invoicing",
+            type: "field_update",
+            status: "success",
+            refId: updated.id,
+            details: {
+              primary: `Invoice ${updated.id}: $${matchPmt.amount.toFixed(2)} recorded via ${methodFormatted}`,
+              secondary: `Status: ${newStatus.toUpperCase()} · Remaining: $${Math.max(0, updated.total - newAmountPaid).toFixed(2)}`,
+            },
+          });
+        }
+
+        return updated;
+      })
+    );
+  };
+
+  const getPaymentsByInvoice = (invoiceId: string) => {
+    return payments.filter((p) => p.invoiceId === invoiceId);
+  };
+
+  const getPaymentsByClient = (clientId: string) => {
+    return payments.filter((p) => p.clientId === clientId);
+  };
+
+  const saveInvoiceTemplate = (template: Omit<InvoiceTemplate, "id"> & { id?: string }): InvoiceTemplate => {
+    const existing = template.id ? invoiceTemplates.find((t) => t.id === template.id) : null;
+    const newTpl: InvoiceTemplate = {
+      ...template,
+      id: template.id || `tpl-custom-${Date.now()}`,
+    };
+
+    setInvoiceTemplates((prev) => {
+      let nextList = existing
+        ? prev.map((t) => (t.id === template.id ? newTpl : t))
+        : [...prev, newTpl];
+      if (newTpl.isDefault) {
+        nextList = nextList.map((t) => ({ ...t, isDefault: t.id === newTpl.id }));
+      }
+      return nextList;
+    });
+    return newTpl;
+  };
+
+  const deleteInvoiceTemplate = (templateId: string) => {
+    setInvoiceTemplates((prev) => {
+      const remaining = prev.filter((t) => t.id !== templateId);
+      if (remaining.length > 0 && !remaining.some((t) => t.isDefault)) {
+        remaining[0].isDefault = true;
+      }
+      return remaining;
+    });
+  };
+
+  const setDefaultInvoiceTemplate = (templateId: string) => {
+    setInvoiceTemplates((prev) =>
+      prev.map((t) => ({ ...t, isDefault: t.id === templateId }))
+    );
+  };
+
+  const getDefaultTemplate = (): InvoiceTemplate => {
+    return invoiceTemplates.find((t) => t.isDefault) || invoiceTemplates[0] || DEFAULT_INVOICE_TEMPLATES[0];
+  };
+
   const voidInvoice = (invoiceId: string) => {
     setInvoices((prev) =>
-      prev.map((inv) => (inv.id === invoiceId ? { ...inv, status: "void" } : inv))
+      prev.map((inv) => {
+        if (inv.id === invoiceId) {
+          const updated = { ...inv, status: "void" as InvoiceStatus };
+          if (updated.clientId) {
+            addActivityEntry({
+              clientId: updated.clientId,
+              processId: "billing",
+              processName: "Billing & Invoicing",
+              type: "field_update",
+              status: "success",
+              refId: updated.id,
+              details: {
+                primary: `Invoice ${updated.id} voided`,
+                secondary: `Status updated to VOID`,
+              },
+            });
+          }
+          return updated;
+        }
+        return inv;
+      })
     );
   };
 
@@ -711,12 +996,23 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     <InvoiceContext.Provider
       value={{
         invoices,
+        payments,
+        invoiceTemplates,
+        fieldRules,
+        updateFieldRule,
         createInvoiceFromAppointment,
         updateInvoice,
         deleteInvoice,
         updateInvoiceStatus,
         sendInvoice,
         simulatePayment,
+        recordPayment,
+        getPaymentsByInvoice,
+        getPaymentsByClient,
+        saveInvoiceTemplate,
+        deleteInvoiceTemplate,
+        setDefaultInvoiceTemplate,
+        getDefaultTemplate,
         voidInvoice,
         getInvoiceById,
         getInvoicesByClient,

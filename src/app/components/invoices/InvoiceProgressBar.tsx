@@ -13,9 +13,10 @@ const STAGE_BLOCKS: { id: InvoiceStatus; name: string; step: number }[] = [
   { id: "draft", name: "Draft", step: 1 },
   { id: "sent", name: "Sent", step: 2 },
   { id: "viewed", name: "Viewed", step: 3 },
-  { id: "paid", name: "Paid", step: 4 },
-  { id: "overdue", name: "Overdue", step: 5 },
-  { id: "void", name: "Void", step: 6 },
+  { id: "partial", name: "Partial", step: 4 },
+  { id: "paid", name: "Paid", step: 5 },
+  { id: "overdue", name: "Overdue", step: 6 },
+  { id: "void", name: "Void", step: 7 },
 ];
 
 export default function InvoiceProgressBar({
@@ -38,14 +39,15 @@ export default function InvoiceProgressBar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Determine active step position (1-6)
+  // Determine active step position (1-7)
   let activeIndex = 1;
   if (status === "draft") activeIndex = 1;
   else if (status === "sent") activeIndex = 2;
   else if (status === "viewed") activeIndex = 3;
-  else if (status === "paid") activeIndex = 4;
-  else if (status === "overdue") activeIndex = 5;
-  else if (status === "void") activeIndex = 6;
+  else if (status === "partial") activeIndex = 4;
+  else if (status === "paid") activeIndex = 5;
+  else if (status === "overdue") activeIndex = 6;
+  else if (status === "void") activeIndex = 7;
 
   const isOverdue = status === "overdue";
   const isVoid = status === "void";
@@ -75,10 +77,13 @@ export default function InvoiceProgressBar({
             bg = "#CBD5E1"; // Muted grey for void
             border = "none";
           } else if (isOverdue && (isActive || isCompleted)) {
-            bg = segIdx === 5 ? "#EF4444" : "#1E88E5"; // Red block for overdue at step 5
+            bg = segIdx === 6 ? "#EF4444" : "#1E88E5"; // Red block for overdue at step 6
+            border = "none";
+          } else if (stg.id === "partial" && isActive) {
+            bg = "#F59E0B"; // Amber for partial status
             border = "none";
           } else if (isFilled) {
-            bg = "#1E88E5"; // Blue for active/completed stages matching Deals.tsx
+            bg = "#1E88E5"; // Blue for active/completed stages
             border = "none";
           }
 

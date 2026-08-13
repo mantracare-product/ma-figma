@@ -152,7 +152,7 @@ export default function ScheduleAppointmentDrawer({
 
   // Computations for invoice summary
   const currentLineItems = values.lineItems || [];
-  const subtotal = currentLineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const subtotal = currentLineItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity - (item.discountAmount || 0)), 0);
   const discount = values.discountAmount || 0;
   const taxableSubtotal = Math.max(0, subtotal - discount);
   const tax = Math.round(taxableSubtotal * 0.08 * 100) / 100;
@@ -166,7 +166,7 @@ export default function ScheduleAppointmentDrawer({
     <CustomSideDrawer
       isOpen={isOpen}
       onClose={onClose}
-      maxWidth="sm:max-w-[540px]"
+      maxWidth="sm:max-w-[70vw]"
       title={
         <div>
           <p className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>

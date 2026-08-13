@@ -21,7 +21,7 @@ export default function DrawerShell({
   title,
   subtitle,
   icon,
-  width = "max-w-2xl",
+  width = "max-w-[70vw]",
   zIndex = 600,
   headerRight,
   footer,
