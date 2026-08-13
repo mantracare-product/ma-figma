@@ -1,4 +1,4 @@
-export type ActionScope = "deny" | "own" | "all";
+export type ActionScope = "deny" | "own" | "role" | "all";
 
 export const ACTIONS = ["read", "add", "edit", "delete", "export", "import"] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -26,6 +26,13 @@ export interface Role {
   id: string;
   name: string;
   description?: string;
+  department?: string;
   isDefault?: boolean;
   permissions: ItemPermissions;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  description?: string;
 }

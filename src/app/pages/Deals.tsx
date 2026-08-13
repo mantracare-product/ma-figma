@@ -122,7 +122,13 @@ const mockClients: { [key: string]: Client } = {
   "CL-025": { id: "CL-025", name: "Omar Al-Rashid", email: "omar.ar@email.com", phone: "503456789", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Appointment Scheduling"], stage: "Slot Selection", responsible: "John Smith", lastContact: "2024-04-11", status: "Active" },
   "CL-027": { id: "CL-027", name: "Youssef Said", email: "youssef.s@email.com", phone: "505678901", country: "AE", countryCode: "+971", countryFlag: "🇦🇪", processes: ["Follow-up Calls", "Patient Intake", "Billing Support"], stage: "Follow-up", responsible: "Michael Chen", lastContact: "2024-04-12", status: "Active" },
   "CL-028": { id: "CL-028", name: "Oliver Thompson", email: "oliver.t@email.com", phone: "7412345678", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Patient Intake", "Follow-up Calls"], stage: "Schedule Appointment", responsible: "Emily Davis", lastContact: "2024-04-09", status: "Active" },
-  "CL-029": { id: "CL-029", name: "Charlotte Evans", email: "charlotte.e@email.com", phone: "7423456789", country: "GB", countryCode: "+44", countryFlag: "🇬🇧", processes: ["Insurance Verification"], stage: "Approval", responsible: "Robert Wilson", lastContact: "2024-04-13", status: "Active" },
+};
+
+const getClientIdByName = (name: string): string => {
+  const found = Object.values(mockClients).find(
+    (c) => c.name.toLowerCase() === name.toLowerCase()
+  );
+  return found ? found.id : "CL-001";
 };
 
 // Comprehensive call logs dataset (100 calls total)
@@ -478,7 +484,7 @@ export default function Deals() {
   const [openRowMenuId, setOpenRowMenuId] = useState<string | null>(null);
   const [showViewDrawer, setShowViewDrawer] = useState(false);
   const [selectedLogForView, setSelectedLogForView] = useState<CallLog | null>(null);
-  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "activity" | "history">("general");
+  const [viewDrawerTab, setViewDrawerTab] = useState<"general" | "activity" | "history" | "documents">("general");
   const [historyFilter, setHistoryFilter] = useState("");
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<{ [key: string]: string }>({});
@@ -2174,8 +2180,13 @@ export default function Deals() {
                       {visibleColumns.client && (
                         <td className="px-4 py-2.5 font-medium text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                           <span
-                            className="text-left"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/clients/${log.clientId || getClientIdByName(log.client)}`);
+                            }}
+                            className="text-left cursor-pointer hover:underline hover:text-blue-700 transition-colors font-semibold"
                             style={{ color: '#1A73E8' }}
+                            title="Click to view Client Profile"
                           >
                             {log.client}
                           </span>
@@ -2610,8 +2621,13 @@ export default function Deals() {
                               {/* Row 1: Client name + ⋯ menu */}
                               <div className="flex items-start justify-between mb-2">
                                 <span
-                                  className="font-bold leading-tight flex-1 pr-1 text-left"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigate(`/clients/${getClientIdByName(deal.clientName)}`);
+                                  }}
+                                  className="font-bold leading-tight flex-1 pr-1 text-left cursor-pointer hover:underline hover:text-blue-700 transition-colors"
                                   style={{ fontSize: '13px', color: '#1A73E8', fontFamily: 'Outfit, sans-serif', padding: 0 }}
+                                  title="Click to view Client Profile"
                                 >
                                   {deal.clientName}
                                 </span>

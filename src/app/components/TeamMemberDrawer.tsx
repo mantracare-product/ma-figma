@@ -44,6 +44,7 @@ interface TeamMemberDrawerProps {
     email: string;
     phone?: string;
     role?: string;
+    department?: string;
   } | null;
   zIndex?: number;
 }
@@ -117,7 +118,7 @@ const WEEKDAY_NAMES = [
 
 export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: TeamMemberDrawerProps) {
   // Tab state
-  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services" | "permissions">("personal-info");
+  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services">("personal-info");
 
   // Personal Information Form State
   const [personalInfo, setPersonalInfo] = useState({
@@ -127,6 +128,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
     gender: "Male",
     dateOfBirth: "1990-01-15",
     role: member?.role || "Admin",
+    department: member?.department || "Engineering",
     language: "English",
     country: "USA",
     timezone: "UTC",
@@ -337,6 +339,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
         email: member.email || prev.email,
         phone: member.phone || prev.phone,
         role: member.role || prev.role,
+        department: member.department || prev.department,
       }));
     }
   });
@@ -359,6 +362,7 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
       <Drawer
         isOpen={isOpen}
         onClose={onClose}
+        maxWidth="max-w-[60vw]"
         title={
           <div className="w-full">
             <div className="flex items-center gap-4 mb-4">
@@ -478,15 +482,6 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     >
                       Services
                     </button>
-                    <button
-                      onClick={() => setActiveTab("permissions")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "permissions"
-                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
-                          : "border-transparent text-gray-600 hover:text-gray-900"
-                        }`}
-                    >
-                      Permissions
-                    </button>
                   </div>
                 </div>
               </div>
@@ -566,6 +561,40 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                           <SelectItem value="Manager">Manager</SelectItem>
                           <SelectItem value="Agent">Agent</SelectItem>
                           <SelectItem value="Supervisor">Supervisor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Department */}
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Department</label>
+                      <Select value={personalInfo.department} onValueChange={(value) => updatePersonalInfo({ department: value })}>
+                        <SelectTrigger className="w-full">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Array.from(new Set([
+                            "Engineering",
+                            "Sales",
+                            "Marketing",
+                            "Support",
+                            "Operations",
+                            "Finance",
+                            "HR",
+                            "Medical",
+                            "Reception",
+                            ...(() => {
+                              try {
+                                const raw = localStorage.getItem("ma_departments");
+                                const parsed = raw ? JSON.parse(raw) : [];
+                                return parsed.map((d: any) => d.name || d);
+                              } catch { return []; }
+                            })()
+                          ])).map((dept) => (
+                            <SelectItem key={dept} value={dept}>
+                              {dept}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1127,72 +1156,6 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                         </div>
                       </div>
                     ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Permissions Tab */}
-              {activeTab === "permissions" && (
-                <div className="space-y-4">
-                  <p className="text-xs text-gray-500 mb-2">
-                    Configure what this team member can access and edit. Select Read, Write, or All (unselected = No Access).
-                  </p>
-
-                  <div className="border border-gray-200 rounded-xl overflow-hidden bg-white divide-y divide-gray-100">
-                    {[
-                      "Dashboard",
-                      "Clients",
-                      "Calls",
-                      "Processes",
-                      "Numbers",
-                      "Billing",
-                      "Webhooks",
-                      "Settings",
-                    ].map((item) => {
-                      const val = itemPermissions[item] || "none";
-                      return (
-                        <div
-                          key={item}
-                          className="p-3.5 flex items-center justify-between gap-4 hover:bg-gray-50/50 transition-colors"
-                        >
-                          <span className="text-xs font-bold text-gray-900">
-                            {item}
-                          </span>
-                          <div className="flex items-center gap-4 text-xs flex-shrink-0">
-                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
-                              <input
-                                type="radio"
-                                name={`drawer-perm-${item}`}
-                                checked={val === "view"}
-                                onChange={() => setItemPermissionLevel(item, "view")}
-                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                              />
-                              <span className="font-medium">Read</span>
-                            </label>
-                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
-                              <input
-                                type="radio"
-                                name={`drawer-perm-${item}`}
-                                checked={val === "write"}
-                                onChange={() => setItemPermissionLevel(item, "write")}
-                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                              />
-                              <span className="font-medium">Write</span>
-                            </label>
-                            <label className="flex items-center gap-1.5 cursor-pointer text-gray-700 select-none">
-                              <input
-                                type="radio"
-                                name={`drawer-perm-${item}`}
-                                checked={val === "all"}
-                                onChange={() => setItemPermissionLevel(item, "all")}
-                                className="w-3.5 h-3.5 text-blue-600 focus:ring-blue-500 border-gray-300"
-                              />
-                              <span className="font-medium">All</span>
-                            </label>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
               )}
@@ -1795,9 +1758,16 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
           </div>
         )}
 
-        {/* Fixed Save Button at Bottom */}
+        {/* Fixed Save / Action Footer at Bottom */}
         {member && (
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 shadow-lg">
+          <div className="absolute bottom-0 left-0 right-0 px-6 py-3 bg-white border-t border-gray-200 flex items-center justify-end gap-3 z-20 shadow-md">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 border-gray-300 rounded-lg cursor-pointer"
+            >
+              Cancel
+            </Button>
             <Button
               variant="primary"
               onClick={() => {
@@ -1806,16 +1776,15 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                 toast.success("Profile updated successfully");
                 setTimeout(() => setSaveStatus("idle"), 2500);
               }}
-              className={`w-full text-sm transition-all ${hasUnsavedChanges ? "bg-[#1F2937] hover:bg-gray-800" : "bg-[#1F2937]/80 hover:bg-[#1F2937]"
-                }`}
+              className={`px-5 py-2 text-sm font-medium rounded-lg shadow-sm cursor-pointer transition-all flex items-center gap-1.5 ${
+                hasUnsavedChanges ? "bg-[#1F2937] hover:bg-gray-800 text-white" : "bg-[#1F2937]/80 hover:bg-[#1F2937] text-white"
+              }`}
             >
               {saveStatus === "saved" ? (
                 <>
-                  <Check className="w-4 h-4 mr-2" />
+                  <Check className="w-4 h-4" />
                   Saved
                 </>
-              ) : hasUnsavedChanges ? (
-                "Save Changes"
               ) : (
                 "Save Changes"
               )}

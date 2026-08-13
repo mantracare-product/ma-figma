@@ -3,7 +3,8 @@ import { useParams, useNavigate, useLocation } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
-  Play, ChevronDown, Download, ArrowLeft, Check, Globe
+  Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
+  Briefcase, ToggleLeft, ToggleRight,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -30,6 +31,13 @@ import { appendActivity } from "../../lib/activityEngine";
 import { useInvoices } from "../context/InvoiceContext";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import { ClientInvoice } from "../types/invoiceTypes";
+import DocumentsTab from "../components/profile/DocumentsTab";
+import DrawerShell from "../components/ui/DrawerShell";
+import {
+  Service, EMPLOYEES as SVC_EMPLOYEES, CURRENCIES as SVC_CURRENCIES, INIT_FORM as SVC_INIT_FORM,
+  getCurrencySymbol, getStoredServices, addService, onServicesChanged,
+  getClientProducts, assignProductToClient, unassignProductFromClient,
+} from "../../lib/servicesStore";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -296,9 +304,6 @@ const getProcessFromDealStage = (stage: string): string => {
   return mainStage;
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-
 interface ClientProfileProps {
   clientIdProp?: string;
   onCloseOverride?: () => void;
@@ -395,7 +400,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "documents" | "products">("overview");
+
+  // ── Products tab state ──
+  const [clientProductList, setClientProductList] = useState<Service[]>([]);
+  const [globalServiceList, setGlobalServiceList] = useState<Service[]>(getStoredServices());
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [assignSearch, setAssignSearch] = useState("");
+  const [showNewProductDrawer, setShowNewProductDrawer] = useState(false);
+  const [newProductForm, setNewProductForm] = useState({ ...SVC_INIT_FORM });
+  const [showEmpDropProduct, setShowEmpDropProduct] = useState(false);
+  const [empSearchProduct, setEmpSearchProduct] = useState("");
   const [expandedSubmissionId, setExpandedSubmissionId] = useState<string | null>(null);
   const [formsTabMode, setFormsTabMode] = useState<"forms" | "flows">("forms");
   const [expandedFlowStepId, setExpandedFlowStepId] = useState<string | null>(null);
@@ -409,7 +425,18 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   const [showFieldPicker, setShowFieldPicker] = useState(false);
 
-  // Sync client profile values and custom field values
+  // ── Sync product assignments when clientId changes ──
+  useEffect(() => {
+    if (!client) return;
+    setClientProductList(getClientProducts(client.id));
+    const unsub = onServicesChanged(() => {
+      setGlobalServiceList(getStoredServices());
+      setClientProductList(getClientProducts(client.id));
+    });
+    return unsub;
+  }, [client?.id]);
+
+  // ── Sync client profile values and custom field values
   useEffect(() => {
     if (client) {
       setClientName(client.name || "");
@@ -456,6 +483,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setDynamicFieldValues(values);
     }
   }, [id, client]);
+
+  // Documents initialization & action handlers with clientDocumentsStore sync
+
 
   // appointments tab
   const [appointments, setAppointments] = useState<any[]>([]);
@@ -542,7 +572,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   const [showProcessDetailDrawer, setShowProcessDetailDrawer] = useState(false);
   const [selectedProcessLog, setSelectedProcessLog] = useState<CallLog | null>(null);
-  const [processDetailTab, setProcessDetailTab] = useState<"general" | "activity" | "history">("general");
+  const [processDetailTab, setProcessDetailTab] = useState<"general" | "activity" | "history" | "documents">("general");
   const [drawerVisibleFields, setDrawerVisibleFields] = useState<string[]>([
     "currentStage",
     "status",
@@ -1091,7 +1121,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       />
 
       {/* Drawer panel */}
-      <div className="fixed right-0 top-0 h-full w-[40%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-[60%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
 
         {/* Hero: client identity */}
         <div className="p-6 border-b border-border flex-shrink-0">
@@ -1142,6 +1172,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
+                { id: "documents" as const, label: "Documents" },
+                { id: "products" as const, label: "Products & Services" },
               ] as const
             ).map((tab) => (
               <button
@@ -2177,13 +2209,360 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             );
           })()}
 
+          {/* ── Documents Tab ── */}
+          {activeProfileTab === "documents" && (
+            <DocumentsTab client={client} />
+          )}
+
+          {/* ── Products & Services Tab ── */}
+          {activeProfileTab === "products" && (() => {
+            const assignedIds = new Set(clientProductList.map((p) => p.id));
+            const unassignedServices = globalServiceList.filter(
+              (s) => !assignedIds.has(s.id) &&
+                (s.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+                  s.description.toLowerCase().includes(assignSearch.toLowerCase()))
+            );
+            const filteredClientProducts = clientProductList.filter(
+              (p) =>
+                p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+                p.description.toLowerCase().includes(productSearchQuery.toLowerCase())
+            );
+            const filteredEmpsProduct = SVC_EMPLOYEES.filter((e) =>
+              e.name.toLowerCase().includes(empSearchProduct.toLowerCase())
+            );
+            const toggleEmpProduct = (id: number) =>
+              setNewProductForm((f) => ({
+                ...f,
+                assignedEmployeeIds: f.assignedEmployeeIds.includes(id)
+                  ? f.assignedEmployeeIds.filter((e) => e !== id)
+                  : [...f.assignedEmployeeIds, id],
+              }));
+
+            return (
+              <div className="space-y-4">
+                {/* Toolbar */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search assigned products..."
+                      value={productSearchQuery}
+                      onChange={(e) => setProductSearchQuery(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    />
+                  </div>
+                  {/* Assign Product Dropdown */}
+                  <div className="relative">
+                    <button
+                      onClick={() => { setShowAssignDropdown(!showAssignDropdown); setAssignSearch(""); }}
+                      className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm font-semibold text-gray-700 bg-white hover:bg-gray-50 transition-colors shadow-xs cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Plus className="w-4 h-4" /> Assign Product
+                    </button>
+                    {showAssignDropdown && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => { setShowAssignDropdown(false); setAssignSearch(""); }} />
+                        <div
+                          className="absolute right-0 mt-2 z-50 bg-white border border-gray-200 rounded-2xl shadow-xl overflow-hidden"
+                          style={{ width: "320px" }}
+                        >
+                          {/* Dropdown header */}
+                          <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2" style={{ fontFamily: "Outfit, sans-serif" }}>Assign Existing Product</p>
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                              <input
+                                type="text"
+                                placeholder="Search products..."
+                                value={assignSearch}
+                                onChange={(e) => setAssignSearch(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="w-full pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs bg-gray-50 focus:outline-none focus:border-blue-400 transition-all"
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                                autoFocus
+                              />
+                            </div>
+                          </div>
+                          {/* Service list */}
+                          <div className="max-h-52 overflow-y-auto py-1">
+                            {unassignedServices.length === 0 ? (
+                              <p className="text-center text-xs text-gray-400 py-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {globalServiceList.length === assignedIds.size ? "All products already assigned" : "No results"}
+                              </p>
+                            ) : (
+                              unassignedServices.map((svc) => (
+                                <button
+                                  key={svc.id}
+                                  onClick={() => {
+                                    if (!client) return;
+                                    assignProductToClient(client.id, svc.id);
+                                    setClientProductList(getClientProducts(client.id));
+                                    setShowAssignDropdown(false);
+                                    setAssignSearch("");
+                                    toast.success(`"${svc.name}" assigned to ${client.name}`);
+                                  }}
+                                  className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-blue-50 transition-colors text-left cursor-pointer"
+                                >
+                                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <Briefcase className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{svc.name}</p>
+                                    <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                      {getCurrencySymbol(svc.currency)}{svc.price} · {svc.duration} min
+                                    </p>
+                                  </div>
+                                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${svc.isActive ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                                    {svc.isActive ? "Active" : "Inactive"}
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                          {/* Create new */}
+                          <div className="border-t border-gray-100 p-2">
+                            <button
+                              onClick={() => {
+                                setShowAssignDropdown(false);
+                                setNewProductForm({ ...SVC_INIT_FORM });
+                                setShowNewProductDrawer(true);
+                              }}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm font-semibold text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <Plus className="w-4 h-4" /> Create New Product
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Assigned Products Table */}
+                {filteredClientProducts.length > 0 ? (
+                  <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead style={{ backgroundColor: "#1F2937" }}>
+                          <tr>
+                            <th className="py-3 px-5 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Product / Service</th>
+                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Duration</th>
+                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Price</th>
+                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                            <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {filteredClientProducts.map((product) => (
+                            <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                              <td className="py-3.5 px-5 min-w-[220px]">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center flex-shrink-0">
+                                    <Briefcase className="w-4 h-4 text-blue-600" />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.name}</p>
+                                    <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{product.description || "No description"}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                                  <Clock className="w-3.5 h-3.5 text-gray-400" />
+                                  <span className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.duration} min</span>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <div className="inline-flex items-center gap-1 px-2.5 py-1 bg-gray-50 border border-gray-200 rounded-lg">
+                                  <span className="text-xs font-bold text-gray-600">{getCurrencySymbol(product.currency)}</span>
+                                  <span className="text-xs font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.price}</span>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap">
+                                <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${product.isActive ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-gray-100 text-gray-600 border border-gray-200"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${product.isActive ? "bg-emerald-500" : "bg-gray-400"}`} />
+                                  {product.isActive ? "Active" : "Inactive"}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 whitespace-nowrap text-right">
+                                <button
+                                  onClick={() => {
+                                    if (!client) return;
+                                    unassignProductFromClient(client.id, product.id);
+                                    setClientProductList(getClientProducts(client.id));
+                                    toast.success(`"${product.name}" removed from ${client.name}`);
+                                  }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 border border-rose-200 rounded-lg transition-colors cursor-pointer font-medium"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                  title="Remove assignment"
+                                >
+                                  <X className="w-3.5 h-3.5" /> Remove
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-gray-200">
+                    <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                      <Briefcase className="w-7 h-7 text-gray-400" />
+                    </div>
+                    <h3 className="text-sm font-bold text-gray-700 mb-1" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      {productSearchQuery ? "No matching products" : "No products assigned"}
+                    </h3>
+                    <p className="text-xs text-gray-500 mb-4" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {productSearchQuery ? "Try a different keyword" : "Assign a product or create a new one for this client"}
+                    </p>
+                    {!productSearchQuery && (
+                      <button
+                        onClick={() => { setNewProductForm({ ...SVC_INIT_FORM }); setShowNewProductDrawer(true); }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <Plus className="w-4 h-4" /> Create New Product
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Create New Product Drawer — same form as Products & Services page */}
+                <DrawerShell
+                  isOpen={showNewProductDrawer}
+                  onClose={() => { setShowNewProductDrawer(false); setNewProductForm({ ...SVC_INIT_FORM }); setEmpSearchProduct(""); setShowEmpDropProduct(false); }}
+                  title="Create New Product"
+                  subtitle="New product will be added globally and assigned to this client"
+                  icon={<Plus className="w-4 h-4 text-blue-600" />}
+                  width="max-w-lg"
+                  zIndex={700}
+                  footer={
+                    <div className="flex items-center gap-2 w-full justify-end">
+                      <button
+                        onClick={() => { setShowNewProductDrawer(false); setNewProductForm({ ...SVC_INIT_FORM }); }}
+                        className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!newProductForm.name.trim()) { toast.error("Product name is required"); return; }
+                          if (!newProductForm.currency) { toast.error("Please select a currency"); return; }
+                          if (!client) return;
+                          const created = addService({
+                            name: newProductForm.name.trim(),
+                            description: newProductForm.description,
+                            duration: newProductForm.duration,
+                            price: newProductForm.price,
+                            currency: newProductForm.currency,
+                            isActive: newProductForm.isActive,
+                            assignedEmployees: newProductForm.assignedEmployeeIds,
+                          });
+                          assignProductToClient(client.id, created.id);
+                          setGlobalServiceList(getStoredServices());
+                          setClientProductList(getClientProducts(client.id));
+                          toast.success(`"${created.name}" created and assigned to ${client.name}`);
+                          setShowNewProductDrawer(false);
+                          setNewProductForm({ ...SVC_INIT_FORM });
+                          setEmpSearchProduct("");
+                          setShowEmpDropProduct(false);
+                        }}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      >
+                        <Plus className="w-4 h-4" /> Create & Assign
+                      </button>
+                    </div>
+                  }
+                >
+                  {/* Service Form — identical to Services.tsx */}
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Product Name *</label>
+                      <input type="text" placeholder="e.g. Initial Consultation" value={newProductForm.name} onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Description</label>
+                      <textarea rows={3} placeholder="Brief description..." value={newProductForm.description} onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none" style={{ fontFamily: "DM Sans, sans-serif" }} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Duration (min) *</label>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                          <input type="number" min={5} value={newProductForm.duration} onChange={(e) => setNewProductForm({ ...newProductForm, duration: parseInt(e.target.value) || 0 })} className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Pricing & Currency *</label>
+                        <div className="flex gap-2">
+                          <select value={newProductForm.currency} onChange={(e) => setNewProductForm({ ...newProductForm, currency: e.target.value })} className="w-28 px-2.5 py-2.5 border border-gray-200 rounded-lg text-xs font-semibold text-gray-800 bg-gray-50 focus:outline-none focus:border-blue-500 transition-all cursor-pointer" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            <option value="">Currency</option>
+                            {SVC_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} ({c.symbol})</option>)}
+                          </select>
+                          <div className="relative flex-1">
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500">{newProductForm.currency ? getCurrencySymbol(newProductForm.currency) : "#"}</span>
+                            <input type="number" min={0} placeholder="0" value={newProductForm.price} onChange={(e) => setNewProductForm({ ...newProductForm, price: parseFloat(e.target.value) || 0 })} className="w-full pl-8 pr-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Assigned Employees</label>
+                      {newProductForm.assignedEmployeeIds.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 mb-2">
+                          {newProductForm.assignedEmployeeIds.map((eid) => { const emp = SVC_EMPLOYEES.find((e) => e.id === eid); if (!emp) return null; return (
+                            <span key={eid} onClick={() => toggleEmpProduct(eid)} title="Click to remove" className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium text-white cursor-pointer hover:opacity-80 transition-opacity" style={{ backgroundColor: "#1F2937", fontFamily: "Outfit, sans-serif" }}>{emp.initials} <span className="opacity-70">x</span></span>
+                          ); })}
+                        </div>
+                      )}
+                      <div className="relative">
+                        <button type="button" onClick={() => setShowEmpDropProduct(!showEmpDropProduct)} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm flex items-center justify-between focus:outline-none focus:border-blue-500 transition-all bg-white cursor-pointer" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                          <span className="text-gray-400">{newProductForm.assignedEmployeeIds.length === 0 ? "Select employees..." : `${newProductForm.assignedEmployeeIds.length} selected`}</span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEmpDropProduct ? "rotate-180" : ""}`} />
+                        </button>
+                        {showEmpDropProduct && (
+                          <>
+                            <div className="fixed inset-0 z-[5]" onClick={() => { setShowEmpDropProduct(false); setEmpSearchProduct(""); }} />
+                            <div className="absolute left-0 right-0 mt-1 z-10 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+                              <div className="border-b border-gray-100 bg-gray-50"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" /><input type="text" placeholder="Search..." value={empSearchProduct} onChange={(e) => setEmpSearchProduct(e.target.value)} onClick={(e) => e.stopPropagation()} className="w-full h-9 pl-9 pr-3 bg-transparent text-xs placeholder:text-gray-400 focus:outline-none" /></div></div>
+                              <div className="max-h-48 overflow-y-auto">
+                                {filteredEmpsProduct.map((emp) => (
+                                  <button key={emp.id} type="button" onClick={(e) => { e.stopPropagation(); toggleEmpProduct(emp.id); }} className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors cursor-pointer ${newProductForm.assignedEmployeeIds.includes(emp.id) ? "bg-blue-50" : "hover:bg-gray-50"}`}>
+                                    <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: "#1F2937" }}>{emp.initials}</div>
+                                    <div className="flex-1 min-w-0"><p className="text-xs font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{emp.name}</p><p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>{emp.role}</p></div>
+                                    {newProductForm.assignedEmployeeIds.includes(emp.id) && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                                  </button>
+                                ))}
+                                {filteredEmpsProduct.length === 0 && <p className="text-center text-xs text-gray-400 py-5">No employees found</p>}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between p-3.5 bg-gray-50 border border-gray-200 rounded-xl">
+                      <div><p className="text-sm font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>Active Product</p><p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>Available for scheduling and booking</p></div>
+                      <button type="button" onClick={() => setNewProductForm({ ...newProductForm, isActive: !newProductForm.isActive })} className="cursor-pointer hover:opacity-80 transition-opacity">{newProductForm.isActive ? <ToggleRight className="w-9 h-9 text-blue-600" /> : <ToggleLeft className="w-9 h-9 text-gray-400" />}</button>
+                    </div>
+                  </div>
+                </DrawerShell>
+              </div>
+            );
+          })()}
+
           {/* Invoice Detail Drawer */}
           <InvoiceDetailDrawer
             isOpen={isInvoiceDrawerOpen}
             onClose={() => setIsInvoiceDrawerOpen(false)}
             invoice={selectedInvoiceForDrawer}
           />
-
           {/* ── Select/Create Field Modals ── */}
           {fieldManagerOpen && fieldManagerMode === "select" && (
             <SelectFieldsModal

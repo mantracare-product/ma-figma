@@ -985,6 +985,7 @@ export default function Settings() {
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [addUserDepartment, setAddUserDepartment] = useState("");
   const [userFormData, setUserFormData] = useState<{
     name: string;
     email: string;
@@ -3416,6 +3417,7 @@ export default function Settings() {
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Name</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Email</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Role</th>
+                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Department</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>
                       </tr>
                     </thead>
@@ -3479,6 +3481,19 @@ export default function Settings() {
                               }`}>
                               {user.role || "Agent"}
                             </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {(() => {
+                              const dept = roles.find(r => r.name === user.role)?.department;
+                              return dept ? (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+                                  {dept}
+                                </span>
+                              ) : (
+                                <span className="text-xs text-slate-400 italic" style={{ fontFamily: 'Outfit, sans-serif' }}>—</span>
+                              );
+                            })()}
                           </td>
                           <td className="px-6 py-4">
                             <label className="relative inline-flex items-center cursor-pointer">
@@ -7143,11 +7158,12 @@ export default function Settings() {
           </div>
         </Modal>
 
-        {/* Add User Modal */}
-        <Modal
+        {/* Add User Drawer */}
+        <Drawer
           isOpen={showAddUserModal}
           onClose={() => {
             setShowAddUserModal(false);
+            setAddUserDepartment("");
             setUserFormData({
               name: "",
               email: "",
@@ -7158,54 +7174,73 @@ export default function Settings() {
             setOperationsPermission("");
             setSystemPermission("");
           }}
-          title="Add User"
-          footer={
-            <>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setShowAddUserModal(false);
-                  setUserFormData({
-                    name: "",
-                    email: "",
-                    role: "Agent",
-                    permissions: createDefaultPermissions(),
-                  });
-                  setCorePermission("");
-                  setOperationsPermission("");
-                  setSystemPermission("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleSaveUser}>
-                <Save className="w-4 h-4" />
-                Add User
-              </Button>
-            </>
+          title={
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-slate-800"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="19" y1="8" x2="19" y2="14"/><line x1="22" y1="11" x2="16" y2="11"/></svg>
+              </div>
+              <div>
+                <div className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>Add Team Member</div>
+                <div className="text-[11px] text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>Fill in the details below to add a new user</div>
+              </div>
+            </div>
           }
+          maxWidth="max-w-[40vw] w-[40vw]"
         >
-          <div className="space-y-4">
-            {/* User Info */}
-            <Input
-              label="Name"
-              value={userFormData.name}
-              onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
-              placeholder="Enter user name"
-              required
-            />
-            <Input
-              label="Email"
-              type="email"
-              value={userFormData.email}
-              onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
-              placeholder="Enter user email"
-              required
-            />
-
-            {/* Role Dropdown */}
+          <div className="space-y-5" style={{ fontFamily: "Outfit, sans-serif" }}>
+            {/* Name */}
             <div>
-              <label className="block text-sm font-medium mb-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Name <span className="text-red-500">*</span></label>
+              <input
+                value={userFormData.name}
+                onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
+                placeholder="Enter team member name"
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
+              />
+            </div>
+
+            {/* Email */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">Email <span className="text-red-500">*</span></label>
+              <input
+                type="email"
+                value={userFormData.email}
+                onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                placeholder="Enter email address"
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors"
+              />
+            </div>
+
+            {/* Department (before Role) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
+                  Department <span className="text-slate-400 font-normal">(optional)</span>
+                </span>
+              </label>
+              <div className="relative">
+                <select
+                  value={addUserDepartment}
+                  onChange={(e) => {
+                    setAddUserDepartment(e.target.value);
+                    // Reset role when dept changes
+                    setUserFormData({ ...userFormData, role: "Agent", permissions: createDefaultPermissions() });
+                  }}
+                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"
+                >
+                  <option value="">All departments</option>
+                  {Array.from(new Set(roles.filter(r => r.department).map(r => r.department!))).map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
+              </div>
+            </div>
+
+            {/* Role (filtered by department) */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Role <span className="text-red-500">*</span>
               </label>
               <div className="relative">
@@ -7215,32 +7250,59 @@ export default function Settings() {
                     const selectedRoleName = e.target.value;
                     const matchedRole = roles.find((r) => r.name === selectedRoleName);
                     if (matchedRole) {
-                      setUserFormData({
-                        ...userFormData,
-                        role: selectedRoleName,
-                        permissions: { ...matchedRole.permissions },
-                      });
+                      setUserFormData({ ...userFormData, role: selectedRoleName, permissions: { ...matchedRole.permissions } });
                     } else {
                       setUserFormData({ ...userFormData, role: selectedRoleName });
                     }
                   }}
-                  className="w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-sm bg-white"
-                  style={{ appearance: "none" }}
+                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"
                 >
-                  {availableRoles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
+                  {roles
+                    .filter(r => !addUserDepartment || r.department === addUserDepartment)
+                    .map((role) => (
+                      <option key={role.id} value={role.name}>{role.name}</option>
+                    ))
+                  }
+                  {roles.filter(r => !addUserDepartment || r.department === addUserDepartment).length === 0 && (
+                    <option value="Agent" disabled>No roles in this department</option>
+                  )}
                 </select>
-                <ChevronDown
-                  className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  style={{ color: "#9CA3AF", width: "16px", height: "16px" }}
-                />
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
               </div>
+              {addUserDepartment && (
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Showing roles in <span className="font-semibold text-slate-600">{addUserDepartment}</span>
+                </p>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddUserModal(false);
+                  setAddUserDepartment("");
+                  setUserFormData({ name: "", email: "", role: "Agent", permissions: createDefaultPermissions() });
+                  setCorePermission("");
+                  setOperationsPermission("");
+                  setSystemPermission("");
+                }}
+                className="flex-1 px-4 py-2.5 text-sm font-semibold text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUser}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                Add Team Member
+              </button>
             </div>
           </div>
-        </Modal>
+        </Drawer>
 
         {/* Edit User Modal - Manage Permissions */}
         <Modal
@@ -7648,7 +7710,7 @@ export default function Settings() {
                         </div>
 
                         <div className="inline-flex rounded-md border border-gray-200 overflow-hidden text-[10px] shadow-xs flex-shrink-0">
-                          {(["deny", "own", "all"] as ActionScope[]).map((opt) => (
+                          {(["deny", "own", "role", "all"] as ActionScope[]).map((opt) => (
                             <button
                               key={opt}
                               type="button"
