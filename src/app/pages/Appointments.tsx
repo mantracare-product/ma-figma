@@ -2543,7 +2543,7 @@ export default function Appointments() {
           if (patch.startMinute !== undefined) setBookingStartMinute(patch.startMinute);
           if (patch.sessionType !== undefined) setSessionType(patch.sessionType);
           if (patch.client !== undefined) setSelectedClient(patch.client);
-          if (patch.provider !== undefined) setSelectedProvider(patch.provider);
+          if (patch.provider !== undefined) setSelectedProvider(patch.provider as any);
           if (patch.serviceId !== undefined) setBookingServiceId(patch.serviceId);
           if (patch.generateInvoice !== undefined) setBookingGenerateInvoice(patch.generateInvoice);
           if (patch.lineItems !== undefined) setBookingLineItems(patch.lineItems);

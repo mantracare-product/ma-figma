@@ -35,7 +35,7 @@ interface InvoiceContextType {
   getInvoicesByClient: (clientId: string) => ClientInvoice[];
   getReportData: (dataSource: ReportDataSource, filters?: Record<string, any>, groupBy?: string) => any;
   reports: ReportDefinition[];
-  saveReport: (report: Omit<ReportDefinition, "id" | "lastRun">) => ReportDefinition;
+  saveReport: (report: Omit<ReportDefinition, "id" | "lastRun"> & { id?: string }) => ReportDefinition;
   deleteReport: (reportId: string) => void;
 }
 
@@ -528,13 +528,14 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return invoices.filter((inv) => inv.clientId === clientId);
   };
 
-  const saveReport = (report: Omit<ReportDefinition, "id" | "lastRun">): ReportDefinition => {
+  const saveReport = (report: Omit<ReportDefinition, "id" | "lastRun"> & { id?: string }): ReportDefinition => {
+    const existing = report.id ? reports.find(r => r.id === report.id) : null;
     const newReport: ReportDefinition = {
       ...report,
-      id: `rep-custom-${Date.now()}`,
+      id: report.id || `rep-custom-${Date.now()}`,
       lastRun: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" }) + " " + new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
     };
-    setReports((prev) => [newReport, ...prev]);
+    setReports((prev) => existing ? prev.map(r => r.id === report.id ? newReport : r) : [newReport, ...prev]);
     return newReport;
   };
 

@@ -5,7 +5,7 @@ import { Button } from "./Button";
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
   maxWidth?: "sm" | "md" | "md-plus" | "lg" | "xl" | "2xl" | "voice-lib" | "custom-field";

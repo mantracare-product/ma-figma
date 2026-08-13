@@ -6,6 +6,7 @@ interface InvoiceProgressBarProps {
   onStatusChange?: (newStatus: InvoiceStatus) => void;
   interactive?: boolean;
   logId?: string;
+  size?: "sm" | "md" | "lg";
 }
 
 const STAGE_BLOCKS: { id: InvoiceStatus; name: string; step: number }[] = [
