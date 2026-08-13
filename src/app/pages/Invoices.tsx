@@ -552,7 +552,7 @@ export default function Invoices() {
                                     className="w-full flex items-center gap-2.5 px-3 text-sm text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
                                     style={{ height: "36px", fontSize: "13px" }}
                                   >
-                                    <CreditCard className="w-4 h-4 text-emerald-600" /> Record Payment
+                                    <CreditCard className="w-4 h-4 text-emerald-600" /> Add Payment
                                   </button>
                                 )}
                                 <button
@@ -934,6 +934,18 @@ export default function Invoices() {
                                           <Eye className="w-3.5 h-3.5 text-gray-400" />
                                           View
                                         </button>
+                                        {inv.status !== "paid" && inv.status !== "void" && (
+                                           <button
+                                             onClick={() => {
+                                               setOpenCardMenuId(null);
+                                               setPaymentModalInvoice(inv);
+                                             }}
+                                             className="w-full text-left px-3 py-1.5 text-xs text-emerald-700 font-bold hover:bg-emerald-50 flex items-center gap-2 transition-colors border-b border-gray-100"
+                                           >
+                                             <CreditCard className="w-3.5 h-3.5 text-emerald-600" />
+                                             Add Payment
+                                           </button>
+                                         )}
                                         {!isEditDisabled && (
                                           <button
                                             onClick={() => handleEditInvoice(inv)}

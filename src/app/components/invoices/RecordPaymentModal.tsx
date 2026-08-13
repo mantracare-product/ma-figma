@@ -37,13 +37,20 @@ export default function RecordPaymentModal({
 }: RecordPaymentModalProps) {
   const { invoices, payments, recordPayment, sendInvoice, getPaymentsByClient } = useInvoices();
   const clientsList = getClientList();
-
   const [selectedClientId, setSelectedClientId] = useState<string>(
     clientId || clientsList[0]?.id || "c-1"
   );
 
+  const availableClients = [...clientsList];
+  if (selectedClientId && !availableClients.some((c) => c.id === selectedClientId)) {
+    availableClients.unshift({
+      id: selectedClientId,
+      name: clientName || "Client",
+    });
+  }
+
   const activeClient =
-    clientsList.find((c) => c.id === selectedClientId) || {
+    availableClients.find((c) => c.id === selectedClientId) || {
       id: selectedClientId,
       name: clientName || "Client",
     };
@@ -208,7 +215,7 @@ export default function RecordPaymentModal({
             onChange={(e) => setSelectedClientId(e.target.value)}
             className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1"
           >
-            {clientsList.map((c) => (
+            {availableClients.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
