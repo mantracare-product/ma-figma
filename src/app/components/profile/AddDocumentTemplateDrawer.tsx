@@ -1,5 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { UploadCloud, FileText, CheckCircle2, Settings, Sparkles, AlertCircle, Loader2 } from "lucide-react";
+import {
+  UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
+  Table as TableIcon, Image as ImageIcon, PlusCircle, LayoutTemplate, Layers,
+  ChevronDown, Check
+} from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
 import {
@@ -17,23 +21,336 @@ interface AddDocumentTemplateDrawerProps {
   onTemplateCreated?: (template: DocumentTemplate) => void;
 }
 
-const SYSTEM_FIELDS_OPTIONS = [
-  { key: "name", label: "Client Full Name" },
-  { key: "email", label: "Email Address" },
-  { key: "phone", label: "Phone Number" },
-  { key: "companyName", label: "Company Name" },
-  { key: "jobPosition", label: "Job Position / Title" },
-  { key: "location", label: "Location / Address" },
-  { key: "responsible", label: "Responsible Staff Member" },
-  { key: "status", label: "Client Status" },
-  { key: "date", label: "Current Date" },
+const SYSTEM_FIELDS_BY_MODULE = [
+  {
+    module: "CLIENTS",
+    fields: [
+      { key: "name", label: "Client Full Name" },
+      { key: "status", label: "Client Status" },
+      { key: "email", label: "Email Address" },
+      { key: "phone", label: "Phone Number" },
+      { key: "location", label: "Location / Address" },
+      { key: "companyName", label: "Company Name" },
+      { key: "jobPosition", label: "Job Position / Title" },
+      { key: "role", label: "Role / Job Title" },
+      { key: "language", label: "Language" },
+      { key: "country", label: "Country" },
+      { key: "responsible", label: "Responsible Staff Member" },
+      { key: "consent_signature", label: "Consent / E-Signature" },
+      { key: "allergies", label: "Clinical Allergies" },
+      { key: "medical_notes", label: "Medical / Clinical Notes" },
+      { key: "emergency_contact", label: "Emergency Contact" },
+      { key: "notes", label: "Client Notes" },
+    ],
+  },
+  {
+    module: "PROCESSES & DEALS",
+    fields: [
+      { key: "process_name", label: "Process Name" },
+      { key: "stage", label: "Process Stage" },
+      { key: "deal_value", label: "Deal Value" },
+    ],
+  },
+  {
+    module: "APPOINTMENTS",
+    fields: [
+      { key: "appointment_date", label: "Appointment Date" },
+      { key: "appointment_time", label: "Appointment Time" },
+      { key: "appointment_type", label: "Appointment Type" },
+      { key: "provider", label: "Provider / Specialist" },
+    ],
+  },
+  {
+    module: "CALLS",
+    fields: [
+      { key: "call_duration", label: "Call Duration" },
+      { key: "call_sentiment", label: "Call Sentiment" },
+    ],
+  },
+  {
+    module: "SERVICES & PRODUCTS",
+    fields: [
+      { key: "service_name", label: "Service Offered" },
+      { key: "price", label: "Service Price" },
+      { key: "tax_rate", label: "Tax Rate (%)" },
+    ],
+  },
+  {
+    module: "ORGANIZATIONS",
+    fields: [
+      { key: "org_name", label: "Organization Name" },
+      { key: "tax_id", label: "Tax ID / Registration" },
+      { key: "payment_terms", label: "Payment Terms" },
+    ],
+  },
+  {
+    module: "SYSTEM METADATA",
+    fields: [
+      { key: "date", label: "Current Date / Submission Date" },
+    ],
+  },
 ];
+
+const SYSTEM_FIELDS_OPTIONS = SYSTEM_FIELDS_BY_MODULE.flatMap((group) =>
+  group.fields.map((f) => ({ key: f.key, label: f.label, module: group.module }))
+);
+
+const AVAILABLE_WEBFORMS = [
+  {
+    id: "wf-1",
+    title: "Client Intake & Consent WebForm",
+    category: "Medical / Intake",
+    fields: ["client_name", "email", "phone", "location", "consent_signature", "date"],
+    sampleText: `CLIENT INTAKE & CONSENT WEBFORM
+
+Client Details:
+Full Name: {client_name}
+Email Address: {email}
+Phone Number: {phone}
+Address / Location: {location}
+Submission Date: {date}
+
+Consent & Authorization:
+I hereby confirm that I have reviewed and agreed to the services and terms outlined.
+Client Signature: {consent_signature}
+Assigned Staff: {responsible}`,
+  },
+  {
+    id: "wf-2",
+    title: "KYC & Identity Verification WebForm",
+    category: "Identification",
+    fields: ["client_name", "email", "phone", "company_name", "job_position", "id_number", "date"],
+    sampleText: `KYC & IDENTITY VERIFICATION WEBFORM
+
+Identity Information:
+Client Name: {client_name}
+Email: {email}
+Phone: {phone}
+Company Name: {company_name}
+Job Title: {job_position}
+Verification Date: {date}
+
+Verification Details:
+Document Verified By Officer: {responsible}
+Status: Verified`,
+  },
+  {
+    id: "wf-3",
+    title: "Medical History Intake WebForm",
+    category: "Medical / Intake",
+    fields: ["client_name", "phone", "allergies", "medical_notes", "emergency_contact", "date"],
+    sampleText: `MEDICAL HISTORY INTAKE WEBFORM
+
+Patient Info:
+Name: {client_name}
+Phone: {phone}
+Intake Date: {date}
+
+Clinical History:
+Allergies: {allergies}
+Medical Notes: {medical_notes}
+Emergency Contact: {emergency_contact}
+Attending Specialist: {responsible}`,
+  },
+  {
+    id: "wf-4",
+    title: "Financial Clearance WebForm",
+    category: "Financial",
+    fields: ["client_name", "email", "company_name", "tax_id", "payment_terms", "date"],
+    sampleText: `FINANCIAL CLEARANCE WEBFORM
+
+Billing & Financial Info:
+Client Name: {client_name}
+Company Name: {company_name}
+Email: {email}
+Tax ID / Registration: {tax_id}
+Payment Terms: {payment_terms}
+Clearance Date: {date}
+Financial Officer: {responsible}`,
+  },
+];
+
+const VARIABLE_OPTIONS = [
+  { category: "Client Variables", items: [
+    { key: "{client_name}", label: "Client Full Name" },
+    { key: "{email}", label: "Email Address" },
+    { key: "{phone}", label: "Phone Number" },
+    { key: "{company_name}", label: "Company Name" },
+    { key: "{job_position}", label: "Job Position" },
+    { key: "{location}", label: "Location / Address" },
+    { key: "{status}", label: "Client Status" },
+  ]},
+  { category: "System & Staff Variables", items: [
+    { key: "{responsible}", label: "Responsible Staff" },
+    { key: "{current_date}", label: "Current Date" },
+    { key: "{organization_name}", label: "Organization Name" },
+  ]},
+  { category: "Service & Billing Variables", items: [
+    { key: "{service_name}", label: "Service Name" },
+    { key: "{duration}", label: "Duration" },
+    { key: "{price}", label: "Price / Rate" },
+    { key: "{tax_rate}", label: "Tax Rate (%)" },
+  ]},
+];
+
+const TEMPLATE_MODE_OPTIONS = [
+  {
+    id: "device",
+    title: "Import from Device",
+    subtitle: "Upload Word (.docx) or Text (.txt) file with auto-extraction",
+    icon: UploadCloud,
+  },
+  {
+    id: "webforms",
+    title: "Import from WebForms",
+    subtitle: "Generate template from pre-built intake webforms & fields",
+    icon: Layers,
+  },
+  {
+    id: "canvas",
+    title: "Create Canvas Template",
+    subtitle: "Build document template using rich editor canvas & variables",
+    icon: LayoutTemplate,
+  },
+];
+
+// MappedFieldSelector custom popover component for table rows with expandable categories
+function MappedFieldSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (newKey: string) => void;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Find currently selected option definition
+  const selectedOpt = SYSTEM_FIELDS_OPTIONS.find((o) => o.key === value) || {
+    key: value,
+    label: value,
+    module: "CLIENTS",
+  };
+
+  // State to track which module category is expanded. Default to the category of current value.
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(selectedOpt.module || "CLIENTS");
+
+  // Keep expanded category synced when value changes or popover opens
+  useEffect(() => {
+    if (isOpen && selectedOpt.module) {
+      setExpandedCategory(selectedOpt.module);
+    }
+  }, [isOpen, selectedOpt.module]);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setIsOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
+        style={{ fontFamily: "Outfit, sans-serif" }}
+      >
+        <div className="flex items-center gap-2 overflow-hidden">
+          <span className="text-xs font-bold text-slate-900 truncate">
+            {selectedOpt.label}
+          </span>
+          <span className="text-[11px] font-mono text-slate-400 font-medium shrink-0">
+            ({selectedOpt.key})
+          </span>
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+      </button>
+
+      {isOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+          <div
+            className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-left p-1.5 animate-in fade-in-50 zoom-in-95 duration-100 max-h-72 overflow-y-auto"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <div className="space-y-1">
+              {SYSTEM_FIELDS_BY_MODULE.map((group) => {
+                const isExpanded = expandedCategory === group.module;
+                const hasSelected = group.fields.some((f) => f.key === value);
+
+                return (
+                  <div key={group.module} className="border border-slate-100 rounded-xl overflow-hidden">
+                    {/* Category Header Button */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedCategory(isExpanded ? null : group.module)}
+                      className={`w-full px-2.5 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${
+                        isExpanded
+                          ? "bg-slate-100 text-slate-900 font-bold"
+                          : hasSelected
+                          ? "bg-slate-50 text-slate-800 font-semibold hover:bg-slate-100/80"
+                          : "bg-white text-slate-600 hover:bg-slate-50"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold tracking-wider uppercase">
+                          {group.module}
+                        </span>
+                      </div>
+                      <ChevronDown
+                        className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${
+                          isExpanded ? "rotate-180 text-slate-700" : ""
+                        }`}
+                      />
+                    </button>
+
+                    {/* Fields List (ONLY shown when category is selected / expanded) */}
+                    {isExpanded && (
+                      <div className="p-1 space-y-0.5 bg-slate-50/50 border-t border-slate-100 animate-in fade-in-50 duration-100">
+                        {group.fields.map((opt) => {
+                          const isSelected = value === opt.key;
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() => {
+                                onChange(opt.key);
+                                setIsOpen(false);
+                              }}
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-between group cursor-pointer ${
+                                isSelected
+                                  ? "bg-[#1F2937] text-white font-bold shadow-xs"
+                                  : "hover:bg-slate-200/60 text-slate-800"
+                              }`}
+                            >
+                              <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                {opt.label}
+                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-[11px] font-mono ${isSelected ? "text-slate-300" : "text-slate-400 group-hover:text-slate-600"}`}>
+                                  ({opt.key})
+                                </span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 export default function AddDocumentTemplateDrawer({
   isOpen,
   onClose,
   onTemplateCreated,
 }: AddDocumentTemplateDrawerProps) {
+  // Mode Selection: "device" | "webforms" | "canvas"
+  const [templateMode, setTemplateMode] = useState<"device" | "webforms" | "canvas">("device");
+  const [modeDropdownOpen, setModeDropdownOpen] = useState(false);
+
   const [templateName, setTemplateName] = useState("");
   const [templateText, setTemplateText] = useState("");
   const [fileName, setFileName] = useState("");
@@ -41,7 +358,12 @@ export default function AddDocumentTemplateDrawer({
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
-  // Field manager state
+  // WebForm Selection State
+  const [selectedWebFormId, setSelectedWebFormId] = useState("");
+  const [webformDropdownOpen, setWebformDropdownOpen] = useState(false);
+
+  // Variable Modal / Popover state
+  const [showVariableModal, setShowVariableModal] = useState(false);
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
 
   // Extract fields automatically whenever templateText changes
@@ -85,6 +407,7 @@ export default function AddDocumentTemplateDrawer({
 
   if (!isOpen) return null;
 
+  // File upload from device handler
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -111,24 +434,18 @@ export default function AddDocumentTemplateDrawer({
             toast.error("Word document contains no text.");
           } else {
             setTemplateText(extractedText);
-            toast.success(`Successfully extracted text from Word file "${file.name}"!`);
+            toast.success(`Extracted text from "${file.name}"!`);
           }
         } catch (err) {
           console.error("Mammoth extraction error:", err);
-          setFileError("Failed to extract text from Word document. Please ensure it is a valid .docx file.");
+          setFileError("Failed to extract text from Word document.");
           toast.error("Failed to parse Word document.");
         } finally {
           setIsExtracting(false);
         }
       };
-      reader.onerror = () => {
-        setIsExtracting(false);
-        setFileError("Failed to read file.");
-        toast.error("File reader error.");
-      };
       reader.readAsArrayBuffer(file);
     } else {
-      // .txt file
       const reader = new FileReader();
       reader.onload = (evt) => {
         const text = evt.target?.result as string;
@@ -139,6 +456,28 @@ export default function AddDocumentTemplateDrawer({
       };
       reader.readAsText(file);
     }
+  };
+
+  // Webform import handler
+  const handleSelectWebform = (wfId: string) => {
+    setSelectedWebFormId(wfId);
+    const wf = AVAILABLE_WEBFORMS.find((w) => w.id === wfId);
+    if (wf) {
+      setTemplateText(wf.sampleText);
+      if (!templateName) setTemplateName(wf.title);
+      toast.success(`Loaded template content from "${wf.title}"!`);
+    }
+  };
+
+  // Insert Rich Content Helpers into Canvas
+  const insertCanvasElement = (snippet: string) => {
+    setTemplateText((prev) => (prev ? `${prev}\n\n${snippet}` : snippet));
+  };
+
+  const insertVariable = (variableKey: string) => {
+    setTemplateText((prev) => `${prev}${variableKey}`);
+    setShowVariableModal(false);
+    toast.info(`Inserted ${variableKey}`);
   };
 
   const handleMappingChange = (field: string, newMappedKey: string) => {
@@ -163,7 +502,7 @@ export default function AddDocumentTemplateDrawer({
       return;
     }
     if (!templateText.trim()) {
-      toast.error("Please enter template body or upload a template file");
+      toast.error("Please enter template content or import a document");
       return;
     }
 
@@ -171,6 +510,7 @@ export default function AddDocumentTemplateDrawer({
     const newTemplate: DocumentTemplate = {
       id: `tpl-${Date.now()}`,
       name: templateName.trim(),
+      category: "General",
       fileName: fileName || `${templateName.trim().toLowerCase().replace(/\s+/g, "_")}.docx`,
       templateText: templateText.trim(),
       extractedFields: extracted,
@@ -191,16 +531,16 @@ export default function AddDocumentTemplateDrawer({
         isOpen={isOpen}
         onClose={onClose}
         title="Add Document Template"
-        subtitle="Upload Word / Text document and map fillable {fields}"
-        icon={<FileText className="w-5 h-5 text-blue-600" />}
-        width="max-w-2xl"
+        subtitle="Create reusable document templates using device import, webforms, or rich canvas editor"
+        icon={<FileText className="w-5 h-5 text-slate-700" />}
+        width="max-w-3xl"
         zIndex={700}
         footer={
           <>
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+              className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               Cancel
@@ -208,7 +548,7 @@ export default function AddDocumentTemplateDrawer({
             <button
               type="button"
               onClick={() => handleSave()}
-              className="flex items-center gap-1.5 px-4 py-2 bg-[#1F2937] hover:bg-gray-800 text-white rounded-lg text-sm font-medium transition-colors shadow-xs cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-lg text-sm font-medium transition-colors shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <CheckCircle2 className="w-4 h-4" />
@@ -218,20 +558,9 @@ export default function AddDocumentTemplateDrawer({
         }
       >
         <div className="space-y-6">
-          {/* Info Banner */}
-          <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl flex items-start gap-3 text-xs">
-            <Sparkles className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="font-semibold text-blue-900 mb-0.5">Template Placeholder Format</p>
-              <p className="text-blue-700 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Use <code className="bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded font-mono font-bold">{"{field_name}"}</code> syntax inside your document text (e.g. <code className="bg-blue-100 text-blue-900 px-1 py-0.5 rounded">{"{client_name}"}</code>, <code className="bg-blue-100 text-blue-900 px-1 py-0.5 rounded">{"{email}"}</code>). All variables will be extracted automatically below for field mapping.
-              </p>
-            </div>
-          </div>
-
-          {/* Form Inputs */}
+          {/* Template Name */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
               Template Name *
             </label>
             <input
@@ -240,79 +569,364 @@ export default function AddDocumentTemplateDrawer({
               placeholder="e.g. Patient Onboarding Agreement"
               value={templateName}
               onChange={(e) => setTemplateName(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-slate-500"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
             />
           </div>
 
-          {/* Word Dropzone */}
+          {/* Custom Modern Dropdown for Template Source & Method */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Upload Word Document (.docx / .txt)
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Choose Template Source & Method
             </label>
-            <label className="p-4 border-2 border-dashed border-gray-200 hover:border-blue-400 rounded-xl bg-gray-50/50 hover:bg-blue-50/30 flex flex-col items-center justify-center cursor-pointer transition-colors">
-              {isExtracting ? (
-                <div className="flex flex-col items-center py-2 text-blue-600">
-                  <Loader2 className="w-6 h-6 animate-spin mb-1" />
-                  <span className="text-xs font-semibold">Extracting Word content via Mammoth.js...</span>
-                </div>
-              ) : (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setModeDropdownOpen((v) => !v)}
+                className="w-full flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {(() => {
+                  const currentOpt = TEMPLATE_MODE_OPTIONS.find((o) => o.id === templateMode) || TEMPLATE_MODE_OPTIONS[0];
+                  const IconComp = currentOpt.icon;
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-800">
+                        <IconComp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">{currentOpt.title}</p>
+                        <p className="text-[11px] text-slate-500">{currentOpt.subtitle}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${modeDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Custom Popover Dropdown Menu */}
+              {modeDropdownOpen && (
                 <>
-                  <UploadCloud className="w-6 h-6 text-blue-600 mb-1.5" />
-                  <span className="text-xs font-semibold text-gray-800">
-                    {fileName ? `Loaded: ${fileName}` : "Click to browse or drop Word / Text file"}
-                  </span>
-                  <span className="text-[11px] text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Extracts fillable {"{fields}"} automatically
-                  </span>
+                  <div className="fixed inset-0 z-40" onClick={() => setModeDropdownOpen(false)} />
+                  <div
+                    className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <div className="space-y-1">
+                      {TEMPLATE_MODE_OPTIONS.map((opt) => {
+                        const IconComp = opt.icon;
+                        const isSelected = templateMode === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setTemplateMode(opt.id as any);
+                              setModeDropdownOpen(false);
+                            }}
+                            className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
+                              isSelected
+                                ? "bg-slate-900 text-white font-bold shadow-xs"
+                                : "hover:bg-slate-100 text-slate-800"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                  isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
+                                }`}
+                              >
+                                <IconComp className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <p className={`text-xs font-bold ${isSelected ? "text-white" : "text-slate-900"}`}>{opt.title}</p>
+                                <p className={`text-[11px] ${isSelected ? "text-slate-300" : "text-slate-500"}`}>{opt.subtitle}</p>
+                              </div>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </>
               )}
-              <input
-                type="file"
-                accept=".docx,.txt,.doc"
-                onChange={handleFileUpload}
-                className="hidden"
-                disabled={isExtracting}
-              />
-            </label>
-
-            {fileError && (
-              <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
-                <span>{fileError}</span>
-              </div>
-            )}
+            </div>
           </div>
 
-          {/* Editor */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Document Template Content (with {"{placeholders}"}) *
-            </label>
+          {/* MODE 1: DEVICE UPLOAD (ONLY shown when templateMode === 'device') */}
+          {templateMode === "device" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Upload Word / Text Document (.docx / .txt)
+              </label>
+              <label className="p-5 border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-xl bg-slate-50/60 hover:bg-slate-100/50 flex flex-col items-center justify-center cursor-pointer transition-colors">
+                {isExtracting ? (
+                  <div className="flex flex-col items-center py-2 text-slate-700">
+                    <Loader2 className="w-6 h-6 animate-spin mb-1 text-slate-800" />
+                    <span className="text-xs font-semibold">Extracting document content...</span>
+                  </div>
+                ) : (
+                  <>
+                    <UploadCloud className="w-7 h-7 text-slate-700 mb-1.5" />
+                    <span className="text-xs font-bold text-slate-900">
+                      {fileName ? `Loaded: ${fileName}` : "Click to browse or drop Word / Text file"}
+                    </span>
+                    <span className="text-[11px] text-slate-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Extracts fillable {"{fields}"} automatically into template content
+                    </span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept=".docx,.txt,.doc"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={isExtracting}
+                />
+              </label>
+              {fileError && (
+                <div className="mt-2 p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center gap-2 text-xs text-rose-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+                  <span>{fileError}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* MODE 2: IMPORT FROM WEBFORMS (Custom Popover Selector) */}
+          {templateMode === "webforms" && (
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <label className="block text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Select Available WebForm
+              </label>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setWebformDropdownOpen((v) => !v)}
+                  className="w-full flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {(() => {
+                    const selectedWf = AVAILABLE_WEBFORMS.find((w) => w.id === selectedWebFormId);
+                    if (selectedWf) {
+                      return (
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-800">
+                            <Layers className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-slate-900">{selectedWf.title}</p>
+                            <p className="text-[11px] text-slate-500">{selectedWf.category} • {selectedWf.fields.length} fillable fields</p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <span className="text-xs font-semibold text-slate-400">
+                        Select a webform to generate document template...
+                      </span>
+                    );
+                  })()}
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${webformDropdownOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {/* Popover Dropdown Menu */}
+                {webformDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setWebformDropdownOpen(false)} />
+                    <div
+                      className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <div className="space-y-1">
+                        {AVAILABLE_WEBFORMS.map((wf) => {
+                          const isSelected = selectedWebFormId === wf.id;
+                          return (
+                            <button
+                              key={wf.id}
+                              type="button"
+                              onClick={() => {
+                                handleSelectWebform(wf.id);
+                                setWebformDropdownOpen(false);
+                              }}
+                              className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
+                                isSelected
+                                  ? "bg-slate-900 text-white font-bold shadow-xs"
+                                  : "hover:bg-slate-100 text-slate-800"
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+                                    isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
+                                  }`}
+                                >
+                                  <Layers className="w-4 h-4" />
+                                </div>
+                                <div>
+                                  <p className={`text-xs font-bold ${isSelected ? "text-white" : "text-slate-900"}`}>{wf.title}</p>
+                                  <p className={`text-[11px] ${isSelected ? "text-slate-300" : "text-slate-500"}`}>
+                                    {wf.category} • {wf.fields.length} fillable fields
+                                  </p>
+                                </div>
+                              </div>
+                              {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* MODE 3 / Document Content Textarea Area */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Document Template Content (with {"{placeholders}"}) *
+              </label>
+
+              {/* Header/Footer/Table/Image/Insert Variable toolbar: ONLY SHOWN WHEN templateMode === "canvas" */}
+              {templateMode === "canvas" && (
+                <div className="flex items-center gap-1 flex-wrap bg-slate-100 p-1 border border-slate-200 rounded-lg">
+                  <button
+                    type="button"
+                    onClick={() => insertCanvasElement("[ HEADER: Organization Name / Logo ]")}
+                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                    title="Insert Header Block"
+                  >
+                    + Header
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCanvasElement("[ FOOTER: Page 1 of 1 - Confidential Document ]")}
+                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                    title="Insert Footer Block"
+                  >
+                    + Footer
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      insertCanvasElement(
+                        `| Item / Description | Quantity | Rate | Amount |\n|-------------------|----------|------|--------|\n| {service_name}    | 1        | {price} | {price} |`
+                      )
+                    }
+                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Insert Table"
+                  >
+                    <TableIcon className="w-3 h-3 text-slate-600" />
+                    <span>Table</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => insertCanvasElement("[ IMAGE: Company Logo / Photo Attachment ]")}
+                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Insert Image Placeholder"
+                  >
+                    <ImageIcon className="w-3 h-3 text-slate-600" />
+                    <span>Image</span>
+                  </button>
+
+                  <div className="h-4 w-px bg-slate-300 mx-0.5" />
+
+                  {/* Insert Variable Button & Compact Floating Popover */}
+                  <div className="relative inline-block">
+                    <button
+                      type="button"
+                      onClick={() => setShowVariableModal((v) => !v)}
+                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-600 border border-slate-200 rounded text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                    >
+                      <span className="font-mono text-blue-600 font-bold">{"{ }"}</span>
+                      <span>Insert Variable</span>
+                    </button>
+
+                    {/* WhatsApp Template Builder Style Compact Popover */}
+                    {showVariableModal && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setShowVariableModal(false)} />
+                        <div
+                          className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {/* Popover Header */}
+                          <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              INSERT FIELD VARIABLE
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowVariableModal(false)}
+                              className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Scrollable Single-Column Field List */}
+                          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
+                            {VARIABLE_OPTIONS.map((cat) => (
+                              <div key={cat.category} className="p-1">
+                                <span className="text-[11px] font-bold text-slate-700 px-2 py-1 block">
+                                  {cat.category}
+                                </span>
+                                <div className="space-y-0.5">
+                                  {cat.items.map((item) => (
+                                    <button
+                                      key={item.key}
+                                      type="button"
+                                      onClick={() => insertVariable(item.key)}
+                                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors flex items-center justify-between group cursor-pointer"
+                                    >
+                                      <span className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
+                                        {item.label}
+                                      </span>
+                                      <span className="text-[11px] font-mono text-slate-400 group-hover:text-slate-600 font-medium">
+                                        {item.key}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             <textarea
-              rows={7}
+              rows={8}
               required
               placeholder="Paste or write document template content here with {client_name}, {email}, {phone}, {date}..."
               value={templateText}
               onChange={(e) => setTemplateText(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-500 leading-relaxed"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-slate-500 leading-relaxed"
             />
           </div>
 
-          {/* Mapping Table */}
-          <div className="space-y-3 pt-2 border-t border-gray-200">
+          {/* Field Mapping Table */}
+          <div className="space-y-3 pt-2 border-t border-slate-200">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-bold text-sm text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
                   Extracted Fillable Fields ({fieldMappings.length})
                 </h3>
-                <p className="text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
                   Map each extracted template field to system or custom client profile fields
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => setFieldManagerOpen(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-xs rounded-lg transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition-colors cursor-pointer"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 <Settings className="w-3.5 h-3.5" />
@@ -321,12 +935,12 @@ export default function AddDocumentTemplateDrawer({
             </div>
 
             {fieldMappings.length === 0 ? (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-800">
-                <AlertCircle className="w-4 h-4 flex-shrink-0 text-amber-600" />
-                <span>No {"{fields}"} detected yet. Add <code className="bg-amber-100 px-1 rounded">{"{field_name}"}</code> placeholders in the template content above.</span>
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-700">
+                <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
+                <span>No {"{fields}"} detected yet. Add <code className="bg-slate-200 px-1 rounded font-bold">{"{field_name}"}</code> placeholders in the template content above.</span>
               </div>
             ) : (
-              <div className="border border-gray-200 rounded-xl overflow-hidden shadow-xs">
+              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
                 <table className="w-full text-xs">
                   <thead>
                     <tr style={{ backgroundColor: "#1F2937", height: "40px" }} className="text-white">
@@ -340,23 +954,15 @@ export default function AddDocumentTemplateDrawer({
                   </thead>
                   <tbody>
                     {fieldMappings.map((m, idx) => (
-                      <tr key={m.templateField} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                        <td className="px-3 py-2 font-mono text-blue-600 font-bold">
+                      <tr key={m.templateField} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                        <td className="px-3 py-2 font-mono text-slate-900 font-bold">
                           {"{"}{m.templateField}{"}"}
                         </td>
                         <td className="px-3 py-2">
-                          <select
+                          <MappedFieldSelector
                             value={m.mappedFieldKey}
-                            onChange={(e) => handleMappingChange(m.templateField, e.target.value)}
-                            className="w-full px-2.5 py-1.5 border border-gray-200 rounded-md bg-white text-xs text-gray-800 focus:outline-none focus:border-blue-500"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {SYSTEM_FIELDS_OPTIONS.map((opt) => (
-                              <option key={opt.key} value={opt.key}>
-                                {opt.label} ({opt.key})
-                              </option>
-                            ))}
-                          </select>
+                            onChange={(newKey) => handleMappingChange(m.templateField, newKey)}
+                          />
                         </td>
                       </tr>
                     ))}

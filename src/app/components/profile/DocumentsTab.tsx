@@ -1,17 +1,24 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, Download,
-  Trash2, MoreVertical
+  Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles
 } from "lucide-react";
 import { toast } from "sonner";
 import {
   StoredClientDocument,
   getStoredClientDocuments,
+  saveClientDocument,
   deleteClientDocument,
   CLIENT_DOCUMENTS_EVENT,
 } from "../../../lib/clientDocumentsStore";
+import {
+  DocumentTemplate,
+  getStoredDocumentTemplates,
+  DOCUMENT_TEMPLATES_EVENT,
+} from "../../../lib/documentTemplatesStore";
 import GenerateDocumentDrawer from "./GenerateDocumentDrawer";
 import DocumentPreviewDrawer from "./DocumentPreviewDrawer";
+import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
 
 export interface DocumentsTabProps {
   client: {
@@ -36,6 +43,12 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [showGenerateDocDrawer, setShowGenerateDocDrawer] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // Upload & Template Dropdown State
+  const [showActionDropdown, setShowActionDropdown] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState<DocumentTemplate[]>(getStoredDocumentTemplates);
+  const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   // Close dropdown on outside click
   useEffect(() => {
     if (!openMenuId) return;
@@ -43,6 +56,14 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     document.addEventListener("click", handler);
     return () => document.removeEventListener("click", handler);
   }, [openMenuId]);
+
+  // Sync templates list
+  useEffect(() => {
+    const refreshTemplates = () => setAvailableTemplates(getStoredDocumentTemplates());
+    refreshTemplates();
+    window.addEventListener(DOCUMENT_TEMPLATES_EVENT, refreshTemplates);
+    return () => window.removeEventListener(DOCUMENT_TEMPLATES_EVENT, refreshTemplates);
+  }, []);
 
   // Sync documents list from store and default initial documents
   useEffect(() => {
@@ -164,6 +185,65 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     }
   };
 
+  // Generate document for client from an available template
+  const handleGenerateFromTemplate = (template: DocumentTemplate) => {
+    const dateStr = new Date().toISOString().replace("T", " ").substring(0, 16);
+    let generatedText = template.templateText || "";
+    generatedText = generatedText
+      .replace(/\{client_name\}/g, client.name || "Client")
+      .replace(/\{email\}/g, client.email || "")
+      .replace(/\{phone\}/g, client.phone || "")
+      .replace(/\{company_name\}/g, client.companyName || "")
+      .replace(/\{job_position\}/g, client.jobPosition || "")
+      .replace(/\{location\}/g, client.location || "")
+      .replace(/\{responsible\}/g, client.responsible || "Admin")
+      .replace(/\{current_date\}/g, dateStr);
+
+    const newDoc: StoredClientDocument = {
+      id: `doc-gen-${Date.now()}`,
+      clientId: client.id,
+      name: `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`,
+      category: (template.category as any) || "General",
+      fileType: "pdf",
+      fileSize: "1.6 MB",
+      uploadedDate: dateStr,
+      uploadedBy: client.responsible || "System Admin",
+      status: "Verified",
+      notes: `Generated using template: ${template.name}`,
+      templateId: template.id,
+      generatedContent: generatedText,
+    };
+    saveClientDocument(newDoc);
+    toast.success(`Generated "${template.name}" for ${client.name}!`);
+  };
+
+  // Upload custom document file
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    let fileType: StoredClientDocument["fileType"] = "pdf";
+    if (ext === "doc" || ext === "docx") fileType = "doc";
+    else if (ext === "xls" || ext === "xlsx") fileType = "sheet";
+    else if (ext === "jpg" || ext === "jpeg" || ext === "png") fileType = "image";
+
+    const newDoc: StoredClientDocument = {
+      id: `doc-upload-${Date.now()}`,
+      clientId: client.id,
+      name: file.name,
+      category: "General",
+      fileType,
+      fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
+      uploadedBy: client.responsible || "Admin User",
+      status: "Verified",
+      notes: `Uploaded file (${file.name})`,
+    };
+    saveClientDocument(newDoc);
+    toast.success(`Uploaded "${file.name}" for ${client.name}!`);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch =
       doc.name.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
@@ -174,6 +254,15 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
 
   return (
     <div className="space-y-4">
+      {/* Hidden file input for Upload Document */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileUpload}
+        className="hidden"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+      />
+
       {/* Top Header Controls Bar */}
       <div className="flex items-center justify-between p-4 border border-gray-200 rounded-xl bg-white shadow-xs gap-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -202,15 +291,89 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
             />
           </div>
 
+          {/* Upload / Generate Document Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setShowActionDropdown((v) => !v)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white font-medium text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Upload / Generate Document</span>
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showActionDropdown ? "rotate-180" : ""}`} />
+            </button>
 
-          <button
-            onClick={() => setShowGenerateDocDrawer(true)}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-[#1F2937] hover:bg-gray-800 text-white font-medium text-xs rounded-lg transition-colors shadow-xs cursor-pointer"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>Upload / Generate Document</span>
-          </button>
+            {/* Dropdown Popover */}
+            {showActionDropdown && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowActionDropdown(false)} />
+                <div
+                  className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {/* Available Templates Header */}
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      AVAILABLE TEMPLATES ({availableTemplates.length})
+                    </span>
+                  </div>
+
+                  {/* List of Available Templates (Text Only, No Left Icons, No Purple) */}
+                  <div className="max-h-52 overflow-y-auto divide-y divide-slate-50 p-1">
+                    {availableTemplates.map((tpl) => (
+                      <button
+                        key={tpl.id}
+                        type="button"
+                        onClick={() => {
+                          setShowActionDropdown(false);
+                          handleGenerateFromTemplate(tpl);
+                        }}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-between group"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-slate-950">{tpl.name}</p>
+                          <p className="text-[10px] text-slate-400 truncate mt-0.5">{tpl.category || "General"}</p>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors shrink-0" />
+                      </button>
+                    ))}
+                    {availableTemplates.length === 0 && (
+                      <p className="text-center text-xs text-slate-400 py-3">No templates created yet.</p>
+                    )}
+                  </div>
+
+                  {/* Action Options (Text Only, Brand Slate Palette) */}
+                  <div className="p-1 border-t border-slate-100 bg-slate-50/70 space-y-1">
+                    {/* Option 1: Upload Document */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActionDropdown(false);
+                        fileInputRef.current?.click();
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-800 transition-colors cursor-pointer"
+                    >
+                      <p className="text-xs font-bold text-slate-900">+ Upload Document</p>
+                      <p className="text-[10px] text-slate-500 mt-0.5">Upload PDF, Word, Excel, or image file</p>
+                    </button>
+
+                    {/* Option 2: Create New Template */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowActionDropdown(false);
+                        setShowAddTemplateDrawer(true);
+                      }}
+                      className="w-full text-left px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 hover:bg-slate-200/80 text-slate-900 transition-colors cursor-pointer"
+                    >
+                      <p className="text-xs font-bold text-slate-900">+ Create New Template</p>
+                      <p className="text-[10px] text-slate-600 mt-0.5">Open template creator drawer</p>
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -389,12 +552,24 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
         />
       )}
 
-      {/* Generate Document Drawer (Right-side drawer) */}
+      {/* Full Document Generator Drawer */}
       {showGenerateDocDrawer && (
         <GenerateDocumentDrawer
           isOpen={showGenerateDocDrawer}
           onClose={() => setShowGenerateDocDrawer(false)}
           client={client}
+        />
+      )}
+
+      {/* Create New Template Drawer */}
+      {showAddTemplateDrawer && (
+        <AddDocumentTemplateDrawer
+          isOpen={showAddTemplateDrawer}
+          onClose={() => setShowAddTemplateDrawer(false)}
+          onTemplateCreated={(newTpl) => {
+            setAvailableTemplates(getStoredDocumentTemplates());
+            toast.success(`Template "${newTpl.name}" created and added to templates!`);
+          }}
         />
       )}
     </div>
