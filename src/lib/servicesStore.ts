@@ -12,11 +12,15 @@ export interface Service {
   id: number;
   name: string;
   description: string;
+  category?: string;
   duration: number;
   price: number;
   currency: string;
+  tax?: number;
   isActive: boolean;
   assignedEmployees?: number[];
+  createdAt?: string;
+  activity?: string;
 }
 
 // Per-client product assignments: clientId → array of service ids
@@ -54,9 +58,11 @@ export const getCurrencySymbol = (code: string) =>
 export const INIT_FORM = {
   name: "",
   description: "",
+  category: "General",
   duration: 30,
   price: 0,
   currency: "",
+  tax: 0,
   isActive: true,
   assignedEmployeeIds: [] as number[],
 };
@@ -64,10 +70,10 @@ export const INIT_FORM = {
 // ─── Default seed data ────────────────────────────────────────────────────────
 
 const DEFAULT_SERVICES: Service[] = [
-  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment",  duration: 60, price: 150, currency: "USD", isActive: true,  assignedEmployees: [1, 2] },
-  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",           duration: 30, price: 75,  currency: "USD", isActive: true,  assignedEmployees: [1, 2, 4] },
-  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",      duration: 45, price: 120, currency: "USD", isActive: true,  assignedEmployees: [5, 6] },
-  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",          duration: 20, price: 80,  currency: "USD", isActive: false, assignedEmployees: [1] },
+  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", duration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
+  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", duration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
+  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       duration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
+  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  duration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
 ];
 
 // ─── Store helpers ────────────────────────────────────────────────────────────

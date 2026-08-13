@@ -1182,7 +1182,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
-                { id: "products" as const, label: "Products & Services" },
+                { id: "products" as const, label: "Product/Services" },
               ] as const
             ).map((tab) => (
               <button

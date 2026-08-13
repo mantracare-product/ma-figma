@@ -15,7 +15,7 @@ import type {
 import { ACTIONS } from "../../../types/permissions";
 import { createDefaultPermissions, DEFAULT_MODULE_PERMISSIONS } from "../../pages/settings-constants";
 import { getStoredProcesses, Process } from "../../../lib/useProcessStore";
-import { CreateRoleDrawer } from "./CreateRoleDrawer";
+import { CreateRoleDrawer, getStoredTeamMembersList } from "./CreateRoleDrawer";
 
 // ─── DEPARTMENTS STORE ─────────────────────────────────────────────────────────
 const DEPARTMENTS_KEY = "ma_departments";
@@ -156,7 +156,7 @@ export const MODULES: ModuleRow[] = [
   { key: "processSettings", label: "Process Settings", route: "/process" },
   { key: "webForms", label: "Web Forms", route: "/web-forms" },
   { key: "appointments", label: "Appointments", route: "/appointments" },
-  { key: "services", label: "Product & Services", route: "/services" },
+  { key: "services", label: "Product/Services", route: "/services" },
 ];
 
 // ─── SETTINGS SUB-PAGES CONFIG ────────────────────────────────────────────────
@@ -170,15 +170,7 @@ interface SettingsPageRow {
 const SETTINGS_PAGES: SettingsPageRow[] = [
   { key: "organization", label: "Organization" },
   { key: "users", label: "Team" },
-  {
-    key: "billing-parent",
-    label: "Billing",
-    children: [
-      { key: "plans", label: "Plans" },
-      { key: "payments", label: "Payments" },
-      { key: "credit-usage", label: "Credit Usage" },
-    ],
-  },
+  { key: "billing", label: "Billing" },
   { key: "voice-config", label: "AI Voices / Models" },
   { key: "numbers", label: "Numbers" },
   { key: "custom-fields", label: "Custom Fields" },
@@ -197,6 +189,7 @@ const ACTION_LABELS: Record<Action, string> = {
 };
 
 const SCOPE_LABELS: Record<ActionScope, string> = {
+  inherit: "Inherit",
   deny: "Deny",
   own: "Own",
   role: "Department",
@@ -215,6 +208,13 @@ const SCOPE_CONFIG: Record<
     description: string;
   }
 > = {
+  inherit: {
+    label: "Inherit",
+    pillClass: "bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200 font-medium",
+    popoverBadgeClass: "bg-slate-100 text-slate-700 border-slate-300",
+    title: "Inherit Process Permission",
+    description: "Inherits the permission scope configured at the parent process level.",
+  },
   deny: {
     label: "Deny",
     pillClass: "bg-slate-100 text-slate-700 border-slate-200/90 hover:bg-slate-200/80 hover:text-slate-900",
@@ -252,6 +252,7 @@ interface ActionSegmentProps {
   roleName?: string;
   moduleLabel?: string;
   actionLabel?: string;
+  inheritedLabel?: string;
   onOpenSelector?: (info: {
     currentValue: ActionScope;
     options: ActionScope[];
@@ -259,6 +260,7 @@ interface ActionSegmentProps {
     roleName?: string;
     moduleLabel?: string;
     actionLabel?: string;
+    inheritedLabel?: string;
   }) => void;
 }
 
@@ -269,12 +271,16 @@ function ActionSegment({
   roleName,
   moduleLabel,
   actionLabel,
+  inheritedLabel,
   onOpenSelector,
 }: ActionSegmentProps) {
   const currentOpt = value || "deny";
   const isBinary = options.length === 2 && options.includes("all");
   const currentConfig = SCOPE_CONFIG[currentOpt] || SCOPE_CONFIG.deny;
-  const currentDisplayLabel = isBinary && currentOpt === "all" ? "Allow" : currentConfig.label;
+  let currentDisplayLabel = isBinary && currentOpt === "all" ? "Allow" : currentConfig.label;
+  if (currentOpt === "inherit" && inheritedLabel) {
+    currentDisplayLabel = inheritedLabel;
+  }
 
   const handleClick = () => {
     if (onOpenSelector) {
@@ -285,6 +291,7 @@ function ActionSegment({
         roleName,
         moduleLabel,
         actionLabel,
+        inheritedLabel,
       });
     }
   };
@@ -293,10 +300,10 @@ function ActionSegment({
     <button
       type="button"
       onClick={handleClick}
-      className={`inline-flex items-center justify-between gap-2 px-3.5 py-1.5 min-w-[105px] text-xs font-bold rounded-xl border transition-all shadow-2xs cursor-pointer select-none ${currentConfig.pillClass}`}
+      className={`inline-flex items-center justify-between gap-2 px-3 py-1.5 min-w-[105px] text-xs font-bold rounded-xl border transition-all shadow-2xs cursor-pointer select-none ${currentConfig.pillClass}`}
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
-      <span>{currentDisplayLabel}</span>
+      <span className="truncate max-w-[120px]">{currentDisplayLabel}</span>
       <ChevronDown className="w-3.5 h-3.5 opacity-75 shrink-0" />
     </button>
   );
@@ -350,12 +357,24 @@ export function RolesPermissionsDrawer({
     roleName?: string;
     moduleLabel?: string;
     actionLabel?: string;
+    inheritedLabel?: string;
   } | null;
   const [selectorInfo, setSelectorInfo] = useState<SelectorInfo>(null);
 
   const openSelector = (info: NonNullable<SelectorInfo>) => {
     setSelectorInfo(info);
   };
+
+  const liveUserCounts = React.useMemo(() => {
+    const members = getStoredTeamMembersList();
+    const counts: Record<string, number> = {};
+    members.forEach((m) => {
+      if (m.role) {
+        counts[m.role] = (counts[m.role] || 0) + 1;
+      }
+    });
+    return { ...assignedUserCounts, ...counts };
+  }, [isOpen, roles, createRoleDrawerOpen]);
 
   const availableDepartments = React.useMemo(() => {
     const stored = getStoredDepartments();
@@ -390,15 +409,9 @@ export function RolesPermissionsDrawer({
     }
   }, [isOpen]);
 
-  const filteredRoles = roles.filter((r) => {
-    const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept =
-      !selectedDepartmentFilter ||
-      (selectedDepartmentFilter === "__unassigned__"
-        ? !r.department
-        : r.department === selectedDepartmentFilter);
-    return matchesSearch && matchesDept;
-  });
+  const filteredRoles = roles.filter((r) =>
+    r.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // ── MATRIX UPDATE HANDLERS ──────────────────────────────────────────────────
 
@@ -442,6 +455,42 @@ export function RolesPermissionsDrawer({
             ...r.permissions.processInstances,
             [processId]: {
               ...currentInstance,
+              [action]: scope,
+            },
+          },
+        },
+      };
+    });
+    onSaveRoles(updated);
+  };
+
+  // Expandable Action Rows in Process Accordion
+  const [expandedActionRows, setExpandedActionRows] = useState<Record<string, boolean>>({});
+
+  const toggleActionRow = (procId: string, action: string) => {
+    const key = `${procId}_${action}`;
+    setExpandedActionRows((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const handleUpdateStageInstanceAction = (
+    roleId: string,
+    processId: string,
+    stageId: string,
+    action: Action,
+    scope: ActionScope
+  ) => {
+    const updated = roles.map((r) => {
+      if (r.id !== roleId) return r;
+      const stageKey = `${processId}_${stageId}`;
+      const currentStagePerms = r.permissions.stageInstances?.[stageKey] ?? {};
+      return {
+        ...r,
+        permissions: {
+          ...r.permissions,
+          stageInstances: {
+            ...r.permissions.stageInstances,
+            [stageKey]: {
+              ...currentStagePerms,
               [action]: scope,
             },
           },
@@ -511,25 +560,6 @@ export function RolesPermissionsDrawer({
                   )}
                 </div>
 
-                {/* Department Filter */}
-                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs min-w-[190px]">
-                  <Building2 className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                  <span className="text-[11px] text-slate-400 font-medium flex-shrink-0">Dept:</span>
-                  <select
-                    value={selectedDepartmentFilter}
-                    onChange={(e) => setSelectedDepartmentFilter(e.target.value)}
-                    className="w-full bg-transparent text-xs font-semibold text-slate-800 focus:outline-none cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <option value="">All Departments</option>
-                    {availableDepartments.map((dept) => (
-                      <option key={dept} value={dept}>
-                        {dept}
-                      </option>
-                    ))}
-                    <option value="__unassigned__">Unassigned</option>
-                  </select>
-                </div>
               </div>
 
               <Button
@@ -563,7 +593,6 @@ export function RolesPermissionsDrawer({
                   >
                     <div>
                       <div className="text-xs font-semibold">{mod.label}</div>
-                      <div className="text-[10px] text-slate-400 font-normal">{mod.route}</div>
                     </div>
                     {selectedModuleKey === mod.key && (
                       <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
@@ -600,7 +629,6 @@ export function RolesPermissionsDrawer({
                     >
                       <div>
                         <div className="text-xs font-semibold">{mod.label}</div>
-                        <div className="text-[10px] text-slate-400 font-normal">{mod.route}</div>
                       </div>
                       {selectedModuleKey === mod.key && (
                         <div className="w-1.5 h-1.5 rounded-full bg-indigo-600" />
@@ -615,19 +643,17 @@ export function RolesPermissionsDrawer({
                   <div className="bg-white p-12 rounded-2xl border border-slate-200/90 text-center shadow-xs">
                     <Building2 className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                     <h4 className="text-sm font-bold text-slate-800 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      No roles found for "{selectedDepartmentFilter || searchQuery}"
+                      No roles found matching "{searchQuery}"
                     </h4>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      {selectedDepartmentFilter
-                        ? `There are no roles currently associated with the "${selectedDepartmentFilter}" department.`
-                        : "No roles match your search criteria."}
+                      No roles match your search criteria.
                     </p>
                     <button
                       type="button"
-                      onClick={() => { setSearchQuery(""); setSelectedDepartmentFilter(""); }}
+                      onClick={() => { setSearchQuery(""); }}
                       className="mt-4 px-3.5 py-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition-colors inline-flex items-center gap-1.5 cursor-pointer"
                     >
-                      Reset Filters
+                      Reset Search
                     </button>
                   </div>
                 ) : (
@@ -641,49 +667,18 @@ export function RolesPermissionsDrawer({
                         Settings Sub-Pages
                       </div>
                       {SETTINGS_PAGES.map((page) => (
-                        <div key={page.key}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (page.children) {
-                                setBillingExpandedInDrawer((v) => !v);
-                                setSelectedSettingsPage(page.children[0].key);
-                              } else {
-                                setSelectedSettingsPage(page.key);
-                              }
-                            }}
-                            className={`w-full text-left px-3.5 py-2.5 text-xs font-medium border-b border-slate-100 transition-colors flex items-center justify-between ${selectedSettingsPage === page.key ||
-                              page.children?.some((c) => c.key === selectedSettingsPage)
+                        <button
+                          key={page.key}
+                          type="button"
+                          onClick={() => setSelectedSettingsPage(page.key)}
+                          className={`w-full text-left px-3.5 py-2.5 text-xs font-medium border-b border-slate-100 transition-colors flex items-center justify-between ${
+                            selectedSettingsPage === page.key
                               ? "bg-indigo-100/60 text-indigo-900 font-bold"
                               : "text-slate-600 hover:bg-slate-100/60"
-                              }`}
-                          >
-                            <span>{page.label}</span>
-                            {page.children && (
-                              <ChevronDown
-                                className={`w-3.5 h-3.5 transition-transform ${billingExpandedInDrawer ? "" : "-rotate-90"
-                                  }`}
-                              />
-                            )}
-                          </button>
-                          {page.children && billingExpandedInDrawer && (
-                            <div className="bg-slate-100/40">
-                              {page.children.map((child) => (
-                                <button
-                                  key={child.key}
-                                  type="button"
-                                  onClick={() => setSelectedSettingsPage(child.key)}
-                                  className={`w-full text-left pl-6 pr-3 py-2 text-[11px] border-b border-slate-100 transition-colors ${selectedSettingsPage === child.key
-                                    ? "bg-indigo-200/60 text-indigo-900 font-bold"
-                                    : "text-slate-500 hover:bg-slate-100"
-                                    }`}
-                                >
-                                  {child.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                          }`}
+                        >
+                          <span>{page.label}</span>
+                        </button>
                       ))}
                     </div>
 
@@ -700,16 +695,21 @@ export function RolesPermissionsDrawer({
                             </th>
                             {filteredRoles.map((role) => (
                               <th key={role.id} className="p-3.5 text-center min-w-[170px]">
-                                <div className="font-bold text-sm text-white" style={{ fontFamily: "Outfit, sans-serif" }}>{role.name}</div>
+                                <div className="flex items-center justify-center gap-1.5 font-bold text-sm text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  <span>{role.name}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => { setEditingRole(role); setCreateRoleDrawerOpen(true); }}
+                                    className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                    title={`Edit role ${role.name}`}
+                                  >
+                                    <Edit2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                                 <div className="flex items-center justify-center gap-1 mt-1 flex-wrap">
                                   <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700/50">
-                                    {assignedUserCounts[role.name] || 0} users
+                                    {liveUserCounts[role.name] || 0} users
                                   </span>
-                                  {role.department && (
-                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-900/80 text-indigo-200 border border-indigo-700/60">
-                                      {role.department}
-                                    </span>
-                                  )}
                                 </div>
                               </th>
                             ))}
@@ -717,7 +717,7 @@ export function RolesPermissionsDrawer({
                         </thead>
                         <tbody>
                           {ACTIONS.filter(
-                            (action) => action !== "add" && action !== "import" && action !== "export"
+                            (action) => action === "read" || action === "edit"
                           ).map((action) => (
                             <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                               <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
@@ -746,8 +746,8 @@ export function RolesPermissionsDrawer({
                   </div>
                 )}
 
-                {/* ── CASE 2: PROCESS SETTINGS (Accordion view: Only 1 process open at a time) ── */}
-                {selectedModuleKey === "processSettings" ? (
+                {/* ── CASE 2: PROCESS & PROCESS SETTINGS (Accordion view: Only 1 process open at a time) ── */}
+                {selectedModuleKey === "processSettings" || selectedModuleKey === "processes" ? (
                   <div className="space-y-4">
                     {storedProcesses.length > 0 ? (
                       storedProcesses.map((proc) => {
@@ -792,48 +792,155 @@ export function RolesPermissionsDrawer({
                                       </th>
                                       {filteredRoles.map((role) => (
                                         <th key={role.id} className="p-3 text-center min-w-[170px]">
-                                          <div className="font-bold text-xs text-white" style={{ fontFamily: "Outfit, sans-serif" }}>{role.name}</div>
+                                          <div className="flex items-center justify-center gap-1.5 font-bold text-xs text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                            <span>{role.name}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => { setEditingRole(role); setCreateRoleDrawerOpen(true); }}
+                                              className="p-0.5 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition-colors cursor-pointer"
+                                              title={`Edit role ${role.name}`}
+                                            >
+                                              <Edit2 className="w-3 h-3" />
+                                            </button>
+                                          </div>
                                           <div className="flex items-center justify-center gap-1 mt-0.5 flex-wrap">
                                             <span className="px-2 py-0.5 rounded-full text-[9px] font-medium bg-slate-900 text-slate-300">
-                                              {assignedUserCounts[role.name] || 0} users
+                                              {liveUserCounts[role.name] || 0} users
                                             </span>
-                                            {role.department && (
-                                              <span className="px-2 py-0.5 rounded-full text-[9px] font-semibold bg-indigo-950 text-indigo-200 border border-indigo-800/60">
-                                                {role.department}
-                                              </span>
-                                            )}
                                           </div>
                                         </th>
                                       ))}
                                     </tr>
                                   </thead>
                                   <tbody>
-                                    {ACTIONS.map((action) => (
-                                      <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
-                                        <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
-                                          {ACTION_LABELS[action]}
-                                        </td>
-                                        {filteredRoles.map((role) => (
-                                          <td key={role.id} className="p-2.5 text-center align-middle">
-                                            <ActionSegment
-                                              value={
+                                    {ACTIONS.map((action) => {
+                                      const isRowExpanded = !!expandedActionRows[`${proc.id}_${action}`];
+                                      const processStages =
+                                        proc.stages && proc.stages.length > 0
+                                          ? proc.stages
+                                          : [
+                                              { id: "s1", name: "Stage 1: Onboarding" },
+                                              { id: "s2", name: "Stage 2: Verification" },
+                                              { id: "s3", name: "Stage 3: Completion" },
+                                            ];
+
+                                      return (
+                                        <React.Fragment key={action}>
+                                          {/* Main Action Row */}
+                                          <tr className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
+                                            <td className="p-3.5 pl-4 text-xs font-bold text-slate-800">
+                                              <div className="flex items-center gap-2">
+                                                <button
+                                                  type="button"
+                                                  onClick={() => toggleActionRow(proc.id, action)}
+                                                  className="w-5 h-5 rounded hover:bg-slate-200/80 flex items-center justify-center text-slate-600 transition-colors cursor-pointer"
+                                                  title={isRowExpanded ? "Collapse stages" : "Expand stages"}
+                                                >
+                                                  <ChevronDown
+                                                    className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                                      isRowExpanded ? "" : "-rotate-90"
+                                                    }`}
+                                                  />
+                                                </button>
+                                                <span>{ACTION_LABELS[action]}</span>
+                                                <span className="text-[10px] font-normal text-slate-400">
+                                                  ({processStages.length})
+                                                </span>
+                                              </div>
+                                            </td>
+                                            {filteredRoles.map((role) => {
+                                              const parentScope =
                                                 role.permissions.processInstances?.[proc.id]?.[action] ??
                                                 role.permissions.processSettings?.[action] ??
-                                                "deny"
-                                              }
-                                              onChange={(v) =>
-                                                handleUpdateProcessInstanceAction(role.id, proc.id, action, v)
-                                              }
-                                              options={["deny", "all"]}
-                                              roleName={role.name}
-                                              moduleLabel={proc.name}
-                                              actionLabel={ACTION_LABELS[action]}
-                                              onOpenSelector={openSelector}
-                                            />
-                                          </td>
-                                        ))}
-                                      </tr>
-                                    ))}
+                                                "deny";
+
+                                              const options =
+                                                selectedModuleKey === "processSettings"
+                                                  ? (["deny", "all"] as ActionScope[])
+                                                  : (["deny", "own", "role", "all"] as ActionScope[]);
+
+                                              return (
+                                                <td key={role.id} className="p-2.5 text-center align-middle">
+                                                  <ActionSegment
+                                                    value={parentScope}
+                                                    onChange={(v) =>
+                                                      handleUpdateProcessInstanceAction(role.id, proc.id, action, v)
+                                                    }
+                                                    options={options}
+                                                    roleName={role.name}
+                                                    moduleLabel={proc.name}
+                                                    actionLabel={ACTION_LABELS[action]}
+                                                    onOpenSelector={openSelector}
+                                                  />
+                                                </td>
+                                              );
+                                            })}
+                                          </tr>
+
+                                          {/* Stage Sub-rows */}
+                                          {isRowExpanded &&
+                                            processStages.map((stg) => (
+                                              <tr
+                                                key={stg.id}
+                                                className="bg-slate-50/70 border-b border-slate-100/80 hover:bg-slate-100/50 transition-colors"
+                                              >
+                                                <td className="p-2.5 pl-10 text-[11px] font-medium text-slate-600">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                                                    <span className="text-slate-400 font-normal text-[10px]">Stage:</span>
+                                                    <span className="font-semibold text-slate-800">{stg.name}</span>
+                                                  </div>
+                                                </td>
+                                                {filteredRoles.map((role) => {
+                                                  const parentScope =
+                                                    role.permissions.processInstances?.[proc.id]?.[action] ??
+                                                    role.permissions.processSettings?.[action] ??
+                                                    "deny";
+
+                                                  const parentDisplayLabel =
+                                                    selectedModuleKey === "processSettings"
+                                                      ? parentScope === "all"
+                                                        ? "Allow"
+                                                        : "Deny"
+                                                      : SCOPE_CONFIG[parentScope]?.label ?? "Deny";
+
+                                                  const stageKey = `${proc.id}_${stg.id}`;
+                                                  const stageScope =
+                                                    role.permissions.stageInstances?.[stageKey]?.[action] ?? "inherit";
+
+                                                  const stageOptions =
+                                                    selectedModuleKey === "processSettings"
+                                                      ? (["inherit", "deny", "all"] as ActionScope[])
+                                                      : (["inherit", "deny", "own", "role", "all"] as ActionScope[]);
+
+                                                  return (
+                                                    <td key={role.id} className="p-2 text-center align-middle">
+                                                      <ActionSegment
+                                                        value={stageScope}
+                                                        onChange={(v) =>
+                                                          handleUpdateStageInstanceAction(
+                                                            role.id,
+                                                            proc.id,
+                                                            stg.id,
+                                                            action,
+                                                            v
+                                                          )
+                                                        }
+                                                        options={stageOptions}
+                                                        inheritedLabel={`Inherit (${parentDisplayLabel})`}
+                                                        roleName={role.name}
+                                                        moduleLabel={`${proc.name} → Stage: ${stg.name}`}
+                                                        actionLabel={ACTION_LABELS[action]}
+                                                        onOpenSelector={openSelector}
+                                                      />
+                                                    </td>
+                                                  );
+                                                })}
+                                              </tr>
+                                            ))}
+                                        </React.Fragment>
+                                      );
+                                    })}
                                   </tbody>
                                 </table>
                               </div>
@@ -858,16 +965,21 @@ export function RolesPermissionsDrawer({
                           </th>
                           {filteredRoles.map((role) => (
                             <th key={role.id} className="p-3.5 text-center min-w-[170px]">
-                              <div className="font-bold text-sm text-white" style={{ fontFamily: "Outfit, sans-serif" }}>{role.name}</div>
+                              <div className="flex items-center justify-center gap-1.5 font-bold text-sm text-white" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                <span>{role.name}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setEditingRole(role); setCreateRoleDrawerOpen(true); }}
+                                  className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                                  title={`Edit role ${role.name}`}
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                               <div className="flex items-center justify-center gap-1 mt-1 flex-wrap">
                                 <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800 text-slate-300 border border-slate-700/50">
-                                  {assignedUserCounts[role.name] || 0} users
+                                  {liveUserCounts[role.name] || 0} users
                                 </span>
-                                {role.department && (
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-900/80 text-indigo-200 border border-indigo-700/60">
-                                    {role.department}
-                                  </span>
-                                )}
                               </div>
                             </th>
                           ))}
@@ -875,30 +987,46 @@ export function RolesPermissionsDrawer({
                       </thead>
 
                         <tbody>
-                          {ACTIONS.map((action) => (
+                          {ACTIONS.filter((action) => {
+                            if (
+                              (selectedModuleKey === "appointments" ||
+                                selectedModuleKey === "chats" ||
+                                selectedModuleKey === "services" ||
+                                selectedModuleKey === "webForms") &&
+                              (action === "import" || action === "export")
+                            ) {
+                              return false;
+                            }
+                            return true;
+                          }).map((action) => (
                             <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                               <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
                                 {ACTION_LABELS[action]}
                               </td>
-                              {filteredRoles.map((role) => (
-                                <td key={role.id} className="p-2.5 text-center align-middle">
-                                  <ActionSegment
-                                    value={role.permissions[selectedModuleKey]?.[action] ?? "deny"}
-                                    onChange={(v) =>
-                                      handleUpdateModuleAction(role.id, selectedModuleKey, action, v)
-                                    }
-                                    options={
-                                      (selectedModuleKey as string) === "knowledgeBase"
-                                        ? ["deny", "all"]
-                                        : ["deny", "own", "role", "all"]
-                                    }
-                                    roleName={role.name}
-                                    moduleLabel={selectedModuleObj?.label ?? selectedModuleKey}
-                                    actionLabel={ACTION_LABELS[action]}
-                                    onOpenSelector={openSelector}
-                                  />
-                                </td>
-                              ))}
+                              {filteredRoles.map((role) => {
+                                const modPerms = role.permissions[
+                                  selectedModuleKey as keyof Omit<ItemPermissions, "processInstances" | "stageInstances">
+                                ] as ModulePermissions | undefined;
+                                return (
+                                  <td key={role.id} className="p-2.5 text-center align-middle">
+                                    <ActionSegment
+                                      value={modPerms?.[action] ?? "deny"}
+                                      onChange={(v) =>
+                                        handleUpdateModuleAction(role.id, selectedModuleKey, action, v)
+                                      }
+                                      options={
+                                        (selectedModuleKey as string) === "knowledgeBase"
+                                          ? ["deny", "all"]
+                                          : ["deny", "own", "role", "all"]
+                                      }
+                                      roleName={role.name}
+                                      moduleLabel={selectedModuleObj?.label ?? selectedModuleKey}
+                                      actionLabel={ACTION_LABELS[action]}
+                                      onOpenSelector={openSelector}
+                                    />
+                                  </td>
+                                );
+                              })}
                             </tr>
                           ))}
                         </tbody>
@@ -958,11 +1086,21 @@ export function RolesPermissionsDrawer({
                   const isSelected = selectorIsBinary && opt === "all"
                     ? selectorInfo.currentValue !== "deny"
                     : selectorInfo.currentValue === opt;
-                  const itemLabel = selectorIsBinary && opt === "all" ? "Allow" : config.label;
-                  const itemTitle = selectorIsBinary && opt === "all" ? "Allow Access" : config.title;
-                  const itemDesc = selectorIsBinary && opt === "all"
+
+                  let itemLabel = selectorIsBinary && opt === "all" ? "Allow" : config.label;
+                  let itemTitle = selectorIsBinary && opt === "all" ? "Allow Access" : config.title;
+                  let itemDesc = selectorIsBinary && opt === "all"
                     ? "Team member is granted full access to this section."
                     : config.description;
+
+                  if (opt === "inherit") {
+                    itemLabel = selectorInfo.inheritedLabel || "Inherit";
+                    itemTitle = "Inherit Process Permission";
+                    const cleanParentScope = selectorInfo.inheritedLabel
+                      ? selectorInfo.inheritedLabel.replace("Inherit ", "").replace("(", "").replace(")", "")
+                      : "process level";
+                    itemDesc = `Inherits the permission scope (${cleanParentScope}) configured at the parent process level.`;
+                  }
 
                   return (
                     <button
@@ -980,7 +1118,7 @@ export function RolesPermissionsDrawer({
                     >
                       {/* Fixed Uniform Badge Column for 100% Perfect Alignment */}
                       <span
-                        className={`mt-0.5 w-[105px] shrink-0 text-center py-1.5 px-3 text-xs font-bold rounded-lg border inline-flex items-center justify-center ${config.popoverBadgeClass}`}
+                        className={`mt-0.5 min-w-[105px] max-w-[140px] px-3 shrink-0 text-center py-1.5 text-xs font-bold rounded-lg border inline-flex items-center justify-center truncate ${config.popoverBadgeClass}`}
                         style={{ fontFamily: "Outfit, sans-serif" }}
                       >
                         {itemLabel}
