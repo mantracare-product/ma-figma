@@ -46,6 +46,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   // Upload & Template Dropdown State
   const [showActionDropdown, setShowActionDropdown] = useState(false);
   const [availableTemplates, setAvailableTemplates] = useState<DocumentTemplate[]>(getStoredDocumentTemplates);
+  const [drawerInitialTemplate, setDrawerInitialTemplate] = useState<DocumentTemplate | null>(null);
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -326,7 +327,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
                         type="button"
                         onClick={() => {
                           setShowActionDropdown(false);
-                          handleGenerateFromTemplate(tpl);
+                          setDrawerInitialTemplate(tpl);
+                          setShowGenerateDocDrawer(true);
                         }}
                         className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-between group"
                       >
@@ -556,8 +558,12 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       {showGenerateDocDrawer && (
         <GenerateDocumentDrawer
           isOpen={showGenerateDocDrawer}
-          onClose={() => setShowGenerateDocDrawer(false)}
+          onClose={() => {
+            setShowGenerateDocDrawer(false);
+            setDrawerInitialTemplate(null);
+          }}
           client={client}
+          initialTemplate={drawerInitialTemplate}
         />
       )}
 

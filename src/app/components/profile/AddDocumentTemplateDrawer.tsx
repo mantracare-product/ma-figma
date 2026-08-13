@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
-  Table as TableIcon, Image as ImageIcon, PlusCircle, LayoutTemplate, Layers,
-  ChevronDown, Check
+  LayoutTemplate, Layers, ChevronDown, Check, Users, Hash, X
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -365,6 +364,59 @@ export default function AddDocumentTemplateDrawer({
   // Variable Modal / Popover state
   const [showVariableModal, setShowVariableModal] = useState(false);
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
+
+  // Template Settings state
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Template Users Settings
+  const AVAILABLE_TEAM_ROLES = [
+    "Admin", "Doctor", "Nurse", "Receptionist", "Finance Officer", "Case Manager", "All Staff"
+  ];
+  const [templateUsers, setTemplateUsers] = useState<string[]>(["All Staff"]);
+  const [usersDropdownOpen, setUsersDropdownOpen] = useState(false);
+
+  // Auto-Numbering Settings
+  const NUMBER_FORMAT_TOKENS = [
+    { id: "NUMBER", label: "Sequential numbers", token: "{NUMBER}" },
+    { id: "DAY", label: "Current day", token: "{DAY}" },
+    { id: "MONTH", label: "Current month", token: "{MONTH}" },
+    { id: "YEAR", label: "Current year", token: "{YEAR}" },
+    { id: "RANDOM", label: "Random number", token: "{RANDOM}" },
+    { id: "PREFIX", label: "Prefix", token: "{PREFIX}" },
+    { id: "ID", label: "ID", token: "{ID}" },
+    { id: "COMPANY_ID", label: "My company ID", token: "{COMPANY_ID}" },
+    { id: "CLIENT_ID", label: "Client ID", token: "{CLIENT_ID}" },
+  ];
+  const [numberFormat, setNumberFormat] = useState("{NUMBER}");
+  const [activeTokens, setActiveTokens] = useState<string[]>(["NUMBER"]);
+  const [startNumber, setStartNumber] = useState("1");
+  const [incrementBy, setIncrementBy] = useState("1");
+  const [numberLength, setNumberLength] = useState("0");
+  const [paddingChar, setPaddingChar] = useState("0");
+  const [activityPeriod, setActivityPeriod] = useState("Continuously");
+  const [crossCompany, setCrossCompany] = useState(false);
+
+  const handleInsertToken = (token: { id: string; token: string }) => {
+    if (!activeTokens.includes(token.id)) {
+      setActiveTokens((prev) => [...prev, token.id]);
+    } else {
+      setActiveTokens((prev) => prev.filter((t) => t !== token.id));
+    }
+    // Build format string from active tokens
+    const newTokens = activeTokens.includes(token.id)
+      ? activeTokens.filter((t) => t !== token.id)
+      : [...activeTokens, token.id];
+    const format = newTokens
+      .map((id) => NUMBER_FORMAT_TOKENS.find((t) => t.id === id)?.token || "")
+      .join("-");
+    setNumberFormat(format || "{NUMBER}");
+  };
+
+  const toggleTemplateUser = (role: string) => {
+    setTemplateUsers((prev) =>
+      prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]
+    );
+  };
 
   // Extract fields automatically whenever templateText changes
   useEffect(() => {
@@ -783,63 +835,22 @@ export default function AddDocumentTemplateDrawer({
             </div>
           )}
 
-          {/* MODE 3 / Document Content Textarea Area */}
+          {/* Document Template Content — HTML Editor */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Document Template Content (with {"{placeholders}"}) *
+                Document Template Content (HTML) *
               </label>
 
-              {/* Header/Footer/Table/Image/Insert Variable toolbar: ONLY SHOWN WHEN templateMode === "canvas" */}
+              {/* Toolbar: Insert Variable only (shown in canvas mode) */}
               {templateMode === "canvas" && (
-                <div className="flex items-center gap-1 flex-wrap bg-slate-100 p-1 border border-slate-200 rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => insertCanvasElement("[ HEADER: Organization Name / Logo ]")}
-                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                    title="Insert Header Block"
-                  >
-                    + Header
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCanvasElement("[ FOOTER: Page 1 of 1 - Confidential Document ]")}
-                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                    title="Insert Footer Block"
-                  >
-                    + Footer
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      insertCanvasElement(
-                        `| Item / Description | Quantity | Rate | Amount |\n|-------------------|----------|------|--------|\n| {service_name}    | 1        | {price} | {price} |`
-                      )
-                    }
-                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Insert Table"
-                  >
-                    <TableIcon className="w-3 h-3 text-slate-600" />
-                    <span>Table</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertCanvasElement("[ IMAGE: Company Logo / Photo Attachment ]")}
-                    className="px-2 py-1 bg-white border border-slate-200 rounded text-[10px] font-bold text-slate-700 hover:bg-slate-50 transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Insert Image Placeholder"
-                  >
-                    <ImageIcon className="w-3 h-3 text-slate-600" />
-                    <span>Image</span>
-                  </button>
-
-                  <div className="h-4 w-px bg-slate-300 mx-0.5" />
-
+                <div className="flex items-center gap-2">
                   {/* Insert Variable Button & Compact Floating Popover */}
                   <div className="relative inline-block">
                     <button
                       type="button"
                       onClick={() => setShowVariableModal((v) => !v)}
-                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-600 border border-slate-200 rounded text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-600 border border-slate-200 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
                     >
                       <span className="font-mono text-blue-600 font-bold">{"{ }"}</span>
                       <span>Insert Variable</span>
@@ -853,7 +864,6 @@ export default function AddDocumentTemplateDrawer({
                           className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          {/* Popover Header */}
                           <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                               INSERT FIELD VARIABLE
@@ -866,8 +876,6 @@ export default function AddDocumentTemplateDrawer({
                               ✕
                             </button>
                           </div>
-
-                          {/* Scrollable Single-Column Field List */}
                           <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
                             {VARIABLE_OPTIONS.map((cat) => (
                               <div key={cat.category} className="p-1">
@@ -902,36 +910,52 @@ export default function AddDocumentTemplateDrawer({
               )}
             </div>
 
-            <textarea
-              rows={8}
-              required
-              placeholder="Paste or write document template content here with {client_name}, {email}, {phone}, {date}..."
-              value={templateText}
-              onChange={(e) => setTemplateText(e.target.value)}
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-slate-500 leading-relaxed"
-            />
+            {/* HTML Editor — clean white textarea */}
+            <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+              {/* Minimal label bar */}
+              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+                <span className="text-[11px] font-semibold text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Write your HTML template below
+                </span>
+                <span className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-200 rounded font-mono">HTML</span>
+              </div>
+              <textarea
+                rows={10}
+                required
+                placeholder={`<p>Dear <strong>{client_name}</strong>,</p>\n<p>Email: {email} | Phone: {phone}</p>\n<p>Date: {date}</p>`}
+                value={templateText}
+                onChange={(e) => setTemplateText(e.target.value)}
+                className="w-full px-4 py-3 bg-white text-slate-800 text-xs font-mono focus:outline-none leading-relaxed resize-none"
+                spellCheck={false}
+              />
+            </div>
+
+            {/* Live HTML Preview (shown when content exists) */}
+            {templateText.trim() && (
+              <div className="rounded-xl border border-slate-200 overflow-hidden">
+                <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Live Preview</span>
+                </div>
+                <div
+                  className="px-5 py-4 bg-white text-sm text-slate-800 leading-relaxed prose prose-sm max-w-none"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                  dangerouslySetInnerHTML={{ __html: templateText }}
+                />
+              </div>
+            )}
           </div>
+
 
           {/* Field Mapping Table */}
           <div className="space-y-3 pt-2 border-t border-slate-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Extracted Fillable Fields ({fieldMappings.length})
-                </h3>
-                <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Map each extracted template field to system or custom client profile fields
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setFieldManagerOpen(true)}
-                className="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs rounded-lg transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Settings className="w-3.5 h-3.5" />
-                <span>Manage Fields</span>
-              </button>
+            <div>
+              <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                Extracted Fillable Fields ({fieldMappings.length})
+              </h3>
+              <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Map each extracted template field to system or custom client profile fields
+              </p>
             </div>
 
             {fieldMappings.length === 0 ? (
@@ -971,17 +995,261 @@ export default function AddDocumentTemplateDrawer({
               </div>
             )}
           </div>
+
+          {/* ─── Template Settings Section ─── */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden">
+            {/* Settings Toggle Header */}
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/70 transition-colors cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-lg bg-[#1F2937] flex items-center justify-center">
+                  <Settings className="w-3.5 h-3.5 text-white" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold text-slate-900">Template Settings</p>
+                  <p className="text-[11px] text-slate-500">Configure template access & document auto-numbering</p>
+                </div>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${settingsOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {/* Settings Content */}
+            {settingsOpen && (
+              <div className="p-5 space-y-6 border-t border-slate-200 bg-white animate-in fade-in-50 duration-150">
+
+                {/* ── Section 1: Template Users ── */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-600" />
+                    <h4 className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Template Users
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Select which team roles are allowed to use and generate documents from this template.
+                  </p>
+
+                  {/* Multi-select Dropdown */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setUsersDropdownOpen((v) => !v)}
+                      className="w-full flex items-center justify-between px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 transition-all cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                        {templateUsers.length === 0 ? (
+                          <span className="text-xs text-slate-400">Select team roles...</span>
+                        ) : (
+                          templateUsers.map((role) => (
+                            <span
+                              key={role}
+                              className="flex items-center gap-1 px-2 py-0.5 bg-[#1F2937] text-white text-[11px] font-semibold rounded-full"
+                            >
+                              {role}
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); toggleTemplateUser(role); }}
+                                className="hover:text-red-300 transition-colors cursor-pointer"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </span>
+                          ))
+                        )}
+                      </div>
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-2 transition-transform ${usersDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {usersDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setUsersDropdownOpen(false)} />
+                        <div
+                          className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block border-b border-slate-100 mb-1">
+                            SELECT ROLES — MULTI SELECT
+                          </span>
+                          <div className="space-y-0.5">
+                            {AVAILABLE_TEAM_ROLES.map((role) => {
+                              const isSelected = templateUsers.includes(role);
+                              return (
+                                <button
+                                  key={role}
+                                  type="button"
+                                  onClick={() => toggleTemplateUser(role)}
+                                  className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
+                                    isSelected
+                                      ? "bg-[#1F2937] text-white"
+                                      : "hover:bg-slate-100 text-slate-800"
+                                  }`}
+                                >
+                                  <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                    {role}
+                                  </span>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="border-t border-slate-100" />
+
+                {/* ── Section 2: Auto-Numbering Settings ── */}
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Hash className="w-4 h-4 text-slate-600" />
+                    <h4 className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                      Auto-Numbering Settings
+                    </h4>
+                  </div>
+                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Define how documents generated from this template will be automatically numbered.
+                  </p>
+
+                  {/* Number Format Preview + Input */}
+                  <div className="space-y-1.5">
+                    <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Number format
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={numberFormat}
+                        onChange={(e) => setNumberFormat(e.target.value)}
+                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-slate-500 text-slate-900 bg-white"
+                      />
+                    </div>
+                    {/* Token Chips */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {NUMBER_FORMAT_TOKENS.map((token) => {
+                        const isActive = activeTokens.includes(token.id);
+                        return (
+                          <button
+                            key={token.id}
+                            type="button"
+                            onClick={() => handleInsertToken(token)}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
+                              isActive
+                                ? "bg-[#1F2937] text-white border-[#1F2937]"
+                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
+                            }`}
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            {token.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Start + Increment in a row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Start sequential numbering with
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={startNumber}
+                        onChange={(e) => setStartNumber(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Increment sequential numbers by
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={incrementBy}
+                        onChange={(e) => setIncrementBy(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Length + Padding in a row */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Sequential number length
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        value={numberLength}
+                        onChange={(e) => setNumberLength(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Padding character
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={1}
+                        value={paddingChar}
+                        onChange={(e) => setPaddingChar(e.target.value)}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Activity Period Dropdown */}
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Automatic numbering template activity period
+                    </label>
+                    <select
+                      value={activityPeriod}
+                      onChange={(e) => setActivityPeriod(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900 bg-white cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="Continuously">Continuously</option>
+                      <option value="Daily">Daily (reset each day)</option>
+                      <option value="Monthly">Monthly (reset each month)</option>
+                      <option value="Yearly">Yearly (reset each year)</option>
+                      <option value="Per Process">Per Process</option>
+                    </select>
+                  </div>
+
+                  {/* Cross-company checkbox */}
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={crossCompany}
+                      onChange={(e) => setCrossCompany(e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 accent-slate-900 cursor-pointer"
+                    />
+                    <span className="text-[11px] text-slate-600 group-hover:text-slate-900 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Use continuous numbering across all of my companies
+                    </span>
+                  </label>
+                </div>
+
+              </div>
+            )}
+          </div>
         </div>
       </DrawerShell>
-
-      {fieldManagerOpen && (
-        <SelectFieldsModal
-          initiallySelected={SYSTEM_FIELDS_OPTIONS.map((s) => s.key)}
-          onlyModules={["client"]}
-          onClose={() => setFieldManagerOpen(false)}
-          onApply={() => setFieldManagerOpen(false)}
-        />
-      )}
     </>
   );
 }
