@@ -156,7 +156,7 @@ export const MODULES: ModuleRow[] = [
   { key: "processSettings", label: "Process Settings", route: "/process" },
   { key: "webForms", label: "Web Forms", route: "/web-forms" },
   { key: "appointments", label: "Appointments", route: "/appointments" },
-  { key: "services", label: "Product & Services", route: "/services" },
+  { key: "services", label: "Product/Services", route: "/services" },
 ];
 
 // ─── SETTINGS SUB-PAGES CONFIG ────────────────────────────────────────────────

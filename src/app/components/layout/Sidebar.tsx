@@ -70,7 +70,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/process", label: "Process Settings", icon: Sliders },
     { path: "/web-forms", label: "Web Forms", icon: FileText },
     { path: "/appointments", label: "Appointments", icon: CalendarIcon },
-    { path: "/services", label: "Product & Services", icon: Package },
+    { path: "/services", label: "Product/Services", icon: Package },
     { path: "/refer-and-earn", label: "Refer & Earn", icon: Gift },
   ];
 
