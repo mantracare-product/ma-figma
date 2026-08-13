@@ -25,6 +25,7 @@ import {
   Plus,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Clock,
   Trash2,
   Package,
@@ -156,8 +157,55 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([
     "Name", "Status", "Email", "Phone", "Location", "Company", "Role", "Company Size", "Process",
-    "Gender", "Date of Birth", "Language", "Country", "Timezone", "Assigned Service"
+    "Gender", "Date of Birth", "Department", "Language", "Country", "Timezone", "Assigned Service"
   ]);
+
+  // Department Combobox State
+  const [deptList, setDeptList] = useState<string[]>(() => {
+    const defaultDepts = [
+      "Engineering",
+      "Sales",
+      "Marketing",
+      "Support",
+      "Operations",
+      "Finance",
+      "HR",
+      "Medical",
+      "Reception",
+    ];
+    try {
+      const raw = localStorage.getItem("ma_departments");
+      const parsed = raw ? JSON.parse(raw) : [];
+      const storedNames = parsed.map((d: any) => d.name || d);
+      return Array.from(new Set([...defaultDepts, ...storedNames]));
+    } catch {
+      return defaultDepts;
+    }
+  });
+  const [deptComboboxOpen, setDeptComboboxOpen] = useState(false);
+  const [deptSearch, setDeptSearch] = useState("");
+
+  const handleCreateAndSelectDept = (deptName: string) => {
+    const trimmed = deptName.trim();
+    if (!trimmed) return;
+    if (!deptList.includes(trimmed)) {
+      const updated = [...deptList, trimmed];
+      setDeptList(updated);
+      try {
+        const raw = localStorage.getItem("ma_departments");
+        const stored = raw ? JSON.parse(raw) : [];
+        const exists = stored.some((d: any) => (d.name || d).toLowerCase() === trimmed.toLowerCase());
+        if (!exists) {
+          stored.push({ id: "dept_" + Date.now(), name: trimmed });
+          localStorage.setItem("ma_departments", JSON.stringify(stored));
+        }
+      } catch {}
+    }
+    updatePersonalInfo({ department: trimmed });
+    setDeptSearch("");
+    setDeptComboboxOpen(false);
+    toast.success(`Department "${trimmed}" added and selected.`);
+  };
 
   // Calendar View State
   const [calendarView, setCalendarView] = useState<"day" | "week" | "month" | "schedule">("month");
@@ -565,38 +613,96 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                       </Select>
                     </div>
 
-                    {/* Department */}
+                    {/* Department (Searchable Combobox) */}
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1.5">Department</label>
-                      <Select value={personalInfo.department} onValueChange={(value) => updatePersonalInfo({ department: value })}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Array.from(new Set([
-                            "Engineering",
-                            "Sales",
-                            "Marketing",
-                            "Support",
-                            "Operations",
-                            "Finance",
-                            "HR",
-                            "Medical",
-                            "Reception",
-                            ...(() => {
-                              try {
-                                const raw = localStorage.getItem("ma_departments");
-                                const parsed = raw ? JSON.parse(raw) : [];
-                                return parsed.map((d: any) => d.name || d);
-                              } catch { return []; }
-                            })()
-                          ])).map((dept) => (
-                            <SelectItem key={dept} value={dept}>
-                              {dept}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="relative">
+                        {/* Trigger Button */}
+                        <button
+                          type="button"
+                          onClick={() => setDeptComboboxOpen((v) => !v)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:border-gray-400 focus:outline-none transition-colors cursor-pointer"
+                        >
+                          <span className={personalInfo.department ? "text-gray-900 font-medium" : "text-gray-400"}>
+                            {personalInfo.department || "Select department..."}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${deptComboboxOpen ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {/* Searchable Dropdown Popover */}
+                        {deptComboboxOpen && (
+                          <div className="absolute z-50 top-full mt-1.5 left-0 w-full bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+                            {/* Search Input */}
+                            <div className="p-2 border-b border-slate-100 bg-slate-50/50 relative flex items-center">
+                              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-4" />
+                              <input
+                                type="text"
+                                value={deptSearch}
+                                onChange={(e) => setDeptSearch(e.target.value)}
+                                placeholder="Type or search department..."
+                                className="w-full pl-7 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-500"
+                                autoFocus
+                              />
+                            </div>
+
+                            {/* Filtered Department Options List */}
+                            <div className="max-h-48 overflow-y-auto divide-y divide-slate-50 p-1">
+                              {(() => {
+                                const filtered = deptList.filter((d) =>
+                                  d.toLowerCase().includes(deptSearch.trim().toLowerCase())
+                                );
+                                const exactMatch = deptList.some(
+                                  (d) => d.toLowerCase() === deptSearch.trim().toLowerCase()
+                                );
+
+                                return (
+                                  <>
+                                    {filtered.map((d) => (
+                                      <button
+                                        key={d}
+                                        type="button"
+                                        onClick={() => {
+                                          updatePersonalInfo({ department: d });
+                                          setDeptSearch("");
+                                          setDeptComboboxOpen(false);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-xs rounded-lg flex items-center justify-between transition-colors cursor-pointer ${
+                                          personalInfo.department === d
+                                            ? "bg-indigo-50 text-indigo-900 font-bold"
+                                            : "hover:bg-slate-100 text-slate-700"
+                                        }`}
+                                      >
+                                        <span>{d}</span>
+                                        {personalInfo.department === d && (
+                                          <Check className="w-3.5 h-3.5 text-indigo-600" />
+                                        )}
+                                      </button>
+                                    ))}
+
+                                    {/* Add Button if Typed Department does NOT exist */}
+                                    {deptSearch.trim() !== "" && !exactMatch && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleCreateAndSelectDept(deptSearch.trim())}
+                                        className="w-full text-left px-3 py-2 text-xs font-bold text-indigo-600 bg-indigo-50/70 hover:bg-indigo-100 rounded-lg flex items-center gap-1.5 transition-colors mt-1 cursor-pointer"
+                                      >
+                                        <Plus className="w-3.5 h-3.5" />
+                                        + Add "{deptSearch.trim()}" Department
+                                      </button>
+                                    )}
+
+                                    {filtered.length === 0 && exactMatch && (
+                                      <div className="px-3 py-3 text-xs text-slate-400 italic text-center">
+                                        No departments found
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Language */}

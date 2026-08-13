@@ -1,4 +1,4 @@
-export type ActionScope = "deny" | "own" | "role" | "all";
+export type ActionScope = "inherit" | "deny" | "own" | "role" | "all";
 
 export const ACTIONS = ["read", "add", "edit", "delete", "export", "import"] as const;
 export type Action = (typeof ACTIONS)[number];
@@ -20,6 +20,9 @@ export interface ItemPermissions {
 
   // Dynamic: one entry per real process, keyed by process id.
   processInstances: Record<string, ModulePermissions>;
+
+  // Dynamic: stage level overrides, keyed by `${processId}_${stageId}`.
+  stageInstances?: Record<string, Partial<Record<Action, ActionScope>>>;
 }
 
 export interface Role {
