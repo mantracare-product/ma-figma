@@ -716,7 +716,9 @@ export function RolesPermissionsDrawer({
                           </tr>
                         </thead>
                         <tbody>
-                          {ACTIONS.map((action) => (
+                          {ACTIONS.filter(
+                            (action) => action !== "add" && action !== "import" && action !== "export"
+                          ).map((action) => (
                             <tr key={action} className="border-b border-slate-100 hover:bg-slate-50/80 transition-colors">
                               <td className="p-3.5 pl-5 text-xs font-semibold text-slate-700">
                                 {ACTION_LABELS[action]}
