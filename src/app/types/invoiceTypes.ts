@@ -8,6 +8,7 @@ export interface InvoiceLineItem {
   quantity: number;
   unitPrice: number;
   discountAmount?: number;
+  taxPercent?: number;
 }
 
 export interface ClientInvoice {
@@ -94,6 +95,7 @@ export interface MockService {
   price: number;
   category: string;
   isActive: boolean;
+  tax?: number;
 }
 
 export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging";

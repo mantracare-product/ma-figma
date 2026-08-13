@@ -533,9 +533,15 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     discount = Math.round(discount * 100) / 100;
-    const taxableSubtotal = Math.max(0, subtotal - discount);
-    const tax = Math.round(taxableSubtotal * 0.08 * 100) / 100;
-    const total = Math.round((taxableSubtotal + tax) * 100) / 100;
+    const taxSum = lineItems.reduce((acc, item) => {
+      const itemSub = Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0));
+      const effectiveDisc = subtotal > 0 ? (discount * (itemSub / subtotal)) : 0;
+      const taxableItem = Math.max(0, itemSub - effectiveDisc);
+      const taxRate = item.taxPercent !== undefined ? item.taxPercent : 8;
+      return acc + (taxableItem * taxRate) / 100;
+    }, 0);
+    const tax = Math.round(taxSum * 100) / 100;
+    const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
 
     const nextIdNumber = 1050 + invoices.length;
     const newInvoice: ClientInvoice = {

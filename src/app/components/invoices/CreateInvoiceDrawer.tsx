@@ -3,6 +3,7 @@ import { CustomSideDrawer } from "../ui/drawer";
 import { useInvoices } from "../../context/InvoiceContext";
 import { getClientList, ClientItem } from "../../../lib/getClientList";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
+import { getStoredServices } from "../../../lib/servicesStore";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus } from "../../types/invoiceTypes";
 import { toast } from "sonner";
 import { addActivityEntry } from "../../../lib/activityLog";
@@ -77,6 +78,7 @@ export default function CreateInvoiceDrawer({
       description: MOCK_SERVICES[0].name,
       quantity: 1,
       unitPrice: MOCK_SERVICES[0].price,
+      taxPercent: MOCK_SERVICES[0].tax ?? 5,
     },
   ]);
   const [discountType, setDiscountType] = useState<"amount" | "percent">("amount");
@@ -118,6 +120,7 @@ export default function CreateInvoiceDrawer({
           description: MOCK_SERVICES[0].name,
           quantity: 1,
           unitPrice: MOCK_SERVICES[0].price,
+          taxPercent: MOCK_SERVICES[0].tax ?? 5,
         },
       ]);
       setDiscountType("amount");
@@ -130,18 +133,24 @@ export default function CreateInvoiceDrawer({
   const selectedClient = clientsList.find((c) => c.id === selectedClientId) || clientsList[0];
 
   const handleAddServiceItem = (serviceId: string) => {
-    const service = MOCK_SERVICES.find((s) => s.id === serviceId);
-    if (!service) return;
+    const stored = getStoredServices();
+    const foundStored = stored.find((s) => String(s.id) === serviceId || `srv-${s.id}` === serviceId);
+    const foundMock = MOCK_SERVICES.find((s) => s.id === serviceId);
+
+    const name = foundStored?.name || foundMock?.name || "Service Item";
+    const price = foundStored?.price ?? foundMock?.price ?? 0;
+    const tax = foundStored?.tax ?? foundMock?.tax ?? 0;
 
     setLineItems((prev) => [
       ...prev,
       {
         id: `li-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         source: "service",
-        serviceId: service.id,
-        description: service.name,
+        serviceId: serviceId,
+        description: name,
         quantity: 1,
-        unitPrice: service.price,
+        unitPrice: price,
+        taxPercent: tax,
       },
     ]);
   };
@@ -155,6 +164,7 @@ export default function CreateInvoiceDrawer({
         description: "Custom Service / Consultation Fee",
         quantity: 1,
         unitPrice: 50,
+        taxPercent: 0,
       },
     ]);
   };
@@ -177,8 +187,20 @@ export default function CreateInvoiceDrawer({
     discountType === "percent"
       ? parseFloat(((subtotal * discountValue) / 100).toFixed(2))
       : discountValue;
+
+  const taxAmount = parseFloat(
+    lineItems
+      .reduce((sum, item) => {
+        const itemSub = Math.max(0, item.quantity * item.unitPrice - (item.discountAmount || 0));
+        const effectiveDisc = subtotal > 0 ? (discountAmount * (itemSub / subtotal)) : 0;
+        const taxableItem = Math.max(0, itemSub - effectiveDisc);
+        const itemTax = (taxableItem * (item.taxPercent ?? 0)) / 100;
+        return sum + itemTax;
+      }, 0)
+      .toFixed(2)
+  );
+
   const taxableAmount = Math.max(0, subtotal - discountAmount);
-  const taxAmount = parseFloat((taxableAmount * 0.08).toFixed(2));
   const totalAmount = parseFloat((taxableAmount + taxAmount).toFixed(2));
 
   const handleAddCustomMode = () => {
@@ -514,7 +536,7 @@ export default function CreateInvoiceDrawer({
                   <option value="">+ Add Product/Service Item...</option>
                   {MOCK_SERVICES.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (${s.price})
+                      {s.name} (${s.price}){Boolean(s.tax && s.tax > 0) ? ` (+${s.tax}% tax)` : ""}
                     </option>
                   ))}
                 </select>
@@ -556,6 +578,17 @@ export default function CreateInvoiceDrawer({
                       value={item.unitPrice}
                       onChange={(e) => handleUpdateItem(idx, { unitPrice: parseFloat(e.target.value) || 0 })}
                       className="w-full text-right py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium"
+                    />
+                  </div>
+                  <div className="w-20 flex items-center gap-1">
+                    <span className="text-slate-400">Tax%:</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={item.taxPercent ?? 0}
+                      onChange={(e) => handleUpdateItem(idx, { taxPercent: Math.max(0, parseFloat(e.target.value) || 0) })}
+                      className="w-full text-center py-1 bg-white border border-slate-200 rounded-lg text-xs font-medium"
                     />
                   </div>
                   <button
@@ -816,7 +849,7 @@ export default function CreateInvoiceDrawer({
                 )}
                 {activeTemplate.showTaxBreakdown && (
                   <div className="flex justify-between text-slate-600">
-                    <span>Tax (8%)</span>
+                    <span>Tax</span>
                     <span>${taxAmount.toFixed(2)}</span>
                   </div>
                 )}

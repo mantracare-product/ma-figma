@@ -111,6 +111,7 @@ export default function ScheduleAppointmentDrawer({
         description: srv.name,
         quantity: 1,
         unitPrice: srv.price,
+        taxPercent: srv.tax || 0,
       };
 
       onChange({
@@ -131,6 +132,7 @@ export default function ScheduleAppointmentDrawer({
       description: "Additional Consultation / Service",
       quantity: 1,
       unitPrice: 50,
+      taxPercent: 0,
     };
     const current = values.lineItems || [];
     onChange({ lineItems: [...current, newLineItem] });
@@ -154,9 +156,15 @@ export default function ScheduleAppointmentDrawer({
   const currentLineItems = values.lineItems || [];
   const subtotal = currentLineItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity - (item.discountAmount || 0)), 0);
   const discount = values.discountAmount || 0;
-  const taxableSubtotal = Math.max(0, subtotal - discount);
-  const tax = Math.round(taxableSubtotal * 0.08 * 100) / 100;
-  const total = Math.round((taxableSubtotal + tax) * 100) / 100;
+  const taxSum = currentLineItems.reduce((acc, item) => {
+    const itemSub = Math.max(0, item.unitPrice * item.quantity - (item.discountAmount || 0));
+    const effectiveDisc = subtotal > 0 ? (discount * (itemSub / subtotal)) : 0;
+    const taxableItem = Math.max(0, itemSub - effectiveDisc);
+    const taxRate = item.taxPercent !== undefined ? item.taxPercent : 0;
+    return acc + (taxableItem * taxRate) / 100;
+  }, 0);
+  const tax = Math.round(taxSum * 100) / 100;
+  const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
 
   const inputCls =
     "w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500 bg-white";

@@ -9,6 +9,7 @@ export const MOCK_SERVICES: MockService[] = [
     price: 150,
     category: "Consultation",
     isActive: true,
+    tax: 5,
   },
   {
     id: "srv-2",
@@ -18,6 +19,7 @@ export const MOCK_SERVICES: MockService[] = [
     price: 75,
     category: "Consultation",
     isActive: true,
+    tax: 5,
   },
   {
     id: "srv-3",
@@ -27,6 +29,7 @@ export const MOCK_SERVICES: MockService[] = [
     price: 120,
     category: "Dental",
     isActive: true,
+    tax: 10,
   },
   {
     id: "srv-4",
@@ -36,6 +39,7 @@ export const MOCK_SERVICES: MockService[] = [
     price: 80,
     category: "Diagnostic",
     isActive: true,
+    tax: 0,
   },
   {
     id: "srv-5",
@@ -45,6 +49,7 @@ export const MOCK_SERVICES: MockService[] = [
     price: 110,
     category: "Therapy",
     isActive: true,
+    tax: 8,
   },
   {
     id: "srv-6",
@@ -54,5 +59,6 @@ export const MOCK_SERVICES: MockService[] = [
     price: 95,
     category: "Diagnostic",
     isActive: true,
+    tax: 12,
   },
 ];
