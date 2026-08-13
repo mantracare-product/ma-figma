@@ -32,6 +32,8 @@ import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
+import { useSearchParams } from "react-router";
+import { useInvoices } from "../context/InvoiceContext";
 
 interface Appointment {
   id: number;
@@ -77,6 +79,7 @@ const processStages: Record<string, string[]> = {
 };
 
 export default function Appointments() {
+  const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
   // Mock data
   const employees: Employee[] = [
     { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
@@ -203,9 +206,21 @@ export default function Appointments() {
     sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
   }, [appointments]);
 
+  const [searchParams] = useSearchParams();
+  const linkedApptId = searchParams.get("id");
+
   useEffect(() => {
-    sessionStorage.setItem("appointments_visibleFields", JSON.stringify(apptVisibleFieldKeys));
-  }, [apptVisibleFieldKeys]);
+    if (linkedApptId) {
+      setView("list");
+      setListViewTab("all");
+      const matched = appointments.find((a) => String(a.id) === String(linkedApptId));
+      if (matched) {
+        setSearchQuery(matched.clientName);
+      } else {
+        setSearchQuery(linkedApptId);
+      }
+    }
+  }, [linkedApptId]);
 
 
   // Booking workflow state (single-page form)
@@ -229,6 +244,10 @@ export default function Appointments() {
   const [bookingStartHour, setBookingStartHour] = useState(9);
   const [bookingStartMinute, setBookingStartMinute] = useState(0);
   const [drawerMode, setDrawerMode] = useState<"create" | "reschedule">("create");
+  const [bookingServiceId, setBookingServiceId] = useState("");
+  const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(true);
+  const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
+  const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -507,7 +526,27 @@ export default function Appointments() {
       };
 
       setAppointments([...appointments, newAppointment]);
-      toast.success("Appointment scheduled successfully!");
+
+      if (bookingGenerateInvoice && bookingLineItems && bookingLineItems.length > 0) {
+        const inv = createInvoiceFromAppointment(
+          {
+            id: newAppointment.id,
+            clientId: String(selectedClient.id || "c-1"),
+            clientName: selectedClient.name,
+            clientEmail: selectedClient.email,
+            clientPhone: selectedClient.phone,
+            title: bookingTitle.trim(),
+          },
+          bookingLineItems,
+          {
+            discountAmount: bookingDiscountAmount,
+            createdBy: "Admin User",
+          }
+        );
+        toast.success(`Appointment scheduled — Invoice ${inv.id} created!`);
+      } else {
+        toast.success("Appointment scheduled successfully!");
+      }
     }
 
     setShowAddModal(false);
@@ -598,11 +637,25 @@ export default function Appointments() {
 
   const handleDeleteAppointment = (appointmentId: number) => {
     setAppointments(appointments.filter((a) => a.id !== appointmentId));
-    toast.success("Appointment cancelled");
+    const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
+    if (linkedInvoice && linkedInvoice.status !== "paid") {
+      voidInvoice(linkedInvoice.id);
+      toast.success(`Appointment cancelled & Invoice ${linkedInvoice.id} voided`);
+    } else {
+      toast.success("Appointment cancelled");
+    }
   };
 
   const handleStatusChange = (appointmentId: number, status: Appointment["status"]) => {
     setAppointments(appointments.map((a) => (a.id === appointmentId ? { ...a, status } : a)));
+    if (status === "cancelled") {
+      const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
+      if (linkedInvoice && linkedInvoice.status !== "paid") {
+        voidInvoice(linkedInvoice.id);
+        toast.success(`Appointment marked cancelled & Invoice ${linkedInvoice.id} voided`);
+        return;
+      }
+    }
     toast.success(`Appointment marked as ${status}`);
   };
 
@@ -2473,6 +2526,10 @@ export default function Appointments() {
           sessionType: sessionType,
           client: selectedClient,
           provider: selectedProvider,
+          serviceId: bookingServiceId,
+          generateInvoice: bookingGenerateInvoice,
+          lineItems: bookingLineItems,
+          discountAmount: bookingDiscountAmount,
         }}
         onChange={(patch) => {
           if (patch.title !== undefined) setBookingTitle(patch.title);
@@ -2486,7 +2543,11 @@ export default function Appointments() {
           if (patch.startMinute !== undefined) setBookingStartMinute(patch.startMinute);
           if (patch.sessionType !== undefined) setSessionType(patch.sessionType);
           if (patch.client !== undefined) setSelectedClient(patch.client);
-          if (patch.provider !== undefined) setSelectedProvider(patch.provider);
+          if (patch.provider !== undefined) setSelectedProvider(patch.provider as any);
+          if (patch.serviceId !== undefined) setBookingServiceId(patch.serviceId);
+          if (patch.generateInvoice !== undefined) setBookingGenerateInvoice(patch.generateInvoice);
+          if (patch.lineItems !== undefined) setBookingLineItems(patch.lineItems);
+          if (patch.discountAmount !== undefined) setBookingDiscountAmount(patch.discountAmount);
         }}
         onSave={handleBookingComplete}
         employees={employees}

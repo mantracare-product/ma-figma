@@ -15,6 +15,7 @@ import { WorkflowStep } from "../../types/workflow";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 import { addActivityEntry } from "../../../lib/activityLog";
 import { addProcessCallLog, updateProcessCallLogStage } from "../../../lib/processLogsStore";
+import { useInvoices } from "../../context/InvoiceContext";
 
 interface TestProcessChatDrawerProps {
   isOpen: boolean;
@@ -29,6 +30,7 @@ export default function TestProcessChatDrawer({
   processes,
   getWorkflowStepsForStage,
 }: TestProcessChatDrawerProps) {
+  const { createInvoiceFromAppointment, sendInvoice } = useInvoices();
   const [selectedNumber, setSelectedNumber] = useState("");
   const [source, setSource] = useState<"whatsapp" | "sms">("whatsapp");
   const [selectedClientId, setSelectedClientId] = useState<string>(""); // "" = new client
@@ -121,7 +123,22 @@ export default function TestProcessChatDrawer({
 
     const workflowSteps = (stage as any).workflowSteps ?? [];
     const userTurn: ProcessSimTurn = { role: "contact", text: draft };
-    const result = generateProcessStageReply(stage, workflowSteps, draft, transcript);
+    const result = generateProcessStageReply(
+      stage,
+      workflowSteps,
+      draft,
+      transcript,
+      source,
+      {
+        createInvoiceFn: createInvoiceFromAppointment,
+        sendInvoiceFn: sendInvoice,
+        clientContext: {
+          id: clientId || "c-1",
+          name: contactName || "Simulated Contact",
+          phone: contactPhone || "",
+        },
+      }
+    );
 
     const newTurns: ProcessSimTurn[] = [
       userTurn,

@@ -142,5 +142,26 @@ export const LIBRARY_TEMPLATES: LibraryTemplate[] = [
       { type: "quick_reply", label: "Copy Code" }
     ],
     language: "en"
+  },
+  {
+    id: "lib-tpl-invoice-payment",
+    name: "Invoice Payment Link Delivery",
+    category: "Utility",
+    description: "Send generated invoice details and secure payment link via WhatsApp, SMS, or Email.",
+    headerType: "text",
+    headerText: "Invoice & Payment Ready 📄",
+    bodyText: "Hi {{contact_name}}, your invoice {{invoice_number}} for {{invoice_amount}} is ready. Due {{due_date}}.",
+    footerText: "Tap below to pay securely",
+    buttons: [
+      { type: "url", label: "Pay Invoice Now", value: "{{payment_link}}" }
+    ],
+    language: "en",
+    variableMappings: {
+      "contact_name": { source: "field", fieldKey: "contactName" },
+      "invoice_number": { source: "field", fieldKey: "invoiceNumber" },
+      "invoice_amount": { source: "field", fieldKey: "invoiceAmount" },
+      "due_date": { source: "field", fieldKey: "dueDate" },
+      "payment_link": { source: "field", fieldKey: "paymentLink" }
+    }
   }
 ];

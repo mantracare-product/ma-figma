@@ -8,6 +8,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { SidebarProvider } from "./context/SidebarContext";
 import { ClientFieldsProvider } from "./context/ClientFieldsContext";
 import { FieldRegistryProvider } from "./context/FieldRegistryContext";
+import { InvoiceProvider } from "./context/InvoiceContext";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -22,8 +23,10 @@ export default function App() {
                 <AIProviderProvider>
                   <FieldRegistryProvider>
                     <ClientFieldsProvider>
-                      <RouterProvider router={router} />
-                      <Toaster position="bottom-right" />
+                      <InvoiceProvider>
+                        <RouterProvider router={router} />
+                        <Toaster position="bottom-right" />
+                      </InvoiceProvider>
                     </ClientFieldsProvider>
                   </FieldRegistryProvider>
                 </AIProviderProvider>

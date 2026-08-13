@@ -101,7 +101,9 @@ import VerifyNumberModal from "../components/settings/VerifyNumberModal";
 import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemberProfileDrawer";
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
 import type { ActionScope, Action, ModulePermissions, ItemPermissions, Role } from "../../types/permissions";
+
 import { DndProvider, useDrag, useDrop } from "react-dnd";
+
 import { HTML5Backend } from "react-dnd-html5-backend";
 
 export type { ActionScope, Action, ModulePermissions, ItemPermissions, Role };
@@ -2888,10 +2890,12 @@ export default function Settings() {
     { id: "voice-config", label: "AI Voices / Models" },
     { id: "numbers", label: "Numbers" },
     { id: "custom-fields", label: "Custom Fields" },
+
     { id: "integrations", label: "Integrations" },
     { id: "audit-logs", label: "Audit Logs" },
     { id: "security", label: "Security" },
   ];
+
 
   const handleSaveOrganization = () => {
     if (!editOrgData.name || !editOrgData.email) {
@@ -6094,7 +6098,10 @@ export default function Settings() {
             )}
 
 
+
+
             {/* Audit Logs Tab */}
+
             {activeTab === "audit-logs" && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
