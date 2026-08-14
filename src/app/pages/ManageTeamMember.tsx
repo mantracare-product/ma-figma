@@ -198,20 +198,20 @@ export default function ManageTeamMember() {
   const workingDaysCount = Object.values(availability).filter((d) => d.enabled).length;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-8 px-[150px] space-y-6">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/settings")}
-              className="p-2.5 hover:bg-white rounded-xl transition-all shadow-sm border border-border hover:shadow-md"
+              className="p-2.5 hover:bg-white rounded-full transition-all shadow-xs border border-slate-200 hover:shadow-sm cursor-pointer"
               style={{ color: "#64748B" }}
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
-              <h1 className="text-3xl font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
                 Manage Team Member
               </h1>
               <p className="text-sm text-muted-foreground mt-1">Configure settings for {user.name}</p>

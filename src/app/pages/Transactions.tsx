@@ -193,16 +193,16 @@ export default function Transactions() {
       </div>
 
       {/* Transaction Table */}
-      <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+      <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-muted border-b border-border">
+            <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Date</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Type</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">User</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Amount</th>
-                <th className="px-6 py-4 text-left text-sm font-semibold">Status</th>
+                <th className="px-6 py-3.5 text-left font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>DATE</th>
+                <th className="px-6 py-3.5 text-left font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>TYPE</th>
+                <th className="px-6 py-3.5 text-left font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>USER</th>
+                <th className="px-6 py-3.5 text-left font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>AMOUNT</th>
+                <th className="px-6 py-3.5 text-left font-semibold" style={{ fontFamily: 'Outfit, sans-serif' }}>STATUS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

@@ -212,22 +212,27 @@ export default function Invoices() {
   };
 
   const kanbanColumns: { id: InvoiceStatus; title: string; headerBg: string; badgeColor: string }[] = [
-    { id: "draft", title: "Draft", headerBg: "#1C2B4A", badgeColor: "bg-amber-100 text-amber-800" },
-    { id: "sent", title: "Sent", headerBg: "#1C2B4A", badgeColor: "bg-blue-100 text-blue-800" },
-    { id: "viewed", title: "Viewed", headerBg: "#1C2B4A", badgeColor: "bg-purple-100 text-purple-800" },
-    { id: "partial", title: "Partial", headerBg: "#D97706", badgeColor: "bg-amber-100 text-amber-800" },
-    { id: "paid", title: "Paid", headerBg: "#1C2B4A", badgeColor: "bg-emerald-100 text-emerald-800" },
-    { id: "overdue", title: "Overdue", headerBg: "#881337", badgeColor: "bg-rose-100 text-rose-800" },
-    { id: "void", title: "Void", headerBg: "#334155", badgeColor: "bg-slate-200 text-slate-700" },
+    { id: "draft", title: "Draft", headerBg: "#181e25", badgeColor: "bg-slate-100 text-slate-800" },
+    { id: "sent", title: "Sent", headerBg: "#181e25", badgeColor: "bg-blue-50 text-[#1456f0]" },
+    { id: "viewed", title: "Viewed", headerBg: "#181e25", badgeColor: "bg-purple-50 text-purple-700" },
+    { id: "partial", title: "Partial", headerBg: "#f59e0b", badgeColor: "bg-amber-50 text-amber-800" },
+    { id: "paid", title: "Paid", headerBg: "#10b981", badgeColor: "bg-emerald-50 text-emerald-800" },
+    { id: "overdue", title: "Overdue", headerBg: "#ef4444", badgeColor: "bg-rose-50 text-rose-800" },
+    { id: "void", title: "Void", headerBg: "#64748b", badgeColor: "bg-slate-100 text-slate-600" },
   ];
 
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC]">
-      <div className="py-6 px-[150px] space-y-6">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         <PageHeader
           title="Invoices"
           subtitle="Manage client billing, view automated call-flow invoices, and collect payments"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Billing Hub
+            </span>
+          }
         >
           <div className="flex items-center gap-3">
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
@@ -239,114 +244,82 @@ export default function Invoices() {
                   toast.info("No active invoices available for recording payment");
                 }
               }}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <CreditCard className="w-4 h-4" /> + Record Payment
+              <CreditCard className="w-3.5 h-3.5" /> + Record Payment
             </button>
             <button
               onClick={handleCreateInvoice}
-              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-all flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#222a35] hover:to-[#384c60] text-white rounded-full font-semibold text-xs transition-all flex items-center gap-2 shadow-sm cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <Plus className="w-4 h-4" /> Create Invoice
+              <Plus className="w-3.5 h-3.5 text-blue-400" /> Create Invoice
             </button>
           </div>
         </PageHeader>
 
         {/* Stats Capsules */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: "rgba(59, 130, 246, 0.1)",
-              borderColor: "rgba(59, 130, 246, 0.2)",
-              borderRadius: "999px",
-              height: "40px",
-            }}
-          >
-            <DollarSign className="w-4 h-4" style={{ color: "#3B82F6" }} />
-            <span className="font-semibold" style={{ fontSize: "14px", color: "#020817" }}>
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+            <DollarSign className="w-3.5 h-3.5 text-[#1456f0]" />
+            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               ${totalInvoiced.toFixed(2)}
             </span>
-            <span style={{ fontSize: "12px", color: "#64748B" }}>Total Invoiced</span>
+            <span className="text-[11px] text-slate-400 font-medium">Total Invoiced</span>
           </div>
 
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: "rgba(245, 158, 11, 0.1)",
-              borderColor: "rgba(245, 158, 11, 0.2)",
-              borderRadius: "999px",
-              height: "40px",
-            }}
-          >
-            <Clock className="w-4 h-4" style={{ color: "#F59E0B" }} />
-            <span className="font-semibold" style={{ fontSize: "14px", color: "#020817" }}>
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+            <Clock className="w-3.5 h-3.5 text-[#f59e0b]" />
+            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               ${totalOutstanding.toFixed(2)}
             </span>
-            <span style={{ fontSize: "12px", color: "#64748B" }}>Outstanding</span>
+            <span className="text-[11px] text-slate-400 font-medium">Outstanding</span>
           </div>
 
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: "rgba(16, 185, 129, 0.1)",
-              borderColor: "rgba(16, 185, 129, 0.2)",
-              borderRadius: "999px",
-              height: "40px",
-            }}
-          >
-            <CheckCircle2 className="w-4 h-4" style={{ color: "#10B981" }} />
-            <span className="font-semibold" style={{ fontSize: "14px", color: "#020817" }}>
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981]" />
+            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               ${totalPaidThisMonth.toFixed(2)}
             </span>
-            <span style={{ fontSize: "12px", color: "#64748B" }}>Paid This Month</span>
+            <span className="text-[11px] text-slate-400 font-medium">Paid This Month</span>
           </div>
 
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: "rgba(244, 63, 94, 0.1)",
-              borderColor: "rgba(244, 63, 94, 0.2)",
-              borderRadius: "999px",
-              height: "40px",
-            }}
-          >
-            <AlertCircle className="w-4 h-4" style={{ color: "#F43F5E" }} />
-            <span className="font-semibold" style={{ fontSize: "14px", color: "#020817" }}>
+          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
+            <AlertCircle className="w-3.5 h-3.5 text-[#ef4444]" />
+            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
               {overdueCount}
             </span>
-            <span style={{ fontSize: "12px", color: "#64748B" }}>Overdue Count</span>
+            <span className="text-[11px] text-slate-400 font-medium">Overdue Count</span>
           </div>
         </div>
 
         {/* View Mode Toggle & Filter Bar */}
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             {/* View Mode Tabs: List | Kanban */}
-            <div className="flex items-center border-b border-gray-200">
+            <div className="inline-flex items-center p-1 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
               <button
                 onClick={() => setViewMode("list")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   viewMode === "list"
-                    ? "border-blue-600 text-blue-600 font-bold"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
+                    : "text-[#45515e] hover:text-[#222222]"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <List className="w-4 h-4" /> List
+                <List className="w-3.5 h-3.5" /> List
               </button>
               <button
                 onClick={() => setViewMode("kanban")}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
                   viewMode === "kanban"
-                    ? "border-blue-600 text-blue-600 font-bold"
-                    : "border-transparent text-gray-500 hover:text-gray-700"
+                    ? "bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white shadow-2xs"
+                    : "text-[#45515e] hover:text-[#222222]"
                 }`}
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <LayoutGrid className="w-4 h-4" /> Kanban
+                <LayoutGrid className="w-3.5 h-3.5" /> Kanban
               </button>
             </div>
           </div>
@@ -385,10 +358,10 @@ export default function Invoices() {
 
         {/* View Mode: List View (Matching Deals.tsx Table Layout 100%) */}
         {viewMode === "list" && (
-          <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="border-b border-border" style={{ backgroundColor: "#314158" }}>
+                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                   <tr>
                     {/* Checkbox Header */}
                     <th className="px-4 py-2.5 w-10">

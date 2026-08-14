@@ -21,6 +21,14 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 
 const defaultOrganizations: Organization[] = [
   {
+    id: "demo",
+    name: "Demo Mantra",
+    industry: "Healthcare AI",
+    email: "contact@mantraassist.com",
+    phone: "+1 (555) 123-4567",
+    status: "Active",
+  },
+  {
     id: "1",
     name: "Healthcare Org",
     industry: "Healthcare",

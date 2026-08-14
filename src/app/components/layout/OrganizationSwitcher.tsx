@@ -203,11 +203,13 @@ export default function OrganizationSwitcher() {
       <div className="relative">
         <button
           onClick={() => setShowOrgMenu(!showOrgMenu)}
-          className="flex items-center gap-2 px-4 py-2 bg-card border border-border rounded-xl hover:bg-muted transition-colors text-sm font-medium"
+          className="flex items-center gap-2 px-3.5 py-2 bg-white/80 hover:bg-white border border-slate-200/80 rounded-full shadow-2xs transition-colors text-xs font-semibold text-[#222222] cursor-pointer"
         >
-          <Building2 className="w-4 h-4 text-muted-foreground" />
-          <span>{activeOrganization.name}</span>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          <div className="w-5 h-5 rounded-full bg-blue-50 text-[#1456f0] flex items-center justify-center font-bold text-[10px]">
+            <Building2 className="w-3 h-3" />
+          </div>
+          <span className="truncate max-w-[140px]">{activeOrganization.name}</span>
+          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
         </button>
 
         {showOrgMenu && (
@@ -216,27 +218,32 @@ export default function OrganizationSwitcher() {
               className="fixed inset-0 z-40"
               onClick={() => setShowOrgMenu(false)}
             />
-            <div className="absolute right-0 mt-2 w-56 bg-card border border-border rounded-xl shadow-lg py-2 z-50">
+            <div className="absolute right-0 mt-2 w-60 bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-2xl shadow-xl py-1.5 z-50 text-xs overflow-hidden">
+              <div className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100">
+                Organizations
+              </div>
               {organizations.map((org) => (
                 <button
                   key={org.id}
                   onClick={() => handleSelectOrganization(org)}
-                  className={`w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors flex items-center justify-between ${
-                    activeOrganization.id === org.id ? "bg-muted" : ""
+                  className={`w-full px-3.5 py-2 text-left text-xs hover:bg-blue-50 transition-colors flex items-center justify-between font-medium cursor-pointer ${
+                    activeOrganization.id === org.id
+                      ? "bg-blue-50/60 text-[#1456f0] font-bold"
+                      : "text-[#222222]"
                   }`}
                 >
-                  <span>{org.name}</span>
+                  <span className="truncate">{org.name}</span>
                   {activeOrganization.id === org.id && (
-                    <Check className="w-4 h-4 text-primary" />
+                    <Check className="w-3.5 h-3.5 text-[#1456f0]" />
                   )}
                 </button>
               ))}
-              <div className="border-t border-border my-2" />
+              <div className="border-t border-slate-100 my-1" />
               <button
                 onClick={handleOpenAddModal}
-                className="w-full px-4 py-2 text-left text-sm hover:bg-muted transition-colors text-primary flex items-center gap-2"
+                className="w-full px-3.5 py-2 text-left text-xs hover:bg-slate-50 transition-colors text-[#1456f0] font-bold flex items-center gap-2 cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-3.5 h-3.5" />
                 Add Organization
               </button>
             </div>

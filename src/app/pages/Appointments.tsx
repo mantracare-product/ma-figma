@@ -807,9 +807,17 @@ export default function Appointments() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Appointments" subtitle="See who's booked, confirm pending requests, and schedule new visits">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <PageHeader
+          title="Appointments"
+          subtitle="Schedule and manage appointments with your clients"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Schedule
+            </span>
+          }
+        >
           {/* DEV ONLY: Role toggle for testing admin vs provider booking flow */}
           <div className="flex items-center gap-3">
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
@@ -1858,23 +1866,21 @@ export default function Appointments() {
                 </div>
 
                 {/* Calendar Grid */}
-                <div className="grid grid-cols-7 gap-0">
+                <div className="grid grid-cols-7 gap-0 rounded-t-xl overflow-hidden bg-gradient-to-r from-[#181e25] to-[#2c3e50] mb-1">
                   {/* Day headers */}
                   {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => (
                     <div
                       key={day}
-                      className="text-center py-2"
+                      className="text-center py-2.5 text-xs font-semibold text-white tracking-wider uppercase"
                       style={{
-                        fontSize: '12px',
-                        fontWeight: 600,
-                        color: '#9CA3AF',
-                        textTransform: 'uppercase',
                         fontFamily: 'Outfit, sans-serif',
                       }}
                     >
                       {day}
                     </div>
                   ))}
+                </div>
+                <div className="grid grid-cols-7 gap-0 border border-slate-200 rounded-b-xl overflow-hidden">
 
                   {/* Empty cells for days before month starts */}
                   {Array.from({ length: startingDayOfWeek }).map((_, i) => (

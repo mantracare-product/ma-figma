@@ -1528,9 +1528,17 @@ export default function Chats() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-6">
-        <PageHeader title="Chats" subtitle="Message clients over WhatsApp and SMS, and set up automated chat campaigns">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <PageHeader
+          title="Chats"
+          subtitle="Message clients over WhatsApp and SMS, and set up automated chat campaigns"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Omnichannel
+            </span>
+          }
+        >
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Chats Works" />
         </PageHeader>
 

@@ -1418,11 +1418,16 @@ export default function Clients() {
 
   return (
     <DndProvider backend={HTML5Backend}>
-      <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
-        <div className="py-6 px-[150px] space-y-8">
+      <div className="min-h-screen bg-[#fafafa]">
+        <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
           <PageHeader
             title="Clients"
-            subtitle="Add, search, and manage every contact — then link them to processes and appointments."
+            subtitle="Manage your medical intelligence and client interactions with precision"
+            badge={
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+                Directory
+              </span>
+            }
           >
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Clients Works" />
           </PageHeader>
@@ -2923,7 +2928,7 @@ export default function Clients() {
               }}
             >
               <table className="w-full min-w-[1200px]">
-                <thead className="border-b border-border" style={{ backgroundColor: '#1F2937' }}>
+                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                   <tr>
                     {/* Checkbox column */}
                     <th className="px-4 py-2.5 w-10">

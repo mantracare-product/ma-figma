@@ -2098,11 +2098,16 @@ export default function Process() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F8FAFC' }}>
-      <div className="py-8 px-[150px] space-y-6">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         <PageHeader
           title="Process Settings"
           subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Workflow Architect
+            </span>
+          }
           actions={
             <>
               <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>

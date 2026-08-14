@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 interface SidebarContextType {
   collapsed: boolean;
-  setCollapsed: (collapsed: boolean) => void;
+  setCollapsed: (collapsed: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);

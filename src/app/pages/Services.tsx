@@ -547,9 +547,17 @@ export default function Services() {
   );
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-7">
-        <PageHeader title="Product/Services" subtitle="Define what you offer, how long it takes, and who is qualified to deliver it">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <PageHeader
+          title="Product / Services"
+          subtitle="Define what you offer, how long it takes, and who is qualified to deliver it"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Catalog
+            </span>
+          }
+        >
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Product/Services Works" />
         </PageHeader>
 
@@ -575,13 +583,13 @@ export default function Services() {
           </button>
         </div>
 
-        {/* Improved Table View without capsule shapes, hamburger menu icon column under gear */}
+        {/* Improved Table View with Glassmorphism */}
         {filteredServices.length > 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-xs overflow-hidden">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead style={{ backgroundColor: "#314158" }}>
-                  <tr className="border-b border-slate-700">
+                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+                  <tr>
                     {/* Checkbox Column */}
                     <th className="py-3 px-4 w-10 text-center">
                       <input

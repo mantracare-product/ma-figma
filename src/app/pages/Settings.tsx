@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { motion, AnimatePresence } from "motion/react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -54,6 +55,7 @@ import {
   Minus,
   MoreVertical,
   User,
+  Users,
   CalendarClock,
   CalendarOff,
   Package,
@@ -64,6 +66,8 @@ import {
   Zap,
   PhoneOff,
   Ban,
+  Building2,
+  Sliders,
 } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import {
@@ -2875,11 +2879,12 @@ export default function Settings() {
 
 
   const tabs = [
-    { id: "organization", label: "Organization" },
-    { id: "users", label: "Team" },
+    { id: "organization", label: "Organization", icon: Building2 },
+    { id: "users", label: "Team", icon: Users },
     {
       id: "billing-parent",
       label: "Billing",
+      icon: CreditCard,
       isParent: true,
       children: [
         { id: "plans", label: "Plans" },
@@ -2887,13 +2892,12 @@ export default function Settings() {
         { id: "credit-usage", label: "Credit Usage" },
       ],
     },
-    { id: "voice-config", label: "AI Voices / Models" },
-    { id: "numbers", label: "Numbers" },
-    { id: "custom-fields", label: "Custom Fields" },
-
-    { id: "integrations", label: "Integrations" },
-    { id: "audit-logs", label: "Audit Logs" },
-    { id: "security", label: "Security" },
+    { id: "voice-config", label: "AI Voices / Models", icon: Volume2 },
+    { id: "numbers", label: "Numbers", icon: Phone },
+    { id: "custom-fields", label: "Custom Fields", icon: ClipboardList },
+    { id: "integrations", label: "Integrations", icon: LinkIcon },
+    { id: "audit-logs", label: "Audit Logs", icon: FileText },
+    { id: "security", label: "Security", icon: ShieldCheck },
   ];
 
 
@@ -3051,67 +3055,119 @@ export default function Settings() {
   };
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: '#F9FAFB' }}>
-      <div className="py-6 px-[150px] space-y-8">
-        <PageHeader title="Settings" subtitle="Manage your application settings">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
+        <PageHeader
+          title="Settings"
+          subtitle="Configure system integrations, billing plans, notification channels, and team preferences"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              System Admin
+            </span>
+          }
+        >
           <HowItWorksButton label="How it works" onClick={() => openHowItWorks(activeTab)} />
         </PageHeader>
 
-        <div className="flex gap-6">
+        <div className="flex gap-6 items-start">
           {/* Left Navigation */}
-          <div style={{ width: "220px", flexShrink: 0 }} className="bg-card rounded-xl border border-border shadow-sm p-2">
-            {tabs.map((tab) => {
-              const isBillingChild = ["plans", "payments", "credit-usage"].includes(activeTab);
-              const isBillingActive = tab.id === "billing-parent" && isBillingChild;
+          <div className="w-[230px] flex-shrink-0 bg-white/80 backdrop-blur-xl border border-white/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] rounded-[28px] p-3.5 space-y-1 self-start">
+            {/* Header Label */}
+            <div className="px-3.5 pt-1.5 pb-2 text-[10px] font-bold uppercase tracking-widest text-[#8e8e93] font-display">
+              SETTINGS
+            </div>
 
-              return (
-                <div key={tab.id}>
-                  <button
-                    onClick={() => {
-                      if (tab.isParent) {
-                        setBillingExpanded(!billingExpanded);
-                        if (!billingExpanded) {
-                          setActiveTab("plans");
+            <nav className="space-y-1">
+              {tabs.map((tab: any) => {
+                const isBillingChild = ["plans", "payments", "credit-usage"].includes(activeTab);
+                const isBillingActive = tab.id === "billing-parent" && isBillingChild;
+                const isActive = activeTab === tab.id || isBillingActive;
+                const Icon = tab.icon;
+
+                return (
+                  <div key={tab.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tab.isParent) {
+                          setBillingExpanded(!billingExpanded);
+                          if (!billingExpanded) {
+                            setActiveTab("plans");
+                          }
+                        } else {
+                          setActiveTab(tab.id);
                         }
-                      } else {
-                        setActiveTab(tab.id);
-                      }
-                    }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-200 relative ${activeTab === tab.id || isBillingActive
-                      ? "bg-[#EFF6FF] text-[#1A73E8] font-semibold border-l-[3px] border-[#1A73E8]"
-                      : "text-foreground hover:bg-[#F1F5F9]"
+                      }}
+                      className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                        isActive && !tab.isParent
+                          ? "text-white shadow-sm"
+                          : isActive && tab.isParent
+                          ? "text-[#181e25] bg-slate-100/70"
+                          : "text-[#45515e] hover:text-[#222222] hover:bg-slate-100/60"
                       }`}
-                  >
-                    <span className="text-sm font-medium" style={{ fontFamily: 'Outfit, sans-serif' }}>{tab.label}</span>
-                    {tab.isParent && (
-                      <>{billingExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}</>
-                    )}
-                  </button>
+                    >
+                      {isActive && !tab.isParent && (
+                        <motion.div
+                          layoutId="settingsTabActivePill"
+                          className="absolute inset-0 bg-gradient-to-r from-[#181e25] to-[#2c3e50] rounded-full -z-10 shadow-sm"
+                          transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                        />
+                      )}
 
-                  {tab.isParent && billingExpanded && tab.children && (
-                    <div className="ml-4 mt-1 space-y-0">
-                      {tab.children.map((child: any) => (
-                        <button
-                          key={child.id}
-                          onClick={() => setActiveTab(child.id)}
-                          className={`w-full text-left px-3 py-2 rounded-xl text-[13px] transition-all duration-200 h-9 relative ${activeTab === child.id
-                            ? "bg-[#EFF6FF] text-[#2563EB] font-semibold border-l-[3px] border-[#2563EB]"
-                            : "text-[#6B7280] hover:bg-[#F3F4F6] hover:text-[#111827]"
+                      <div className="flex items-center gap-3 min-w-0">
+                        {Icon && (
+                          <Icon
+                            className={`w-4 h-4 flex-shrink-0 transition-colors ${
+                              isActive && !tab.isParent ? "text-white" : "text-slate-500"
                             }`}
-                          style={{ fontFamily: 'Outfit, sans-serif' }}
-                        >
-                          {child.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                          />
+                        )}
+                        <span className="truncate">{tab.label}</span>
+                      </div>
+
+                      {tab.isParent && (
+                        <span className="text-slate-400">
+                          {billingExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
+                        </span>
+                      )}
+                    </button>
+
+                    {tab.isParent && billingExpanded && tab.children && (
+                      <div className="ml-7 my-1 pl-2 border-l border-slate-200/60 space-y-1">
+                        {tab.children.map((child: any) => {
+                          const isChildActive = activeTab === child.id;
+                          return (
+                            <button
+                              key={child.id}
+                              type="button"
+                              onClick={() => setActiveTab(child.id)}
+                              className={`w-full text-left px-3 py-1.5 rounded-full text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                                isChildActive
+                                  ? "text-[#1456f0] bg-blue-50/80 font-bold"
+                                  : "text-[#64748b] hover:text-[#222222] hover:bg-slate-100/50 font-medium"
+                              }`}
+                            >
+                              <span>{child.label}</span>
+                              {isChildActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#1456f0]" />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </nav>
           </div>
 
           {/* Content Area */}
-          <div className="flex-1 bg-card rounded-xl border border-border shadow-sm p-6" style={{ minWidth: 0, overflowX: "hidden" }}>
+          <div className="flex-1 min-w-0 bg-white/80 backdrop-blur-xl rounded-[28px] border border-white/80 shadow-2xs p-6 lg:p-8" style={{ overflowX: "hidden" }}>
             {/* Organization Tab */}
             {activeTab === "organization" && (
               <div className="space-y-6">
@@ -3160,8 +3216,8 @@ export default function Settings() {
                 </div>
 
                 {/* Basic Info */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border space-y-4">
-                  <h3 className="font-semibold text-sm pb-3 border-b border-border" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>BASIC INFO</h3>
+                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
+                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">BASIC INFO</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
@@ -3204,8 +3260,8 @@ export default function Settings() {
                 </div>
 
                 {/* Contact Info */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border space-y-4">
-                  <h3 className="font-semibold text-sm pb-3 border-b border-border" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>CONTACT INFO</h3>
+                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
+                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">CONTACT INFO</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
@@ -3259,8 +3315,8 @@ export default function Settings() {
                 </div>
 
                 {/* Call Preferences */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border space-y-4">
-                  <h3 className="font-semibold text-sm pb-3 border-b border-border" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>
+                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
+                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">
                     CALL PREFERENCES
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -3314,8 +3370,8 @@ export default function Settings() {
                 </div>
 
                 {/* Billing Info */}
-                <div className="bg-muted/30 rounded-xl p-6 border border-border space-y-4">
-                  <h3 className="font-semibold text-sm pb-3 border-b border-border" style={{ color: '#64748B', fontFamily: 'DM Sans, sans-serif' }}>BILLING INFO</h3>
+                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
+                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">BILLING INFO</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="md:col-span-2">
                       <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>

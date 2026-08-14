@@ -121,12 +121,17 @@ export default function ReferAndEarn() {
   });
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-8" style={{ fontFamily: "Outfit, sans-serif" }}>
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         {/* Page Header */}
         <PageHeader
           title="Refer & Earn"
-          subtitle="Invite colleagues and healthcare practices to MantraAssist and earn recurring rewards."
+          subtitle="Invite colleagues and healthcare practices to MantraAssist and earn recurring rewards"
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              Rewards
+            </span>
+          }
         >
           <HowItWorksButton onClick={() => setActiveTab("overview")} label="How Referrals Work" />
         </PageHeader>
@@ -500,16 +505,16 @@ export default function ReferAndEarn() {
                   </div>
 
                   {/* Table */}
-                  <div className="overflow-x-auto border border-gray-100 rounded-xl">
+                  <div className="overflow-x-auto rounded-2xl border border-white/80 overflow-hidden shadow-2xs">
                     <table className="w-full text-left text-xs">
-                      <thead className="bg-gray-50/80 text-[#64748B] font-semibold border-b border-gray-100">
+                      <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white font-semibold">
                         <tr>
-                          <th className="px-4 py-3">Contact Name</th>
-                          <th className="px-4 py-3">Email / Phone</th>
-                          <th className="px-4 py-3">Invited Date</th>
-                          <th className="px-4 py-3">Plan</th>
-                          <th className="px-4 py-3">Status</th>
-                          <th className="px-4 py-3 text-right">Commission Rate</th>
+                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>CONTACT NAME</th>
+                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>EMAIL / PHONE</th>
+                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>INVITED DATE</th>
+                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>PLAN</th>
+                          <th className="px-4 py-3" style={{ fontFamily: 'Outfit, sans-serif' }}>STATUS</th>
+                          <th className="px-4 py-3 text-right" style={{ fontFamily: 'Outfit, sans-serif' }}>COMMISSION RATE</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">

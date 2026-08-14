@@ -1430,13 +1430,18 @@ export default function KnowledgeBase() {
   ];
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F9FAFB" }}>
-      <div className="py-6 px-[150px] space-y-6">
+    <div className="min-h-screen bg-[#fafafa]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
         
         {/* ── Page Header ── */}
         <PageHeader
           title="Knowledge Base"
           subtitle="Give your AI reference material, scoped to the exact processes and stages where it should be used."
+          badge={
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
+              AI Context
+            </span>
+          }
         >
           <HowItWorksButton onClick={() => setShowHelp(true)} label="How Knowledge Base Works" />
         </PageHeader>
@@ -1584,7 +1589,7 @@ export default function KnowledgeBase() {
           </div>
         ) : (
           /* List View (Table card matching Clients page) */
-          <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative animate-in fade-in duration-200">
+          <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden relative animate-in fade-in duration-200">
             <div
               ref={tableScrollRef}
               className="overflow-x-auto scrollbar-hide"
@@ -1600,7 +1605,7 @@ export default function KnowledgeBase() {
               }}
             >
               <table className="w-full">
-                <thead className="border-b border-border" style={{ backgroundColor: "#1F2937" }}>
+                <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
                   <tr>
                     {/* Checkbox Header */}
                     <th className="px-4 py-2.5 w-10">

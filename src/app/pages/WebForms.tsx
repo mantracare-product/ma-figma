@@ -1584,30 +1584,30 @@ export default function WebForms() {
                 </div>
 
                 {/* Forms table */}
-                <div className="bg-white rounded-xl border border-border shadow-sm overflow-hidden">
+                <div className="bg-white/90 backdrop-blur-xl rounded-2xl border border-white/80 shadow-2xs overflow-hidden">
                   <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-border bg-gray-50">
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("name")}>
-                            Name {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
+                    <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+                      <tr>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("name")}>
+                            Title {sortCol === "name" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Type</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Status</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("submissions")}>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Type</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Status</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("submissions")}>
                             Submissions {sortCol === "submissions" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Created By</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>
-                          <button className="flex items-center gap-1 hover:text-[#020817] transition-colors" onClick={() => handleSortCol("lastUpdated")}>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Created By</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <button className="flex items-center gap-1 hover:text-blue-300 transition-colors" onClick={() => handleSortCol("lastUpdated")}>
                             Last Updated {sortCol === "lastUpdated" ? (sortDir === "asc" ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />) : null}
                           </button>
                         </th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Enabled</th>
-                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>Actions</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide" style={{ fontFamily: "Outfit, sans-serif" }}>Enabled</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-right" style={{ fontFamily: "Outfit, sans-serif" }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
