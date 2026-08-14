@@ -60,6 +60,13 @@ const PREBUILT_TEMPLATES: Array<{
     dataSource: "clients",
     fields: ["id", "client", "status", "created"],
   },
+  {
+    id: "tpl-processes",
+    name: "Process & Deal Pipeline Tracking",
+    desc: "Active process stages, time in stage, deal status & assignment",
+    dataSource: "processes",
+    fields: ["id", "client", "process", "stage", "status", "timeInStage"],
+  },
 ];
 
 export default function Reports() {

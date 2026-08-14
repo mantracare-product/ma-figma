@@ -1,21 +1,13 @@
-import React, { useState } from "react";
+import React from "react";
 import { Modal } from "../ui/Modal";
 import { ClientInvoice, InvoiceStatus } from "../../types/invoiceTypes";
 import { useInvoices } from "../../context/InvoiceContext";
 import { toast } from "sonner";
 import {
   Printer,
-  Download,
   Send,
-  Building2,
-  CheckCircle2,
-  Clock,
-  Ban,
   FileText,
-  ChevronDown,
-  Plus,
 } from "lucide-react";
-import AddInvoiceTemplateDrawer from "./AddInvoiceTemplateDrawer";
 
 interface InvoiceDocumentModalProps {
   isOpen: boolean;
@@ -28,16 +20,9 @@ export default function InvoiceDocumentModal({
   onClose,
   invoice,
 }: InvoiceDocumentModalProps) {
-  const { sendInvoice, invoiceTemplates, getDefaultTemplate } = useInvoices();
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>(
-    () => getDefaultTemplate().id
-  );
-  const [isAddTemplateDrawerOpen, setIsAddTemplateDrawerOpen] = useState(false);
+  const { sendInvoice } = useInvoices();
 
   if (!invoice) return null;
-
-  const activeTemplate =
-    invoiceTemplates.find((t) => t.id === selectedTemplateId) || getDefaultTemplate();
 
   const handlePrint = () => {
     window.print();
@@ -96,37 +81,11 @@ export default function InvoiceDocumentModal({
       onClose={onClose}
       maxWidth="2xl"
       title={
-        <div className="flex items-center justify-between w-full pr-4">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-blue-600" />
-            <h3 className="text-lg font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Invoice Document View
-            </h3>
-          </div>
-
-          {/* Unified Real InvoiceTemplate Selector Dropdown */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400 font-medium">Template:</span>
-            <select
-              value={selectedTemplateId}
-              onChange={(e) => setSelectedTemplateId(e.target.value)}
-              className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
-            >
-              {invoiceTemplates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name} {t.isDefault ? "(Default)" : ""}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => setIsAddTemplateDrawerOpen(true)}
-              className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-xs font-bold transition-colors flex items-center gap-1 border border-blue-200"
-              title="Create or customize invoice templates"
-            >
-              <Plus className="w-3.5 h-3.5" /> + New
-            </button>
-          </div>
+        <div className="flex items-center gap-2">
+          <FileText className="w-5 h-5 text-blue-600" />
+          <h3 className="text-lg font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+            Invoice Document View
+          </h3>
         </div>
       }
       footer={
@@ -168,35 +127,23 @@ export default function InvoiceDocumentModal({
         <div className="flex items-start justify-between border-b border-slate-200 pb-6">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <div
-                className="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-base shadow-sm"
-                style={{ backgroundColor: activeTemplate.accentColor }}
-              >
+              <div className="w-9 h-9 rounded-xl text-white bg-blue-600 flex items-center justify-center font-bold text-base shadow-sm">
                 M
               </div>
               <span className="text-xl font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
-                {activeTemplate.headerFields.includes("businessName")
-                  ? activeTemplate.logoPlaceholder || "MantraAssist RCM"
-                  : ""}
+                MantraAssist RCM
               </span>
             </div>
-            {activeTemplate.headerFields.includes("address") && (
-              <p className="text-xs text-slate-400">123 Health Tech Ave, Suite 400, New York, NY 10001</p>
-            )}
-            {activeTemplate.headerFields.includes("phone") && (
-              <p className="text-xs text-slate-400">Phone: +1 (800) 555-0199</p>
-            )}
-            {activeTemplate.headerFields.includes("email") && (
-              <p className="text-xs text-slate-400">Email: billing@mantraassist.com</p>
-            )}
+            <p className="text-xs text-slate-400">123 Health Tech Ave, Suite 400, New York, NY 10001</p>
+            <p className="text-xs text-slate-400">Phone: +1 (800) 555-0199 · Email: billing@mantraassist.com</p>
           </div>
 
           <div className="text-right space-y-2">
             <h2
-              className="text-2xl font-bold tracking-tight uppercase"
-              style={{ color: activeTemplate.accentColor, fontFamily: "Outfit, sans-serif" }}
+              className="text-2xl font-bold tracking-tight uppercase text-blue-600"
+              style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {activeTemplate.name}
+              Official Invoice
             </h2>
             <div className="text-sm font-bold text-slate-900">{invoice.id}</div>
             <div>{getStatusBadge(invoice.status)}</div>
@@ -209,15 +156,9 @@ export default function InvoiceDocumentModal({
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
               Billed To
             </span>
-            {activeTemplate.billToFields.includes("name") && (
-              <p className="text-sm font-bold text-slate-900">{invoice.clientName}</p>
-            )}
-            {activeTemplate.billToFields.includes("email") && invoice.clientEmail && (
-              <p className="text-slate-600">{invoice.clientEmail}</p>
-            )}
-            {activeTemplate.billToFields.includes("phone") && invoice.clientPhone && (
-              <p className="text-slate-600">{invoice.clientPhone}</p>
-            )}
+            <p className="text-sm font-bold text-slate-900">{invoice.clientName}</p>
+            {invoice.clientEmail && <p className="text-slate-600">{invoice.clientEmail}</p>}
+            {invoice.clientPhone && <p className="text-slate-600">{invoice.clientPhone}</p>}
           </div>
 
           <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
@@ -247,26 +188,21 @@ export default function InvoiceDocumentModal({
         {/* Itemized Table */}
         <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
           <table className="w-full text-left border-collapse">
-            <thead
-              className="text-white font-bold uppercase text-[10px] tracking-wider"
-              style={{ backgroundColor: activeTemplate.accentColor }}
-            >
+            <thead className="bg-slate-900 text-white font-bold uppercase text-[10px] tracking-wider">
               <tr>
-                {activeTemplate.lineItemColumns.includes("description") && <th className="py-3 px-4">Description</th>}
-                {activeTemplate.lineItemColumns.includes("quantity") && <th className="py-3 px-4 text-center">Qty</th>}
-                {activeTemplate.lineItemColumns.includes("unitPrice") && <th className="py-3 px-4 text-right">Unit Price</th>}
-                {activeTemplate.lineItemColumns.includes("amount") && <th className="py-3 px-4 text-right">Amount</th>}
+                <th className="py-3 px-4">Description</th>
+                <th className="py-3 px-4 text-center">Qty</th>
+                <th className="py-3 px-4 text-right">Unit Price</th>
+                <th className="py-3 px-4 text-right">Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-800 font-medium">
               {invoice.lineItems.map((item) => (
                 <tr key={item.id}>
-                  {activeTemplate.lineItemColumns.includes("description") && <td className="py-3.5 px-4 font-semibold text-slate-900">{item.description}</td>}
-                  {activeTemplate.lineItemColumns.includes("quantity") && <td className="py-3.5 px-4 text-center">{item.quantity}</td>}
-                  {activeTemplate.lineItemColumns.includes("unitPrice") && <td className="py-3.5 px-4 text-right">${item.unitPrice.toFixed(2)}</td>}
-                  {activeTemplate.lineItemColumns.includes("amount") && (
-                    <td className="py-3.5 px-4 text-right font-bold">${(item.quantity * item.unitPrice).toFixed(2)}</td>
-                  )}
+                  <td className="py-3.5 px-4 font-semibold text-slate-900">{item.description}</td>
+                  <td className="py-3.5 px-4 text-center">{item.quantity}</td>
+                  <td className="py-3.5 px-4 text-right">${item.unitPrice.toFixed(2)}</td>
+                  <td className="py-3.5 px-4 text-right font-bold">${(item.quantity * item.unitPrice).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
@@ -286,15 +222,13 @@ export default function InvoiceDocumentModal({
                 <span>-${invoice.discountAmount.toFixed(2)}</span>
               </div>
             )}
-            {activeTemplate.showTaxBreakdown && (
-              <div className="flex justify-between">
-                <span>Sales Tax (8%)</span>
-                <span>${invoice.taxAmount.toFixed(2)}</span>
-              </div>
-            )}
+            <div className="flex justify-between">
+              <span>Sales Tax</span>
+              <span>${invoice.taxAmount.toFixed(2)}</span>
+            </div>
             <div className="flex justify-between pt-2 border-t border-slate-300 text-base font-bold text-slate-900">
               <span>Total Amount</span>
-              <span style={{ color: activeTemplate.accentColor }}>${invoice.total.toFixed(2)}</span>
+              <span className="text-blue-600">${invoice.total.toFixed(2)}</span>
             </div>
             {invoice.amountPaid > 0 && (
               <div className="flex justify-between text-emerald-600 font-bold border-t border-slate-200 pt-1">
@@ -306,22 +240,11 @@ export default function InvoiceDocumentModal({
         </div>
 
         {/* Payment Terms & Instructions Footer */}
-        {activeTemplate.footerNotes && (
-          <div className="border-t border-slate-200 pt-6 text-[11px] text-slate-400 space-y-1 text-center italic">
-            <p className="font-semibold text-slate-600 not-italic">Payment Terms & Instructions</p>
-            <p>{activeTemplate.footerNotes}</p>
-          </div>
-        )}
+        <div className="border-t border-slate-200 pt-6 text-[11px] text-slate-400 space-y-1 text-center italic">
+          <p className="font-semibold text-slate-600 not-italic">Payment Terms & Instructions</p>
+          <p>Payment is due within 14 days of invoice issue date. Thank you for your business.</p>
+        </div>
       </div>
-
-      {isAddTemplateDrawerOpen && (
-        <AddInvoiceTemplateDrawer
-          isOpen={isAddTemplateDrawerOpen}
-          onClose={() => setIsAddTemplateDrawerOpen(false)}
-          onTemplateSaved={(tpl) => setSelectedTemplateId(tpl.id)}
-        />
-      )}
     </Modal>
   );
 }
-

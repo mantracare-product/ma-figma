@@ -1,5 +1,6 @@
 export type InvoiceStatus = "draft" | "sent" | "viewed" | "partial" | "paid" | "overdue" | "void";
 
+
 export interface InvoiceLineItem {
   id: string;
   source: "service" | "manual";
@@ -52,28 +53,6 @@ export interface Payment {
   createdAt: string;
 }
 
-export interface InvoiceTemplate {
-  id: string;
-  name: string;              // e.g. "Standard Invoice", "Tax Invoice", "Receipt"
-  isDefault: boolean;
-  accentColor: string;       // e.g. "#2563EB"
-  logoPlaceholder?: string;  // mock text/brand label
-  headerLogoUrl?: string;    // Base64 or uploaded image URL for header logo
-  headerContent?: string;    // Custom HTML/Text for Header section
-  headerAlignment?: "left" | "center" | "right";
-  headerFields: string[];    // e.g. ["businessName", "address", "phone", "email"]
-  billToFields: string[];    // e.g. ["name", "email", "phone"]
-  lineItemColumns: string[]; // e.g. ["description", "quantity", "unitPrice", "amount"]
-  showTaxBreakdown: boolean;
-  footerNotes: string;       // payment terms / thank you note
-  footerContent?: string;    // Custom HTML/Text for Footer section (bank details, UPI, etc.)
-  footerLogoUrl?: string;    // Base64 or uploaded image URL for footer signature/stamp
-  footerAlignment?: "left" | "center" | "right";
-  uploadedFileName?: string; // Name of uploaded template file (.docx / .txt / .html)
-  rawTemplateText?: string;  // Extracted or uploaded template string with {placeholders}
-  customCss?: string;        // Optional custom styling
-}
-
 export type RequiredStage = "draft" | "sent" | "viewed" | "paid" | "never";
 
 export interface InvoiceFieldRule {
@@ -98,7 +77,7 @@ export interface MockService {
   tax?: number;
 }
 
-export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging";
+export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes";
 
 export interface ReportDefinition {
   id: string;
@@ -125,12 +104,13 @@ export interface ReportDefinition {
     direction: "asc" | "desc";
   };
   filterConditions?: {
-    matchType: "AND" | "OR";
+    matchType?: "AND" | "OR";
     conditions: Array<{
       id: string;
       field: string;
       operator: "equals" | "contains" | "gt" | "lt";
       value: string;
+      logic?: "AND" | "OR";
     }>;
   };
   showChart?: boolean;

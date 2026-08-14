@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment, InvoiceTemplate } from "../types/invoiceTypes";
+import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
-import { MOCK_SERVICES } from "../../lib/mockServicesData";
+import { useFieldRegistry } from "./FieldRegistryContext";
 
 interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -17,7 +17,6 @@ interface CreateInvoiceOptions {
 interface InvoiceContextType {
   invoices: ClientInvoice[];
   payments: Payment[];
-  invoiceTemplates: InvoiceTemplate[];
   fieldRules: InvoiceFieldRulesMap;
   updateFieldRule: (rule: InvoiceFieldRule) => void;
   createInvoiceFromAppointment: (
@@ -40,14 +39,11 @@ interface InvoiceContextType {
   recordPayment: (paymentParamsList: Omit<Payment, "id" | "createdAt">[]) => void;
   getPaymentsByInvoice: (invoiceId: string) => Payment[];
   getPaymentsByClient: (clientId: string) => Payment[];
-  saveInvoiceTemplate: (template: Omit<InvoiceTemplate, "id"> & { id?: string }) => InvoiceTemplate;
-  deleteInvoiceTemplate: (templateId: string) => void;
-  setDefaultInvoiceTemplate: (templateId: string) => void;
-  getDefaultTemplate: () => InvoiceTemplate;
   voidInvoice: (invoiceId: string) => void;
   getInvoiceById: (invoiceId: string) => ClientInvoice | undefined;
   getInvoicesByClient: (clientId: string) => ClientInvoice[];
   getReportData: (dataSource: ReportDataSource, filters?: Record<string, any>, groupBy?: string) => any;
+  getReportRows: (dataSource: ReportDataSource) => Record<string, any>[];
   reports: ReportDefinition[];
   saveReport: (report: Omit<ReportDefinition, "id" | "lastRun"> & { id?: string }) => ReportDefinition;
   deleteReport: (reportId: string) => void;
@@ -63,45 +59,6 @@ const DEFAULT_FIELD_RULES: InvoiceFieldRulesMap = {
     visibleToUserIds: [],
   },
 };
-
-const DEFAULT_INVOICE_TEMPLATES: InvoiceTemplate[] = [
-  {
-    id: "tpl-standard",
-    name: "Standard Invoice",
-    isDefault: true,
-    accentColor: "#2563EB",
-    logoPlaceholder: "MantraAssist RCM",
-    headerFields: ["businessName", "address", "phone", "email"],
-    billToFields: ["name", "email", "phone"],
-    lineItemColumns: ["description", "quantity", "unitPrice", "amount"],
-    showTaxBreakdown: true,
-    footerNotes: "Payment is due within 14 days of issue. Thank you for choosing MantraAssist RCM Healthcare Services.",
-  },
-  {
-    id: "tpl-receipt",
-    name: "Receipt",
-    isDefault: false,
-    accentColor: "#059669",
-    logoPlaceholder: "MantraCare Health Receipt",
-    headerFields: ["businessName", "phone", "email"],
-    billToFields: ["name", "email"],
-    lineItemColumns: ["description", "quantity", "amount"],
-    showTaxBreakdown: false,
-    footerNotes: "Payment Received in Full. Thank you for your visit!",
-  },
-  {
-    id: "tpl-tax-invoice",
-    name: "Tax Invoice",
-    isDefault: false,
-    accentColor: "#7C3AED",
-    logoPlaceholder: "MantraAssist Healthcare Services",
-    headerFields: ["businessName", "address", "phone", "email"],
-    billToFields: ["name", "email", "phone"],
-    lineItemColumns: ["description", "quantity", "unitPrice", "amount"],
-    showTaxBreakdown: true,
-    footerNotes: "Official Tax Invoice for healthcare services rendered. Tax Reg #HC-884920.",
-  },
-];
 
 const INITIAL_INVOICES: ClientInvoice[] = [
   {
@@ -351,6 +308,70 @@ const INITIAL_INVOICES: ClientInvoice[] = [
 ];
 
 
+// ─── Record-level mock rows used by the custom report engine ─────────────────
+const MOCK_REPORT_ROWS: Record<string, Record<string, any>[]> = {
+  calls: [
+    { id: "call-101", client: "Sarah Jenkins", service: "Patient Intake", duration: 252, status: "Completed", sentiment: "Positive", cost: 0.45, created: "2026-08-12", responsible: "John Smith" },
+    { id: "call-102", client: "Michael Chang", service: "Appointment Scheduling", duration: 150, status: "Completed", sentiment: "Neutral", cost: 0.28, created: "2026-08-11", responsible: "Sarah Johnson" },
+    { id: "call-103", client: "Elena Rostova", service: "Insurance Verification", duration: 318, status: "Completed", sentiment: "Positive", cost: 0.58, created: "2026-08-11", responsible: "John Smith" },
+    { id: "call-104", client: "David Miller", service: "Follow-up Calls", duration: 105, status: "Handoff", sentiment: "Negative", cost: 0.20, created: "2026-08-10", responsible: "Lisa Anderson" },
+    { id: "call-105", client: "Priya Nair", service: "Billing Support", duration: 224, status: "Completed", sentiment: "Positive", cost: 0.41, created: "2026-08-09", responsible: "Sarah Johnson" },
+    { id: "call-106", client: "Emma Brown", service: "Patient Intake", duration: 96, status: "Failed", sentiment: "Neutral", cost: 0.14, created: "2026-08-08", responsible: "Michael Chen" },
+    { id: "call-107", client: "Oliver Davis", service: "Appointment Scheduling", duration: 281, status: "Completed", sentiment: "Positive", cost: 0.52, created: "2026-08-07", responsible: "Emily Davis" },
+    { id: "call-108", client: "James Wilson", service: "Follow-up Calls", duration: 133, status: "Completed", sentiment: "Neutral", cost: 0.24, created: "2026-08-06", responsible: "Lisa Anderson" },
+  ],
+  appointments: [
+    { id: "appt-1", service: "Initial Consultation", client: "James Wilson", provider: "John Smith", date: "2026-08-12", status: "Scheduled", created: "2026-08-05" },
+    { id: "appt-2", service: "Follow-up Visit", client: "Emma Brown", provider: "Sarah Johnson", date: "2026-08-11", status: "Scheduled", created: "2026-08-04" },
+    { id: "appt-3", service: "Dental Cleaning", client: "Oliver Davis", provider: "Dr. Robert Martinez", date: "2026-08-10", status: "Completed", created: "2026-08-01" },
+    { id: "appt-4", service: "X-Ray Imaging", client: "Priya Nair", provider: "Dr. Robert Martinez", date: "2026-08-09", status: "Cancelled", created: "2026-07-30" },
+    { id: "appt-5", service: "Physiotherapy Session", client: "David Miller", provider: "Sarah Johnson", date: "2026-08-08", status: "No-show", created: "2026-07-28" },
+    { id: "appt-6", service: "Initial Consultation", client: "Michael Chang", provider: "John Smith", date: "2026-08-07", status: "Completed", created: "2026-07-27" },
+    { id: "appt-7", service: "Blood Test & Lab Panel", client: "Sarah Jenkins", provider: "Dr. Robert Martinez", date: "2026-08-06", status: "Completed", created: "2026-07-25" },
+    { id: "appt-8", service: "Follow-up Visit", client: "Elena Rostova", provider: "Sarah Johnson", date: "2026-08-05", status: "Scheduled", created: "2026-07-24" },
+  ],
+  clients: [
+    { client: "Sarah Jenkins", stage: "Schedule Appointment", process: "Patient Intake", value: 162, status: "Active", responsible: "John Smith", created: "2026-06-01", lastContact: "2026-08-12" },
+    { client: "Michael Chang", stage: "Insurance Verification", process: "Patient Intake", value: 81, status: "Active", responsible: "Sarah Johnson", created: "2026-06-10", lastContact: "2026-08-11" },
+    { client: "Elena Rostova", stage: "Initial Contact", process: "Follow-up Calls", value: 108, status: "Active", responsible: "John Smith", created: "2026-07-02", lastContact: "2026-08-10" },
+    { client: "David Miller", stage: "Confirmed", process: "Appointment Scheduling", value: 216, status: "Active", responsible: "Lisa Anderson", created: "2026-06-20", lastContact: "2026-08-09" },
+    { client: "Priya Nair", stage: "Insurance Verification", process: "Billing Support", value: 194.4, status: "Active", responsible: "Emily Davis", created: "2026-05-15", lastContact: "2026-08-08" },
+    { client: "Emma Brown", stage: "Initial Contact", process: "Patient Intake", value: 0, status: "Inactive", responsible: "Michael Chen", created: "2026-07-18", lastContact: "2026-07-28" },
+    { client: "Oliver Davis", stage: "Document Check", process: "Insurance Verification", value: 0, status: "Pending", responsible: "Sarah Johnson", created: "2026-06-25", lastContact: "2026-08-07" },
+    { client: "James Wilson", stage: "Scheduled", process: "Appointment Scheduling", value: 162, status: "Active", responsible: "John Smith", created: "2026-05-01", lastContact: "2026-08-12" },
+  ],
+  team: [
+    { member: "John Smith", role: "Senior Agent", calls: 48, appts: 12, rating: 4.9, status: "Active", created: "2025-01-15", responsible: "Admin" },
+    { member: "Sarah Johnson", role: "Agent", calls: 42, appts: 9, rating: 4.8, status: "Active", created: "2025-03-02", responsible: "Admin" },
+    { member: "Dr. Robert Martinez", role: "Practitioner", calls: 18, appts: 6, rating: 5.0, status: "Active", created: "2024-11-10", responsible: "Admin" },
+    { member: "Lisa Anderson", role: "Agent", calls: 36, appts: 5, rating: 4.7, status: "Active", created: "2025-06-20", responsible: "Admin" },
+    { member: "Michael Chen", role: "Agent", calls: 30, appts: 4, rating: 4.6, status: "On Leave", created: "2025-09-01", responsible: "Admin" },
+    { member: "Emily Davis", role: "Coordinator", calls: 22, appts: 7, rating: 4.8, status: "Active", created: "2025-02-14", responsible: "Admin" },
+  ],
+  messaging: [
+    { id: "msg-1", client: "Sarah Jenkins", channel: "WhatsApp", status: "Delivered", messages: 6, botContained: "Yes", created: "2026-08-12", responsible: "AI Bot" },
+    { id: "msg-2", client: "Michael Chang", channel: "WhatsApp", status: "Read", messages: 4, botContained: "Yes", created: "2026-08-11", responsible: "AI Bot" },
+    { id: "msg-3", client: "Elena Rostova", channel: "SMS", status: "Delivered", messages: 2, botContained: "No", created: "2026-08-10", responsible: "Agent Desk" },
+    { id: "msg-4", client: "David Miller", channel: "Email", status: "Failed", messages: 1, botContained: "No", created: "2026-08-09", responsible: "Agent Desk" },
+    { id: "msg-5", client: "Priya Nair", channel: "WhatsApp", status: "Read", messages: 8, botContained: "Yes", created: "2026-08-08", responsible: "AI Bot" },
+    { id: "msg-6", client: "James Wilson", channel: "WhatsApp", status: "Delivered", messages: 3, botContained: "Yes", created: "2026-08-07", responsible: "AI Bot" },
+    { id: "msg-7", client: "Oliver Davis", channel: "SMS", status: "Delivered", messages: 2, botContained: "No", created: "2026-08-06", responsible: "Agent Desk" },
+    { id: "msg-8", client: "Emma Brown", channel: "WhatsApp", status: "Read", messages: 5, botContained: "Yes", created: "2026-08-05", responsible: "AI Bot" },
+  ],
+  processes: [
+    { id: "PR-001", client: "James Wilson", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: "2026-07-20", lastActivity: "2026-08-10", responsible: "John Smith", timeInStage: 2.4 },
+    { id: "PR-002", client: "Emma Brown", process: "Patient Intake", stage: "Initial Contact", status: "Failed", created: "2026-07-18", lastActivity: "2026-07-30", responsible: "Sarah Johnson", timeInStage: 4.1 },
+    { id: "PR-003", client: "Oliver Davis", process: "Insurance Verification", stage: "Document Check", status: "Pending", created: "2026-07-25", lastActivity: "2026-08-07", responsible: "Michael Chen", timeInStage: 6.3 },
+    { id: "PR-004", client: "Priya Nair", process: "Billing Support", stage: "Issue Resolution", status: "Completed", created: "2026-06-15", lastActivity: "2026-08-08", responsible: "Emily Davis", timeInStage: 0 },
+    { id: "PR-005", client: "Sarah Jenkins", process: "Appointment Scheduling", stage: "Slot Selection", status: "Completed", created: "2026-06-01", lastActivity: "2026-08-05", responsible: "John Smith", timeInStage: 0 },
+    { id: "PR-006", client: "Michael Chang", process: "Patient Intake", stage: "Insurance Verify", status: "Pending", created: "2026-07-10", lastActivity: "2026-08-11", responsible: "Sarah Johnson", timeInStage: 1.8 },
+    { id: "PR-007", client: "Elena Rostova", process: "Follow-up Calls", stage: "Post-Visit Check", status: "Completed", created: "2026-05-20", lastActivity: "2026-08-02", responsible: "Lisa Anderson", timeInStage: 0 },
+    { id: "PR-008", client: "David Miller", process: "Patient Intake", stage: "Schedule Appointment", status: "Pending", created: "2026-06-20", lastActivity: "2026-08-09", responsible: "Michael Chen", timeInStage: 3.6 },
+    { id: "PR-009", client: "James Wilson", process: "Follow-up Calls", stage: "Medication Reminder", status: "Completed", created: "2026-06-28", lastActivity: "2026-07-25", responsible: "Emily Davis", timeInStage: 0 },
+    { id: "PR-010", client: "Emma Brown", process: "Appointment Scheduling", stage: "Confirmation", status: "Failed", created: "2026-07-22", lastActivity: "2026-08-01", responsible: "Sarah Johnson", timeInStage: 5.2 },
+  ],
+};
+
 const INITIAL_REPORTS: ReportDefinition[] = [
   {
     id: "rep-1",
@@ -417,11 +438,24 @@ const INITIAL_REPORTS: ReportDefinition[] = [
     viewType: "table_chart",
     chartType: "line",
   },
+  {
+    id: "rep-7",
+    name: "Processes & Deal Stage Tracking",
+    type: "template",
+    dataSource: "processes",
+    lastRun: "2026-08-14 09:30 AM",
+    description: "Deal and process records, stage transitions, time in stage and assignments",
+    templateKey: "process_tracking",
+    viewType: "table_chart",
+    chartType: "bar",
+  },
 ];
 
 const InvoiceContext = createContext<InvoiceContextType | undefined>(undefined);
 
 export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { getAllFields } = useFieldRegistry();
+
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
     const saved = localStorage.getItem("mantra_invoices_v1");
     if (saved) {
@@ -464,16 +498,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     ];
   });
 
-  const [invoiceTemplates, setInvoiceTemplates] = useState<InvoiceTemplate[]>(() => {
-    const saved = localStorage.getItem("mantra_invoice_templates_v1");
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch {}
-    }
-    return DEFAULT_INVOICE_TEMPLATES;
-  });
-
   const [reports, setReports] = useState<ReportDefinition[]>(() => {
     const saved = localStorage.getItem("mantra_reports_v1");
     if (saved) {
@@ -491,10 +515,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     localStorage.setItem("mantra_payments_v1", JSON.stringify(payments));
   }, [payments]);
-
-  useEffect(() => {
-    localStorage.setItem("mantra_invoice_templates_v1", JSON.stringify(invoiceTemplates));
-  }, [invoiceTemplates]);
 
   useEffect(() => {
     localStorage.setItem("mantra_invoice_field_rules_v1", JSON.stringify(fieldRules));
@@ -746,45 +766,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return payments.filter((p) => p.clientId === clientId);
   };
 
-  const saveInvoiceTemplate = (template: Omit<InvoiceTemplate, "id"> & { id?: string }): InvoiceTemplate => {
-    const existing = template.id ? invoiceTemplates.find((t) => t.id === template.id) : null;
-    const newTpl: InvoiceTemplate = {
-      ...template,
-      id: template.id || `tpl-custom-${Date.now()}`,
-    };
-
-    setInvoiceTemplates((prev) => {
-      let nextList = existing
-        ? prev.map((t) => (t.id === template.id ? newTpl : t))
-        : [...prev, newTpl];
-      if (newTpl.isDefault) {
-        nextList = nextList.map((t) => ({ ...t, isDefault: t.id === newTpl.id }));
-      }
-      return nextList;
-    });
-    return newTpl;
-  };
-
-  const deleteInvoiceTemplate = (templateId: string) => {
-    setInvoiceTemplates((prev) => {
-      const remaining = prev.filter((t) => t.id !== templateId);
-      if (remaining.length > 0 && !remaining.some((t) => t.isDefault)) {
-        remaining[0].isDefault = true;
-      }
-      return remaining;
-    });
-  };
-
-  const setDefaultInvoiceTemplate = (templateId: string) => {
-    setInvoiceTemplates((prev) =>
-      prev.map((t) => ({ ...t, isDefault: t.id === templateId }))
-    );
-  };
-
-  const getDefaultTemplate = (): InvoiceTemplate => {
-    return invoiceTemplates.find((t) => t.isDefault) || invoiceTemplates[0] || DEFAULT_INVOICE_TEMPLATES[0];
-  };
-
   const voidInvoice = (invoiceId: string) => {
     setInvoices((prev) =>
       prev.map((inv) => {
@@ -993,9 +974,74 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ],
         };
       }
+      case "processes": {
+        const procRows = MOCK_REPORT_ROWS.processes || [];
+        const completedCount = procRows.filter((p) => p.status === "Completed").length;
+        const pendingCount = procRows.filter((p) => p.status === "Pending").length;
+        const failedCount = procRows.filter((p) => p.status === "Failed").length;
+        const avgTimeInStage =
+          procRows.reduce((sum, p) => sum + (p.timeInStage || 0), 0) / (procRows.length || 1);
+
+        return {
+          kpis: [
+            { label: "Active Deals/Processes", value: `${procRows.length}` },
+            { label: "Completed Rate", value: `${Math.round((completedCount / procRows.length) * 100)}%` },
+            { label: "Pending Reviews", value: `${pendingCount}` },
+            { label: "Avg Time in Stage", value: `${avgTimeInStage.toFixed(1)} days` },
+          ],
+          table: procRows.map((p) => ({
+            id: p.id,
+            client: p.client,
+            process: p.process,
+            stage: p.stage,
+            status: p.status,
+            timeInStage: `${p.timeInStage} days`,
+            created: p.created,
+            responsible: p.responsible,
+          })),
+          chartData: [
+            { name: "Patient Intake", count: 4, total: 11.9 },
+            { name: "Insurance Verify", count: 2, total: 8.1 },
+            { name: "Appt Scheduling", count: 2, total: 5.2 },
+            { name: "Follow-up Calls", count: 2, total: 0 },
+          ],
+        };
+      }
       default:
         return { kpis: [], table: [], chartData: [] };
     }
+  };
+
+  const getReportRows = (dataSource: ReportDataSource): Record<string, any>[] => {
+    if (dataSource === "revenue") {
+      return invoices
+        .filter((i) => i.status !== "void")
+        .map((i) => ({
+          id: i.id,
+          client: i.clientName,
+          amount: i.total,
+          status: i.status,
+          dueDate: i.dueDate,
+          created: i.createdAt.split("T")[0],
+          service: i.lineItems.map((l) => l.description).join(", ") || "General Service",
+          paymentMode: i.paymentMode || "",
+        }));
+    }
+
+    if (dataSource === "clients") {
+      const custom = getAllFields("client");
+      const base = (MOCK_REPORT_ROWS.clients || []).map((row) => ({ ...row }));
+      // Attach mock values for client custom registry fields (count-only dimension)
+      custom.forEach((f, idx) => {
+        if (f.key === "name" || f.key === "status" || f.key === "processes") return;
+        base.forEach((row, i) => {
+          row[f.key] = `${f.label} ${((i + idx) % 3) + 1}`;
+        });
+      });
+      return base;
+    }
+
+    return (MOCK_REPORT_ROWS[dataSource] || []).map((row) => ({ ...row }));
   };
 
   return (
@@ -1003,7 +1049,6 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         invoices,
         payments,
-        invoiceTemplates,
         fieldRules,
         updateFieldRule,
         createInvoiceFromAppointment,
@@ -1015,14 +1060,11 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         recordPayment,
         getPaymentsByInvoice,
         getPaymentsByClient,
-        saveInvoiceTemplate,
-        deleteInvoiceTemplate,
-        setDefaultInvoiceTemplate,
-        getDefaultTemplate,
         voidInvoice,
         getInvoiceById,
         getInvoicesByClient,
         getReportData,
+        getReportRows,
         reports,
         saveReport,
         deleteReport,

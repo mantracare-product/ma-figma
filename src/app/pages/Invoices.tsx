@@ -7,7 +7,6 @@ import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import InvoiceDocumentModal from "../components/invoices/InvoiceDocumentModal";
 import InvoiceProgressBar from "../components/invoices/InvoiceProgressBar";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
-import AddInvoiceTemplateDrawer from "../components/invoices/AddInvoiceTemplateDrawer";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { toast } from "sonner";
@@ -40,7 +39,6 @@ export default function Invoices() {
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<ClientInvoice | null>(null);
-  const [isAddTemplateDrawerOpen, setIsAddTemplateDrawerOpen] = useState(false);
   
   // Selection state (matching Deals.tsx)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -245,13 +243,6 @@ export default function Invoices() {
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <CreditCard className="w-4 h-4" /> + Record Payment
-            </button>
-            <button
-              onClick={() => setIsAddTemplateDrawerOpen(true)}
-              className="px-3.5 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5 shadow-2xs"
-              style={{ fontFamily: "Outfit, sans-serif" }}
-            >
-              <FileText className="w-4 h-4 text-blue-600" /> + New Template
             </button>
             <button
               onClick={handleCreateInvoice}
@@ -1075,12 +1066,6 @@ export default function Invoices() {
           clientId={paymentModalInvoice.clientId}
           clientName={paymentModalInvoice.clientName}
           preSelectedInvoiceId={paymentModalInvoice.id}
-        />
-      )}
-      {isAddTemplateDrawerOpen && (
-        <AddInvoiceTemplateDrawer
-          isOpen={isAddTemplateDrawerOpen}
-          onClose={() => setIsAddTemplateDrawerOpen(false)}
         />
       )}
     </div>

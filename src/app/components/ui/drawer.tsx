@@ -25,7 +25,7 @@ function CustomSideDrawer({
   title,
   footer,
   children,
-  maxWidth = "sm:max-w-[70vw]",
+  maxWidth = "sm:max-w-xl",
   zIndex = 9999, // add this
 }: {
   isOpen: boolean;
