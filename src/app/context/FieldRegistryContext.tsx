@@ -2,6 +2,26 @@ import React, { createContext, useContext, useState, useEffect, type ReactNode }
 
 export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember";
 
+export const ALL_MODULES: Exclude<FieldModule, "deal">[] = [
+  "client",
+  "process",
+  "appointment",
+  "call",
+  "service",
+  "organization",
+  "teamMember"
+];
+
+export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plural: string }> = {
+  client: { singular: "client", plural: "clients" },
+  process: { singular: "process", plural: "processes" },
+  appointment: { singular: "appointment", plural: "appointments" },
+  call: { singular: "call", plural: "calls" },
+  service: { singular: "service", plural: "services" },
+  organization: { singular: "organization", plural: "organizations" },
+  teamMember: { singular: "team member", plural: "team members" },
+};
+
 export type FieldInputType = "text" | "email" | "tel" | "select" | "multiselect" | "textarea" | "date"
   | "date_time" | "number" | "money" | "link" | "whatsapp_link" | "yes_no";
 

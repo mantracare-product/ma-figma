@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
-  LayoutTemplate, Layers, ChevronDown, Check, Users, Hash, X
+  LayoutTemplate, Layers, ChevronDown, ChevronRight, Check, Users, Hash, X, Search, Plus,
+  Sparkles, RotateCcw
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -11,7 +12,13 @@ import {
   saveDocumentTemplate,
   extractTemplateFields,
 } from "../../../lib/documentTemplatesStore";
-import { SelectFieldsModal } from "../help/FieldManager";
+import { CreateFieldModal } from "../help/FieldManager";
+import {
+  useFieldRegistry,
+  FieldModule,
+  ALL_MODULES,
+  MODULE_NOUN,
+} from "../../context/FieldRegistryContext";
 import DrawerShell from "../ui/DrawerShell";
 
 interface AddDocumentTemplateDrawerProps {
@@ -169,29 +176,6 @@ Financial Officer: {responsible}`,
   },
 ];
 
-const VARIABLE_OPTIONS = [
-  { category: "Client Variables", items: [
-    { key: "{client_name}", label: "Client Full Name" },
-    { key: "{email}", label: "Email Address" },
-    { key: "{phone}", label: "Phone Number" },
-    { key: "{company_name}", label: "Company Name" },
-    { key: "{job_position}", label: "Job Position" },
-    { key: "{location}", label: "Location / Address" },
-    { key: "{status}", label: "Client Status" },
-  ]},
-  { category: "System & Staff Variables", items: [
-    { key: "{responsible}", label: "Responsible Staff" },
-    { key: "{current_date}", label: "Current Date" },
-    { key: "{organization_name}", label: "Organization Name" },
-  ]},
-  { category: "Service & Billing Variables", items: [
-    { key: "{service_name}", label: "Service Name" },
-    { key: "{duration}", label: "Duration" },
-    { key: "{price}", label: "Price / Rate" },
-    { key: "{tax_rate}", label: "Tax Rate (%)" },
-  ]},
-];
-
 const TEMPLATE_MODE_OPTIONS = [
   {
     id: "device",
@@ -277,13 +261,12 @@ function MappedFieldSelector({
                     <button
                       type="button"
                       onClick={() => setExpandedCategory(isExpanded ? null : group.module)}
-                      className={`w-full px-2.5 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${
-                        isExpanded
+                      className={`w-full px-2.5 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${isExpanded
                           ? "bg-slate-100 text-slate-900 font-bold"
                           : hasSelected
-                          ? "bg-slate-50 text-slate-800 font-semibold hover:bg-slate-100/80"
-                          : "bg-white text-slate-600 hover:bg-slate-50"
-                      }`}
+                            ? "bg-slate-50 text-slate-800 font-semibold hover:bg-slate-100/80"
+                            : "bg-white text-slate-600 hover:bg-slate-50"
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold tracking-wider uppercase">
@@ -291,9 +274,8 @@ function MappedFieldSelector({
                         </span>
                       </div>
                       <ChevronDown
-                        className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${
-                          isExpanded ? "rotate-180 text-slate-700" : ""
-                        }`}
+                        className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-150 ${isExpanded ? "rotate-180 text-slate-700" : ""
+                          }`}
                       />
                     </button>
 
@@ -310,11 +292,10 @@ function MappedFieldSelector({
                                 onChange(opt.key);
                                 setIsOpen(false);
                               }}
-                              className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-between group cursor-pointer ${
-                                isSelected
+                              className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-all flex items-center justify-between group cursor-pointer ${isSelected
                                   ? "bg-[#1F2937] text-white font-bold shadow-xs"
                                   : "hover:bg-slate-200/60 text-slate-800"
-                              }`}
+                                }`}
                             >
                               <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
                                 {opt.label}
@@ -357,16 +338,58 @@ export default function AddDocumentTemplateDrawer({
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
 
-  // WebForm Selection State
-  const [selectedWebFormId, setSelectedWebFormId] = useState("");
+  // Webform selection state
+  const [selectedWebFormId, setSelectedWebFormId] = useState<string>("");
   const [webformDropdownOpen, setWebformDropdownOpen] = useState(false);
 
-  // Variable Modal / Popover state
-  const [showVariableModal, setShowVariableModal] = useState(false);
-  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
+  // Select Fields Dropdown Popover State (Form Builder style)
+  const [fieldDropdownOpen, setFieldDropdownOpen] = useState(false);
+  const [fieldSearchQuery, setFieldSearchQuery] = useState("");
+  const [selectedFieldsForDropdown, setSelectedFieldsForDropdown] = useState<string[]>([]);
+  const [collapsedDropdownSections, setCollapsedDropdownSections] = useState<Record<string, boolean>>({});
+  const [createFieldModalOpenFor, setCreateFieldModalOpenFor] = useState<FieldModule | null>(null);
 
-  // Template Settings state
+  const { getAllFields } = useFieldRegistry();
+
+  // Compile fields grouped by module
+  const targetModules: Exclude<FieldModule, "deal">[] = ALL_MODULES;
+  const groupedFieldsList = targetModules.map((module) => {
+    const fields = getAllFields(module).filter((f) =>
+      f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase()) ||
+      f.key.toLowerCase().includes(fieldSearchQuery.toLowerCase())
+    );
+    return {
+      module,
+      label: MODULE_NOUN[module]?.plural.toUpperCase() || module.toUpperCase(),
+      fields,
+    };
+  }).filter((g) => g.fields.length > 0);
+
+  const totalFilteredCount = groupedFieldsList.reduce((acc, curr) => acc + curr.fields.length, 0);
+
+  const toggleDropdownSection = (module: string) => {
+    setCollapsedDropdownSections((prev) => ({
+      ...prev,
+      [module]: !prev[module],
+    }));
+  };
+
+  const handleApplyDropdownFields = () => {
+    if (selectedFieldsForDropdown.length === 0) {
+      setFieldDropdownOpen(false);
+      return;
+    }
+    const variablesText = selectedFieldsForDropdown.map((k) => `{${k}}`).join(" ");
+    setTemplateText((prev) => (prev ? `${prev} ${variablesText}` : variablesText));
+    toast.success(`Inserted ${selectedFieldsForDropdown.length} field placeholder${selectedFieldsForDropdown.length !== 1 ? "s" : ""}!`);
+    setSelectedFieldsForDropdown([]);
+    setFieldDropdownOpen(false);
+  };
+
+  // Advance Settings state
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [usersSectionOpen, setUsersSectionOpen] = useState(false);
+  const [autoNumberDrawerOpen, setAutoNumberDrawerOpen] = useState(false);
 
   // Template Users Settings
   const AVAILABLE_TEAM_ROLES = [
@@ -377,39 +400,56 @@ export default function AddDocumentTemplateDrawer({
 
   // Auto-Numbering Settings
   const NUMBER_FORMAT_TOKENS = [
-    { id: "NUMBER", label: "Sequential numbers", token: "{NUMBER}" },
-    { id: "DAY", label: "Current day", token: "{DAY}" },
-    { id: "MONTH", label: "Current month", token: "{MONTH}" },
-    { id: "YEAR", label: "Current year", token: "{YEAR}" },
-    { id: "RANDOM", label: "Random number", token: "{RANDOM}" },
-    { id: "PREFIX", label: "Prefix", token: "{PREFIX}" },
-    { id: "ID", label: "ID", token: "{ID}" },
-    { id: "COMPANY_ID", label: "My company ID", token: "{COMPANY_ID}" },
+    { id: "NUMBER", label: "Number", token: "{NUMBER}" },
+    { id: "YEAR", label: "Year (YYYY)", token: "{YEAR}" },
+    { id: "MONTH", label: "Month (MM)", token: "{MONTH}" },
+    { id: "DAY", label: "Day (DD)", token: "{DAY}" },
+    { id: "PREFIX", label: "Prefix (DOC)", token: "{PREFIX}" },
     { id: "CLIENT_ID", label: "Client ID", token: "{CLIENT_ID}" },
+    { id: "COMPANY_ID", label: "Company ID", token: "{COMPANY_ID}" },
+    { id: "RANDOM", label: "Random (4-digit)", token: "{RANDOM}" },
   ];
-  const [numberFormat, setNumberFormat] = useState("{NUMBER}");
-  const [activeTokens, setActiveTokens] = useState<string[]>(["NUMBER"]);
+  const [numberFormat, setNumberFormat] = useState("DOC-{YEAR}-{NUMBER}");
   const [startNumber, setStartNumber] = useState("1");
   const [incrementBy, setIncrementBy] = useState("1");
-  const [numberLength, setNumberLength] = useState("0");
+  const [numberLength, setNumberLength] = useState("4");
   const [paddingChar, setPaddingChar] = useState("0");
   const [activityPeriod, setActivityPeriod] = useState("Continuously");
   const [crossCompany, setCrossCompany] = useState(false);
 
-  const handleInsertToken = (token: { id: string; token: string }) => {
-    if (!activeTokens.includes(token.id)) {
-      setActiveTokens((prev) => [...prev, token.id]);
-    } else {
-      setActiveTokens((prev) => prev.filter((t) => t !== token.id));
-    }
-    // Build format string from active tokens
-    const newTokens = activeTokens.includes(token.id)
-      ? activeTokens.filter((t) => t !== token.id)
-      : [...activeTokens, token.id];
-    const format = newTokens
-      .map((id) => NUMBER_FORMAT_TOKENS.find((t) => t.id === id)?.token || "")
-      .join("-");
-    setNumberFormat(format || "{NUMBER}");
+  const getSimulatedNumber = (format: string, start: string, len: string, pad: string) => {
+    const numVal = parseInt(start, 10) || 1;
+    const lengthVal = parseInt(len, 10) || 0;
+    const padChar = pad || "0";
+    const paddedNum = lengthVal > 0 ? String(numVal).padStart(lengthVal, padChar) : String(numVal);
+
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+
+    const fmt = format || "DOC-{YEAR}-{NUMBER}";
+
+    return fmt
+      .replace(/\{NUMBER\}/gi, paddedNum)
+      .replace(/\{YEAR\}/gi, year)
+      .replace(/\{MONTH\}/gi, month)
+      .replace(/\{DAY\}/gi, day)
+      .replace(/\{RANDOM\}/gi, "8429")
+      .replace(/\{PREFIX\}/gi, "DOC")
+      .replace(/\{ID\}/gi, "104")
+      .replace(/\{COMPANY_ID\}/gi, "ORG")
+      .replace(/\{CLIENT_ID\}/gi, "CL-902");
+  };
+
+  const handleInsertToken = (tokenStr: string) => {
+    setNumberFormat((prev) => {
+      if (!prev) return tokenStr;
+      if (prev.endsWith("-") || prev.endsWith("_") || prev.endsWith("/")) {
+        return `${prev}${tokenStr}`;
+      }
+      return `${prev}-${tokenStr}`;
+    });
   };
 
   const toggleTemplateUser = (role: string) => {
@@ -526,22 +566,16 @@ export default function AddDocumentTemplateDrawer({
     setTemplateText((prev) => (prev ? `${prev}\n\n${snippet}` : snippet));
   };
 
-  const insertVariable = (variableKey: string) => {
-    setTemplateText((prev) => `${prev}${variableKey}`);
-    setShowVariableModal(false);
-    toast.info(`Inserted ${variableKey}`);
-  };
-
   const handleMappingChange = (field: string, newMappedKey: string) => {
     const option = SYSTEM_FIELDS_OPTIONS.find((o) => o.key === newMappedKey);
     setFieldMappings((prev) =>
       prev.map((m) =>
         m.templateField === field
           ? {
-              ...m,
-              mappedFieldKey: newMappedKey,
-              label: option ? option.label : newMappedKey,
-            }
+            ...m,
+            mappedFieldKey: newMappedKey,
+            label: option ? option.label : newMappedKey,
+          }
           : m
       )
     );
@@ -676,17 +710,15 @@ export default function AddDocumentTemplateDrawer({
                               setTemplateMode(opt.id as any);
                               setModeDropdownOpen(false);
                             }}
-                            className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
-                              isSelected
+                            className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${isSelected
                                 ? "bg-slate-900 text-white font-bold shadow-xs"
                                 : "hover:bg-slate-100 text-slate-800"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-3">
                               <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                  isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
-                                }`}
+                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
+                                  }`}
                               >
                                 <IconComp className="w-4 h-4" />
                               </div>
@@ -802,17 +834,15 @@ export default function AddDocumentTemplateDrawer({
                                 handleSelectWebform(wf.id);
                                 setWebformDropdownOpen(false);
                               }}
-                              className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
-                                isSelected
+                              className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${isSelected
                                   ? "bg-slate-900 text-white font-bold shadow-xs"
                                   : "hover:bg-slate-100 text-slate-800"
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-3">
                                 <div
-                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                    isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
-                                  }`}
+                                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
+                                    }`}
                                 >
                                   <Layers className="w-4 h-4" />
                                 </div>
@@ -835,183 +865,272 @@ export default function AddDocumentTemplateDrawer({
             </div>
           )}
 
-          {/* Document Template Content — HTML Editor */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Document Template Content (HTML) *
-              </label>
+          {/* Document Template Content — HTML Editor (Only visible when Canvas is selected) */}
+          {templateMode === "canvas" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Document Template Content (HTML) *
+                </label>
 
-              {/* Toolbar: Insert Variable only (shown in canvas mode) */}
-              {templateMode === "canvas" && (
+                {/* Toolbar: Select Fields Dropdown */}
                 <div className="flex items-center gap-2">
-                  {/* Insert Variable Button & Compact Floating Popover */}
                   <div className="relative inline-block">
                     <button
                       type="button"
-                      onClick={() => setShowVariableModal((v) => !v)}
+                      onClick={() => setFieldDropdownOpen((v) => !v)}
                       className="px-2.5 py-1 bg-white hover:bg-slate-50 text-blue-600 border border-slate-200 rounded-lg text-[11px] font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     >
                       <span className="font-mono text-blue-600 font-bold">{"{ }"}</span>
-                      <span>Insert Variable</span>
+                      <span>Select Fields</span>
+                      <ChevronDown className={`w-3 h-3 text-blue-600 transition-transform ${fieldDropdownOpen ? "rotate-180" : ""}`} />
                     </button>
 
-                    {/* WhatsApp Template Builder Style Compact Popover */}
-                    {showVariableModal && (
+                    {/* Form Builder Style Select Fields Dropdown Popover */}
+                    {fieldDropdownOpen && (
                       <>
-                        <div className="fixed inset-0 z-40" onClick={() => setShowVariableModal(false)} />
+                        <div className="fixed inset-0 z-40" onClick={() => setFieldDropdownOpen(false)} />
                         <div
-                          className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
+                          className="absolute right-0 top-full mt-1.5 w-[460px] max-w-[85vw] bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100 flex flex-col max-h-[480px]"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                              INSERT FIELD VARIABLE
-                            </span>
+                          {/* Dropdown Header */}
+                          <div className="p-3.5 border-b border-slate-100 bg-slate-50/80 flex items-center justify-between flex-shrink-0">
+                            <div>
+                              <h4 className="font-bold text-xs text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                Select Fields
+                              </h4>
+                              <p className="text-[10px] text-slate-500">Insert placeholder variables into your HTML template</p>
+                            </div>
                             <button
                               type="button"
-                              onClick={() => setShowVariableModal(false)}
-                              className="text-slate-400 hover:text-slate-700 text-xs cursor-pointer"
+                              onClick={() => setFieldDropdownOpen(false)}
+                              className="text-slate-400 hover:text-slate-700 text-xs p-1 rounded hover:bg-slate-100 cursor-pointer"
                             >
                               ✕
                             </button>
                           </div>
-                          <div className="max-h-60 overflow-y-auto divide-y divide-slate-50 p-1">
-                            {VARIABLE_OPTIONS.map((cat) => (
-                              <div key={cat.category} className="p-1">
-                                <span className="text-[11px] font-bold text-slate-700 px-2 py-1 block">
-                                  {cat.category}
-                                </span>
-                                <div className="space-y-0.5">
-                                  {cat.items.map((item) => (
-                                    <button
-                                      key={item.key}
-                                      type="button"
-                                      onClick={() => insertVariable(item.key)}
-                                      className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors flex items-center justify-between group cursor-pointer"
-                                    >
-                                      <span className="text-xs font-semibold text-slate-900 group-hover:text-blue-600">
-                                        {item.label}
-                                      </span>
-                                      <span className="text-[11px] font-mono text-slate-400 group-hover:text-slate-600 font-medium">
-                                        {item.key}
-                                      </span>
-                                    </button>
-                                  ))}
+
+                          {/* Search Input */}
+                          <div className="p-2.5 border-b border-slate-100 flex-shrink-0 bg-white">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                              <input
+                                type="text"
+                                value={fieldSearchQuery}
+                                onChange={(e) => setFieldSearchQuery(e.target.value)}
+                                placeholder="Search fields across all categories..."
+                                className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 bg-slate-50/50"
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Collapsible Modules List */}
+                          <div className="flex-1 overflow-y-auto p-2.5 space-y-2 min-h-0 bg-[#fafafa]">
+                            {groupedFieldsList.map((group) => {
+                              const isCollapsed = !!collapsedDropdownSections[group.module];
+                              return (
+                                <div key={group.module} className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleDropdownSection(group.module)}
+                                    className="w-full flex items-center justify-between px-3 py-2 bg-slate-50/70 hover:bg-slate-100/70 transition-colors border-b border-slate-100 text-left cursor-pointer"
+                                  >
+                                    <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                                      {group.label} ({group.fields.length})
+                                    </span>
+                                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform ${isCollapsed ? "-rotate-90" : ""}`} />
+                                  </button>
+
+                                  {!isCollapsed && (
+                                    <div className="p-2 space-y-1.5">
+                                      <div className="grid grid-cols-2 gap-1.5">
+                                        {group.fields.map((f) => {
+                                          const isChecked = selectedFieldsForDropdown.includes(f.key);
+                                          return (
+                                            <label
+                                              key={`${group.module}-${f.key}`}
+                                              className={`flex items-center gap-2 p-1.5 rounded-lg cursor-pointer transition-colors border select-none ${
+                                                isChecked ? "bg-blue-50/70 border-blue-200" : "hover:bg-slate-50 border-transparent"
+                                              }`}
+                                            >
+                                              <input
+                                                type="checkbox"
+                                                checked={isChecked}
+                                                onChange={(e) => {
+                                                  if (e.target.checked) {
+                                                    setSelectedFieldsForDropdown((prev) => [...prev, f.key]);
+                                                  } else {
+                                                    setSelectedFieldsForDropdown((prev) => prev.filter((k) => k !== f.key));
+                                                  }
+                                                }}
+                                                className="w-3.5 h-3.5 rounded text-blue-600 accent-blue-600 cursor-pointer"
+                                              />
+                                              <div className="flex flex-col min-w-0 flex-1">
+                                                <span className="text-[11px] font-semibold text-slate-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                                  {f.label}
+                                                </span>
+                                                <span className="text-[9px] text-slate-400 font-mono">
+                                                  {"{"}{f.key}{"}"}
+                                                </span>
+                                              </div>
+                                            </label>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="pt-1.5 border-t border-slate-100 flex justify-end">
+                                        <button
+                                          type="button"
+                                          onClick={() => setCreateFieldModalOpenFor(group.module as FieldModule)}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded border border-dashed border-blue-200 transition-colors cursor-pointer"
+                                        >
+                                          <Plus className="w-3 h-3" />
+                                          <span>Create Field</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
+                              );
+                            })}
+
+                            {totalFilteredCount === 0 && (
+                              <div className="text-center py-6 text-xs text-slate-400">
+                                No fields found matching your search.
                               </div>
-                            ))}
+                            )}
+                          </div>
+
+                          {/* Footer */}
+                          <div className="p-3 border-t border-slate-200 bg-white flex items-center justify-between flex-shrink-0">
+                            <span className="text-xs text-slate-600 font-semibold" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                              {selectedFieldsForDropdown.length} selected
+                            </span>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setFieldDropdownOpen(false)}
+                                className="px-3 py-1.5 border border-slate-200 hover:bg-slate-100 rounded-lg text-xs font-semibold text-slate-600 transition-colors cursor-pointer"
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                              >
+                                CANCEL
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleApplyDropdownFields}
+                                disabled={selectedFieldsForDropdown.length === 0}
+                                className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+                                  selectedFieldsForDropdown.length > 0
+                                    ? "bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-xs"
+                                    : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                }`}
+                                style={{ fontFamily: "DM Sans, sans-serif" }}
+                              >
+                                <span>APPLY</span>
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </>
                     )}
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* HTML Editor — clean white textarea */}
-            <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-              {/* Minimal label bar */}
-              <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
-                <span className="text-[11px] font-semibold text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Write your HTML template below
-                </span>
-                <span className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-200 rounded font-mono">HTML</span>
               </div>
-              <textarea
-                rows={10}
-                required
-                placeholder={`<p>Dear <strong>{client_name}</strong>,</p>\n<p>Email: {email} | Phone: {phone}</p>\n<p>Date: {date}</p>`}
-                value={templateText}
-                onChange={(e) => setTemplateText(e.target.value)}
-                className="w-full px-4 py-3 bg-white text-slate-800 text-xs font-mono focus:outline-none leading-relaxed resize-none"
-                spellCheck={false}
-              />
-            </div>
 
-            {/* Live HTML Preview (shown when content exists) */}
-            {templateText.trim() && (
-              <div className="rounded-xl border border-slate-200 overflow-hidden">
-                <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Live Preview</span>
+              {/* HTML Editor — clean white textarea */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                {/* Minimal label bar */}
+                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
+                  <span className="text-[11px] font-semibold text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Write your HTML template below
+                  </span>
+                  <span className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-200 rounded font-mono">HTML</span>
                 </div>
-                <div
-                  className="px-5 py-4 bg-white text-sm text-slate-800 leading-relaxed prose prose-sm max-w-none"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                  dangerouslySetInnerHTML={{ __html: templateText }}
+                <textarea
+                  rows={10}
+                  required
+                  placeholder={`<p>Dear <strong>{client_name}</strong>,</p>\n<p>Email: {email} | Phone: {phone}</p>\n<p>Date: {date}</p>`}
+                  value={templateText}
+                  onChange={(e) => setTemplateText(e.target.value)}
+                  className="w-full px-4 py-3 bg-white text-slate-800 text-xs font-mono focus:outline-none leading-relaxed resize-none"
+                  spellCheck={false}
                 />
               </div>
-            )}
-          </div>
-
-
-          {/* Field Mapping Table */}
-          <div className="space-y-3 pt-2 border-t border-slate-200">
-            <div>
-              <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Extracted Fillable Fields ({fieldMappings.length})
-              </h3>
-              <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Map each extracted template field to system or custom client profile fields
-              </p>
             </div>
+          )}
 
-            {fieldMappings.length === 0 ? (
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-700">
-                <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
-                <span>No {"{fields}"} detected yet. Add <code className="bg-slate-200 px-1 rounded font-bold">{"{field_name}"}</code> placeholders in the template content above.</span>
+
+          {/* Field Mapping Table (Only visible when Import from Device is selected) */}
+          {templateMode === "device" && (
+            <div className="space-y-3 pt-2 border-t border-slate-200">
+              <div>
+                <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Extracted Fillable Fields ({fieldMappings.length})
+                </h3>
+                <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Map each extracted template field to system or custom client profile fields
+                </p>
               </div>
-            ) : (
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr style={{ backgroundColor: "#1F2937", height: "40px" }} className="text-white">
-                      <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Extracted Placeholder
-                      </th>
-                      <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Mapped Client Field
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fieldMappings.map((m, idx) => (
-                      <tr key={m.templateField} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
-                        <td className="px-3 py-2 font-mono text-slate-900 font-bold">
-                          {"{"}{m.templateField}{"}"}
-                        </td>
-                        <td className="px-3 py-2">
-                          <MappedFieldSelector
-                            value={m.mappedFieldKey}
-                            onChange={(newKey) => handleMappingChange(m.templateField, newKey)}
-                          />
-                        </td>
+
+              {fieldMappings.length === 0 ? (
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-2 text-xs text-slate-700">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-slate-500" />
+                  <span>No {"{fields}"} detected yet. Add <code className="bg-slate-200 px-1 rounded font-bold">{"{field_name}"}</code> placeholders in the template content above.</span>
+                </div>
+              ) : (
+                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr style={{ backgroundColor: "#1F2937", height: "40px" }} className="text-white">
+                        <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Extracted Placeholder
+                        </th>
+                        <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Mapped Client Field
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {fieldMappings.map((m, idx) => (
+                        <tr key={m.templateField} className={idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"}>
+                          <td className="px-3 py-2 font-mono text-slate-900 font-bold">
+                            {"{"}{m.templateField}{"}"}
+                          </td>
+                          <td className="px-3 py-2">
+                            <MappedFieldSelector
+                              value={m.mappedFieldKey}
+                              onChange={(newKey) => handleMappingChange(m.templateField, newKey)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* ─── Template Settings Section ─── */}
-          <div className="border border-slate-200 rounded-2xl overflow-hidden">
-            {/* Settings Toggle Header */}
+          {/* ─── Advance Settings Section ─── */}
+          <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
+            {/* Main Advance Settings Header */}
             <button
               type="button"
               onClick={() => setSettingsOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/70 transition-colors cursor-pointer"
+              className="w-full flex items-center justify-between px-4 py-3.5 bg-slate-50 hover:bg-slate-100/70 transition-colors cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
               <div className="flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-lg bg-[#1F2937] flex items-center justify-center">
+                <div className="w-7 h-7 rounded-lg bg-[#1F2937] flex items-center justify-center shadow-xs">
                   <Settings className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-bold text-slate-900">Template Settings</p>
-                  <p className="text-[11px] text-slate-500">Configure template access & document auto-numbering</p>
+                  <p className="text-xs font-bold text-slate-900">Advance Settings</p>
+                  <p className="text-[11px] text-slate-500">Configure template access permissions & document auto-numbering</p>
                 </div>
               </div>
               <ChevronDown
@@ -1019,230 +1138,156 @@ export default function AddDocumentTemplateDrawer({
               />
             </button>
 
-            {/* Settings Content */}
+            {/* Advance Settings Dropdown Content */}
             {settingsOpen && (
-              <div className="p-5 space-y-6 border-t border-slate-200 bg-white animate-in fade-in-50 duration-150">
+              <div className="p-4 space-y-3.5 border-t border-slate-200 bg-slate-50/50 animate-in fade-in-50 duration-150">
 
-                {/* ── Section 1: Template Users ── */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-600" />
-                    <h4 className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Template Users
-                    </h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Select which team roles are allowed to use and generate documents from this template.
-                  </p>
-
-                  {/* Multi-select Dropdown */}
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setUsersDropdownOpen((v) => !v)}
-                      className="w-full flex items-center justify-between px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 transition-all cursor-pointer shadow-2xs"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
-                        {templateUsers.length === 0 ? (
-                          <span className="text-xs text-slate-400">Select team roles...</span>
-                        ) : (
-                          templateUsers.map((role) => (
-                            <span
-                              key={role}
-                              className="flex items-center gap-1 px-2 py-0.5 bg-[#1F2937] text-white text-[11px] font-semibold rounded-full"
-                            >
-                              {role}
-                              <button
-                                type="button"
-                                onClick={(e) => { e.stopPropagation(); toggleTemplateUser(role); }}
-                                className="hover:text-red-300 transition-colors cursor-pointer"
-                              >
-                                <X className="w-2.5 h-2.5" />
-                              </button>
-                            </span>
-                          ))
-                        )}
+                {/* ── Sub-setting 1: Template Users Dropdown ── */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                  <div
+                    onClick={() => setUsersSectionOpen((v) => !v)}
+                    className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/80 transition-colors cursor-pointer select-none"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 text-slate-700">
+                        <Users className="w-3.5 h-3.5" />
                       </div>
-                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-2 transition-transform ${usersDropdownOpen ? "rotate-180" : ""}`} />
-                    </button>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Template Users
+                          </p>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+                            {templateUsers.length === 0 ? "None" : templateUsers.includes("All Staff") ? "All Staff" : `${templateUsers.length} role${templateUsers.length > 1 ? "s" : ""}`}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Select which team roles are allowed to use this template
+                        </p>
+                      </div>
+                    </div>
 
-                    {usersDropdownOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setUsersDropdownOpen(false)} />
-                        <div
-                          className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      <ChevronDown
+                        className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
+                          usersSectionOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Template Users Collapsible Details */}
+                  {usersSectionOpen && (
+                    <div className="p-4 border-t border-slate-100 bg-white space-y-3 animate-in fade-in-50 duration-150">
+                      <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Assign role permissions for creating and generating documents with this template:
+                      </p>
+
+                      {/* Multi-select Dropdown */}
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => setUsersDropdownOpen((v) => !v)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 transition-all cursor-pointer shadow-2xs"
                           style={{ fontFamily: "Outfit, sans-serif" }}
                         >
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block border-b border-slate-100 mb-1">
-                            SELECT ROLES — MULTI SELECT
-                          </span>
-                          <div className="space-y-0.5">
-                            {AVAILABLE_TEAM_ROLES.map((role) => {
-                              const isSelected = templateUsers.includes(role);
-                              return (
-                                <button
+                          <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                            {templateUsers.length === 0 ? (
+                              <span className="text-xs text-slate-400">Select team roles...</span>
+                            ) : (
+                              templateUsers.map((role) => (
+                                <span
                                   key={role}
-                                  type="button"
-                                  onClick={() => toggleTemplateUser(role)}
-                                  className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${
-                                    isSelected
-                                      ? "bg-[#1F2937] text-white"
-                                      : "hover:bg-slate-100 text-slate-800"
-                                  }`}
+                                  className="flex items-center gap-1 px-2 py-0.5 bg-[#1F2937] text-white text-[11px] font-semibold rounded-full"
                                 >
-                                  <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
-                                    {role}
-                                  </span>
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
-                                </button>
-                              );
-                            })}
+                                  {role}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); toggleTemplateUser(role); }}
+                                    className="hover:text-red-300 transition-colors cursor-pointer"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </span>
+                              ))
+                            )}
                           </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 shrink-0 ml-2 transition-transform ${usersDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {usersDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setUsersDropdownOpen(false)} />
+                            <div
+                              className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1 block border-b border-slate-100 mb-1">
+                                SELECT ROLES — MULTI SELECT
+                              </span>
+                              <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                                {AVAILABLE_TEAM_ROLES.map((role) => {
+                                  const isSelected = templateUsers.includes(role);
+                                  return (
+                                    <button
+                                      key={role}
+                                      type="button"
+                                      onClick={() => toggleTemplateUser(role)}
+                                      className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${isSelected
+                                          ? "bg-[#1F2937] text-white"
+                                          : "hover:bg-slate-100 text-slate-800"
+                                        }`}
+                                    >
+                                      <span className={`text-xs font-semibold ${isSelected ? "text-white" : "text-slate-900"}`}>
+                                        {role}
+                                      </span>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Divider */}
-                <div className="border-t border-slate-100" />
-
-                {/* ── Section 2: Auto-Numbering Settings ── */}
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Hash className="w-4 h-4 text-slate-600" />
-                    <h4 className="text-xs font-bold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      Auto-Numbering Settings
-                    </h4>
-                  </div>
-                  <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Define how documents generated from this template will be automatically numbered.
-                  </p>
-
-                  {/* Number Format Preview + Input */}
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Number format
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={numberFormat}
-                        onChange={(e) => setNumberFormat(e.target.value)}
-                        className="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-slate-500 text-slate-900 bg-white"
-                      />
+                {/* ── Sub-setting 2: Auto-Numbering Settings (Opens small drawer) ── */}
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                  <div
+                    onClick={() => setAutoNumberDrawerOpen(true)}
+                    className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/80 transition-colors cursor-pointer select-none group"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center shrink-0 text-slate-700 group-hover:bg-[#1F2937] group-hover:text-white transition-colors">
+                        <Hash className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="text-left">
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            Auto-Numbering Settings
+                          </p>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200/60 truncate max-w-[120px]">
+                            {numberFormat || "{NUMBER}"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Configure automated document numbering format, counters & rules
+                        </p>
+                      </div>
                     </div>
-                    {/* Token Chips */}
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {NUMBER_FORMAT_TOKENS.map((token) => {
-                        const isActive = activeTokens.includes(token.id);
-                        return (
-                          <button
-                            key={token.id}
-                            type="button"
-                            onClick={() => handleInsertToken(token)}
-                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-all cursor-pointer ${
-                              isActive
-                                ? "bg-[#1F2937] text-white border-[#1F2937]"
-                                : "bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:bg-slate-50"
-                            }`}
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {token.label}
-                          </button>
-                        );
-                      })}
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-900 hidden sm:inline-block" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Configure
+                      </span>
+                      <div className="w-6 h-6 rounded-lg bg-slate-50 border border-slate-200/80 flex items-center justify-center text-slate-400 group-hover:text-slate-800 group-hover:bg-slate-100 transition-colors">
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                   </div>
-
-                  {/* Start + Increment in a row */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Start sequential numbering with
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={startNumber}
-                        onChange={(e) => setStartNumber(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Increment sequential numbers by
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={incrementBy}
-                        onChange={(e) => setIncrementBy(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Length + Padding in a row */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Sequential number length
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={numberLength}
-                        onChange={(e) => setNumberLength(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Padding character
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={1}
-                        value={paddingChar}
-                        onChange={(e) => setPaddingChar(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Activity Period Dropdown */}
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Automatic numbering template activity period
-                    </label>
-                    <select
-                      value={activityPeriod}
-                      onChange={(e) => setActivityPeriod(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-500 text-slate-900 bg-white cursor-pointer"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="Continuously">Continuously</option>
-                      <option value="Daily">Daily (reset each day)</option>
-                      <option value="Monthly">Monthly (reset each month)</option>
-                      <option value="Yearly">Yearly (reset each year)</option>
-                      <option value="Per Process">Per Process</option>
-                    </select>
-                  </div>
-
-                  {/* Cross-company checkbox */}
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={crossCompany}
-                      onChange={(e) => setCrossCompany(e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 accent-slate-900 cursor-pointer"
-                    />
-                    <span className="text-[11px] text-slate-600 group-hover:text-slate-900 transition-colors" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Use continuous numbering across all of my companies
-                    </span>
-                  </label>
                 </div>
 
               </div>
@@ -1250,6 +1295,238 @@ export default function AddDocumentTemplateDrawer({
           </div>
         </div>
       </DrawerShell>
+
+      {/* ─── Auto-Numbering Settings Small Drawer ─── */}
+      <DrawerShell
+        isOpen={autoNumberDrawerOpen}
+        onClose={() => setAutoNumberDrawerOpen(false)}
+        title="Auto-Numbering Settings"
+        subtitle="Configure sequential document numbering for this template"
+        icon={<Hash className="w-5 h-5 text-slate-700" />}
+        width="max-w-md"
+        zIndex={800}
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <button
+              type="button"
+              onClick={() => setAutoNumberDrawerOpen(false)}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAutoNumberDrawerOpen(false);
+                toast.success("Auto-numbering settings applied");
+              }}
+              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-xl shadow-xs transition-colors cursor-pointer"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              Save Settings
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-5" style={{ fontFamily: "Outfit, sans-serif" }}>
+          
+          {/* Subtle Output Preview Card */}
+          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
+                Generated Number Preview
+              </span>
+              <span className="text-[10px] font-medium text-slate-400">
+                Live Output
+              </span>
+            </div>
+            <div className="font-mono text-sm font-semibold text-slate-900 py-1 tracking-wide">
+              {getSimulatedNumber(numberFormat, startNumber, numberLength, paddingChar)}
+            </div>
+            <p className="text-[11px] text-slate-500">
+              Next document created with this template will follow this format.
+            </p>
+          </div>
+
+          {/* Number Format Pattern */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-800">
+                Number Format Pattern
+              </label>
+              {numberFormat !== "DOC-{YEAR}-{NUMBER}" && (
+                <button
+                  type="button"
+                  onClick={() => setNumberFormat("DOC-{YEAR}-{NUMBER}")}
+                  className="text-[11px] text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
+                >
+                  Reset to default
+                </button>
+              )}
+            </div>
+
+            <input
+              type="text"
+              value={numberFormat}
+              onChange={(e) => setNumberFormat(e.target.value)}
+              placeholder="DOC-{YEAR}-{NUMBER}"
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:border-slate-400 text-slate-900 bg-white shadow-2xs"
+            />
+
+            {/* Subtle Variable Badges */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] text-slate-500 font-medium block">
+                Insert variables:
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {NUMBER_FORMAT_TOKENS.map((token) => (
+                  <button
+                    key={token.id}
+                    type="button"
+                    onClick={() => handleInsertToken(token.token)}
+                    className="px-2 py-1 bg-white hover:bg-slate-50 text-slate-600 hover:text-slate-900 border border-slate-200 rounded-lg text-[11px] font-mono transition-colors cursor-pointer shadow-2xs"
+                  >
+                    + {token.token}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Presets */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-800 block">
+              Format Presets
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: "Year + Number", format: "DOC-{YEAR}-{NUMBER}" },
+                { label: "Sequential Only", format: "DOC-{NUMBER}" },
+                { label: "Year & Month", format: "{YEAR}{MONTH}-{NUMBER}" },
+                { label: "Client Code", format: "CL-{CLIENT_ID}-{NUMBER}" },
+              ].map((preset) => {
+                const isActive = numberFormat === preset.format;
+                return (
+                  <button
+                    key={preset.label}
+                    type="button"
+                    onClick={() => setNumberFormat(preset.format)}
+                    className={`px-3 py-2 rounded-xl border text-left text-xs transition-colors cursor-pointer ${
+                      isActive
+                        ? "bg-slate-100 border-slate-400 text-slate-900 font-semibold"
+                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sequence & Step Counter */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <label className="text-xs font-semibold text-slate-800 block">
+              Sequence & Digits
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-600 block">Start Number</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={startNumber}
+                  onChange={(e) => setStartNumber(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-400 text-slate-900 bg-white"
+                />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-600 block">Increment By</span>
+                <input
+                  type="number"
+                  min="1"
+                  value={incrementBy}
+                  onChange={(e) => setIncrementBy(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-400 text-slate-900 bg-white"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-600 block">Minimum Digits (Padding)</span>
+                <select
+                  value={numberLength}
+                  onChange={(e) => setNumberLength(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-400 text-slate-900 bg-white cursor-pointer"
+                >
+                  <option value="0">No padding (1, 2...)</option>
+                  <option value="3">3 digits (001, 002...)</option>
+                  <option value="4">4 digits (0001, 0002...)</option>
+                  <option value="5">5 digits (00001, 00002...)</option>
+                  <option value="6">6 digits (000001, 000002...)</option>
+                </select>
+              </div>
+              <div className="space-y-1">
+                <span className="text-[11px] text-slate-600 block">Padding Character</span>
+                <input
+                  type="text"
+                  maxLength={1}
+                  value={paddingChar}
+                  onChange={(e) => setPaddingChar(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-400 text-slate-900 bg-white"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Reset Period & Scope */}
+          <div className="space-y-3 pt-2 border-t border-slate-100">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-slate-800 block">
+                Reset Frequency
+              </label>
+              <select
+                value={activityPeriod}
+                onChange={(e) => setActivityPeriod(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-slate-400 text-slate-900 bg-white cursor-pointer"
+              >
+                <option value="Continuously">Continuously (Never reset sequence)</option>
+                <option value="Daily">Daily (Reset each day)</option>
+                <option value="Monthly">Monthly (Reset each month)</option>
+                <option value="Yearly">Yearly (Reset each year)</option>
+                <option value="Per Process">Per Process</option>
+              </select>
+            </div>
+
+            <label className="flex items-center gap-2.5 pt-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={crossCompany}
+                onChange={(e) => setCrossCompany(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 accent-slate-900 cursor-pointer shrink-0"
+              />
+              <span className="text-xs text-slate-700">
+                Use continuous numbering across all my companies
+              </span>
+            </label>
+          </div>
+
+        </div>
+      </DrawerShell>
+
+      {createFieldModalOpenFor && (
+        <CreateFieldModal
+          lockModule={createFieldModalOpenFor}
+          onClose={() => setCreateFieldModalOpenFor(null)}
+          onCreated={(newField) => {
+            setSelectedFieldsForDropdown((prev) => [...prev, newField.key]);
+            setCreateFieldModalOpenFor(null);
+            toast.success(`Created field "${newField.label}" ({${newField.key}})`);
+          }}
+        />
+      )}
     </>
   );
 }
