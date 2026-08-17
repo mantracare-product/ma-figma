@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Search, Plus, FileText, CheckCircle2, ArrowRight, ShieldCheck, Printer,
   Loader2, User, Building, Mail, Phone, MapPin, Download, ChevronDown, Check,
-  Sparkles, FileCode, RefreshCw
+  Sparkles, FileCode, RefreshCw, FileSpreadsheet, Share2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../../../lib/clientDocumentsStore";
 import { generateClientPdf } from "../../../lib/pdfGenerator";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
+import ShareDocumentDrawer from "./ShareDocumentDrawer";
 import DrawerShell from "../ui/DrawerShell";
 
 export interface GenerateDocumentDrawerProps {
@@ -57,6 +58,7 @@ export default function GenerateDocumentDrawer({
   // Download Dropdown State
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
+  const [shareDrawerOpen, setShareDrawerOpen] = useState(false);
 
   // Listen to template store updates
   useEffect(() => {
@@ -161,7 +163,10 @@ export default function GenerateDocumentDrawer({
   const downloadAsWordDoc = (docName: string, textContent: string) => {
     const header = "<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Document</title></head><body>";
     const footer = "</body></html>";
-    const html = header + `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-wrap;">${textContent.replace(/\n/g, "<br/>")}</div>` + footer;
+    const bodyContent = /<[a-z][\s\S]*>/i.test(textContent)
+      ? textContent
+      : `<div style="font-family:Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-wrap;">${textContent.replace(/\n/g, "<br/>")}</div>`;
+    const html = header + bodyContent + footer;
 
     const blob = new Blob(['\ufeff', html], {
       type: 'application/msword'
@@ -285,21 +290,11 @@ export default function GenerateDocumentDrawer({
             : "Select a document template to populate with client data"
         }
         icon={<FileText className="w-5 h-5 text-slate-700" />}
-        width={selectedTemplate ? "max-w-6xl" : "max-w-3xl"}
+        width={selectedTemplate ? "max-w-[94vw] lg:max-w-6xl" : "max-w-3xl"}
         zIndex={650}
         footer={
           selectedTemplate ? (
-            <div className="flex items-center justify-between w-full">
-              <button
-                type="button"
-                onClick={() => setSelectedTemplate(null)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-                disabled={isSaving}
-              >
-                ← Back to Templates List
-              </button>
-
+            <div className="flex items-center justify-end w-full">
               <div className="flex items-center gap-3">
                 {/* Print Button */}
                 <button
@@ -311,6 +306,18 @@ export default function GenerateDocumentDrawer({
                 >
                   <Printer className="w-4 h-4 text-slate-600" />
                   <span>Print Document</span>
+                </button>
+
+                {/* Share Button */}
+                <button
+                  type="button"
+                  onClick={() => setShareDrawerOpen(true)}
+                  className="flex items-center gap-1.5 px-3.5 py-2 border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  disabled={isSaving}
+                >
+                  <Share2 className="w-4 h-4 text-blue-600" />
+                  <span>Share</span>
                 </button>
 
                 {/* Download Dropdown (Download as PDF or DOCX) */}
@@ -368,7 +375,7 @@ export default function GenerateDocumentDrawer({
                             className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-100 transition-colors flex items-center justify-between group cursor-pointer"
                           >
                             <div className="flex items-center gap-2.5">
-                              <FileCode className="w-4 h-4 text-blue-600 shrink-0" />
+                              <FileSpreadsheet className="w-4 h-4 text-blue-600 shrink-0" />
                               <div>
                                 <p className="text-xs font-bold text-slate-900 group-hover:text-blue-600">Download as Word</p>
                                 <p className="text-[10px] text-slate-400">Editable Word Document (.docx)</p>
@@ -513,14 +520,14 @@ export default function GenerateDocumentDrawer({
             </div>
           ) : (
             /* STEP 2: SPLIT SCREEN (Left: Live Document Preview | Right: Filled Editable Fields) */
-            <div className="grid grid-cols-12 gap-6">
+            <div className="grid grid-cols-12 gap-6 items-start">
               {/* LEFT PANEL: Document Preview Canvas */}
-              <div className="col-span-7 space-y-3">
+              <div className="col-span-7 space-y-3 min-w-0">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                     DOCUMENT PREVIEW
                   </span>
-                  <span className="text-[11px] text-slate-400 font-medium">
+                  <span className="text-[11px] text-slate-400 font-medium truncate ml-2">
                     Template: <strong className="text-slate-800">{selectedTemplate.name}</strong>
                   </span>
                 </div>
@@ -537,50 +544,30 @@ export default function GenerateDocumentDrawer({
                     </p>
                   </div>
                 ) : (
-                  <div className="border border-slate-300 rounded-2xl bg-white shadow-lg p-7 space-y-5 border-t-8 border-t-[#1F2937] min-h-[440px] animate-in fade-in-50 duration-150">
-                    {/* Letterhead Header */}
-                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                      <div>
-                        <h1 className="text-lg font-black tracking-tight text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          MANTRACARE HEALTHCARE CRM
-                        </h1>
-                        <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Official Client Record & Document Output
-                        </p>
-                      </div>
-                      <div className="text-right text-[11px] text-slate-400 font-mono">
-                        <p>DOC-{Date.now().toString().slice(-6)}</p>
-                      </div>
-                    </div>
-
-                    {/* Document Title */}
-                    <div className="text-center py-2 bg-slate-50 rounded-xl border border-slate-200">
-                      <h2 className="text-sm font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        {selectedTemplate.name}
-                      </h2>
-                    </div>
-
-                    {/* Merged Text Area */}
-                    <div className="p-4 bg-white border border-slate-100 rounded-xl min-h-[220px]">
-                      <pre
-                        className="whitespace-pre-wrap text-xs text-slate-800 leading-relaxed font-sans"
-                        style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px" }}
-                      >
-                        {getRenderedText()}
-                      </pre>
-                    </div>
-
-                    {/* Document Footer */}
-                    <div className="pt-3 border-t border-slate-200 text-[11px] text-slate-400 flex items-center justify-between" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <span>Prepared for: {client.name}</span>
-                      <span>MantraCare Verified Document</span>
+                  <div className="border border-slate-200 rounded-2xl bg-white shadow-md p-8 min-h-[480px] animate-in fade-in-50 duration-150 overflow-hidden w-full">
+                    {/* Document Content as-is */}
+                    <div className="overflow-x-auto max-w-full">
+                      {/<[a-z][\s\S]*>/i.test(getRenderedText()) ? (
+                        <div
+                          className="prose prose-slate max-w-full text-slate-900 leading-relaxed font-sans break-words [&_*]:max-w-full [&_table]:w-full [&_table]:table-auto [&_td]:break-all [&_th]:break-words [&_pre]:overflow-x-auto [&_code]:break-all"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                          dangerouslySetInnerHTML={{ __html: getRenderedText() }}
+                        />
+                      ) : (
+                        <pre
+                          className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed font-sans break-words overflow-x-auto max-w-full"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {getRenderedText()}
+                        </pre>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* RIGHT PANEL: Extracted Filled Fields Editor */}
-              <div className="col-span-5 space-y-3">
+              {/* RIGHT PANEL: Extracted Filled Fields Editor (Sticky to top) */}
+              <div className="col-span-5 space-y-3 min-w-0 sticky top-0 self-start z-10">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                     FILLED FIELDS & VALUES ({activePlaceholders.length})
@@ -596,7 +583,7 @@ export default function GenerateDocumentDrawer({
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 max-h-[460px] overflow-y-auto">
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
                   <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
                     The placeholders below were pre-filled with {client.name}'s profile data. You can manually edit any field value to update the document in real time:
                   </p>
@@ -645,6 +632,15 @@ export default function GenerateDocumentDrawer({
           onTemplateCreated={(newTpl) => {
             handleSelectTemplate(newTpl);
           }}
+        />
+      )}
+
+      {shareDrawerOpen && selectedTemplate && (
+        <ShareDocumentDrawer
+          isOpen={shareDrawerOpen}
+          onClose={() => setShareDrawerOpen(false)}
+          documentTitle={selectedTemplate.name}
+          client={client}
         />
       )}
     </>

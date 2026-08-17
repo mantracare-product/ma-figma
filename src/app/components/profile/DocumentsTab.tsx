@@ -41,7 +41,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [selectedDocStatus, setSelectedDocStatus] = useState<string>("All");
   const [previewDoc, setPreviewDoc] = useState<StoredClientDocument | null>(null);
   const [showGenerateDocDrawer, setShowGenerateDocDrawer] = useState(false);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [activeMenuDoc, setActiveMenuDoc] = useState<StoredClientDocument | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null);
 
   // Upload & Template Dropdown State
   const [showActionDropdown, setShowActionDropdown] = useState(false);
@@ -50,13 +51,35 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click or scroll
   useEffect(() => {
-    if (!openMenuId) return;
-    const handler = () => setOpenMenuId(null);
-    document.addEventListener("click", handler);
-    return () => document.removeEventListener("click", handler);
-  }, [openMenuId]);
+    if (!activeMenuDoc) return;
+    const handler = () => {
+      setActiveMenuDoc(null);
+      setMenuPos(null);
+    };
+    window.addEventListener("click", handler);
+    window.addEventListener("scroll", handler, true);
+    return () => {
+      window.removeEventListener("click", handler);
+      window.removeEventListener("scroll", handler, true);
+    };
+  }, [activeMenuDoc]);
+
+  const handleOpenDocMenu = (e: React.MouseEvent<HTMLButtonElement>, doc: StoredClientDocument) => {
+    e.stopPropagation();
+    if (activeMenuDoc?.id === doc.id) {
+      setActiveMenuDoc(null);
+      setMenuPos(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setActiveMenuDoc(doc);
+      setMenuPos({
+        top: rect.bottom + 4,
+        right: Math.max(16, window.innerWidth - rect.right),
+      });
+    }
+  };
 
   // Sync templates list
   useEffect(() => {
@@ -124,11 +147,10 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       ];
 
       const stored = getStoredClientDocuments(client.id);
-      const storedMap = new Map<string, StoredClientDocument>();
-      initialDocs.forEach((d) => storedMap.set(d.id, d));
-      stored.forEach((d) => storedMap.set(d.id, d));
+      const storedIds = new Set(stored.map((d) => d.id));
+      const remainingInitial = initialDocs.filter((d) => !storedIds.has(d.id));
 
-      setDocuments(Array.from(storedMap.values()));
+      setDocuments([...stored, ...remainingInitial]);
     };
 
     refreshDocs();
@@ -496,43 +518,16 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
                       {doc.fileSize}
                     </td>
                     <td className="px-5 text-right">
-                      <div className="relative flex items-center justify-end">
+                      <div className="flex items-center justify-end">
                         <button
-                          onClick={(e) => { e.stopPropagation(); setOpenMenuId(openMenuId === doc.id ? null : doc.id); }}
-                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 text-gray-500 transition-colors cursor-pointer"
+                          onClick={(e) => handleOpenDocMenu(e, doc)}
+                          className={`w-7 h-7 flex items-center justify-center rounded transition-colors cursor-pointer ${
+                            activeMenuDoc?.id === doc.id ? "bg-slate-200 text-slate-900" : "hover:bg-gray-200 text-gray-500"
+                          }`}
                           title="Actions"
                         >
                           <MoreVertical className="w-4 h-4" />
                         </button>
-                        {openMenuId === doc.id && (
-                          <div
-                            className="absolute right-0 top-8 z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[140px]"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            <button
-                              onClick={() => { setPreviewDoc(doc); setOpenMenuId(null); }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                            >
-                              <Eye className="w-3.5 h-3.5 text-gray-500" />
-                              Preview
-                            </button>
-                            <button
-                              onClick={() => { handleDownloadDoc(doc); setOpenMenuId(null); }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50 transition-colors cursor-pointer"
-                            >
-                              <Download className="w-3.5 h-3.5 text-gray-500" />
-                              Download
-                            </button>
-                            <div className="border-t border-gray-100 my-1" />
-                            <button
-                              onClick={() => { handleDeleteDoc(doc.id, doc.name); setOpenMenuId(null); }}
-                              className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              Delete
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </td>
                   </tr>
@@ -542,6 +537,64 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           </tbody>
         </table>
       </div>
+
+      {/* Fixed Positioning Action Dropdown (Z-Index Relative to Whole Screen & Drawer) */}
+      {activeMenuDoc && menuPos && (
+        <>
+          <div
+            className="fixed inset-0 z-[9998]"
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveMenuDoc(null);
+              setMenuPos(null);
+            }}
+          />
+          <div
+            className="fixed z-[9999] bg-white border border-slate-200 rounded-xl shadow-2xl py-1 min-w-[150px] animate-in fade-in-50 zoom-in-95 duration-100"
+            style={{
+              top: `${menuPos.top}px`,
+              right: `${menuPos.right}px`,
+              fontFamily: "Outfit, sans-serif",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => {
+                setPreviewDoc(activeMenuDoc);
+                setActiveMenuDoc(null);
+                setMenuPos(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
+            >
+              <Eye className="w-3.5 h-3.5 text-slate-500" />
+              <span>Preview</span>
+            </button>
+            <button
+              onClick={() => {
+                handleDownloadDoc(activeMenuDoc);
+                setActiveMenuDoc(null);
+                setMenuPos(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer text-left"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              <span>Download</span>
+            </button>
+            <div className="border-t border-slate-100 my-1" />
+            <button
+              onClick={() => {
+                handleDeleteDoc(activeMenuDoc.id, activeMenuDoc.name);
+                setActiveMenuDoc(null);
+                setMenuPos(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer text-left font-medium"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+              <span>Delete</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Document Preview Drawer (Right-side drawer) */}
       {previewDoc && (

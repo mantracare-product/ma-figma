@@ -278,45 +278,24 @@ export default function GenerateDocumentModal({
                 </div>
               </div>
 
-              {/* Styled PDF Letterhead Sheet */}
-              <div className="border border-gray-300 rounded-2xl bg-white shadow-lg p-8 space-y-6 max-w-3xl mx-auto border-t-8 border-t-[#1F2937]">
-                {/* PDF Header Letterhead */}
-                <div className="flex items-center justify-between pb-6 border-b border-gray-200">
-                  <div>
-                    <h1 className="text-xl font-black tracking-tight text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                      MANTRACARE HEALTHCARE CRM
-                    </h1>
-                    <p className="text-xs text-gray-500 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      Official Client Record & Document Services
-                    </p>
-                  </div>
-                  <div className="text-right text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    <p className="font-bold text-gray-800">{selectedTemplate.category.toUpperCase()}</p>
-                    <p>Doc ID: DOC-{Date.now().toString().slice(-6)}</p>
-                  </div>
-                </div>
-
-                {/* PDF Document Title */}
-                <div className="text-center py-2 bg-gray-50 rounded-xl border border-gray-100">
-                  <h2 className="text-base font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                    {selectedTemplate.name}
-                  </h2>
-                </div>
-
-                {/* Merged Text Body */}
-                <div className="p-4 bg-white border border-gray-100 rounded-xl">
-                  <pre
-                    className="whitespace-pre-wrap text-xs text-gray-800 leading-relaxed font-sans"
-                    style={{ fontFamily: "DM Sans, sans-serif", fontSize: "12px" }}
-                  >
-                    {generateMergedText(selectedTemplate)}
-                  </pre>
-                </div>
-
-                {/* PDF Footer Notice */}
-                <div className="pt-4 border-t border-gray-200 text-[11px] text-gray-400 flex items-center justify-between" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <span>Generated for {client.name} ({client.email})</span>
-                  <span>MantraCare Authorized System Document</span>
+              {/* Styled Document Sheet */}
+              <div className="border border-gray-200 rounded-2xl bg-white shadow-md p-8 max-w-3xl mx-auto">
+                {/* Document Body as-is */}
+                <div className="overflow-x-auto max-w-full">
+                  {/<[a-z][\s\S]*>/i.test(generateMergedText(selectedTemplate)) ? (
+                    <div
+                      className="prose prose-slate max-w-full text-slate-900 leading-relaxed font-sans break-words [&_*]:max-w-full [&_table]:w-full [&_table]:table-auto [&_td]:break-all [&_th]:break-words [&_pre]:overflow-x-auto [&_code]:break-all"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                      dangerouslySetInnerHTML={{ __html: generateMergedText(selectedTemplate) }}
+                    />
+                  ) : (
+                    <pre
+                      className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed font-sans break-words overflow-x-auto max-w-full"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {generateMergedText(selectedTemplate)}
+                    </pre>
+                  )}
                 </div>
               </div>
             </div>

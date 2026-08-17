@@ -85,40 +85,37 @@ export default function DocumentPreviewDrawer({
       }
     >
       <div className="space-y-4">
-        {/* PDF Viewer iFrame or Fallback View */}
-        {downloadUrl ? (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-gray-500">
-              <span className="flex items-center gap-1 text-emerald-600 font-semibold">
-                <ShieldCheck className="w-4 h-4" /> Live PDF Document Viewer
-              </span>
-              <span>Doc ID: {document.id}</span>
-            </div>
-            <iframe
-              src={downloadUrl}
-              title={document.name}
-              className="w-full h-[65vh] border border-gray-200 rounded-xl shadow-xs bg-gray-100"
-            />
-          </div>
-        ) : (
-          <div className="w-full bg-gray-50 border border-gray-200 rounded-xl p-5 text-left font-sans">
+        {/* Document Content View (Pure HTML or text document sheet) */}
+        <div className="border border-slate-200 rounded-2xl bg-white shadow-md p-8 min-h-[380px] overflow-hidden w-full">
+          <div className="overflow-x-auto max-w-full">
             {document.generatedContent ? (
-              <pre className="whitespace-pre-wrap text-xs text-gray-800 font-sans leading-relaxed">
-                {document.generatedContent}
-              </pre>
+              /<[a-z][\s\S]*>/i.test(document.generatedContent) ? (
+                <div
+                  className="prose prose-slate max-w-full text-sm text-slate-900 leading-relaxed font-sans break-words [&_*]:max-w-full [&_table]:w-full [&_table]:table-auto [&_td]:break-all [&_th]:break-words [&_pre]:overflow-x-auto [&_code]:break-all"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                  dangerouslySetInnerHTML={{ __html: document.generatedContent }}
+                />
+              ) : (
+                <pre
+                  className="whitespace-pre-wrap text-sm text-slate-800 leading-relaxed font-sans break-words overflow-x-auto max-w-full"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {document.generatedContent}
+                </pre>
+              )
             ) : (
-              <div className="flex flex-col items-center justify-center text-center py-10">
-                <FileText className="w-12 h-12 text-gray-400 mb-2" />
-                <p className="text-xs font-semibold text-gray-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Document Preview: {document.name}
+              <div className="flex flex-col items-center justify-center text-center py-12">
+                <FileText className="w-12 h-12 text-slate-300 mb-2" />
+                <p className="text-xs font-semibold text-slate-700" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                  Document: {document.name}
                 </p>
-                <p className="text-[11px] text-gray-400 mt-1 max-w-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  [Standard document record for {clientName}]
+                <p className="text-[11px] text-slate-400 mt-1 max-w-xs" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Official client document record for {clientName}
                 </p>
               </div>
             )}
           </div>
-        )}
+        </div>
 
         {/* Metadata Details */}
         <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-xl text-xs">

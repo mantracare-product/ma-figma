@@ -32,14 +32,8 @@ export function getStoredClientDocuments(clientId?: string): StoredClientDocumen
 
 export function saveClientDocument(doc: StoredClientDocument): void {
   const current = getStoredClientDocuments();
-  const existingIdx = current.findIndex((d) => d.id === doc.id);
-  let updated: StoredClientDocument[];
-  if (existingIdx >= 0) {
-    updated = [...current];
-    updated[existingIdx] = doc;
-  } else {
-    updated = [doc, ...current];
-  }
+  const filtered = current.filter((d) => d.id !== doc.id);
+  const updated = [doc, ...filtered];
   sessionStorage.setItem("clientSavedDocuments", JSON.stringify(updated));
   window.dispatchEvent(new Event(CLIENT_DOCUMENTS_EVENT));
 }

@@ -21,6 +21,7 @@ export interface Service {
   assignedEmployees?: number[];
   createdAt?: string;
   activity?: string;
+  customFields?: Record<string, any>;
 }
 
 // Per-client product assignments: clientId → array of service ids
@@ -65,6 +66,7 @@ export const INIT_FORM = {
   tax: 0,
   isActive: true,
   assignedEmployeeIds: [] as number[],
+  customFields: {} as Record<string, any>,
 };
 
 // ─── Default seed data ────────────────────────────────────────────────────────

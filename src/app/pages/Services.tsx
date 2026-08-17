@@ -8,6 +8,8 @@ import {
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import DrawerShell from "../components/ui/DrawerShell";
+import { useFieldRegistry, ALL_MODULES, FieldDefinition } from "../context/FieldRegistryContext";
+import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import {
   Service, EMPLOYEES, CURRENCIES, INIT_FORM, getCurrencySymbol,
   getStoredServices, addService, updateService, deleteService,
@@ -70,6 +72,39 @@ export default function Services() {
   // Row selection state
   const [selectedServiceIds, setSelectedServiceIds] = useState<number[]>([]);
 
+  // Field registry for all modules
+  const { getAllFields } = useFieldRegistry();
+  const [showSelectFieldModal, setShowSelectFieldModal] = useState(false);
+  const [showCreateFieldModal, setShowCreateFieldModal] = useState(false);
+  const [serviceVisibleFieldKeys, setServiceVisibleFieldKeys] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("ma_service_visible_fields");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const HARDCODED_SERVICE_KEYS = new Set([
+    "service_name",
+    "name",
+    "price",
+    "duration",
+    "currency",
+    "category",
+    "description",
+    "tax",
+    "assignedEmployees",
+    "isActive",
+  ]);
+
+  const allAvailableFields = ALL_MODULES.flatMap((m) => getAllFields(m));
+
+  const visibleCustomFields = serviceVisibleFieldKeys
+    .filter((key) => !HARDCODED_SERVICE_KEYS.has(key))
+    .map((key) => allAvailableFields.find((f) => f.key === key))
+    .filter((f): f is FieldDefinition => Boolean(f));
+
   // Column visibility configuration state (Header Gear menu)
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
@@ -112,7 +147,7 @@ export default function Services() {
   );
 
   const resetForm = () => {
-    setForm({ ...INIT_FORM, category: "General" });
+    setForm({ ...INIT_FORM, category: "General", customFields: {} });
     setEmpSearch("");
     setShowEmpDrop(false);
     setCatSearch("");
@@ -136,6 +171,7 @@ export default function Services() {
       assignedEmployees: form.assignedEmployeeIds,
       createdAt: nowStr,
       activity: `Created ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      customFields: form.customFields,
     });
     setServices(getStoredServices());
     toast.success(`"${s.name}" added`);
@@ -157,6 +193,7 @@ export default function Services() {
       isActive: form.isActive,
       assignedEmployees: form.assignedEmployeeIds,
       activity: `Updated ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`,
+      customFields: form.customFields,
     });
     setServices(getStoredServices());
     toast.success(`"${form.name}" updated`);
@@ -176,6 +213,7 @@ export default function Services() {
       tax: service.tax || 0,
       isActive: service.isActive,
       assignedEmployeeIds: service.assignedEmployees || [],
+      customFields: service.customFields || {},
     });
     setShowEditDrawer(true);
     setOpenMenuId(null);
@@ -522,6 +560,81 @@ export default function Services() {
         >
           {form.isActive ? <ToggleRight className="w-9 h-9 text-blue-600" /> : <ToggleLeft className="w-9 h-9 text-gray-400" />}
         </button>
+      </div>
+
+      {/* Dynamic / Selected Custom Fields */}
+      {visibleCustomFields.length > 0 && (
+        <div className="space-y-4 pt-2 border-t border-gray-100">
+          {visibleCustomFields.map((field) => (
+            <div key={field.key}>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                {field.label} {field.required && <span className="text-rose-500">*</span>}
+              </label>
+              {field.inputType === "select" && field.options && field.options.length > 0 ? (
+                <select
+                  value={form.customFields?.[field.key] || ""}
+                  onChange={(e) => setForm({
+                    ...form,
+                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}...`}</option>
+                  {field.options.map((opt) => (
+                    <option key={opt.id} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              ) : field.inputType === "textarea" ? (
+                <textarea
+                  rows={3}
+                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                  value={form.customFields?.[field.key] || ""}
+                  onChange={(e) => setForm({
+                    ...form,
+                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                />
+              ) : (
+                <input
+                  type={field.inputType === "number" || field.inputType === "money" ? "number" : field.inputType === "date" ? "date" : field.inputType === "date_time" ? "datetime-local" : "text"}
+                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
+                  value={form.customFields?.[field.key] || ""}
+                  onChange={(e) => setForm({
+                    ...form,
+                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
+                  })}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Select Field Modal Trigger Button */}
+      <div className="pt-4 border-t border-gray-200">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setShowSelectFieldModal(true)}
+            className="text-sm font-medium transition-colors cursor-pointer"
+            style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
+          >
+            Select field
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowCreateFieldModal(true)}
+            className="text-xs font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            + Create Field
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -964,6 +1077,36 @@ export default function Services() {
       >
         <ServiceForm />
       </DrawerShell>
+
+      {/* Select Field Modal — shows all available system fields and custom fields across all modules */}
+      {showSelectFieldModal && (
+        <SelectFieldsModal
+          initiallySelected={serviceVisibleFieldKeys}
+          onClose={() => setShowSelectFieldModal(false)}
+          onApply={(keys) => {
+            setServiceVisibleFieldKeys(keys);
+            try {
+              localStorage.setItem("ma_service_visible_fields", JSON.stringify(keys));
+            } catch {}
+          }}
+        />
+      )}
+
+      {/* Create Field Modal */}
+      {showCreateFieldModal && (
+        <CreateFieldModal
+          onClose={() => setShowCreateFieldModal(false)}
+          onCreated={(field) => {
+            setServiceVisibleFieldKeys((prev) => {
+              const next = prev.includes(field.key) ? prev : [...prev, field.key];
+              try {
+                localStorage.setItem("ma_service_visible_fields", JSON.stringify(next));
+              } catch {}
+              return next;
+            });
+          }}
+        />
+      )}
 
       <HowItWorksModal
         isOpen={showHelp}

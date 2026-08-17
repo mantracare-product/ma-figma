@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
   LayoutTemplate, Layers, ChevronDown, ChevronRight, Check, Users, Hash, X, Search, Plus,
-  Sparkles, RotateCcw
+  Sparkles, RotateCcw, Code, Eye
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -179,20 +179,17 @@ Financial Officer: {responsible}`,
 const TEMPLATE_MODE_OPTIONS = [
   {
     id: "device",
-    title: "Import from Device",
-    subtitle: "Upload Word (.docx) or Text (.txt) file with auto-extraction",
+    title: "Import Word Doc",
     icon: UploadCloud,
   },
   {
     id: "webforms",
-    title: "Import from WebForms",
-    subtitle: "Generate template from pre-built intake webforms & fields",
+    title: "Import WebForm",
     icon: Layers,
   },
   {
     id: "canvas",
-    title: "Create Canvas Template",
-    subtitle: "Build document template using rich editor canvas & variables",
+    title: "Use Template Builder",
     icon: LayoutTemplate,
   },
 ];
@@ -374,13 +371,32 @@ export default function AddDocumentTemplateDrawer({
     }));
   };
 
+  // Template Builder Tab State: HTML vs Preview
+  const [editorTab, setEditorTab] = useState<"html" | "preview">("html");
+  const previewEditableRef = useRef<HTMLDivElement>(null);
+
+  // Keep preview container in sync when switching tabs or external updates
+  useEffect(() => {
+    if (editorTab === "preview" && previewEditableRef.current) {
+      if (previewEditableRef.current.innerHTML !== templateText) {
+        previewEditableRef.current.innerHTML = templateText || "";
+      }
+    }
+  }, [editorTab, templateText]);
+
   const handleApplyDropdownFields = () => {
     if (selectedFieldsForDropdown.length === 0) {
       setFieldDropdownOpen(false);
       return;
     }
     const variablesText = selectedFieldsForDropdown.map((k) => `{${k}}`).join(" ");
-    setTemplateText((prev) => (prev ? `${prev} ${variablesText}` : variablesText));
+    setTemplateText((prev) => {
+      const updated = prev ? `${prev} ${variablesText}` : variablesText;
+      if (previewEditableRef.current && editorTab === "preview") {
+        previewEditableRef.current.innerHTML = updated;
+      }
+      return updated;
+    });
     toast.success(`Inserted ${selectedFieldsForDropdown.length} field placeholder${selectedFieldsForDropdown.length !== 1 ? "s" : ""}!`);
     setSelectedFieldsForDropdown([]);
     setFieldDropdownOpen(false);
@@ -617,7 +633,6 @@ export default function AddDocumentTemplateDrawer({
         isOpen={isOpen}
         onClose={onClose}
         title="Add Document Template"
-        subtitle="Create reusable document templates using device import, webforms, or rich canvas editor"
         icon={<FileText className="w-5 h-5 text-slate-700" />}
         width="max-w-3xl"
         zIndex={700}
@@ -669,7 +684,7 @@ export default function AddDocumentTemplateDrawer({
               <button
                 type="button"
                 onClick={() => setModeDropdownOpen((v) => !v)}
-                className="w-full flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
+                className="w-full flex items-center justify-between px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
                 {(() => {
@@ -677,13 +692,10 @@ export default function AddDocumentTemplateDrawer({
                   const IconComp = currentOpt.icon;
                   return (
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-800">
-                        <IconComp className="w-4 h-4" />
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 text-slate-800">
+                        <IconComp className="w-3.5 h-3.5" />
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-slate-900">{currentOpt.title}</p>
-                        <p className="text-[11px] text-slate-500">{currentOpt.subtitle}</p>
-                      </div>
+                      <span className="text-xs font-bold text-slate-900">{currentOpt.title}</span>
                     </div>
                   );
                 })()}
@@ -710,22 +722,19 @@ export default function AddDocumentTemplateDrawer({
                               setTemplateMode(opt.id as any);
                               setModeDropdownOpen(false);
                             }}
-                            className={`w-full text-left p-2.5 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${isSelected
+                            className={`w-full text-left px-3 py-2 rounded-xl transition-all flex items-center justify-between group cursor-pointer ${isSelected
                                 ? "bg-slate-900 text-white font-bold shadow-xs"
                                 : "hover:bg-slate-100 text-slate-800"
                               }`}
                           >
                             <div className="flex items-center gap-3">
                               <div
-                                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
+                                className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isSelected ? "bg-slate-800 text-white" : "bg-slate-100 text-slate-700 group-hover:bg-white"
                                   }`}
                               >
-                                <IconComp className="w-4 h-4" />
+                                <IconComp className="w-3.5 h-3.5" />
                               </div>
-                              <div>
-                                <p className={`text-xs font-bold ${isSelected ? "text-white" : "text-slate-900"}`}>{opt.title}</p>
-                                <p className={`text-[11px] ${isSelected ? "text-slate-300" : "text-slate-500"}`}>{opt.subtitle}</p>
-                              </div>
+                              <span className={`text-xs font-bold ${isSelected ? "text-white" : "text-slate-900"}`}>{opt.title}</span>
                             </div>
                             {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
                           </button>
@@ -865,13 +874,50 @@ export default function AddDocumentTemplateDrawer({
             </div>
           )}
 
-          {/* Document Template Content — HTML Editor (Only visible when Canvas is selected) */}
+          {/* Document Template Content — HTML / Preview Editor (Only visible when Canvas is selected) */}
           {templateMode === "canvas" && (
-            <div className="space-y-2">
+            <div className="space-y-2.5">
               <div className="flex items-center justify-between">
-                <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Document Template Content (HTML) *
-                </label>
+                <div className="flex items-center gap-3">
+                  <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Document Template Content *
+                  </label>
+
+                  {/* Two Tabs: HTML and Preview */}
+                  <div className="flex items-center p-0.5 bg-slate-100 border border-slate-200/80 rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setEditorTab("html")}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        editorTab === "html"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                      <span>HTML</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorTab("preview");
+                        if (previewEditableRef.current) {
+                          previewEditableRef.current.innerHTML = templateText || "";
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all cursor-pointer ${
+                        editorTab === "preview"
+                          ? "bg-white text-slate-900 shadow-xs"
+                          : "text-slate-500 hover:text-slate-800"
+                      }`}
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview</span>
+                    </button>
+                  </div>
+                </div>
 
                 {/* Toolbar: Select Fields Dropdown */}
                 <div className="flex items-center gap-2">
@@ -1041,24 +1087,60 @@ export default function AddDocumentTemplateDrawer({
                 </div>
               </div>
 
-              {/* HTML Editor — clean white textarea */}
-              <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs">
-                {/* Minimal label bar */}
-                <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-200">
-                  <span className="text-[11px] font-semibold text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Write your HTML template below
-                  </span>
-                  <span className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-200 rounded font-mono">HTML</span>
-                </div>
-                <textarea
-                  rows={10}
-                  required
-                  placeholder={`<p>Dear <strong>{client_name}</strong>,</p>\n<p>Email: {email} | Phone: {phone}</p>\n<p>Date: {date}</p>`}
-                  value={templateText}
-                  onChange={(e) => setTemplateText(e.target.value)}
-                  className="w-full px-4 py-3 bg-white text-slate-800 text-xs font-mono focus:outline-none leading-relaxed resize-none"
-                  spellCheck={false}
-                />
+              {/* Editor Block: HTML Tab vs Live Preview Tab */}
+              <div className="rounded-xl border border-slate-200 overflow-hidden shadow-xs bg-white">
+                {editorTab === "html" ? (
+                  <>
+                    {/* Minimal label bar for HTML */}
+                    <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-50 border-b border-slate-200">
+                      <span className="text-[11px] font-semibold text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Write your HTML template source below
+                      </span>
+                      <span className="px-2 py-0.5 text-[10px] font-bold text-slate-500 bg-slate-200 rounded font-mono">HTML</span>
+                    </div>
+                    <textarea
+                      rows={10}
+                      required
+                      placeholder={`<p>Dear <strong>{client_name}</strong>,</p>\n<p>Email: {email} | Phone: {phone}</p>\n<p>Date: {date}</p>`}
+                      value={templateText}
+                      onChange={(e) => setTemplateText(e.target.value)}
+                      className="w-full px-4 py-3 bg-white text-slate-800 text-xs font-mono focus:outline-none leading-relaxed resize-none"
+                      spellCheck={false}
+                    />
+                  </>
+                ) : (
+                  <>
+                    {/* Live Editable Preview */}
+                    <div className="flex items-center justify-between px-3.5 py-1.5 bg-slate-50 border-b border-slate-200">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Live Editable Preview
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          (Click and edit text directly — changes sync to HTML)
+                        </span>
+                      </div>
+                      <span className="px-2 py-0.5 text-[10px] font-bold text-emerald-700 bg-emerald-100 rounded font-mono">
+                        PREVIEW
+                      </span>
+                    </div>
+                    <div
+                      ref={previewEditableRef}
+                      contentEditable
+                      suppressContentEditableWarning
+                      onInput={(e) => {
+                        const html = e.currentTarget.innerHTML;
+                        setTemplateText(html);
+                      }}
+                      onBlur={(e) => {
+                        const html = e.currentTarget.innerHTML;
+                        setTemplateText(html);
+                      }}
+                      className="w-full min-h-[220px] max-h-[380px] overflow-y-auto overflow-x-auto px-5 py-4 bg-white text-slate-900 text-sm focus:outline-none leading-relaxed font-sans cursor-text prose prose-slate max-w-full break-words [&_*]:max-w-full [&_table]:w-full [&_table]:table-auto [&_td]:break-all [&_th]:break-words [&_pre]:overflow-x-auto [&_code]:break-all"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}
