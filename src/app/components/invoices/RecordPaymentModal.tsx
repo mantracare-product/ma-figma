@@ -469,36 +469,8 @@ export default function RecordPaymentModal({
         </div>
       ) : (
       <div className="space-y-6 text-xs text-slate-700">
-        {/* Unlinked / Open Invoices Mode Switcher */}
-        <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-lg bg-white border border-slate-200 flex items-center justify-center text-slate-700 font-bold">
-              1
-            </div>
-            <div>
-              <span className="font-bold text-slate-900 block text-xs">
-                {isUnlinkedMode ? "Unlinked Advance / On-Account Deposit" : "Invoice Allocation & Outstanding Balances"}
-              </span>
-              <p className="text-[11px] text-slate-500">
-                {isUnlinkedMode
-                  ? "Directly record an upfront credit for this client without linking to a specific bill"
-                  : `Select open invoices to settle and specify individual payment allocations`}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setIsUnlinkedMode(!isUnlinkedMode)}
-            className="px-3 py-1.5 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold rounded-xl text-xs transition-colors flex items-center gap-1.5 shadow-2xs"
-          >
-            <Wallet className="w-3.5 h-3.5 text-blue-600" />
-            <span>{isUnlinkedMode ? "Switch to Open Invoices" : "+ Unlinked / Advance Deposit"}</span>
-          </button>
-        </div>
-
-        {/* STEP 1: Content depending on Unlinked Mode */}
-        {isUnlinkedMode ? (
+        {/* STEP 1: Content based on Open Invoices vs Advance Deposit */}
+        {clientOutstandingInvoices.length === 0 ? (
           <div className="bg-indigo-50/50 border border-indigo-200/80 rounded-2xl p-5 space-y-4">
             <div className="flex items-start gap-3">
               <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold flex-shrink-0 mt-0.5">
@@ -507,7 +479,7 @@ export default function RecordPaymentModal({
               <div className="flex-1">
                 <h4 className="text-xs font-bold text-indigo-950">Record Unlinked / Advance Payment</h4>
                 <p className="text-[11px] text-indigo-800/80 mt-0.5">
-                  This payment will be credited to <strong className="text-indigo-950">{activeClient.name}</strong>'s account balance. It can be automatically applied to future invoices anytime.
+                  This client has no open invoices. The payment of ${parseFloat(unlinkedAmount) || 0} will be credited to <strong className="text-indigo-950">{activeClient?.name}</strong>'s account balance and can be applied to future bills.
                 </p>
               </div>
             </div>
@@ -536,7 +508,7 @@ export default function RecordPaymentModal({
           <div className="space-y-3 bg-white p-4 border border-slate-200 rounded-2xl shadow-xs">
             <div className="flex items-center justify-between border-b border-slate-100 pb-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Select Invoices & Enter Payment Amounts
+                Step 1 — Select Invoices & Enter Payment Amounts
               </span>
               <span className="text-xs font-semibold text-slate-500">
                 {selectedInvoiceIds.size} of {clientOutstandingInvoices.length} selected
