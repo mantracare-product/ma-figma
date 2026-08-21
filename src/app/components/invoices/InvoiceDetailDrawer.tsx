@@ -26,6 +26,9 @@ import {
   ChevronDown,
   FileCheck,
   Download,
+  Wallet,
+  Receipt,
+  Sparkles,
 } from "lucide-react";
 import { Link } from "react-router";
 import InvoiceProgressBar from "./InvoiceProgressBar";
@@ -52,8 +55,8 @@ export default function InvoiceDetailDrawer({
   invoice,
   onOpenDocument,
 }: InvoiceDetailDrawerProps) {
-  const { updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice } = useInvoices();
-  const [activeTab, setActiveTab] = useState<"general" | "history" | "documents">("general");
+  const { updateInvoiceStatus, sendInvoice, voidInvoice, getPaymentsByInvoice, getClientCredit } = useInvoices();
+  const [activeTab, setActiveTab] = useState<"general" | "activity" | "documents" | "payments">("general");
   const [copied, setCopied] = useState(false);
   const [showSendOptions, setShowSendOptions] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
@@ -61,7 +64,7 @@ export default function InvoiceDetailDrawer({
   const [isUploadReceiptOpen, setIsUploadReceiptOpen] = useState(false);
   const [uploadReceiptFileName, setUploadReceiptFileName] = useState("");
 
-  // Live activity log state for documents tab
+  // Live activity log state for documents & activity tab
   const [activityEntries, setActivityEntries] = useState<any[]>([]);
 
   useEffect(() => {
@@ -86,6 +89,7 @@ export default function InvoiceDetailDrawer({
   if (!invoice) return null;
 
   const isAutomated = invoice.createdBy === "system";
+  const availableCredit = getClientCredit(invoice.clientId);
 
   const handleCopyLink = () => {
     if (invoice.paymentLinkUrl) {
@@ -152,6 +156,14 @@ export default function InvoiceDetailDrawer({
       (e.details?.primary && (e.details.primary.includes("Document generated") || e.details.primary.includes("Receipt uploaded")))
   );
 
+  const clientActivityLogs = activityEntries.filter(
+    (e) =>
+      !e.details?.primary?.includes("Document generated") &&
+      !e.details?.primary?.includes("Receipt uploaded")
+  );
+
+  const activityCount = 1 + (invoice.sentAt ? 1 : 0) + invoicePayments.length + clientActivityLogs.length;
+
   return (
     <>
       <CustomSideDrawer
@@ -175,6 +187,11 @@ export default function InvoiceDetailDrawer({
                     interactive={true}
                     size="sm"
                   />
+                  {availableCredit > 0 && (
+                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-full text-[10px] font-bold flex items-center gap-1">
+                      <Wallet className="w-3 h-3 text-emerald-600" /> Credit Available: ${availableCredit.toFixed(2)}
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">Created on {invoice.createdAt.split("T")[0]}</p>
               </div>
@@ -200,33 +217,32 @@ export default function InvoiceDetailDrawer({
             {onOpenDocument && (
               <button
                 onClick={() => onOpenDocument(invoice)}
-                className="py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-semibold text-xs transition-all flex items-center gap-1.5"
+                className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors"
                 style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                <FileText className="w-3.5 h-3.5 text-blue-400" /> View Document
+                <Printer className="w-3.5 h-3.5 text-blue-600" /> Printable View
               </button>
             )}
 
+            <button
+              onClick={() => setShowSendOptions(!showSendOptions)}
+              className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+            >
+              <Send className="w-3.5 h-3.5" /> Send Invoice
+            </button>
+
             {invoice.status !== "paid" && invoice.status !== "void" && (
-              <>
-                <button
-                  onClick={() => setIsRecordPaymentOpen(true)}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5 shadow-xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <CreditCard className="w-3.5 h-3.5" /> Record Payment
-                </button>
-                <button
-                  onClick={() => setShowSendOptions(!showSendOptions)}
-                  className="flex-1 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  <Send className="w-3.5 h-3.5" /> Send
-                </button>
-              </>
+              <button
+                onClick={() => setIsRecordPaymentOpen(true)}
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-2xs"
+              >
+                <CreditCard className="w-3.5 h-3.5" /> Record Payment
+              </button>
             )}
 
-            {invoice.status !== "void" && (
+            <div className="flex-1" />
+
+            {invoice.status !== "void" && invoice.status !== "paid" && (
               <button
                 onClick={handleVoid}
                 className="px-3 py-2.5 border border-slate-200 hover:bg-rose-50 hover:border-rose-200 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-semibold transition-all flex items-center gap-1"
@@ -237,7 +253,7 @@ export default function InvoiceDetailDrawer({
           </div>
         }
       >
-        {/* Tab Bar: General | History | Documents */}
+        {/* Tab Bar: General | Activity | Documents | Payments */}
         <div className="border-b border-slate-200 mb-6">
           <div className="flex items-center gap-6">
             <button
@@ -253,16 +269,16 @@ export default function InvoiceDetailDrawer({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("history")}
+              onClick={() => setActiveTab("activity")}
               className={`pb-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
-                activeTab === "history"
+                activeTab === "activity"
                   ? "text-blue-600 border-b-2 border-blue-600"
                   : "text-slate-500 hover:text-slate-800"
               }`}
             >
-              <History className="w-3.5 h-3.5" /> History
+              <History className="w-3.5 h-3.5" /> Activity
               <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">
-                {invoicePayments.length + (invoice.sentAt ? 2 : 1)}
+                {activityCount}
               </span>
             </button>
             <button
@@ -277,6 +293,22 @@ export default function InvoiceDetailDrawer({
               <FileText className="w-3.5 h-3.5" /> Documents
               <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full font-bold">
                 {invoiceDocEntries.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("payments")}
+              className={`pb-3 text-xs font-bold transition-all relative flex items-center gap-1.5 ${
+                activeTab === "payments"
+                  ? "text-blue-600 border-b-2 border-blue-600"
+                  : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" /> Payments
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                invoicePayments.length > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"
+              }`}>
+                {invoicePayments.length}
               </span>
             </button>
           </div>
@@ -349,109 +381,67 @@ export default function InvoiceDetailDrawer({
               </div>
             </div>
 
-            {/* Visual Lifecycle Timeline */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-700">Invoice Timeline</p>
-              <div className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl text-xs">
-                <div className="flex flex-col items-center gap-1">
-                  <div className="w-7 h-7 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs">
-                    ✓
-                  </div>
-                  <span className="text-[10px] text-slate-600 font-medium">Created</span>
-                </div>
-                <div className={`flex-1 h-0.5 mx-2 ${invoice.sentAt ? "bg-emerald-500" : "bg-slate-200"}`} />
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${invoice.sentAt ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
-                    {invoice.sentAt ? "✓" : "2"}
-                  </div>
-                  <span className="text-[10px] text-slate-600 font-medium">Sent {invoice.sentVia ? `(${invoice.sentVia})` : ""}</span>
-                </div>
-                <div className={`flex-1 h-0.5 mx-2 ${invoice.status === "viewed" || invoice.status === "paid" ? "bg-emerald-500" : "bg-slate-200"}`} />
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${invoice.status === "viewed" || invoice.status === "paid" ? "bg-emerald-100 text-emerald-600" : "bg-slate-100 text-slate-400"}`}>
-                    {invoice.status === "viewed" || invoice.status === "paid" ? "✓" : "3"}
-                  </div>
-                  <span className="text-[10px] text-slate-600 font-medium">Viewed</span>
-                </div>
-                <div className={`flex-1 h-0.5 mx-2 ${invoice.status === "paid" ? "bg-emerald-500" : "bg-slate-200"}`} />
-                <div className="flex flex-col items-center gap-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs ${invoice.status === "paid" ? "bg-emerald-100 text-emerald-600 text-white" : "bg-slate-100 text-slate-400"}`}>
-                    {invoice.status === "paid" ? "✓" : "4"}
-                  </div>
-                  <span className="text-[10px] text-slate-600 font-medium">Paid</span>
-                </div>
+            {/* Line Items Table */}
+            <div>
+              <span className="text-xs font-semibold text-slate-700 block mb-2 font-bold uppercase tracking-wider text-[10px]">
+                Line Items ({invoice.lineItems.length})
+              </span>
+              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left border-collapse">
+                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200">
+                    <tr>
+                      <th className="py-2.5 px-3 font-semibold">Description</th>
+                      <th className="py-2.5 px-3 font-semibold text-center">Qty</th>
+                      <th className="py-2.5 px-3 font-semibold text-right">Price</th>
+                      <th className="py-2.5 px-3 font-semibold text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {invoice.lineItems.map((item) => (
+                      <tr key={item.id}>
+                        <td className="py-2.5 px-3 font-medium text-slate-800">{item.description}</td>
+                        <td className="py-2.5 px-3 text-center text-slate-500">{item.quantity}</td>
+                        <td className="py-2.5 px-3 text-right text-slate-500">${item.unitPrice.toFixed(2)}</td>
+                        <td className="py-2.5 px-3 text-right font-medium text-slate-800">
+                          ${(item.quantity * item.unitPrice).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
-            {/* Itemized Line Items Table */}
-            <div className="space-y-2">
-              <p className="text-xs font-semibold text-slate-700">Line Items</p>
-              <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-medium">
-                    <tr>
-                      <th className="p-3">Description</th>
-                      <th className="p-3 text-center">Qty</th>
-                      <th className="p-3 text-right">Unit Price</th>
-                      <th className="p-3 text-right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
-                    {invoice.lineItems.map((item) => {
-                      const lineTotal = item.quantity * item.unitPrice - (item.discountAmount || 0);
-                      return (
-                        <tr key={item.id}>
-                          <td className="p-3 font-medium">
-                            {item.description}
-                            {item.discountAmount && item.discountAmount > 0 ? (
-                              <span className="text-[10px] text-emerald-600 font-bold block">
-                                (Line Discount: -${item.discountAmount.toFixed(2)})
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="p-3 text-center">{item.quantity}</td>
-                          <td className="p-3 text-right">${item.unitPrice.toFixed(2)}</td>
-                          <td className="p-3 text-right font-semibold">${lineTotal.toFixed(2)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-
-                {/* Calculations Footer */}
-                <div className="bg-slate-50/70 p-4 border-t border-slate-200 space-y-1.5 text-xs text-slate-600">
-                  <div className="flex justify-between">
-                    <span>Subtotal</span>
-                    <span className="font-semibold">${invoice.subtotal.toFixed(2)}</span>
+            {/* Summary Totals */}
+            <div className="flex justify-end">
+              <div className="w-60 p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal</span>
+                  <span>${invoice.subtotal.toFixed(2)}</span>
+                </div>
+                {invoice.discountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Discount</span>
+                    <span>-${invoice.discountAmount.toFixed(2)}</span>
                   </div>
-                  {invoice.discountAmount > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-medium">
-                      <span>
-                        Discount {invoice.discountType === "percent" && invoice.discountValue ? `(${invoice.discountValue}%)` : ""}
-                      </span>
-                      <span>-${invoice.discountAmount.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span>Tax</span>
-                    <span>${invoice.taxAmount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-200 text-base font-bold text-slate-900">
-                    <span>Total Amount</span>
-                    <span className="text-blue-600">${invoice.total.toFixed(2)}</span>
-                  </div>
-                  {invoice.amountPaid > 0 && (
-                    <div className="flex justify-between text-emerald-600 font-semibold border-t border-slate-200 pt-1">
-                      <span>Amount Paid</span>
-                      <span>-${invoice.amountPaid.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold text-slate-900 border-t border-slate-200 pt-1">
-                    <span>Remaining Balance</span>
-                    <span className={invoice.total - (invoice.amountPaid || 0) > 0 ? "text-rose-600" : "text-emerald-600"}>
-                      ${Math.max(0, invoice.total - (invoice.amountPaid || 0)).toFixed(2)}
-                    </span>
-                  </div>
+                )}
+                <div className="flex justify-between text-slate-500">
+                  <span>Tax</span>
+                  <span>${invoice.taxAmount.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900 text-sm">
+                  <span>Total</span>
+                  <span>${invoice.total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between pt-1 text-emerald-600 font-semibold">
+                  <span>Amount Paid</span>
+                  <span>${(invoice.amountPaid || 0).toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between font-bold text-xs">
+                  <span>Remaining Balance</span>
+                  <span className={invoice.total - (invoice.amountPaid || 0) > 0 ? "text-rose-600" : "text-emerald-600"}>
+                    ${Math.max(0, invoice.total - (invoice.amountPaid || 0)).toFixed(2)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -480,11 +470,109 @@ export default function InvoiceDetailDrawer({
           </div>
         )}
 
-        {activeTab === "history" && (
+        {activeTab === "payments" && (
+          <div className="space-y-6">
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Total Amount</span>
+                <span className="text-lg font-extrabold text-slate-900 font-mono mt-0.5 block">${invoice.total.toFixed(2)}</span>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Amount Paid</span>
+                <span className="text-lg font-extrabold text-emerald-600 font-mono mt-0.5 block">${(invoice.amountPaid || 0).toFixed(2)}</span>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Balance Due</span>
+                <span className={`text-lg font-extrabold font-mono mt-0.5 block ${invoice.total - (invoice.amountPaid || 0) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                  ${Math.max(0, invoice.total - (invoice.amountPaid || 0)).toFixed(2)}
+                </span>
+              </div>
+
+              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Client Credit</span>
+                <span className="text-lg font-extrabold text-indigo-600 font-mono mt-0.5 block">${availableCredit.toFixed(2)}</span>
+              </div>
+            </div>
+
+            {/* Payments Action Header */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Settled & Applied Payments</h4>
+                <p className="text-[11px] text-slate-500">Itemized transaction records and attached payment receipts for {invoice.id}</p>
+              </div>
+
+              {invoice.status !== "paid" && invoice.status !== "void" && (
+                <button
+                  type="button"
+                  onClick={() => setIsRecordPaymentOpen(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> + Record Payment
+                </button>
+              )}
+            </div>
+
+            {/* Payments Table */}
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              {invoicePayments.length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <CreditCard className="w-8 h-8 text-slate-300 mx-auto" />
+                  <div>
+                    <p className="text-xs font-bold text-slate-700">No Payments Recorded Yet</p>
+                    <p className="text-[11px] text-slate-400">Click "+ Record Payment" above to collect payments or apply client credit.</p>
+                  </div>
+                </div>
+              ) : (
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead className="bg-slate-50 text-slate-500 border-b border-slate-200 font-bold uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Method & Type</th>
+                      <th className="py-3 px-4">Receipt / Ref</th>
+                      <th className="py-3 px-4 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800">
+                    {invoicePayments.map((pmt) => (
+                      <tr key={pmt.id} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-900">{pmt.paymentDate}</td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-800 text-[10px] font-bold uppercase inline-block mb-0.5">
+                            {pmt.method.replace("_", " ")}
+                          </span>
+                          <span className="text-[11px] text-slate-400 block">{pmt.paymentType}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          {pmt.receiptFileName ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                              <Receipt className="w-3 h-3" /> {pmt.receiptFileName}
+                            </span>
+                          ) : pmt.receiptNumber ? (
+                            <span className="text-slate-600 font-mono text-[11px]">{pmt.receiptNumber}</span>
+                          ) : (
+                            <span className="text-slate-400 italic">No receipt attached</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-right font-mono font-bold text-emerald-600 text-sm">
+                          +${pmt.amount.toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "activity" && (
           <div className="space-y-6">
             <div>
               <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3">
-                Combined Activity & Payment History
+                Combined Activity & Lifecycle Timeline
               </h4>
               <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-4">
                 {/* Created Event */}
@@ -542,7 +630,7 @@ export default function InvoiceDetailDrawer({
                         </span>
                       </div>
                     </div>
-                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 font-mono">
                       +${pmt.amount.toFixed(2)}
                     </span>
                   </div>
@@ -685,6 +773,17 @@ export default function InvoiceDetailDrawer({
         )}
       </CustomSideDrawer>
 
+      {/* Embedded Record Payment Modal */}
+      {isRecordPaymentOpen && (
+        <RecordPaymentModal
+          isOpen={isRecordPaymentOpen}
+          onClose={() => setIsRecordPaymentOpen(false)}
+          clientId={invoice.clientId}
+          clientName={invoice.clientName}
+          preSelectedInvoiceId={invoice.id}
+        />
+      )}
+
       {/* Upload Receipt Modal */}
       {isUploadReceiptOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
@@ -707,7 +806,7 @@ export default function InvoiceDetailDrawer({
               <label className="block text-xs font-bold text-slate-700">Receipt File Name / Title</label>
               <input
                 type="text"
-                placeholder="e.g. payment_receipt_chase_08142026.pdf"
+                placeholder="e.g. payment_receipt_08142026.pdf"
                 value={uploadReceiptFileName}
                 onChange={(e) => setUploadReceiptFileName(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -732,16 +831,6 @@ export default function InvoiceDetailDrawer({
             </div>
           </div>
         </div>
-      )}
-
-      {isRecordPaymentOpen && (
-        <RecordPaymentModal
-          isOpen={isRecordPaymentOpen}
-          onClose={() => setIsRecordPaymentOpen(false)}
-          clientId={invoice.clientId}
-          clientName={invoice.clientName}
-          preSelectedInvoiceId={invoice.id}
-        />
       )}
     </>
   );

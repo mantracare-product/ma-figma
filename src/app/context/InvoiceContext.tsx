@@ -17,6 +17,10 @@ interface CreateInvoiceOptions {
 interface InvoiceContextType {
   invoices: ClientInvoice[];
   payments: Payment[];
+  clientCredits: Record<string, number>;
+  getClientCredit: (clientId: string) => number;
+  addClientCredit: (clientId: string, amount: number, note?: string) => void;
+  useClientCredit: (clientId: string, amount: number, invoiceId?: string) => void;
   fieldRules: InvoiceFieldRulesMap;
   updateFieldRule: (rule: InvoiceFieldRule) => void;
   createInvoiceFromAppointment: (
@@ -476,6 +480,20 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return DEFAULT_FIELD_RULES;
   });
 
+  const [clientCredits, setClientCredits] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem("mantra_client_credits_v1");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {}
+    }
+    return {
+      "c-1": 60,
+      "c-2": 35,
+      "c-4": 20,
+    };
+  });
+
   const [payments, setPayments] = useState<Payment[]>(() => {
     const saved = localStorage.getItem("mantra_payments_v1");
     if (saved) {
@@ -493,7 +511,35 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         paymentType: "self_pay",
         paymentDate: "2026-05-14",
         note: "Initial payment on file",
+        receiptNumber: "REC-1040-01",
+        receiptFileName: "Receipt_INV_1040.pdf",
         createdAt: "2026-05-14T14:30:00Z",
+      },
+      {
+        id: "pmt-init-1045",
+        invoiceId: "INV-CL-1045",
+        clientId: "c-1",
+        amount: 102.6,
+        method: "cash",
+        paymentType: "self_pay",
+        paymentDate: "2026-07-22",
+        note: "Cash settlement at frontdesk",
+        receiptNumber: "REC-1045-88",
+        receiptFileName: "Receipt_INV_1045.pdf",
+        createdAt: "2026-07-22T09:15:00Z",
+      },
+      {
+        id: "pmt-init-1046",
+        invoiceId: "INV-CL-1046",
+        clientId: "c-2",
+        amount: 145.8,
+        method: "bank_transfer",
+        paymentType: "self_pay",
+        paymentDate: "2026-06-16",
+        note: "Wire transfer wire-8920",
+        receiptNumber: "REC-1046-12",
+        receiptFileName: "Wire_Receipt_1046.pdf",
+        createdAt: "2026-06-16T16:00:00Z",
       },
     ];
   });
@@ -517,12 +563,64 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [payments]);
 
   useEffect(() => {
+    localStorage.setItem("mantra_client_credits_v1", JSON.stringify(clientCredits));
+  }, [clientCredits]);
+
+  useEffect(() => {
     localStorage.setItem("mantra_invoice_field_rules_v1", JSON.stringify(fieldRules));
   }, [fieldRules]);
 
   useEffect(() => {
     localStorage.setItem("mantra_reports_v1", JSON.stringify(reports));
   }, [reports]);
+
+  const getClientCredit = (clientId: string): number => {
+    return clientCredits[clientId] || 0;
+  };
+
+  const addClientCredit = (clientId: string, amount: number, note?: string) => {
+    if (!clientId || amount <= 0) return;
+    setClientCredits((prev) => {
+      const current = prev[clientId] || 0;
+      const updated = parseFloat((current + amount).toFixed(2));
+      return { ...prev, [clientId]: updated };
+    });
+
+    addActivityEntry({
+      clientId,
+      processId: "billing",
+      processName: "Billing & Invoicing",
+      type: "field_update",
+      status: "success",
+      refId: "CREDIT-ACC",
+      details: {
+        primary: `Account credit added: +$${amount.toFixed(2)}`,
+        secondary: note ? `Reason: ${note}` : `Unallocated payment credited to client account balance`,
+      },
+    });
+  };
+
+  const useClientCredit = (clientId: string, amount: number, invoiceId?: string) => {
+    if (!clientId || amount <= 0) return;
+    setClientCredits((prev) => {
+      const current = prev[clientId] || 0;
+      const updated = Math.max(0, parseFloat((current - amount).toFixed(2)));
+      return { ...prev, [clientId]: updated };
+    });
+
+    addActivityEntry({
+      clientId,
+      processId: "billing",
+      processName: "Billing & Invoicing",
+      type: "field_update",
+      status: "success",
+      refId: invoiceId || "CREDIT-ACC",
+      details: {
+        primary: `Account credit applied: -$${amount.toFixed(2)}`,
+        secondary: invoiceId ? `Applied towards Invoice ${invoiceId}` : `Applied from client credit balance`,
+      },
+    });
+  };
 
   const updateFieldRule = (rule: InvoiceFieldRule) => {
     setFieldRules((prev) => ({ ...prev, [rule.fieldKey]: rule }));
@@ -705,12 +803,66 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setPayments((prev) => [...createdPayments, ...prev]);
 
+    createdPayments.forEach((p) => {
+      // If payment had applied credit, deduct it from client account
+      if (p.appliedCreditAmount && p.appliedCreditAmount > 0) {
+        useClientCredit(p.clientId, p.appliedCreditAmount, p.invoiceId !== "UNLINKED" ? p.invoiceId : undefined);
+      }
+
+      // If this is an unlinked payment / deposit to account
+      if (p.invoiceId === "UNLINKED" || p.isUnlinked) {
+        addClientCredit(p.clientId, p.amount, p.note || "Unlinked advance payment");
+        addActivityEntry({
+          clientId: p.clientId,
+          processId: "billing",
+          processName: "Billing & Invoicing",
+          type: "field_update",
+          status: "success",
+          refId: "PAYMENT-UNLINKED",
+          details: {
+            primary: `Unlinked payment of $${p.amount.toFixed(2)} received`,
+            secondary: `Method: ${p.method.replace("_", " ").toUpperCase()} · Added to client credit balance${p.receiptNumber ? ` · Ref: ${p.receiptNumber}` : ""}`,
+          },
+        });
+      }
+
+      // If a receipt file was uploaded, log to documents & activity
+      if (p.receiptFileName) {
+        addActivityEntry({
+          clientId: p.clientId,
+          processId: "billing",
+          processName: "Billing & Invoicing",
+          type: "receipt_uploaded",
+          status: "success",
+          refId: p.invoiceId !== "UNLINKED" ? p.invoiceId : "UNLINKED",
+          details: {
+            primary: `Receipt uploaded: ${p.receiptFileName}`,
+            secondary: `Payment receipt (${p.receiptNumber || p.method.replace("_", " ").toUpperCase()}) · $${p.amount.toFixed(2)}`,
+          },
+        });
+      }
+    });
+
     setInvoices((prev) =>
       prev.map((inv) => {
-        const matchPmt = createdPayments.find((p) => p.invoiceId === inv.id);
-        if (!matchPmt) return inv;
+        const matchPmts = createdPayments.filter((p) => p.invoiceId === inv.id);
+        if (matchPmts.length === 0) return inv;
 
-        const newAmountPaid = (inv.amountPaid || 0) + matchPmt.amount;
+        const totalNewPaid = matchPmts.reduce((sum, p) => sum + p.amount, 0);
+        const remainingDue = Math.max(0, inv.total - (inv.amountPaid || 0));
+        
+        // Check for overpayment
+        let excessCredit = 0;
+        let effectivePaymentToInvoice = totalNewPaid;
+        if (totalNewPaid > remainingDue) {
+          excessCredit = parseFloat((totalNewPaid - remainingDue).toFixed(2));
+          effectivePaymentToInvoice = remainingDue;
+          if (excessCredit > 0 && inv.clientId) {
+            addClientCredit(inv.clientId, excessCredit, `Overpayment on Invoice ${inv.id}`);
+          }
+        }
+
+        const newAmountPaid = (inv.amountPaid || 0) + effectivePaymentToInvoice;
         const isPaidFull = newAmountPaid >= inv.total;
         const newStatus: InvoiceStatus = isPaidFull
           ? "paid"
@@ -718,27 +870,33 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ? "partial"
           : inv.status;
 
+        const lastPmt = matchPmts[matchPmts.length - 1];
+
         const updated: ClientInvoice = {
           ...inv,
           amountPaid: newAmountPaid,
           status: newStatus,
-          paymentType: matchPmt.paymentType,
+          paymentType: lastPmt.paymentType,
           paidAt: isPaidFull ? now : inv.paidAt,
-          paymentMode: matchPmt.method === "card_on_file"
+          paymentMode: lastPmt.method === "card_on_file"
             ? "Card on File"
-            : matchPmt.method === "cash"
+            : lastPmt.method === "cash"
             ? "Cash"
-            : matchPmt.method === "check"
+            : lastPmt.method === "check"
             ? "Check"
-            : matchPmt.method === "external_terminal"
+            : lastPmt.method === "external_terminal"
             ? "External Terminal"
-            : matchPmt.method === "payment_link"
+            : lastPmt.method === "bank_transfer"
+            ? "Bank Transfer"
+            : lastPmt.method === "credit_balance"
+            ? "Client Credit Balance"
+            : lastPmt.method === "payment_link"
             ? "Payment Link"
             : inv.paymentMode,
         };
 
         if (updated.clientId) {
-          const methodFormatted = matchPmt.method.replace("_", " ");
+          const methodFormatted = lastPmt.method.replace("_", " ").toUpperCase();
           addActivityEntry({
             clientId: updated.clientId,
             processId: "billing",
@@ -747,8 +905,8 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
             status: "success",
             refId: updated.id,
             details: {
-              primary: `Invoice ${updated.id}: $${matchPmt.amount.toFixed(2)} recorded via ${methodFormatted}`,
-              secondary: `Status: ${newStatus.toUpperCase()} · Remaining: $${Math.max(0, updated.total - newAmountPaid).toFixed(2)}`,
+              primary: `Invoice ${updated.id}: $${totalNewPaid.toFixed(2)} recorded via ${methodFormatted}`,
+              secondary: `Status: ${newStatus.toUpperCase()} · Remaining: $${Math.max(0, updated.total - newAmountPaid).toFixed(2)}${excessCredit > 0 ? ` (+$${excessCredit.toFixed(2)} credited to client balance)` : ""}`,
             },
           });
         }
@@ -1049,6 +1207,10 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         invoices,
         payments,
+        clientCredits,
+        getClientCredit,
+        addClientCredit,
+        useClientCredit,
         fieldRules,
         updateFieldRule,
         createInvoiceFromAppointment,

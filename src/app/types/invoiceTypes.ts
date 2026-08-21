@@ -43,13 +43,21 @@ export interface ClientInvoice {
 
 export interface Payment {
   id: string;
-  invoiceId: string;
+  invoiceId: string; // "UNLINKED" or invoice id
   clientId: string;
   amount: number;
-  method: "card_on_file" | "cash" | "check" | "external_terminal" | "payment_link";
+  method: "card_on_file" | "cash" | "check" | "external_terminal" | "payment_link" | "bank_transfer" | "credit_balance";
   paymentType: "self_pay" | "insurance" | "write_off";
   paymentDate: string;   // ISO date
   note?: string;
+  receiptNumber?: string;
+  receiptFileName?: string;
+  receiptUrl?: string;
+  appliedCreditAmount?: number;
+  isUnlinked?: boolean;
+  insurancePayer?: string;
+  claimRefNumber?: string;
+  writeOffReason?: string;
   createdAt: string;
 }
 

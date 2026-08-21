@@ -238,11 +238,8 @@ export default function Invoices() {
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
             <button
               onClick={() => {
-                if (invoices.length > 0) {
-                  setPaymentModalInvoice(invoices.find((i) => i.status !== "paid" && i.status !== "void") || invoices[0]);
-                } else {
-                  toast.info("No active invoices available for recording payment");
-                }
+                const defaultInvoice = invoices.find((i) => i.status !== "paid" && i.status !== "void") || invoices[0] || ({ clientId: "c-1", clientName: "James Wilson" } as any);
+                setPaymentModalInvoice(defaultInvoice);
               }}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
