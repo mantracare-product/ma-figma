@@ -1,5 +1,4 @@
 import { ReactNode } from "react";
-import OrganizationSwitcher from "./OrganizationSwitcher";
 
 interface PageHeaderProps {
   title: string;
@@ -38,7 +37,6 @@ export default function PageHeader({
       <div className="flex flex-wrap items-center gap-3">
         {actions}
         {children}
-        <OrganizationSwitcher />
       </div>
     </div>
   );
