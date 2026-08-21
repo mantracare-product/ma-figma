@@ -55,7 +55,7 @@ export default function RecordPaymentModal({
   const { invoices, recordPayment, sendInvoice, getPaymentsByClient, getClientCredit, addClientCredit } = useInvoices();
   const clientsList = getClientList();
   const [selectedClientId, setSelectedClientId] = useState<string>(
-    clientId || clientsList[0]?.id || "c-1"
+    clientId || ""
   );
 
   const availableClients = [...clientsList];
@@ -66,22 +66,25 @@ export default function RecordPaymentModal({
     });
   }
 
-  const activeClient =
-    availableClients.find((c) => c.id === selectedClientId) || {
-      id: selectedClientId,
-      name: clientName || "Client",
-    };
+  const activeClient = selectedClientId
+    ? availableClients.find((c) => c.id === selectedClientId) || {
+        id: selectedClientId,
+        name: clientName || "Client",
+      }
+    : null;
 
   // Find all unpaid or partially paid invoices for this client
-  const clientOutstandingInvoices = invoices.filter(
-    (inv) =>
-      inv.clientId === selectedClientId &&
-      inv.status !== "paid" &&
-      inv.status !== "void" &&
-      inv.total - (inv.amountPaid || 0) > 0
-  );
+  const clientOutstandingInvoices = selectedClientId
+    ? invoices.filter(
+        (inv) =>
+          inv.clientId === selectedClientId &&
+          inv.status !== "paid" &&
+          inv.status !== "void" &&
+          inv.total - (inv.amountPaid || 0) > 0
+      )
+    : [];
 
-  const availableCredit = getClientCredit(selectedClientId);
+  const availableCredit = selectedClientId ? getClientCredit(selectedClientId) : 0;
 
   // Unlinked / Deposit mode state
   const [isUnlinkedMode, setIsUnlinkedMode] = useState<boolean>(false);
@@ -127,14 +130,19 @@ export default function RecordPaymentModal({
 
   useEffect(() => {
     if (isOpen) {
-      if (clientId) {
-        setSelectedClientId(clientId);
-      }
+      setSelectedClientId(clientId || "");
     }
   }, [isOpen, clientId]);
 
   useEffect(() => {
     if (isOpen) {
+      if (!selectedClientId) {
+        setSelectedInvoiceIds(new Set());
+        setEnteredAmounts({});
+        setIsUnlinkedMode(false);
+        return;
+      }
+
       const hasOpenBills = clientOutstandingInvoices.length > 0;
       setIsUnlinkedMode(!hasOpenBills);
 
@@ -354,6 +362,7 @@ export default function RecordPaymentModal({
               onChange={(e) => setSelectedClientId(e.target.value)}
               className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer pr-1"
             >
+              <option value="">-- Select Client --</option>
               {availableClients.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -390,14 +399,17 @@ export default function RecordPaymentModal({
             <button
               type="button"
               onClick={handleSave}
+              disabled={!selectedClientId}
               className={`px-6 py-2.5 text-white rounded-xl font-semibold text-xs transition-all shadow-sm flex items-center gap-1.5 ${
-                paymentType === "write_off"
-                  ? "bg-purple-600 hover:bg-purple-700"
+                !selectedClientId
+                  ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                  : paymentType === "write_off"
+                  ? "bg-purple-600 hover:bg-purple-700 cursor-pointer"
                   : mode === "send_link"
-                  ? "bg-blue-600 hover:bg-blue-700"
+                  ? "bg-blue-600 hover:bg-blue-700 cursor-pointer"
                   : isUnlinkedMode
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  ? "bg-indigo-600 hover:bg-indigo-700 cursor-pointer"
+                  : "bg-emerald-600 hover:bg-emerald-700 cursor-pointer"
               }`}
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
@@ -427,6 +439,35 @@ export default function RecordPaymentModal({
         </div>
       }
     >
+      {!selectedClientId ? (
+        <div className="p-12 text-center bg-white border border-dashed border-slate-300 rounded-2xl space-y-4 shadow-xs my-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center mx-auto">
+            <User className="w-7 h-7" />
+          </div>
+          <div className="space-y-1">
+            <h4 className="text-base font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+              Select a Client to Begin
+            </h4>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Please choose a client from the dropdown menu in the top right to view open invoices, check account credit balance, or record an advance payment.
+            </p>
+          </div>
+          <div className="pt-2">
+            <select
+              value={selectedClientId}
+              onChange={(e) => setSelectedClientId(e.target.value)}
+              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer shadow-xs"
+            >
+              <option value="">-- Choose Client --</option>
+              {availableClients.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      ) : (
       <div className="space-y-6 text-xs text-slate-700">
         {/* Unlinked / Open Invoices Mode Switcher */}
         <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-2xl p-3.5">
@@ -1039,6 +1080,7 @@ export default function RecordPaymentModal({
           )}
         </div>
       </div>
+      )}
     </CustomSideDrawer>
   );
 }

@@ -39,6 +39,7 @@ export default function Invoices() {
   const [clientFilter, setClientFilter] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban">("list");
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<ClientInvoice | null>(null);
+  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   
   // Selection state (matching Deals.tsx)
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
@@ -238,8 +239,8 @@ export default function Invoices() {
             <HowItWorksButton onClick={() => setShowHelp(true)} label="How Invoices Works" />
             <button
               onClick={() => {
-                const defaultInvoice = invoices.find((i) => i.status !== "paid" && i.status !== "void") || invoices[0] || ({ clientId: "c-1", clientName: "James Wilson" } as any);
-                setPaymentModalInvoice(defaultInvoice);
+                setPaymentModalInvoice(null);
+                setIsRecordPaymentOpen(true);
               }}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-bold text-xs transition-all flex items-center gap-2 shadow-xs cursor-pointer"
               style={{ fontFamily: "Outfit, sans-serif" }}
@@ -509,6 +510,7 @@ export default function Invoices() {
                                     onClick={() => {
                                       setOpenRowMenuId(null);
                                       setPaymentModalInvoice(inv);
+                                      setIsRecordPaymentOpen(true);
                                     }}
                                     className="w-full flex items-center gap-2.5 px-3 text-sm text-emerald-700 font-bold transition-colors hover:bg-emerald-50 border-b border-slate-100"
                                     style={{ height: "36px", fontSize: "13px" }}
@@ -900,6 +902,7 @@ export default function Invoices() {
                                              onClick={() => {
                                                setOpenCardMenuId(null);
                                                setPaymentModalInvoice(inv);
+                                               setIsRecordPaymentOpen(true);
                                              }}
                                              className="w-full text-left px-3 py-1.5 text-xs text-emerald-700 font-bold hover:bg-emerald-50 flex items-center gap-2 transition-colors border-b border-gray-100"
                                            >
@@ -1029,13 +1032,16 @@ export default function Invoices() {
         ]}
         guideUrl="/guide/invoices"
       />
-      {paymentModalInvoice && (
+      {isRecordPaymentOpen && (
         <RecordPaymentModal
-          isOpen={!!paymentModalInvoice}
-          onClose={() => setPaymentModalInvoice(null)}
-          clientId={paymentModalInvoice.clientId}
-          clientName={paymentModalInvoice.clientName}
-          preSelectedInvoiceId={paymentModalInvoice.id}
+          isOpen={isRecordPaymentOpen}
+          onClose={() => {
+            setIsRecordPaymentOpen(false);
+            setPaymentModalInvoice(null);
+          }}
+          clientId={paymentModalInvoice?.clientId || ""}
+          clientName={paymentModalInvoice?.clientName || ""}
+          preSelectedInvoiceId={paymentModalInvoice?.id || null}
         />
       )}
     </div>
