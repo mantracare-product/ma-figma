@@ -29,6 +29,7 @@ import {
   Wallet,
   Receipt,
   Sparkles,
+  X,
 } from "lucide-react";
 import { Link } from "react-router";
 import InvoiceProgressBar from "./InvoiceProgressBar";
@@ -61,8 +62,12 @@ export default function InvoiceDetailDrawer({
   const [showSendOptions, setShowSendOptions] = useState(false);
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [isDocMenuOpen, setIsDocMenuOpen] = useState(false);
-  const [isUploadReceiptOpen, setIsUploadReceiptOpen] = useState(false);
-  const [uploadReceiptFileName, setUploadReceiptFileName] = useState("");
+  
+  // Real file uploader state
+  const [isUploadDocOpen, setIsUploadDocOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadDocTitle, setUploadDocTitle] = useState("");
+  const [uploadDocCategory, setUploadDocCategory] = useState<string>("Receipt");
 
   // Live activity log state for documents & activity tab
   const [activityEntries, setActivityEntries] = useState<any[]>([]);
@@ -128,23 +133,33 @@ export default function InvoiceDetailDrawer({
     setIsDocMenuOpen(false);
   };
 
-  const handleUploadReceiptSubmit = () => {
-    const fileName = uploadReceiptFileName.trim() || `Receipt_${invoice.id}_${Date.now()}.pdf`;
+  const handleUploadSubmit = () => {
+    if (!uploadFile && !uploadDocTitle.trim()) {
+      toast.error("Please select a file to upload.");
+      return;
+    }
+    const fileName = uploadFile ? uploadFile.name : `${uploadDocTitle.trim()}.pdf`;
+    const primaryTitle = uploadDocTitle.trim() || fileName;
+    const isReceipt = uploadDocCategory.toLowerCase().includes("receipt");
+
     addActivityEntry({
       clientId: invoice.clientId,
       processId: "billing",
       processName: "Billing & Invoicing",
-      type: "receipt_uploaded",
+      type: isReceipt ? "receipt_uploaded" : "document_generated",
       status: "success",
       refId: invoice.id,
       details: {
-        primary: `Receipt uploaded: ${fileName}`,
-        secondary: `Uploaded on ${new Date().toLocaleDateString()} · ${invoice.id}`,
+        primary: `${uploadDocCategory}: ${primaryTitle}`,
+        secondary: `File: ${fileName}${uploadFile ? ` (${(uploadFile.size / 1024).toFixed(1)} KB)` : ""} · Uploaded on ${new Date().toLocaleDateString()}`,
       },
     });
-    toast.success(`Receipt "${fileName}" uploaded successfully!`);
-    setUploadReceiptFileName("");
-    setIsUploadReceiptOpen(false);
+
+    toast.success(`Document "${primaryTitle}" uploaded successfully!`);
+    setUploadFile(null);
+    setUploadDocTitle("");
+    setUploadDocCategory("Receipt");
+    setIsUploadDocOpen(false);
   };
 
   const invoicePayments = getPaymentsByInvoice(invoice.id);
@@ -701,10 +716,10 @@ export default function InvoiceDetailDrawer({
 
                 <button
                   type="button"
-                  onClick={() => setIsUploadReceiptOpen(true)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5"
+                  onClick={() => setIsUploadDocOpen(true)}
+                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                 >
-                  <Upload className="w-3.5 h-3.5" /> + Upload Receipt
+                  <Upload className="w-3.5 h-3.5" /> + Upload
                 </button>
               </div>
             </div>
@@ -714,9 +729,9 @@ export default function InvoiceDetailDrawer({
               {invoiceDocEntries.length === 0 ? (
                 <div className="p-8 text-center space-y-2">
                   <FileText className="w-8 h-8 text-slate-300 mx-auto" />
-                  <p className="text-xs font-bold text-slate-700">No Documents or Receipts Logged</p>
+                  <p className="text-xs font-bold text-slate-700">No Documents Logged</p>
                   <p className="text-[11px] text-slate-400">
-                    Use "Generate Document" or "+ Upload Receipt" above to attach documents to this invoice.
+                    Use "Generate Document" or "+ Upload" above to attach documents or receipts to this invoice.
                   </p>
                 </div>
               ) : (
@@ -784,49 +799,152 @@ export default function InvoiceDetailDrawer({
         />
       )}
 
-      {/* Upload Receipt Modal */}
-      {isUploadReceiptOpen && (
+      {/* Upload Document / File Modal with Real File Uploader */}
+      {isUploadDocOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Upload className="w-4 h-4 text-emerald-600" /> Upload Receipt
-              </h3>
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-100 flex items-center justify-center">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Upload Document
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Attach files, payment receipts, or insurance proofs to Invoice <strong>{invoice.id}</strong>
+                  </p>
+                </div>
+              </div>
               <button
-                onClick={() => setIsUploadReceiptOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-sm font-bold"
+                onClick={() => {
+                  setUploadFile(null);
+                  setUploadDocTitle("");
+                  setIsUploadDocOpen(false);
+                }}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition-colors"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
-            <p className="text-xs text-slate-500">
-              Attach an official receipt or proof of payment for Invoice <strong>{invoice.id}</strong>.
-            </p>
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">Receipt File Name / Title</label>
-              <input
-                type="text"
-                placeholder="e.g. payment_receipt_08142026.pdf"
-                value={uploadReceiptFileName}
-                onChange={(e) => setUploadReceiptFileName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                autoFocus
-              />
+
+            <div className="space-y-4 text-xs">
+              {/* Document Category / Type Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Document Type *
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {["Receipt", "Invoice Copy", "Insurance / EOB", "Contract", "Other"].map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setUploadDocCategory(cat)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                        uploadDocCategory === cat
+                          ? "bg-emerald-50 text-emerald-900 border-emerald-500 font-bold shadow-2xs"
+                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Drag & Drop / Click to Upload Box */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Select File *
+                </label>
+
+                {!uploadFile ? (
+                  <label className="flex flex-col items-center justify-center p-6 bg-slate-50 hover:bg-slate-100/80 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl cursor-pointer transition-all group">
+                    <div className="w-12 h-12 rounded-2xl bg-white border border-slate-200 text-slate-400 group-hover:text-emerald-600 flex items-center justify-center mb-2 shadow-2xs transition-colors">
+                      <Upload className="w-6 h-6" />
+                    </div>
+                    <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-700">
+                      Click or drag file here to upload
+                    </span>
+                    <span className="text-[11px] text-slate-400 mt-0.5">
+                      Supports PDF, PNG, JPG, DOCX, CSV up to 25MB
+                    </span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          const f = e.target.files[0];
+                          setUploadFile(f);
+                          if (!uploadDocTitle) {
+                            setUploadDocTitle(f.name.replace(/\.[^/.]+$/, ""));
+                          }
+                        }
+                      }}
+                    />
+                  </label>
+                ) : (
+                  <div className="p-4 bg-emerald-50/60 border border-emerald-200 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-emerald-200 text-emerald-600 flex items-center justify-center shadow-2xs font-bold">
+                        <FileCheck className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-slate-900 block truncate max-w-[260px]">
+                          {uploadFile.name}
+                        </span>
+                        <span className="text-[11px] text-emerald-700 font-medium">
+                          {(uploadFile.size / 1024).toFixed(1)} KB · Ready to upload
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setUploadFile(null)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-white transition-colors"
+                      title="Remove file"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Document Title / Note */}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Document Title (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Settlement receipt #8942"
+                  value={uploadDocTitle}
+                  onChange={(e) => setUploadDocTitle(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                />
+              </div>
             </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
               <button
                 type="button"
-                onClick={() => setIsUploadReceiptOpen(false)}
-                className="px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold"
+                onClick={() => {
+                  setUploadFile(null);
+                  setUploadDocTitle("");
+                  setIsUploadDocOpen(false);
+                }}
+                className="px-4 py-2.5 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-semibold"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleUploadReceiptSubmit}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold"
+                onClick={handleUploadSubmit}
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
               >
-                Save Receipt
+                <Upload className="w-4 h-4" /> Upload Document
               </button>
             </div>
           </div>
