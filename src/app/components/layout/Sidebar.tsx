@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { useAuth } from "../../context/AuthContext";
 import { useSidebar } from "../../context/SidebarContext";
 import { useOrganization } from "../../context/OrganizationContext";
-import logo from "../../../imports/ma_logo-1.png";
+import logo from "../../../imports/ma_logo.png";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -105,44 +105,33 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         } bg-white border-r border-slate-200/80 shadow-xs flex flex-col justify-between flex-shrink-0 relative select-none`}
       >
-        {/* Floating Sidebar Toggle Button (Matching User Screenshot) */}
+        {/* Floating Sidebar Toggle Button (Premium Glassmorphic Design) */}
         <button
           type="button"
           onClick={toggleCollapse}
-          className="hidden lg:flex absolute top-5 -right-3.5 w-7 h-7 rounded-full bg-white border border-slate-900 shadow-md hover:shadow-lg items-center justify-center text-slate-900 hover:bg-slate-50 transition-all duration-200 z-50 cursor-pointer active:scale-95"
+          className="hidden lg:flex absolute top-5 -right-3 w-6 h-6 rounded-full bg-white/90 backdrop-blur-md border border-slate-200/90 shadow-xs hover:shadow-md hover:bg-white hover:border-slate-300 items-center justify-center text-slate-500 hover:text-slate-800 transition-all duration-200 z-50 cursor-pointer active:scale-90"
           title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
         >
           {collapsed ? (
-            <PanelLeftOpen className="w-3.5 h-3.5 text-slate-900" />
+            <PanelLeftOpen className="w-3 h-3" />
           ) : (
-            <PanelLeftClose className="w-3.5 h-3.5 text-slate-900" />
+            <PanelLeftClose className="w-3 h-3" />
           )}
         </button>
 
         {/* ── Top Area ── */}
         <div className="p-4 flex flex-col gap-4 overflow-y-auto scrollbar-hide flex-1">
           {/* Logo Header */}
-          <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between"}`}>
+          <div className={`flex items-center ${collapsed ? "justify-center" : "justify-start px-1"}`}>
             <Link to="/" onClick={onClose} className="flex items-center gap-2">
               {collapsed ? (
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[#1456f0]">
-                  <img src={logo} alt="MantraAssist" className="w-7 h-7 object-contain" />
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center">
+                  <img src={logo} alt="Logo" className="w-7 h-7 object-contain" />
                 </div>
               ) : (
-                <div className="flex items-center">
-                  <span
-                    className="text-2xl font-extrabold tracking-tight text-[#0f172a]"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <span className="text-[#1456f0]">M</span>antra
-                  </span>
-                  <span
-                    className="text-2xl font-light tracking-tight text-[#0284c7]"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    Assist
-                  </span>
+                <div className="flex items-center py-0.5">
+                  <img src={logo} alt="Logo" className="h-8 w-auto max-w-[175px] object-contain" />
                 </div>
               )}
             </Link>
