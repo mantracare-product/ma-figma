@@ -24,6 +24,7 @@ import {
   Sliders,
   Check,
   Plus,
+  Stethoscope,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -63,9 +64,10 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     setShowOrgDropdown(false);
   };
 
-  // Primary 6 navigation items matching reference screenshot
+  // Primary navigation items matching reference screenshot
   const primaryLinks = [
     { path: "/", label: "Overview", icon: LayoutGrid },
+    { path: "/scribe", label: "AI Scribe", icon: Stethoscope, badge: "Live" },
     { path: "/clients", label: "Clients", icon: Users },
     { path: "/deals", label: "Processes", icon: RefreshCw },
     { path: "/call-logs", label: "Call Logs", icon: Phone },
@@ -255,7 +257,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                       active ? "text-white" : "text-slate-500"
                     }`}
                   />
-                  {!collapsed && <span className="truncate">{link.label}</span>}
+                  {!collapsed && (
+                    <div className="flex items-center justify-between flex-1 min-w-0">
+                      <span className="truncate">{link.label}</span>
+                      {"badge" in link && (
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                          active ? "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                        }`}>
+                          {link.badge}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </Link>
               );
 

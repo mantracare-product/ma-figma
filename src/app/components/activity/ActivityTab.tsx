@@ -32,7 +32,7 @@ export type ActivityType =
   | "process_entry" | "whatsapp" | "sms" | "email" | "webhook_trigger"
   | "field_update" | "appointment_booked" | "call" | "outbound_call"
   | "inbound_call" | "failed_call" | "stage_update" | "stage_change"
-  | "process_completed" | "website_message" | "website" | "form_submitted";
+  | "process_completed" | "website_message" | "website" | "form_submitted" | "note";
 
 export interface ActivityLogEntry {
   id: string;
@@ -83,7 +83,7 @@ const ACTIVITY_ICON_BG: Record<string, string> = {
   sms: "#1F2937", email: "#1F2937", stage_update: "#1F2937", stage_change: "#1F2937",
   webhook_trigger: "#1F2937", appointment_booked: "#1F2937", field_update: "#1F2937",
   process_completed: "#1F2937", website_message: "#1F2937", website: "#1F2937",
-  form_submitted: "#1F2937",
+  form_submitted: "#1F2937", note: "#1F2937",
 };
 
 const HEADING_BY_TYPE: Record<string, string> = {
@@ -94,7 +94,7 @@ const HEADING_BY_TYPE: Record<string, string> = {
   webhook_trigger: "Webhook Triggered", field_update: "Field Updated",
   appointment_booked: "Appointment Booked", process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
-  form_submitted: "Form Submitted",
+  form_submitted: "Form Submitted", note: "Note",
 };
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -156,6 +156,7 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "appointment_booked": return <Calendar className={cls} />;
     case "field_update":      return <Pencil className={cls} />;
     case "form_submitted":    return <FileText className={cls} />;
+    case "note":              return <FileText className={cls} />;
     case "website_message":
     case "website":           return <Globe className={cls} />;
     default:                  return <Pencil className={cls} />;

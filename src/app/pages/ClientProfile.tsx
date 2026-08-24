@@ -4,7 +4,7 @@ import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
-  Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers,
+  Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -33,6 +33,7 @@ import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
+import AIScribeModal from "../components/scribe/AIScribeModal";
 
 import DrawerShell from "../components/ui/DrawerShell";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
@@ -534,6 +535,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
   const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>("all");
+  const [showScribeModal, setShowScribeModal] = useState(false);
 
 
   // All state variables verbatim from Clients.tsx drawer
@@ -1241,12 +1243,22 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 {client.status}
               </span>
             </div>
-            <button
-              onClick={handleClose}
-              className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
-            >
-              <X className="w-5 h-5" style={{ color: "#6B7280" }} />
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                onClick={() => setShowScribeModal(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold shadow-xs hover:opacity-95 transition-all cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Mic className="w-3.5 h-3.5 text-[#60a5fa]" />
+                <span>AI Scribe</span>
+              </button>
+              <button
+                onClick={handleClose}
+                className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
+              >
+                <X className="w-5 h-5" style={{ color: "#6B7280" }} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2681,6 +2693,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             onSelectCallId={(targetId) => {
               setSelectedCallId(targetId);
             }}
+          />
+
+          {/* AI Scribe Modal */}
+          <AIScribeModal
+            isOpen={showScribeModal}
+            onClose={() => setShowScribeModal(false)}
+            clientId={String(client.id)}
+            clientName={client.name}
+            patientAge={54}
+            patientGender="Male"
           />
         </div>
       </div>

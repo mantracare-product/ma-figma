@@ -30,6 +30,7 @@ import GuidePageRoute from "./pages/GuidePageRoute";
 import ReferAndEarn from "./pages/ReferAndEarn";
 import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
+import AIScribeConsole from "./pages/AIScribeConsole";
 
 export const router = createBrowserRouter([
   {
@@ -48,6 +49,7 @@ export const router = createBrowserRouter([
         Component: MainLayout,
         children: [
           { index: true, Component: Overview },
+          { path: "scribe", Component: AIScribeConsole },
           {
             path: "clients",
             Component: Clients,

@@ -96,6 +96,12 @@ export interface FieldUpdateActivityEntry extends ActivityBase {
   newValue: string;
 }
 
+export interface NoteActivityEntry extends ActivityBase {
+  type: "note";
+  noteText?: string;
+  category?: string;
+}
+
 export interface SystemActivityEntry extends ActivityBase {
   type: "process_entry" | "webhook_trigger" | "process_completed" | "website_message" | "website";
   status?: string;
@@ -114,6 +120,7 @@ export type ActivityEntry =
   | FormSubmittedActivityEntry
   | StageActivityEntry
   | FieldUpdateActivityEntry
+  | NoteActivityEntry
   | SystemActivityEntry;
 
 /**
@@ -148,6 +155,9 @@ export function isStageEntry(e: ActivityEntry): e is StageActivityEntry {
 }
 export function isFieldUpdateEntry(e: ActivityEntry): e is FieldUpdateActivityEntry {
   return e.type === "field_update";
+}
+export function isNoteEntry(e: ActivityEntry): e is NoteActivityEntry {
+  return e.type === "note";
 }
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────

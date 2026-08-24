@@ -1,0 +1,1859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MantraAssist Intelligence — Comprehensive Design System & Operations Testbed</title>
+  
+  <!-- Typography System (§1): Outfit (Display), DM Sans (Body/UI), JetBrains Mono (Clinical/Mono) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  
+  <!-- Lucide Icons (§7) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    /* ==========================================================================
+       DESIGN SYSTEM TOKENS (DESIGN.md Version 2.0 — Complete Implementation)
+       ========================================================================== */
+    :root {
+      /* Typography Variables (§1) */
+      --font-outfit: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-dm-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-jetbrains-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+
+      /* Canvas & Surface Tokens (§2.1) */
+      --canvas-bg: #fafafa;
+      --surface-white: #ffffff;
+      --glass-base: rgba(255, 255, 255, 0.68);
+      --glass-subtle: rgba(255, 255, 255, 0.38);
+      --glass-toolbar: rgba(255, 255, 255, 0.5);
+      --glass-edge: rgba(255, 255, 255, 0.9);
+      --glass-border: rgba(24, 30, 37, 0.07);
+      --glass-border-hover: rgba(20, 86, 240, 0.25);
+
+      /* Navy Gradient Focal Points (§0, §2.1) */
+      --navy-900: #14181d;
+      --navy-800: #181e25;
+      --navy-700: #243342;
+      --navy-600: #2c3e50;
+
+      /* Text Hierarchy Tokens (§2.2 - WCAG AAA/AA Verified) */
+      --text-display: #222222;     /* 15.2:1 AAA */
+      --text-body: #45515e;        /* 7.8:1 AAA */
+      --text-muted: #64748b;       /* 4.6:1 AA */
+      --text-subtle: #94a3b8;      /* Decorative / Placeholder */
+
+      /* Brand Blue Scale (§2.3) */
+      --blue-50: #eff6ff;
+      --blue-100: #dbeafe;
+      --blue-400: #60a5fa;
+      --blue-500: #3b82f6;
+      --blue-600: #2563eb;
+      --blue-700: #1d4ed8;
+      --brand-primary: #1456f0;
+
+      /* Semantic Status Scale (§2.4) */
+      --emerald-50: #ecfdf5;
+      --emerald-500: #10b981;
+      --emerald-700: #047857;
+
+      --amber-50: #fffbeb;
+      --amber-500: #f59e0b;
+      --amber-700: #b45309;
+
+      --red-50: #fef2f2;
+      --red-500: #ef4444;
+      --red-600: #dc2626;
+      --red-700: #b91c1c;
+
+      /* Elevation & Navy-tinted Shadows (§5.2 - Never pure black) */
+      --shadow-xs: 0 1px 2px rgba(24, 30, 37, 0.04);
+      --shadow-sm: 0 2px 6px rgba(24, 30, 37, 0.05), 0 1px 2px rgba(24, 30, 37, 0.04);
+      --shadow-md: 0 8px 20px rgba(24, 30, 37, 0.07), 0 2px 4px rgba(24, 30, 37, 0.05);
+      --shadow-lg: 0 16px 40px rgba(24, 30, 37, 0.10), 0 4px 8px rgba(24, 30, 37, 0.06);
+      --shadow-xl: 0 28px 64px rgba(24, 30, 37, 0.16);
+      --shadow-focus-blue: 0 0 0 4px rgba(20, 86, 240, 0.15);
+      --shadow-cta-navy: 0 10px 28px rgba(24, 30, 37, 0.28);
+
+      /* Glass Blur Tokens (§5.1) */
+      --blur-xs: 4px;
+      --blur-sm: 8px;
+      --blur-md: 16px;
+      --blur-lg: 24px;
+      --blur-xl: 40px;
+
+      /* Border Radii (§6) */
+      --radius-xs: 6px;
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      --radius-2xl: 32px;
+      --radius-full: 9999px;
+
+      /* Restrained Motion Tokens (§8) */
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --duration-instant: 100ms;
+      --duration-fast: 160ms;
+      --duration-base: 240ms;
+      --duration-slow: 400ms;
+      --duration-agent-pulse: 1800ms;
+    }
+
+    /* ==========================================================================
+       GLOBAL RESETS & CANVAS SETUP
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      background-color: var(--canvas-bg);
+      color: var(--text-body);
+      font-family: var(--font-dm-sans);
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(at 10% 10%, rgba(20, 86, 240, 0.035) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, rgba(44, 62, 80, 0.04) 0px, transparent 50%),
+        radial-gradient(at 50% 30%, rgba(16, 185, 129, 0.02) 0px, transparent 60%);
+      background-attachment: fixed;
+    }
+
+    h1, h2, h3, h4, .font-display {
+      font-family: var(--font-outfit);
+      color: var(--text-display);
+      letter-spacing: -0.015em;
+      font-weight: 600;
+    }
+
+    .font-mono, .data-value, .timestamp, .record-id {
+      font-family: var(--font-jetbrains-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tabular-nums {
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ==========================================================================
+       SIDEBAR NAVIGATION (§9.6 - Live Bitrix24 Hierarchy)
+       ========================================================================== */
+    .sidebar {
+      width: 270px;
+      background: rgba(255, 255, 255, 0.82);
+      backdrop-filter: blur(var(--blur-lg)) saturate(160%);
+      border-right: 1px solid var(--glass-border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      flex-shrink: 0;
+    }
+
+    .brand-container {
+      padding: 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-600) 100%);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      box-shadow: 0 4px 12px rgba(24, 30, 37, 0.15);
+      border-top: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text-display);
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .brand-subtitle {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .nav-links {
+      padding: 16px 12px;
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .nav-category {
+      font-size: 10.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      padding: 14px 12px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: var(--radius-full);
+      color: var(--text-body);
+      text-decoration: none;
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: all var(--duration-fast) var(--ease-out);
+      cursor: pointer;
+      border: 1px solid transparent;
+      user-select: none;
+    }
+
+    .nav-item:hover {
+      background: rgba(24, 30, 37, 0.04);
+      color: var(--text-display);
+    }
+
+    .nav-item.active {
+      background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-600) 100%);
+      color: #ffffff;
+      font-weight: 600;
+      box-shadow: 0 4px 14px rgba(24, 30, 37, 0.18);
+      border-top: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .nav-item.active .nav-icon {
+      color: #60a5fa;
+    }
+
+    .nav-badge {
+      margin-left: auto;
+      background: var(--blue-50);
+      color: var(--blue-700);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-jetbrains-mono);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .nav-item.active .nav-badge {
+      background: rgba(255, 255, 255, 0.15);
+      color: #ffffff;
+    }
+
+    .sidebar-footer {
+      padding: 14px;
+      border-top: 1px solid var(--glass-border);
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Agent Presence Ring & Autonomy Indicator (§10) */
+    .agent-status-card {
+      background: var(--surface-white);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 12px;
+      box-shadow: var(--shadow-xs);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .agent-ring {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      border: 2.5px solid var(--blue-500);
+      border-top-color: transparent;
+      animation: agentPulseRing var(--duration-agent-pulse) var(--ease-in-out) infinite;
+      display: inline-block;
+    }
+
+    @keyframes agentPulseRing {
+      0% { transform: rotate(0deg); border-color: var(--blue-500); border-top-color: transparent; }
+      50% { transform: rotate(180deg); border-color: var(--emerald-500); border-top-color: transparent; }
+      100% { transform: rotate(360deg); border-color: var(--blue-500); border-top-color: transparent; }
+    }
+
+    .agent-status-desc {
+      font-size: 11px;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    /* ==========================================================================
+       MAIN CONTENT WRAPPER & TOPBAR
+       ========================================================================== */
+    .main-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .topbar {
+      height: 72px;
+      background: rgba(250, 250, 250, 0.78);
+      backdrop-filter: blur(var(--blur-md)) saturate(160%);
+      border-bottom: 1px solid var(--glass-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 36px;
+      position: sticky;
+      top: 0;
+      z-index: 40;
+      border-top: 1px solid var(--glass-edge);
+    }
+
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      padding: 8px 16px;
+      border-radius: var(--radius-full);
+      width: 380px;
+      box-shadow: var(--shadow-xs);
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .search-box:focus-within {
+      border-color: var(--brand-primary);
+      box-shadow: var(--shadow-focus-blue);
+      background: var(--surface-white);
+    }
+
+    .search-box input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-display);
+      font-family: var(--font-dm-sans);
+      font-size: 13.5px;
+      width: 100%;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: var(--radius-full);
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      color: var(--text-body);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+      position: relative;
+      box-shadow: var(--shadow-xs);
+    }
+
+    .icon-btn:hover {
+      background: #f8fafc;
+      color: var(--text-display);
+      border-color: #cbd5e1;
+      transform: translateY(-1px);
+    }
+
+    .live-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--emerald-500);
+      border-radius: var(--radius-full);
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      box-shadow: 0 0 0 2px var(--surface-white);
+      animation: agentPulse 1800ms var(--ease-in-out) infinite;
+    }
+
+    @keyframes agentPulse {
+      0% { transform: scale(0.95); opacity: 0.9; }
+      50% { transform: scale(1.15); opacity: 1; box-shadow: 0 0 8px rgba(16, 185, 129, 0.6); }
+      100% { transform: scale(0.95); opacity: 0.9; }
+    }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 5px 14px 5px 6px;
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      border-radius: var(--radius-full);
+      cursor: pointer;
+      box-shadow: var(--shadow-xs);
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .user-pill:hover {
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-full);
+      background: linear-gradient(135deg, var(--navy-800) 0%, var(--blue-600) 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #ffffff;
+      font-family: var(--font-outfit);
+    }
+
+    /* ==========================================================================
+       DASHBOARD CONTAINER & LAYOUT GRID (§3, §4, §5)
+       ========================================================================== */
+    .dashboard-container {
+      padding: 36px;
+      max-width: 1760px; /* §4: Clinical Workstation Cap */
+      width: 100%;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 32px;
+    }
+
+    /* Hero Banner (§0, §2.1) */
+    .hero-banner {
+      background: linear-gradient(135deg, var(--navy-800) 0%, var(--navy-700) 50%, var(--navy-600) 100%);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+      border-radius: var(--radius-xl);
+      padding: 32px 36px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: var(--shadow-lg);
+      position: relative;
+      overflow: hidden;
+      color: #ffffff;
+    }
+
+    .hero-banner::after {
+      content: '';
+      position: absolute;
+      right: -40px;
+      top: -40px;
+      width: 280px;
+      height: 280px;
+      background: radial-gradient(circle, rgba(20, 86, 240, 0.22) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(var(--blur-xs));
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      color: #93c5fd;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+
+    .hero-title {
+      font-family: var(--font-outfit);
+      font-size: clamp(1.5rem, 1.4rem + 0.5vw, 1.875rem);
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+    }
+
+    .hero-desc {
+      font-size: 14.5px;
+      color: #cbd5e1;
+      max-width: 650px;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    /* Component Specifications: Buttons (§9.1) */
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand-primary) 0%, var(--blue-600) 100%);
+      color: #ffffff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-dm-sans);
+      font-weight: 600;
+      font-size: 13.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+      box-shadow: var(--shadow-cta-navy);
+      border-top: 1px solid rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 32px rgba(20, 86, 240, 0.35);
+    }
+
+    .btn-secondary {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      color: var(--text-body);
+      padding: 10px 20px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-dm-sans);
+      font-weight: 600;
+      font-size: 13.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .btn-secondary:hover {
+      background: #f8fafc;
+      color: var(--text-display);
+      border-color: #cbd5e1;
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-body);
+      padding: 8px 16px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-dm-sans);
+      font-weight: 600;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .btn-ghost:hover {
+      color: var(--blue-600);
+      background: var(--blue-50);
+    }
+
+    .btn-destructive {
+      background: var(--red-600);
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-dm-sans);
+      font-weight: 600;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .btn-destructive:hover {
+      background: var(--red-700);
+      transform: translateY(-1px);
+    }
+
+    /* ==========================================================================
+       DATA & STAT CARDS (§9.2)
+       ========================================================================== */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+    }
+
+    @media (max-width: 1200px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 640px) {
+      .metrics-grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--glass-base);
+      backdrop-filter: blur(var(--blur-md)) saturate(160%);
+      border: 1px solid var(--glass-border);
+      border-top: 1px solid var(--glass-edge);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+      transition: all var(--duration-base) var(--ease-out);
+      position: relative;
+    }
+
+    .card:hover {
+      background: rgba(255, 255, 255, 0.88);
+      border-color: var(--glass-border-hover);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .metric-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .metric-icon-box {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.8);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .metric-value {
+      font-family: var(--font-outfit);
+      font-size: clamp(1.75rem, 1.6rem + 0.75vw, 2.25rem);
+      font-weight: 700;
+      color: var(--text-display);
+      margin-bottom: 2px;
+      letter-spacing: -0.02em;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Semantic Status Badges (§2.4, §9.3 - Color + Icon + Label) */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: var(--radius-full);
+      font-size: 12px;
+      font-weight: 600;
+      font-family: var(--font-dm-sans);
+    }
+
+    .status-badge.success {
+      background-color: var(--emerald-50);
+      color: var(--emerald-700);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .status-badge.success i { color: var(--emerald-500); }
+
+    .status-badge.info {
+      background-color: var(--blue-50);
+      color: var(--blue-700);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+    .status-badge.info i { color: var(--blue-600); }
+
+    .status-badge.warning {
+      background-color: var(--amber-50);
+      color: var(--amber-700);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+    }
+    .status-badge.warning i { color: var(--amber-500); }
+
+    .status-badge.danger {
+      background-color: var(--red-50);
+      color: var(--red-700);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .status-badge.danger i { color: var(--red-500); }
+
+    /* ==========================================================================
+       AGENTIC INTERFACE PATTERNS (§10 - Confirmation Gate & Autonomy)
+       ========================================================================== */
+    .agent-proposal-card {
+      background: #f8fafc;
+      border: 1.5px solid #cbd5e1;
+      border-left: 4px solid var(--brand-primary);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .proposal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .proposal-title {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-display);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .streaming-caret {
+      display: inline-block;
+      width: 2px;
+      height: 14px;
+      background: var(--blue-600);
+      margin-left: 4px;
+      animation: blinkCaret 530ms infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes blinkCaret {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+
+    .trace-chips-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .trace-chip {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      padding: 3px 10px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-jetbrains-mono);
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all var(--duration-fast);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .trace-chip:hover {
+      border-color: var(--blue-500);
+      color: var(--blue-700);
+      background: var(--blue-50);
+    }
+
+    /* ==========================================================================
+       CLINICAL TABLES (§9.4 - Bitrix24 Integrated Entities)
+       ========================================================================== */
+    .table-container {
+      overflow-x: auto;
+      border-radius: var(--radius-md);
+      border: 1px solid #e2e8f0;
+      background: var(--surface-white);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .clinical-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      font-size: 13.5px;
+    }
+
+    .clinical-table th {
+      background: rgba(248, 250, 252, 0.95);
+      backdrop-filter: blur(var(--blur-sm));
+      padding: 12px 16px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .clinical-table td {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f1f5f9;
+      color: var(--text-body);
+      vertical-align: middle;
+    }
+
+    .clinical-table tr:hover td {
+      background: rgba(248, 250, 252, 0.8);
+    }
+
+    /* ==========================================================================
+       FORMS & INPUTS (§9.5)
+       ========================================================================== */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-display);
+    }
+
+    .form-input {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 9px 14px;
+      font-family: var(--font-dm-sans);
+      font-size: 13.5px;
+      color: var(--text-display);
+      outline: none;
+      transition: all var(--duration-fast);
+    }
+
+    .form-input:focus {
+      border-color: var(--brand-primary);
+      box-shadow: var(--shadow-focus-blue);
+    }
+
+    .form-input.input-error {
+      border-color: var(--red-600);
+    }
+
+    .form-error-text {
+      font-size: 11.5px;
+      color: var(--red-700);
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 500;
+    }
+
+    /* ==========================================================================
+       DASHBOARD SPLIT & PIPELINE COLUMNS
+       ========================================================================== */
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: 8fr 4fr;
+      gap: 28px;
+    }
+
+    @media (max-width: 1024px) {
+      .dashboard-split { grid-template-columns: 1fr; }
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .section-title {
+      font-family: var(--font-outfit);
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text-display);
+    }
+
+    .section-subtitle {
+      font-size: 12.5px;
+      color: var(--text-muted);
+    }
+
+    .pill-tabs {
+      display: flex;
+      background: rgba(24, 30, 37, 0.04);
+      border: 1px solid var(--glass-border);
+      padding: 4px;
+      border-radius: var(--radius-full);
+      gap: 2px;
+    }
+
+    .pill-tab {
+      padding: 6px 14px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-dm-sans);
+      font-size: 12.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .pill-tab:hover {
+      color: var(--text-display);
+    }
+
+    .pill-tab.active {
+      background: var(--surface-white);
+      color: var(--text-display);
+      box-shadow: var(--shadow-xs);
+    }
+
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 12px;
+    }
+
+    @media (max-width: 1380px) {
+      .pipeline-grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 768px) {
+      .pipeline-grid { grid-template-columns: 1fr; }
+    }
+
+    .stage-column {
+      background: rgba(255, 255, 255, 0.45);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .stage-header {
+      font-size: 11.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding-bottom: 4px;
+      border-bottom: 1px solid rgba(24, 30, 37, 0.05);
+    }
+
+    .stage-count {
+      font-family: var(--font-jetbrains-mono);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: var(--radius-full);
+      background: var(--blue-50);
+      color: var(--blue-700);
+    }
+
+    .stage-card {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      cursor: pointer;
+      transition: all var(--duration-fast) var(--ease-out);
+      box-shadow: var(--shadow-xs);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .stage-card:hover {
+      border-color: var(--blue-400);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-sm);
+    }
+
+    /* Live Feed */
+    .feed-list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .feed-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      border-radius: var(--radius-md);
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      box-shadow: var(--shadow-xs);
+      transition: all var(--duration-fast) var(--ease-out);
+    }
+
+    .feed-item:hover {
+      border-color: #cbd5e1;
+      box-shadow: var(--shadow-sm);
+      transform: translateY(-1px);
+    }
+
+    .channel-badge {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-xs);
+    }
+
+    /* ==========================================================================
+       MODAL, DRAWER & TOAST CONTAINER (§9.7)
+       ========================================================================== */
+    .modal-scrim {
+      position: fixed;
+      inset: 0;
+      background: rgba(24, 30, 37, 0.4);
+      backdrop-filter: blur(var(--blur-lg));
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      border-radius: var(--radius-xl);
+      padding: 32px;
+      max-width: 540px;
+      width: 100%;
+      box-shadow: var(--shadow-xl);
+      animation: modalEnter var(--duration-slow) var(--ease-out);
+    }
+
+    @keyframes modalEnter {
+      from { transform: scale(0.96) translateY(8px); opacity: 0; }
+      to { transform: scale(1) translateY(0); opacity: 1; }
+    }
+
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 120;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .toast {
+      background: var(--surface-white);
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid var(--brand-primary);
+      padding: 14px 18px;
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13.5px;
+      min-width: 300px;
+      animation: toastSlide var(--duration-base) var(--ease-out);
+    }
+
+    @keyframes toastSlide {
+      from { transform: translateX(40px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       SIDEBAR NAVIGATION (§9.6 - All Integrated Real CRM / Bitrix24 Categories)
+       ========================================================================== -->
+  <aside class="sidebar">
+    <div class="brand-container">
+      <div class="brand-logo">
+        <i data-lucide="activity" style="width: 22px; height: 22px; stroke-width: 2;"></i>
+      </div>
+      <div>
+        <h2 class="brand-title">MantraAssist</h2>
+        <p class="brand-subtitle">Clinical Intelligence v2.0</p>
+      </div>
+    </div>
+
+    <nav class="nav-links">
+      <!-- Section 1: Core Clinical Operations -->
+      <div class="nav-category">Clinical Operations</div>
+      <a class="nav-item active" onclick="switchNav(this)">
+        <i data-lucide="layout-dashboard" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 2;"></i>
+        <span>Dashboard</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="user-plus" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Add / Search Patient</span>
+        <span class="nav-badge">1,482</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="calendar" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Appointments</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="git-merge" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Surgery Pipeline (Counselors)</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="scissors" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Surgery & Procedures</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="layers" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>All Deals & Pipeline</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="test-tube" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Test Deals</span>
+      </a>
+
+      <!-- Section 2: Sales, Invoicing & Cashless -->
+      <div class="nav-category">Sales & Billing</div>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="glasses" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Optical Sales</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="pill" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Pharmacy Sales</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="credit-card" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>EM Cashless Pre-Auth</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="receipt" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Invoices & Claims</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="user-check" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Optical / Referral Name</span>
+      </a>
+
+      <!-- Section 3: Communications & Tasks -->
+      <div class="nav-category">Communications & Tasks</div>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="message-square" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Messenger & Chat</span>
+        <span class="live-dot" style="position: static; margin-left: auto;"></span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="check-square" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Tasks & Projects</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="calendar-days" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Meeting Room Availability</span>
+      </a>
+
+      <!-- Section 4: Administration & Knowledge -->
+      <div class="nav-category">Admin & Governance</div>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="file-check-2" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Leave Approval</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="bar-chart-3" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Reports & Analytics</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="book-open" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Knowledge Base (KB)</span>
+      </a>
+      <a class="nav-item" onclick="switchNav(this)">
+        <i data-lucide="sliders" class="nav-icon" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+        <span>Settings & Models</span>
+      </a>
+    </nav>
+
+    <!-- Sidebar Autonomy Footer (§10) -->
+    <div class="sidebar-footer">
+      <div class="agent-status-card">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="agent-ring"></span>
+            <span style="font-size: 12px; font-weight: 700; color: var(--text-display);">Mantra Agent v2</span>
+          </div>
+          <span class="status-badge success" style="padding: 1px 6px; font-size: 10px;">Active</span>
+        </div>
+        <p class="agent-status-desc">
+          Continuous reasoning & clinical safety guardrails enabled.
+        </p>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ==========================================================================
+       MAIN CONTENT CONTAINER
+       ========================================================================== */
+  -->
+  <div class="main-wrapper">
+    
+    <!-- TOP NAVIGATION BAR -->
+    <header class="topbar">
+      <div class="search-box">
+        <i data-lucide="search" style="width: 16px; height: 16px; color: var(--text-muted); stroke-width: 2;"></i>
+        <input type="text" placeholder="Search patients (MRN), deals, optical orders, transcripts..." />
+      </div>
+
+      <div class="topbar-actions">
+        <!-- Interactive Design System Testing Buttons -->
+        <button class="btn-ghost" onclick="triggerToast('Clinical pre-auth packet compiled for Dr. Vance', 'info')">
+          <i data-lucide="bell" style="width: 15px; height: 15px;"></i>
+          <span>Test Toast</span>
+        </button>
+
+        <button class="btn-secondary" onclick="openModal()">
+          <i data-lucide="plus" style="width: 15px; height: 15px;"></i>
+          <span>New Record</span>
+        </button>
+
+        <button class="icon-btn" title="Live Telephony Receptionist" onclick="triggerToast('Telephony receptionist actively listening on 4 SIP trunks', 'success')">
+          <i data-lucide="mic" style="width: 18px; height: 18px; stroke-width: 1.5;"></i>
+          <span class="live-dot"></span>
+        </button>
+
+        <div class="user-pill">
+          <div class="avatar">RV</div>
+          <div style="text-align: left;">
+            <p style="font-size: 12.5px; font-weight: 700; color: var(--text-display); line-height: 1.2;">Dr. Robin Vance</p>
+            <p style="font-size: 11px; color: var(--text-muted); line-height: 1;">Chief of Operations</p>
+          </div>
+          <i data-lucide="chevron-down" style="width: 14px; height: 14px; color: var(--text-muted); stroke-width: 2;"></i>
+        </div>
+      </div>
+    </header>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="dashboard-container">
+      
+      <!-- HERO ANNOUNCEMENT BANNER (§0, §2.1, §9.1) -->
+      <section class="hero-banner">
+        <div>
+          <span class="hero-badge">
+            <i data-lucide="shield-check" style="width: 14px; height: 14px; stroke-width: 2;"></i>
+            Autonomous Clinical Agent Online
+          </span>
+          <h1 class="hero-title">
+            Operational Intelligence & Surgery Pipeline Center
+          </h1>
+          <p class="hero-desc">
+            Full clinical governance testbed exercising design tokens, tabular data, patient intake pipelines, and human-in-the-loop validation.
+          </p>
+        </div>
+
+        <div style="display: flex; gap: 12px; position: relative; z-index: 10;">
+          <button class="btn-primary" onclick="openModal()">
+            <i data-lucide="phone-outgoing" style="width: 16px; height: 16px; stroke-width: 2;"></i>
+            <span>Simulate AI Call</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- 4 TOP METRIC CARDS (§1.3, §2.4, §9.2 - Tabular numerals & verified hierarchy) -->
+      <section class="metrics-grid">
+        
+        <!-- Card 1: Telephony Intake -->
+        <div class="card">
+          <div class="metric-top">
+            <div class="metric-icon-box" style="background: var(--blue-50); color: var(--blue-700);">
+              <i data-lucide="phone-call" style="width: 22px; height: 22px; stroke-width: 2;"></i>
+            </div>
+            <span class="status-badge success">
+              <i data-lucide="trending-up" style="width: 14px; height: 14px; stroke-width: 2;"></i> +18.4%
+            </span>
+          </div>
+          <div class="metric-value font-display">1,248</div>
+          <div class="metric-label">Calls Handled Today</div>
+        </div>
+
+        <!-- Card 2: AI Resolution Rate -->
+        <div class="card">
+          <div class="metric-top">
+            <div class="metric-icon-box" style="background: var(--emerald-50); color: var(--emerald-700);">
+              <i data-lucide="sparkles" style="width: 22px; height: 22px; stroke-width: 2;"></i>
+            </div>
+            <span class="status-badge success">
+              <i data-lucide="check-circle" style="width: 14px; height: 14px; stroke-width: 2;"></i> 94.8%
+            </span>
+          </div>
+          <div class="metric-value font-display">94.8%</div>
+          <div class="metric-label">Autonomous Resolution Rate</div>
+        </div>
+
+        <!-- Card 3: Appointments Scheduled -->
+        <div class="card">
+          <div class="metric-top">
+            <div class="metric-icon-box" style="background: var(--blue-50); color: var(--blue-600);">
+              <i data-lucide="calendar-check" style="width: 22px; height: 22px; stroke-width: 2;"></i>
+            </div>
+            <span class="status-badge info">
+              <i data-lucide="calendar" style="width: 14px; height: 14px; stroke-width: 2;"></i> +12 Slots
+            </span>
+          </div>
+          <div class="metric-value font-display">186</div>
+          <div class="metric-label">Appointments Booked</div>
+        </div>
+
+        <!-- Card 4: Surgery & Optical Pipeline -->
+        <div class="card">
+          <div class="metric-top">
+            <div class="metric-icon-box" style="background: var(--blue-50); color: var(--blue-700);">
+              <i data-lucide="dollar-sign" style="width: 22px; height: 22px; stroke-width: 2;"></i>
+            </div>
+            <span class="status-badge success">
+              <i data-lucide="arrow-up-right" style="width: 14px; height: 14px; stroke-width: 2;"></i> $42.5k MTD
+            </span>
+          </div>
+          <div class="metric-value font-display">$84,250</div>
+          <div class="metric-label">Surgery & Deals Value</div>
+        </div>
+      </section>
+
+      <!-- AGENTIC INTERFACE PATTERN & HUMAN-CONFIRMATION GATE (§10) -->
+      <section class="card" style="border-left: 4px solid var(--brand-primary);">
+        <div class="section-header" style="margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span class="agent-ring"></span>
+            <div>
+              <h3 class="section-title">Agentic Autonomy & Clinical Confirmation Gate</h3>
+              <p class="section-subtitle">Real-time reasoning step with mandatory human-in-the-loop clinical approval</p>
+            </div>
+          </div>
+          <span class="status-badge info">
+            <i data-lucide="cpu" style="width: 14px; height: 14px;"></i> Reasoning Live
+          </span>
+        </div>
+
+        <div class="agent-proposal-card">
+          <div class="proposal-header">
+            <span class="proposal-title">
+              <i data-lucide="alert-circle" style="width: 16px; height: 16px; color: var(--brand-primary);"></i>
+              Proposed Clinical Action: Pre-Auth Insurance Submission & Cataract Procedure Booking
+            </span>
+            <span class="status-badge warning">
+              <i data-lucide="lock" style="width: 12px; height: 12px;"></i> Approval Required
+            </span>
+          </div>
+
+          <p style="font-size: 13.5px; color: var(--text-body); line-height: 1.5;">
+            Agent analyzed patient <strong class="font-mono">Sarah Lin (MRN-88421)</strong> intake transcript. Automated vision OCR verified left eye Cataract diagnosis with 99.4% confidence. Proposed surgery date: <span class="font-mono">Aug 28, 2026 at 09:30 AM</span> with Dr. Vance.
+            <span class="streaming-caret"></span>
+          </p>
+
+          <!-- Tool-Call Trace Chips (§10) -->
+          <div class="trace-chips-row">
+            <span class="trace-chip" onclick="triggerToast('EHR Query verified: No drug allergy conflicts detected', 'success')">
+              <i data-lucide="check" style="width: 12px; height: 12px; color: var(--emerald-700);"></i> Queried EHR Record
+            </span>
+            <span class="trace-chip" onclick="triggerToast('OCR pre-auth verification passed for EM Cashless', 'success')">
+              <i data-lucide="check" style="width: 12px; height: 12px; color: var(--emerald-700);"></i> OCR Cashless Verified
+            </span>
+            <span class="trace-chip" onclick="triggerToast('Meeting Room 03 reserved for 09:30 AM', 'info')">
+              <i data-lucide="calendar" style="width: 12px; height: 12px; color: var(--blue-600);"></i> Room 03 Reserved
+            </span>
+          </div>
+
+          <!-- Human Gate Actions (§9.1 & §10) -->
+          <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 6px; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+            <button class="btn-ghost" onclick="triggerToast('Clinical proposal declined and logged to audit trail', 'danger')">
+              <i data-lucide="x" style="width: 14px; height: 14px;"></i> Decline
+            </button>
+            <button class="btn-secondary" onclick="openModal()">
+              <i data-lucide="edit-3" style="width: 14px; height: 14px;"></i> Edit Parameters
+            </button>
+            <button class="btn-primary" onclick="triggerToast('Proposal Approved! Patient record & insurance pre-auth submitted.', 'success')">
+              <i data-lucide="check" style="width: 14px; height: 14px;"></i> Approve & Authorize
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2-COLUMN SPLIT: PIPELINE & LIVE FEED -->
+      <div class="dashboard-split">
+        
+        <!-- LEFT: Active Pipeline & Clinical Tables (§9.4) -->
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          
+          <!-- Pipeline Grid -->
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Surgery Pipeline (Counselors)</h3>
+                <p class="section-subtitle">Real-time stage distribution across active patient deals</p>
+              </div>
+              <div class="pill-tabs">
+                <button class="pill-tab active">Cataract</button>
+                <button class="pill-tab">Refractive</button>
+                <button class="pill-tab">Optical</button>
+              </div>
+            </div>
+
+            <div class="pipeline-grid">
+              
+              <!-- Stage 1 -->
+              <div class="stage-column">
+                <div class="stage-header">
+                  <span>1. Inbound Lead</span>
+                  <span class="stage-count">14</span>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">Johnathan Myers</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="message-circle" style="width: 13px; height: 13px; color: var(--blue-600);"></i>
+                    <span>WhatsApp · 2m ago</span>
+                  </p>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">Sarah Lin</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="phone-call" style="width: 13px; height: 13px; color: var(--emerald-700);"></i>
+                    <span>Voice Call · 5m ago</span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Stage 2 -->
+              <div class="stage-column">
+                <div class="stage-header">
+                  <span>2. Counsel Pending</span>
+                  <span class="stage-count">6</span>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">Mark Davies</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="clock" style="width: 13px; height: 13px; color: var(--text-muted);"></i>
+                    <span>Callback in 15m</span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Stage 3 -->
+              <div class="stage-column">
+                <div class="stage-header">
+                  <span>3. Pre-Op Eval</span>
+                  <span class="stage-count">28</span>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">Elena Rostova</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="file-text" style="width: 13px; height: 13px; color: var(--blue-600);"></i>
+                    <span>Labs Received</span>
+                  </p>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">David Becker</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="message-square" style="width: 13px; height: 13px; color: var(--blue-600);"></i>
+                    <span>SMS Pre-Op Form</span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Stage 4 -->
+              <div class="stage-column">
+                <div class="stage-header">
+                  <span>4. Cashless Auth</span>
+                  <span class="stage-count">42</span>
+                </div>
+                <div class="stage-card">
+                  <p class="patient-name" style="font-weight: 700;">Chloe Kardashian</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="credit-card" style="width: 13px; height: 13px; color: var(--blue-600);"></i>
+                    <span>TPA Query Sent</span>
+                  </p>
+                </div>
+              </div>
+
+              <!-- Stage 5 -->
+              <div class="stage-column">
+                <div class="stage-header">
+                  <span>5. Surgery Booked</span>
+                  <span class="stage-count" style="background: var(--emerald-50); color: var(--emerald-700);">89</span>
+                </div>
+                <div class="stage-card" style="border-left: 3px solid var(--emerald-500);">
+                  <p class="patient-name" style="font-weight: 700;">Michael Chang</p>
+                  <p class="patient-meta font-mono">
+                    <i data-lucide="check-circle" style="width: 13px; height: 13px; color: var(--emerald-700);"></i>
+                    <span>OT Scheduled (Aug 27)</span>
+                  </p>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Clinical & Bitrix24 Integrated Data Table (§9.4) -->
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Active Clinical Deals & Patient Records</h3>
+                <p class="section-subtitle">Tabular records with monospace IDs, precise clinical data, and status tokens</p>
+              </div>
+              <button class="btn-ghost" onclick="triggerToast('Refreshed 1,482 clinical records from Bitrix24 sync', 'info')">
+                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i> Refresh
+              </button>
+            </div>
+
+            <div class="table-container">
+              <table class="clinical-table">
+                <thead>
+                  <tr>
+                    <th>MRN / ID</th>
+                    <th>Patient Name</th>
+                    <th>Category</th>
+                    <th>Assigned Counselor</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="font-mono">#MRN-88421</td>
+                    <td style="font-weight: 600; color: var(--text-display);">Sarah Lin</td>
+                    <td>Surgery (Cataract)</td>
+                    <td>Dr. Robin Vance</td>
+                    <td class="font-mono tabular-nums">$1,850.00</td>
+                    <td>
+                      <span class="status-badge success">
+                        <i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Pre-Auth Approved
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="triggerToast('Opening record #MRN-88421', 'info')">
+                        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="font-mono">#MRN-88419</td>
+                    <td style="font-weight: 600; color: var(--text-display);">Anshul Gupta</td>
+                    <td>Optical Sales</td>
+                    <td>Tamanna (Optometrist)</td>
+                    <td class="font-mono tabular-nums">$320.00</td>
+                    <td>
+                      <span class="status-badge info">
+                        <i data-lucide="clock" style="width: 12px; height: 12px;"></i> Lens In Production
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="triggerToast('Opening record #MRN-88419', 'info')">
+                        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="font-mono">#MRN-88390</td>
+                    <td style="font-weight: 600; color: var(--text-display);">Michael Chang</td>
+                    <td>EM Cashless</td>
+                    <td>Aman Pratap Singh</td>
+                    <td class="font-mono tabular-nums">$2,450.00</td>
+                    <td>
+                      <span class="status-badge success">
+                        <i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> Claim Paid
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="triggerToast('Opening record #MRN-88390', 'info')">
+                        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                      </button>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="font-mono">#MRN-88372</td>
+                    <td style="font-weight: 600; color: var(--text-display);">Priya Sharma</td>
+                    <td>Pharmacy Sales</td>
+                    <td>Pharmacy Staff</td>
+                    <td class="font-mono tabular-nums">$85.50</td>
+                    <td>
+                      <span class="status-badge warning">
+                        <i data-lucide="alert-triangle" style="width: 12px; height: 12px;"></i> Pending Pickup
+                      </span>
+                    </td>
+                    <td>
+                      <button class="btn-ghost" style="padding: 4px 8px;" onclick="triggerToast('Opening record #MRN-88372', 'info')">
+                        <i data-lucide="chevron-right" style="width: 14px; height: 14px;"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- RIGHT: Live Feed & Form Validation Testbed (§9.3, §9.5) -->
+        <div style="display: flex; flex-direction: column; gap: 24px;">
+          
+          <!-- Live Telephony & Omnichannel Stream -->
+          <div class="card" style="display: flex; flex-direction: column;">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Live Telephony Feed</h3>
+                <p class="section-subtitle">Real-time omnichannel intake stream</p>
+              </div>
+              <span class="status-badge success">
+                <span class="live-dot" style="position: static; display: inline-block;"></span> Active
+              </span>
+            </div>
+
+            <div class="feed-list">
+              
+              <!-- Feed Item 1: Voice Call (Electric Blue) -->
+              <div class="feed-item">
+                <div class="feed-left" style="display: flex; align-items: center; gap: 12px;">
+                  <div class="channel-badge" style="background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);">
+                    <i data-lucide="phone-incoming" style="width: 18px; height: 18px; stroke-width: 2;"></i>
+                  </div>
+                  <div>
+                    <p style="font-size: 13.5px; font-weight: 700; color: var(--text-display);">Anshul Gupta</p>
+                    <p class="font-mono" style="font-size: 11.5px; color: var(--text-muted);">Voice Call · Completed (3m 42s)</p>
+                  </div>
+                </div>
+                <span class="status-badge success">
+                  <i data-lucide="check-circle" style="width: 12px; height: 12px;"></i> Verified
+                </span>
+              </div>
+
+              <!-- Feed Item 2: WhatsApp (Clinical Emerald) -->
+              <div class="feed-item">
+                <div class="feed-left" style="display: flex; align-items: center; gap: 12px;">
+                  <div class="channel-badge" style="background: linear-gradient(135deg, #10b981 0%, #047857 100%);">
+                    <i data-lucide="message-circle" style="width: 18px; height: 18px; stroke-width: 2;"></i>
+                  </div>
+                  <div>
+                    <p style="font-size: 13.5px; font-weight: 700; color: var(--text-display);">Priya Sharma</p>
+                    <p class="font-mono" style="font-size: 11.5px; color: var(--text-muted);">WhatsApp · Slot 4:00 PM Booked</p>
+                  </div>
+                </div>
+                <span class="status-badge info">
+                  <i data-lucide="calendar" style="width: 12px; height: 12px;"></i> Booked
+                </span>
+              </div>
+
+              <!-- Feed Item 3: Clinical Document (Navy / Slate) -->
+              <div class="feed-item">
+                <div class="feed-left" style="display: flex; align-items: center; gap: 12px;">
+                  <div class="channel-badge" style="background: linear-gradient(135deg, #181e25 0%, #2c3e50 100%);">
+                    <i data-lucide="file-check" style="width: 18px; height: 18px; stroke-width: 2;"></i>
+                  </div>
+                  <div>
+                    <p style="font-size: 13.5px; font-weight: 700; color: var(--text-display);">Dr. Emily Davis</p>
+                    <p class="font-mono" style="font-size: 11.5px; color: var(--text-muted);">Intake Document Auto-Verified</p>
+                  </div>
+                </div>
+                <span class="status-badge success">
+                  <i data-lucide="shield-check" style="width: 12px; height: 12px;"></i> System
+                </span>
+              </div>
+
+              <!-- Feed Item 4: Telephony Billing (Electric Blue) -->
+              <div class="feed-item">
+                <div class="feed-left" style="display: flex; align-items: center; gap: 12px;">
+                  <div class="channel-badge" style="background: linear-gradient(135deg, #1456f0 0%, #2563eb 100%);">
+                    <i data-lucide="receipt" style="width: 18px; height: 18px; stroke-width: 2;"></i>
+                  </div>
+                  <div>
+                    <p class="font-mono" style="font-size: 13px; font-weight: 700; color: var(--text-display);">#INV-2026-88</p>
+                    <p class="font-mono" style="font-size: 11.5px; color: var(--text-muted);">$850.00 Paid via Stripe</p>
+                  </div>
+                </div>
+                <span class="status-badge success">
+                  <i data-lucide="check" style="width: 12px; height: 12px;"></i> Paid
+                </span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Forms & Inputs Testbed (§9.5) -->
+          <div class="card">
+            <div class="section-header">
+              <div>
+                <h3 class="section-title">Form Controls & Validation (§9.5)</h3>
+                <p class="section-subtitle">Testing standard, focus ring, and inline error states</p>
+              </div>
+            </div>
+
+            <div class="form-grid" style="grid-template-columns: 1fr;">
+              <div class="form-group">
+                <label class="form-label">Patient Full Name</label>
+                <input class="form-input" type="text" value="Sarah Lin" placeholder="Enter patient name..." />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">MRN / Clinical Identifier (Monospace)</label>
+                <input class="form-input font-mono" type="text" value="MRN-88421-EYE" />
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Insurance Policy Number (Simulated Error)</label>
+                <input class="form-input input-error font-mono" type="text" value="POL-INVALID-99" />
+                <span class="form-error-text">
+                  <i data-lucide="alert-circle" style="width: 13px; height: 13px;"></i> Policy ID not recognized in EM Cashless database
+                </span>
+              </div>
+
+              <div style="display: flex; gap: 8px; margin-top: 6px;">
+                <button class="btn-primary" style="flex: 1; justify-content: center;" onclick="triggerToast('Record successfully updated', 'success')">Save Record</button>
+                <button class="btn-destructive" onclick="triggerToast('Record discarded', 'danger')">Discard</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </main>
+  </div>
+
+  <!-- ==========================================================================
+       MODAL & TOAST SCRIPTS (§9.7)
+       ========================================================================== -->
+  <div class="modal-scrim" id="testModal" onclick="closeModalOnBackdrop(event)">
+    <div class="modal-box">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+        <h3 style="font-family: var(--font-outfit); font-size: 18px; font-weight: 700; color: var(--text-display);">
+          Add New Clinical Deal / Patient
+        </h3>
+        <button class="btn-ghost" style="padding: 4px;" onclick="closeModal()">
+          <i data-lucide="x" style="width: 18px; height: 18px;"></i>
+        </button>
+      </div>
+
+      <p style="font-size: 13.5px; color: var(--text-muted); margin-bottom: 20px;">
+        Creates a synchronized deal entry across Bitrix24 CRM and the MantraCare AI Telephony Receptionist.
+      </p>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label class="form-label">Patient Name</label>
+        <input class="form-input" type="text" placeholder="e.g. Rahul Sharma" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 14px;">
+        <label class="form-label">Primary Specialty / Category</label>
+        <input class="form-input" type="text" value="Surgery Pipeline (Counselors)" />
+      </div>
+
+      <div class="form-group" style="margin-bottom: 24px;">
+        <label class="form-label">Contact Phone (for AI Telephony)</label>
+        <input class="form-input font-mono" type="text" placeholder="+91 98765 43210" />
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 10px;">
+        <button class="btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn-primary" onclick="closeModal(); triggerToast('New Patient Record Created!', 'success')">Create Patient Deal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script>
+    // Initialize Lucide icons
+    lucide.createIcons();
+
+    // Navigation Switcher
+    function switchNav(el) {
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      el.classList.add('active');
+    }
+
+    // Modal Control
+    function openModal() {
+      document.getElementById('testModal').style.display = 'flex';
+      lucide.createIcons();
+    }
+
+    function closeModal() {
+      document.getElementById('testModal').style.display = 'none';
+    }
+
+    function closeModalOnBackdrop(e) {
+      if (e.target.id === 'testModal') {
+        closeModal();
+      }
+    }
+
+    // Toast Control
+    function triggerToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      
+      let icon = 'info';
+      let color = 'var(--blue-600)';
+      if (type === 'success') { icon = 'check-circle'; color = 'var(--emerald-700)'; }
+      if (type === 'danger') { icon = 'alert-triangle'; color = 'var(--red-700)'; }
+
+      toast.innerHTML = `
+        <i data-lucide="${icon}" style="width: 18px; height: 18px; color: ${color}; flex-shrink: 0;"></i>
+        <span style="font-weight: 500; color: var(--text-display);">${message}</span>
+      `;
+      
+      container.appendChild(toast);
+      lucide.createIcons();
+
+      setTimeout(() => {
+        toast.style.transition = 'all 0.3s ease';
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateX(40px)';
+        setTimeout(() => toast.remove(), 300);
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
