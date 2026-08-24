@@ -1179,13 +1179,14 @@ export default function Settings() {
   // Custom Fields Context
   const { getCustomFields, addCustomField, updateCustomField, deleteCustomField } = useFieldRegistry();
 
-  const tabToModule: Record<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team", FieldModule> = {
+  const tabToModule: Record<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe", FieldModule> = {
     "clients": "client",
     "call-logs": "call",
     "processes": "process",
     "appointments": "appointment",
     "forms": "appointment",
     "team": "organization",
+    "scribe": "scribe",
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
@@ -1217,7 +1218,7 @@ export default function Settings() {
   };
 
   // Custom Fields Tab State
-  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team">("clients");
+  const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
@@ -6068,6 +6069,15 @@ export default function Settings() {
                       }`}
                   >
                     Team
+                  </button>
+                  <button
+                    onClick={() => setCustomFieldsTab("scribe")}
+                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "scribe"
+                      ? "bg-white shadow-sm text-[#111827]"
+                      : "text-muted-foreground hover:text-foreground"
+                      }`}
+                  >
+                    AI Scribe
                   </button>
                 </div>
 

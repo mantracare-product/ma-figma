@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   X,
   Play,
@@ -10,9 +10,10 @@ import {
   MessageSquare,
   Volume2,
   Sparkles,
-  Layers,
 } from "lucide-react";
+import { toast } from "sonner";
 import { ScribeSession } from "../../../lib/scribeSessionStore";
+import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
 
 export interface TranscriptDetailDrawerProps {
   isOpen: boolean;
@@ -21,14 +22,97 @@ export interface TranscriptDetailDrawerProps {
   onOpenWhatsApp?: (session: ScribeSession) => void;
 }
 
-interface ConfiguredSection {
-  id: string;
-  title: string;
-  fieldKeys: string[];
-}
+const STORAGE_SECTIONS_KEY = "mantra_scribe_ehr_clean_titles_v5";
 
-const STORAGE_SECTIONS_KEY = "mantra_scribe_simple_sections";
-const STORAGE_TOGGLE_KEY = "mantra_scribe_autofetch_toggle";
+const DEFAULT_MEDICATION_FIELDS = [
+  "med_name",
+  "med_strength",
+  "med_form",
+  "med_dosage",
+  "med_frequency",
+  "med_duration",
+  "med_route",
+];
+
+const DEFAULT_SCRIBE_SECTIONS: OverviewSection[] = [
+  {
+    id: "sec-patient-info",
+    title: "Patient Information",
+    description: "Demographics & consultation identifiers",
+    iconName: "user",
+    fieldKeys: ["patient_name", "patient_age_sex", "consultation_date", "patient_id"],
+  },
+  {
+    id: "sec-chief-complaint",
+    title: "Chief Complaint",
+    description: "Reported symptoms & onset timeline",
+    iconName: "tag",
+    fieldKeys: ["symptoms", "complaint_duration"],
+  },
+  {
+    id: "sec-diagnosis",
+    title: "Diagnosis",
+    description: "Primary assessment, ICD coding & examination findings",
+    iconName: "sparkles",
+    fieldKeys: ["primary_diagnosis", "icd_code", "diagnosis_type", "clinical_findings"],
+  },
+  {
+    id: "sec-medication-1",
+    title: "Medication 1",
+    description: "Primary prescribed drug, dosage & route",
+    iconName: "file-text",
+    fieldKeys: [...DEFAULT_MEDICATION_FIELDS],
+  },
+  {
+    id: "sec-medication-2",
+    title: "Medication 2",
+    description: "Secondary supportive drug, dosage & route",
+    iconName: "file-text",
+    fieldKeys: [...DEFAULT_MEDICATION_FIELDS],
+  },
+  {
+    id: "sec-medication-3",
+    title: "Medication 3",
+    description: "Additional prescribed medication & route",
+    iconName: "file-text",
+    fieldKeys: [...DEFAULT_MEDICATION_FIELDS],
+  },
+  {
+    id: "sec-instructions",
+    title: "Instructions",
+    description: "Medication administration & daily living advice",
+    iconName: "workflow",
+    fieldKeys: ["patient_instructions"],
+  },
+  {
+    id: "sec-precautions",
+    title: "Precautions",
+    description: "Activity limits, allergy warnings & red-flag triggers",
+    iconName: "shield",
+    fieldKeys: ["patient_precautions"],
+  },
+  {
+    id: "sec-prognosis",
+    title: "Prognosis",
+    description: "Expected clinical course & complication risk",
+    iconName: "layers",
+    fieldKeys: ["prognosis_status", "expected_course", "complication_risk"],
+  },
+  {
+    id: "sec-followup",
+    title: "Follow-up",
+    description: "Recall review schedule & trigger conditions",
+    iconName: "settings",
+    fieldKeys: ["follow_up_review", "follow_up_criteria"],
+  },
+  {
+    id: "sec-doctor-info",
+    title: "Doctor Information",
+    description: "Attending physician credentials & signature date",
+    iconName: "briefcase",
+    fieldKeys: ["doctor_name", "doctor_qualification", "registration_no", "doctor_signature_date"],
+  },
+];
 
 export default function TranscriptDetailDrawer({
   isOpen,
@@ -42,9 +126,158 @@ export default function TranscriptDetailDrawer({
   const [hoverRating, setHoverRating] = useState(0);
   const timerRef = useRef<any>(null);
 
-  // Configured sections from Settings
-  const [configuredSections, setConfiguredSections] = useState<ConfiguredSection[]>([]);
-  const [isAutoFetchActive, setIsAutoFetchActive] = useState(true);
+  // Sections State (Separate Medication 1, Medication 2, Medication 3 sections with common fields)
+  const [sections, setSections] = useState<OverviewSection[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_SECTIONS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length >= 8) return parsed;
+      }
+    } catch {}
+    return DEFAULT_SCRIBE_SECTIONS;
+  });
+
+  // Re-sync sections on opening to ensure full section structure
+  useEffect(() => {
+    if (isOpen) {
+      try {
+        const raw = localStorage.getItem(STORAGE_SECTIONS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length >= 8) {
+            setSections(parsed);
+            return;
+          }
+        }
+      } catch {}
+      setSections(DEFAULT_SCRIBE_SECTIONS);
+    }
+  }, [isOpen]);
+
+  // Dynamic Field Values State (Prefilled from session transcript)
+  const [fieldValues, setFieldValues] = useState<Record<string, any>>({});
+
+  // Sync field values from session when opened
+  useEffect(() => {
+    if (!session) return;
+    const d: any = session.extractedData || {};
+
+    // Parse dynamic symptoms array from transcript data
+    let extractedSymptoms: string[] = [];
+    if (d.chiefComplaint) {
+      const parts = d.chiefComplaint
+        .split(/[,;\n•]+/)
+        .map((s: string) => s.trim())
+        .filter((s: string) => s.length > 1);
+      if (parts.length > 0) {
+        extractedSymptoms = parts;
+      }
+    }
+    if (extractedSymptoms.length === 0) {
+      extractedSymptoms = [
+        "Fever",
+        "Sore throat",
+        "Dry cough",
+      ];
+    }
+
+    const sessionDate = new Date(session.createdAt).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+
+    const initialValues: Record<string, any> = {
+      // 1. Patient Information
+      patient_name: session.clientName || "Rahul Sharma",
+      patient_age_sex: `${session.patientAge || 32} years / ${session.patientGender || "Male"}`,
+      consultation_date: sessionDate,
+      patient_id: `PT-${Math.floor(10000 + Math.random() * 90000)}`,
+
+      // 2. Chief Complaint
+      symptoms: extractedSymptoms,
+      complaint_duration: "Symptoms for 3 days",
+
+      // 3. Diagnosis
+      primary_diagnosis: d.diagnosis || "Acute upper respiratory tract infection",
+      icd_code: "J06.9",
+      diagnosis_type: "Acute",
+      clinical_findings: "Mild fever, congested throat, no breathing difficulty. Bilateral air entry clear.",
+
+      // 4. Medication 1 (Common Field Keys scoped to section)
+      "sec-medication-1_med_name": d.medications?.[0]?.drugName || "Paracetamol",
+      "sec-medication-1_med_strength": d.medications?.[0]?.dosage || "500 mg",
+      "sec-medication-1_med_form": "Tablet",
+      "sec-medication-1_med_dosage": "1 tablet",
+      "sec-medication-1_med_frequency": d.medications?.[0]?.frequency || "Up to 3 times/day as needed",
+      "sec-medication-1_med_duration": d.medications?.[0]?.duration || "3 days",
+      "sec-medication-1_med_route": "Oral",
+
+      // 5. Medication 2 (Common Field Keys scoped to section)
+      "sec-medication-2_med_name": d.medications?.[1]?.drugName || "Cetirizine",
+      "sec-medication-2_med_strength": d.medications?.[1]?.dosage || "10 mg",
+      "sec-medication-2_med_form": "Tablet",
+      "sec-medication-2_med_dosage": "1 tablet",
+      "sec-medication-2_med_frequency": d.medications?.[1]?.frequency || "Once daily (OD)",
+      "sec-medication-2_med_duration": d.medications?.[1]?.duration || "5 days",
+      "sec-medication-2_med_route": "Oral",
+
+      // 6. Medication 3 (Common Field Keys scoped to section)
+      "sec-medication-3_med_name": d.medications?.[2]?.drugName || "Cough syrup",
+      "sec-medication-3_med_strength": d.medications?.[2]?.dosage || "Standard",
+      "sec-medication-3_med_form": "Syrup",
+      "sec-medication-3_med_dosage": "5 mL",
+      "sec-medication-3_med_frequency": d.medications?.[2]?.frequency || "3 times/day (TDS)",
+      "sec-medication-3_med_duration": d.medications?.[2]?.duration || "5 days",
+      "sec-medication-3_med_route": "Oral",
+
+      // Fallbacks
+      med_name: d.medications?.[0]?.drugName || "Paracetamol",
+      med_strength: d.medications?.[0]?.dosage || "500 mg",
+      med_form: "Tablet",
+      med_dosage: "1 tablet",
+      med_frequency: "Up to 3 times/day as needed",
+      med_duration: "3 days",
+      med_route: "Oral",
+
+      // 7. Instructions (List Array)
+      patient_instructions: [
+        "Take medicines as prescribed",
+        "Take tablets after meals where applicable",
+        "Maintain adequate fluid intake",
+        "Get adequate rest",
+        "Do not exceed the prescribed dosage",
+      ],
+
+      // 8. Precautions (List Array)
+      patient_precautions: [
+        "Avoid driving if the medication causes drowsiness",
+        "Avoid taking other medicines containing paracetamol simultaneously",
+        "Inform the doctor about any known drug allergies",
+        "Seek medical attention if breathing difficulty or persistent high fever develops",
+      ],
+
+      // 9. Prognosis
+      prognosis_status: "Good",
+      expected_course: "Symptoms expected to improve within 5–7 days.",
+      complication_risk: "Low",
+
+      // 10. Follow-up
+      follow_up_review: d.followUpDate
+        ? `Review after: ${d.followUpDays || 5}–7 days (${d.followUpDate}) or earlier if symptoms worsen.`
+        : "Review after: 5–7 days or earlier if symptoms worsen.",
+      follow_up_criteria: "If symptoms worsen or do not improve within 5 days.",
+
+      // 11. Doctor Information
+      doctor_name: session.doctorName || "Dr. Ankit Mehra",
+      doctor_qualification: "MBBS, MD",
+      registration_no: "MCI-482910",
+      doctor_signature_date: sessionDate,
+    };
+
+    setFieldValues(initialValues);
+  }, [session]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -53,33 +286,8 @@ export default function TranscriptDetailDrawer({
       setPlaybackSpeed(1);
       setRating(0);
       setHoverRating(0);
-    } else {
-      // Load saved sections from Settings
-      try {
-        const raw = localStorage.getItem(STORAGE_SECTIONS_KEY);
-        const parsed = raw ? JSON.parse(raw) : [];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setConfiguredSections(parsed);
-        } else {
-          // Default initial sections matching clinical template
-          setConfiguredSections([
-            {
-              id: "sec-default-clinical",
-              title: "Clinical Notes & Findings",
-              fieldKeys: ["chief_complaint", "primary_diagnosis", "medications", "follow_up_date"],
-            },
-          ]);
-        }
-
-        const toggleRaw = localStorage.getItem(STORAGE_TOGGLE_KEY);
-        if (toggleRaw !== null) {
-          setIsAutoFetchActive(JSON.parse(toggleRaw));
-        }
-      } catch (e) {
-        console.error("Error loading configured sections", e);
-      }
     }
-  }, [isOpen, session]);
+  }, [isOpen]);
 
   useEffect(() => {
     if (isPlaying && session) {
@@ -106,68 +314,18 @@ export default function TranscriptDetailDrawer({
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // Extract intelligent prefilled value from transcript / session data
-  const getPrefilledFieldValue = (key: string): string => {
-    const normKey = key.toLowerCase().replace(/[-_]/g, "");
-    const d: any = session.extractedData || {};
-
-    if (normKey.includes("client") || normKey.includes("patient") || normKey.includes("name")) {
-      return session.clientName || "Rajesh Kumar";
-    }
-    if (normKey.includes("age")) {
-      return session.patientAge ? `${session.patientAge} years` : "54 years";
-    }
-    if (normKey.includes("gender") || normKey.includes("sex")) {
-      return session.patientGender || "Male";
-    }
-    if (normKey.includes("doctor") || normKey.includes("responsible") || normKey.includes("physician")) {
-      return session.doctorName || "Dr. Priya Sharma";
-    }
-    if (normKey.includes("complaint") || normKey.includes("symptom") || normKey.includes("hpi") || normKey.includes("reason")) {
-      return d.chiefComplaint || "Blurry vision in right eye with night glare for 3 months";
-    }
-    if (normKey.includes("diagnosis") || normKey.includes("condition") || normKey.includes("assessment")) {
-      return d.diagnosis || "Nuclear Cataract Grade II (Right Eye)";
-    }
-    if (normKey.includes("medication") || normKey.includes("rx") || normKey.includes("drug") || normKey.includes("prescription")) {
-      if (d.medications && d.medications.length > 0) {
-        return d.medications.map((m: any) => `${m.drugName} - ${m.dosage}, ${m.frequency} (${m.duration})`).join("; ");
-      }
-      return "Moxifloxacin Eye Drops 0.5% (1 drop, QID for 7 days); Refresh Tears 0.5% (1 drop, TDS for 30 days)";
-    }
-    if (normKey.includes("vital") || normKey.includes("bp") || normKey.includes("pulse") || normKey.includes("pressure")) {
-      return "BP: 120/80 mmHg • Pulse: 74 bpm • SpO2: 99%";
-    }
-    if (normKey.includes("investigation") || normKey.includes("lab") || normKey.includes("test") || normKey.includes("scan")) {
-      return d.investigations && d.investigations.length > 0
-        ? d.investigations.join(", ")
-        : "Slit Lamp Examination, Visual Acuity Test";
-    }
-    if (normKey.includes("followup") || normKey.includes("recall") || normKey.includes("nextvisit") || normKey.includes("review")) {
-      return d.followUpDate ? `${d.followUpDays || 14} days (${d.followUpDate})` : "14 days post consultation";
-    }
-    if (normKey.includes("diet") || normKey.includes("lifestyle") || normKey.includes("advice") || normKey.includes("instruction")) {
-      return d.dietaryAdvice || "Avoid rubbing eyes, wear protective sunglasses when outdoors";
-    }
-    if (normKey.includes("phone") || normKey.includes("contact") || normKey.includes("mobile")) {
-      return "+91 98765 43210";
-    }
-    if (normKey.includes("email")) {
-      return "patient.rajesh@gmail.com";
-    }
-    if (normKey.includes("date") || normKey.includes("created")) {
-      return new Date(session.sessionDate || session.createdAt).toLocaleDateString("en-IN", {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-      });
-    }
-
-    return "Extracted from dialogue";
+  const handleSectionsChange = (newSections: OverviewSection[]) => {
+    setSections(newSections);
+    try {
+      localStorage.setItem(STORAGE_SECTIONS_KEY, JSON.stringify(newSections));
+    } catch {}
   };
 
-  const formatFieldLabel = (key: string) => {
-    return key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const handleFieldValueChange = (key: string, value: any) => {
+    setFieldValues((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
   };
 
   // Generate a clean narrative summary from extractedData
@@ -212,82 +370,21 @@ export default function TranscriptDetailDrawer({
 
         {/* Drawer Body */}
         <div className="flex-1 overflow-y-auto p-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* ─── LEFT COLUMN: ALL CONFIGURED SECTIONS (5 cols) ──────────── */}
-            <div className="lg:col-span-5 space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-[#181e25]" />
-                  <span className="font-bold text-xs text-foreground uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    Clinical & Profile Fields
-                  </span>
-                </div>
-
-                {isAutoFetchActive && (
-                  <span className="flex items-center gap-1 text-[10px] font-semibold text-[#181e25] bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md font-mono">
-                    <Sparkles className="w-3 h-3 text-[#181e25]" /> Auto-Filled
-                  </span>
-                )}
-              </div>
-
-              {/* Configured Sections List */}
-              {configuredSections.length === 0 ? (
-                <div className="rounded-2xl bg-white border border-border p-6 text-center text-xs text-muted-foreground shadow-xs">
-                  No sections configured yet. Open Settings in AI Scribe to add mapping sections.
-                </div>
-              ) : (
-                configuredSections.map((section) => (
-                  <div
-                    key={section.id}
-                    className="rounded-2xl bg-white border border-border shadow-xs overflow-hidden"
-                  >
-                    {/* Section Header */}
-                    <div className="px-4 py-3 bg-slate-50/70 border-b border-border flex items-center justify-between">
-                      <h4
-                        className="font-bold text-xs text-foreground"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      >
-                        {section.title}
-                      </h4>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        {section.fieldKeys.length} fields
-                      </span>
-                    </div>
-
-                    {/* Section Fields with Prefilled Values */}
-                    <div className="p-4 space-y-3">
-                      {section.fieldKeys.length === 0 ? (
-                        <p className="text-xs text-muted-foreground italic text-center py-2">
-                          No fields in this section
-                        </p>
-                      ) : (
-                        section.fieldKeys.map((key) => {
-                          const val = getPrefilledFieldValue(key);
-                          return (
-                            <div
-                              key={key}
-                              className="rounded-xl bg-slate-50/70 border border-border p-3 space-y-1"
-                            >
-                              <div
-                                className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {formatFieldLabel(key)}
-                              </div>
-                              <div
-                                className="text-xs font-semibold text-foreground leading-relaxed break-words"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {val}
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* ─── LEFT COLUMN: CLINICAL EHR SECTIONS (5 cols) ─────────────── */}
+            <div className="lg:col-span-5 space-y-4 pb-12">
+              {/* Interactive Draggable Overview Sections Component */}
+              <DraggableOverviewSections
+                mode="scribe"
+                customFieldsModule="scribe"
+                sections={sections}
+                onSectionsChange={handleSectionsChange}
+                fieldValues={fieldValues}
+                onFieldValueChange={handleFieldValueChange}
+                onSaveChanges={() => {
+                  toast.success("Prescription & EHR notes saved!");
+                }}
+              />
             </div>
 
             {/* ─── RIGHT COLUMN: RECORDING + SUMMARY + TRANSCRIPTION (7 cols) ─ */}
@@ -402,9 +499,9 @@ export default function TranscriptDetailDrawer({
                 </p>
               </div>
 
-              {/* 3. Transcription Speech Timeline */}
-              <div className="rounded-2xl bg-white p-5 border border-border shadow-xs flex flex-col min-h-[450px]">
-                <div className="flex items-center justify-between pb-4 border-b border-border mb-4">
+              {/* 3. Transcription Speech Timeline (Sticky when scrolled into view) */}
+              <div className="rounded-2xl bg-white p-5 border border-border shadow-xs flex flex-col sticky top-0 z-10 max-h-[calc(100vh-140px)]">
+                <div className="flex items-center justify-between pb-4 border-b border-border mb-4 flex-shrink-0">
                   <div className="flex items-center gap-2 text-foreground font-semibold text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
                     <MessageSquare className="w-4 h-4 text-[#181e25]" />
                     <span>Transcription</span>
@@ -415,7 +512,7 @@ export default function TranscriptDetailDrawer({
                 </div>
 
                 {/* Speech Turns Timeline */}
-                <div className="space-y-4 max-h-[600px] overflow-y-auto pr-1">
+                <div className="space-y-4 overflow-y-auto pr-1 flex-1">
                   {session.transcript.utterances.map((u) => {
                     const isDoctor = u.speaker === "doctor";
 

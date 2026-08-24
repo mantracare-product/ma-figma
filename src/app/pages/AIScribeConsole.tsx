@@ -29,7 +29,6 @@ import {
 } from "../../lib/scribeSessionStore";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
-import TranscriptFieldMappingDrawer from "../components/scribe/TranscriptFieldMappingDrawer";
 
 export default function AIScribeConsole() {
   // Core Data Stores
@@ -46,7 +45,6 @@ export default function AIScribeConsole() {
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedDetailSession, setSelectedDetailSession] = useState<ScribeSession | null>(null);
   const [isNewConsultationOpen, setIsNewConsultationOpen] = useState(false);
-  const [isFieldMappingOpen, setIsFieldMappingOpen] = useState(false);
 
   // WhatsApp Share Modal
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -202,17 +200,6 @@ export default function AIScribeConsole() {
                 </div>
               </div>
             </div>
-
-            {/* Settings Gear: Field Mapping Configuration */}
-            <Tooltip text="Configure Field Mappings">
-              <button
-                type="button"
-                onClick={() => setIsFieldMappingOpen(true)}
-                className="h-[44px] w-[44px] rounded-xl border border-input bg-card hover:bg-slate-50 text-muted-foreground hover:text-foreground flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-            </Tooltip>
 
             {/* + Button to Create New Transcript / Open Drawer */}
             <Tooltip text="Create New Transcript">
@@ -505,12 +492,6 @@ export default function AIScribeConsole() {
             setWhatsAppTargetSession(session);
             setShowWhatsAppModal(true);
           }}
-        />
-
-        {/* ─── TRANSCRIPT FIELD MAPPING CONFIGURATION DRAWER ─────────────────── */}
-        <TranscriptFieldMappingDrawer
-          isOpen={isFieldMappingOpen}
-          onClose={() => setIsFieldMappingOpen(false)}
         />
 
         {/* ─── WHATSAPP DIRECT SHARE MODAL ─────────────────────────────────── */}

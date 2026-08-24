@@ -27,9 +27,10 @@ const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {
   service: "Service Fields",
   organization: "Organization Fields",
   teamMember: "Team Member Fields",
+  scribe: "AI Scribe Fields",
 };
 
-const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember"];
+const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appointment", "call", "service", "organization", "teamMember", "scribe"];
 
 import { resolveVisibility } from "../../context/FieldRegistryContext";
 
@@ -42,6 +43,7 @@ const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plur
   service: { singular: "service", plural: "services" },
   organization: { singular: "organization", plural: "organizations" },
   teamMember: { singular: "team member", plural: "team members" },
+  scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
 };
 
 interface CreateFieldModalProps {

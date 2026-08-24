@@ -45,7 +45,7 @@ export interface OverviewSection {
 }
 
 export interface DraggableOverviewSectionsProps {
-  mode: "client" | "process";
+  mode: "client" | "process" | "scribe";
   client?: any;
   log?: any;
   sections: OverviewSection[];
@@ -317,13 +317,26 @@ export default function DraggableOverviewSections({
     const isFieldDragged = draggedField?.sectionId === sectionId && draggedField?.index === index;
     const isFieldDragOver = dragOverField?.sectionId === sectionId && dragOverField?.index === index;
 
+    // Support section-scoped field values (e.g. sec-medication-1_med_name)
+    const scopedKey = `${sectionId}_${key}`;
+    const valueKey = fieldValues[scopedKey] !== undefined ? scopedKey : key;
+    const rawVal = fieldValues[valueKey] !== undefined ? fieldValues[valueKey] : fieldValues[key];
+
+    const setVal = (newVal: any) => {
+      if (fieldValues[scopedKey] !== undefined || key.startsWith("med_")) {
+        onFieldValueChange(scopedKey, newVal);
+      } else {
+        onFieldValueChange(key, newVal);
+      }
+    };
+
     // Look up custom field metadata if exists
     const regField = allRegistryFields.find((f) => f.key === key);
     const label = regField?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
     return (
       <div
-        key={key}
+        key={`${sectionId}-${key}-${index}`}
         draggable
         onDragStart={(e) => handleFieldDragStart(e, sectionId, index)}
         onDragOver={(e) => handleFieldDragOver(e, sectionId, index)}
@@ -366,8 +379,8 @@ export default function DraggableOverviewSections({
           <div className="flex items-center gap-2">
             <input
               type="text"
-              value={fieldValues[key] || ""}
-              onChange={(e) => onFieldValueChange(key, e.target.value)}
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
               placeholder="Enter full name"
               className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
               style={{ fontFamily: "Outfit, sans-serif" }}
@@ -386,15 +399,15 @@ export default function DraggableOverviewSections({
           <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-medium">
             <input
               type="email"
-              value={fieldValues[key] || ""}
-              onChange={(e) => onFieldValueChange(key, e.target.value)}
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
               placeholder="client@email.com"
               className="w-full bg-transparent text-xs text-slate-800 focus:outline-none"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
             <button
               type="button"
-              onClick={() => handleCopy(fieldValues[key] || "", "Email")}
+              onClick={() => handleCopy(rawVal || "", "Email")}
               className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors shrink-0 cursor-pointer"
               title="Copy email"
             >
@@ -409,15 +422,15 @@ export default function DraggableOverviewSections({
           <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-800 font-medium">
             <input
               type="tel"
-              value={fieldValues[key] || ""}
-              onChange={(e) => onFieldValueChange(key, e.target.value)}
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
               placeholder="+1 (555) 000-0000"
               className="w-full bg-transparent text-xs text-slate-800 focus:outline-none"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
             <button
               type="button"
-              onClick={() => handleCopy(fieldValues[key] || "", "Phone number")}
+              onClick={() => handleCopy(rawVal || "", "Phone number")}
               className="p-1 text-slate-400 hover:text-slate-600 rounded transition-colors shrink-0 cursor-pointer"
               title="Copy phone"
             >
@@ -433,8 +446,8 @@ export default function DraggableOverviewSections({
             <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
             <input
               type="text"
-              value={fieldValues[key] || ""}
-              onChange={(e) => onFieldValueChange(key, e.target.value)}
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
               placeholder="City, State"
               className="w-full bg-transparent text-xs text-slate-800 focus:outline-none"
               style={{ fontFamily: "Outfit, sans-serif" }}
@@ -445,8 +458,8 @@ export default function DraggableOverviewSections({
             <Globe className="w-3 h-3 text-slate-400 shrink-0" />
             <input
               type="text"
-              value={fieldValues[key] || ""}
-              onChange={(e) => onFieldValueChange(key, e.target.value)}
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
               placeholder="Country"
               className="w-full bg-transparent text-xs text-slate-800 focus:outline-none"
               style={{ fontFamily: "Outfit, sans-serif" }}
@@ -454,8 +467,8 @@ export default function DraggableOverviewSections({
           </div>
         ) : key === "status" ? (
           <select
-            value={fieldValues[key] || "Active"}
-            onChange={(e) => onFieldValueChange(key, e.target.value)}
+            value={rawVal || "Active"}
+            onChange={(e) => setVal(e.target.value)}
             className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
@@ -473,10 +486,10 @@ export default function DraggableOverviewSections({
             >
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
-                  {(fieldValues[key] || "Unassigned").charAt(0).toUpperCase()}
+                  {(rawVal || "Unassigned").charAt(0).toUpperCase()}
                 </div>
                 <span className="text-xs font-semibold text-slate-800">
-                  {fieldValues[key] || "Unassigned"}
+                  {rawVal || "Unassigned"}
                 </span>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
@@ -494,7 +507,7 @@ export default function DraggableOverviewSections({
                       key={person}
                       type="button"
                       onClick={() => {
-                        onFieldValueChange(key, person);
+                        setVal(person);
                         setResponsibleDropdownOpen(false);
                         toast.success(`Assigned to ${person}`);
                       }}
@@ -520,37 +533,36 @@ export default function DraggableOverviewSections({
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
                   <span>{proc}</span>
-                  {onSelectedProcessesChange && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const updated = selectedProcesses.filter((_, i) => i !== pIdx);
-                        onSelectedProcessesChange(updated);
-                        toast.success(`${proc} removed`);
-                      }}
-                      className="w-3.5 h-3.5 rounded-full hover:bg-blue-200 flex items-center justify-center text-blue-600 hover:text-blue-800 transition-colors cursor-pointer"
-                    >
-                      <X className="w-2.5 h-2.5" />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const updated = selectedProcesses.filter((_, i) => i !== pIdx);
+                      onSelectedProcessesChange(updated);
+                    }}
+                    className="w-3.5 h-3.5 rounded-full hover:bg-blue-100 flex items-center justify-center text-blue-400 hover:text-blue-700 transition-colors cursor-pointer"
+                    title="Remove process"
+                  >
+                    <X className="w-2.5 h-2.5" />
+                  </button>
                 </div>
               ))
             ) : (
-              <span className="text-xs text-slate-400 italic">No processes assigned</span>
+              <span className="text-xs text-muted-foreground italic">No processes assigned</span>
             )}
 
-            {onSelectedProcessesChange && (
+            {availableProcesses.length > 0 && (
               <DropdownMenu open={processDropdownOpen} onOpenChange={setProcessDropdownOpen}>
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className="px-2 py-0.5 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 border border-dashed border-slate-300 text-slate-600 hover:border-blue-400 hover:text-blue-600 text-xs rounded-md font-medium transition-colors cursor-pointer"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    <Plus className="w-3 h-3" /> Add Process
+                    <Plus className="w-3 h-3" />
+                    <span>Assign</span>
                   </button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-56">
+                <DropdownMenuContent align="start" className="w-52">
                   {availableProcesses
                     .filter((p) => !selectedProcesses.includes(p))
                     .map((proc) => (
@@ -572,18 +584,334 @@ export default function DraggableOverviewSections({
               </DropdownMenu>
             )}
           </div>
+        ) : key === "prescribed_medications" || key === "medications" ? (
+          <div className="space-y-3">
+            {(() => {
+              let medsList: any[] = [];
+              if (Array.isArray(rawVal)) {
+                medsList = rawVal;
+              } else if (typeof rawVal === "string" && rawVal.trim()) {
+                try {
+                  const parsed = JSON.parse(rawVal);
+                  if (Array.isArray(parsed)) medsList = parsed;
+                } catch {
+                  medsList = rawVal
+                    .split("\n")
+                    .filter((l: string) => l.trim())
+                    .map((l: string, idx: number) => {
+                      const parts = l.replace(/^\d+\.\s*/, "").split(/[|()\-]+/).map((s: string) => s.trim());
+                      return {
+                        id: `med-${idx + 1}`,
+                        name: parts[0] || "Paracetamol",
+                        strength: parts[1] || "500 mg",
+                        form: parts[2] || "Tablet",
+                        dosage: parts[3] || "1 tablet",
+                        frequency: parts[4] || "Up to 3 times/day as needed",
+                        duration: parts[5] || "3 days",
+                      };
+                    });
+                }
+              }
+
+              if (medsList.length === 0) {
+                medsList = [
+                  {
+                    id: "med-1",
+                    name: "Paracetamol",
+                    strength: "500 mg",
+                    form: "Tablet",
+                    dosage: "1 tablet",
+                    frequency: "Up to 3 times/day as needed",
+                    duration: "3 days",
+                  },
+                ];
+              }
+
+              return (
+                <div className="space-y-3">
+                  {medsList.map((med: any, mIdx: number) => (
+                    <div
+                      key={med.id || mIdx}
+                      className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5 hover:border-slate-300 transition-colors"
+                    >
+                      <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          <span className="w-5 h-5 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center text-[10px] font-bold">
+                            {mIdx + 1}
+                          </span>
+                          <span>Medication {mIdx + 1}</span>
+                        </div>
+                        {medsList.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const updated = medsList.filter((_: any, i: number) => i !== mIdx);
+                              setVal(updated);
+                              toast.success(`Medication ${mIdx + 1} removed`);
+                            }}
+                            className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Remove medication"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
+                            Medicine Name
+                          </label>
+                          <input
+                            type="text"
+                            value={med.name || ""}
+                            onChange={(e) => {
+                              const updated = [...medsList];
+                              updated[mIdx] = { ...updated[mIdx], name: e.target.value };
+                              setVal(updated);
+                            }}
+                            placeholder="e.g. Paracetamol, Cetirizine"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
+                            Strength
+                          </label>
+                          <input
+                            type="text"
+                            value={med.strength || ""}
+                            onChange={(e) => {
+                              const updated = [...medsList];
+                              updated[mIdx] = { ...updated[mIdx], strength: e.target.value };
+                              setVal(updated);
+                            }}
+                            placeholder="e.g. 500 mg, 10 mg"
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-0.5">
+                            Form
+                          </label>
+                          <select
+                            value={med.form || "Tablet"}
+                            onChange={(e) => {
+                              const updated = [...medsList];
+                              updated[mIdx] = { ...updated[mIdx], form: e.target.value };
+                              setVal(updated);
+                            }}
+                            className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <option value="Tablet">Tablet</option>
+                            <option value="Syrup">Syrup</option>
+                            <option value="Capsule">Capsule</option>
+                            <option value="Eye Drops">Eye Drops</option>
+                            <option value="Ointment">Ointment</option>
+                            <option value="Injection">Injection</option>
+                            <option value="Inhalation">Inhalation</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newMed = {
+                        id: `med-${Date.now()}`,
+                        name: "",
+                        strength: "",
+                        form: "Tablet",
+                        dosage: "1 tablet",
+                        frequency: "Once daily (OD)",
+                        duration: "5 days",
+                      };
+                      setVal([...medsList, newMed]);
+                      toast.success(`Medication ${medsList.length + 1} added`);
+                    }}
+                    className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-slate-400 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add Medication
+                  </button>
+                </div>
+              );
+            })()}
+          </div>
+        ) : key === "symptoms" ||
+            key === "patient_instructions" ||
+            key === "patient_precautions" ||
+            regField?.key === "symptoms" ||
+            regField?.key === "patient_instructions" ||
+            regField?.key === "patient_precautions" ||
+            regField?.inputType === "multiselect" ||
+            Array.isArray(rawVal) ? (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-1.5 min-h-[30px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
+              {(() => {
+                const currentArr: string[] = Array.isArray(rawVal)
+                  ? rawVal
+                  : typeof rawVal === "string" && rawVal.trim()
+                  ? rawVal
+                      .split(/[\n;]+/)
+                      .map((s: string) => s.replace(/^[•\-\s]+/, "").trim())
+                      .filter(Boolean)
+                  : [];
+
+                if (currentArr.length === 0) {
+                  return (
+                    <span className="text-xs text-muted-foreground italic">
+                      No {label.toLowerCase()} added yet. Type below to add.
+                    </span>
+                  );
+                }
+
+                return currentArr.map((item: string, idx: number) => (
+                  <div
+                    key={idx}
+                    className="group relative inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 text-xs font-semibold rounded-lg shadow-2xs select-none hover:border-blue-400 transition-colors"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <span>{item}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = currentArr.filter((_: any, i: number) => i !== idx);
+                        setVal(updated);
+                      }}
+                      className="w-3.5 h-3.5 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-red-600 transition-colors cursor-pointer"
+                      title="Remove"
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <input
+                type="text"
+                id={`input-add-${sectionId}-${key}`}
+                placeholder={`+ Type ${label.toLowerCase()} and press Enter...`}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
+                    e.preventDefault();
+                    const val = (e.target as HTMLInputElement).value.replace(/^[•\-\s]+/, "").trim();
+                    if (!val) return;
+                    const arr: string[] = Array.isArray(rawVal)
+                      ? [...rawVal]
+                      : typeof rawVal === "string" && rawVal
+                      ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
+                      : [];
+                    if (!arr.includes(val)) {
+                      setVal([...arr, val]);
+                    }
+                    (e.target as HTMLInputElement).value = "";
+                  }
+                }}
+                className="flex-1 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  const input = document.getElementById(`input-add-${sectionId}-${key}`) as HTMLInputElement;
+                  if (input && input.value.trim()) {
+                    const val = input.value.replace(/^[•\-\s]+/, "").trim();
+                    if (!val) return;
+                    const arr: string[] = Array.isArray(rawVal)
+                      ? [...rawVal]
+                      : typeof rawVal === "string" && rawVal
+                      ? rawVal.split(/[\n;]+/).map((s: string) => s.replace(/^[•\-\s]+/, "").trim()).filter(Boolean)
+                      : [];
+                    if (!arr.includes(val)) {
+                      setVal([...arr, val]);
+                    }
+                    input.value = "";
+                  }
+                }}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
         ) : regField?.inputType === "select" ? (
-          <select
-            value={fieldValues[key] || ""}
-            onChange={(e) => onFieldValueChange(key, e.target.value)}
-            className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-          >
-            <option value="Organic">Organic</option>
-            <option value="Paid">Paid</option>
-            <option value="Referral">Referral</option>
-            <option value="Web">Web</option>
-            <option value="Other">Other</option>
-          </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 hover:border-slate-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-slate-800 transition-all cursor-pointer shadow-2xs outline-none group text-left"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <span className={rawVal ? "text-slate-800 truncate" : "text-slate-400 font-normal truncate"}>
+                  {rawVal || `Select ${label}...`}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-600 shrink-0 ml-2 transition-transform duration-150" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="start"
+              className="w-72 max-h-64 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-xl shadow-xl z-50 animate-in fade-in-80 zoom-in-95"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {regField.options && regField.options.length > 0 ? (
+                regField.options.map((opt) => {
+                  const isSelected = rawVal === opt.value;
+                  return (
+                    <DropdownMenuItem
+                      key={opt.id}
+                      onClick={() => setVal(opt.value)}
+                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-blue-50 text-blue-700 font-semibold"
+                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      <span className="truncate">{opt.label}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                    </DropdownMenuItem>
+                  );
+                })
+              ) : (
+                ["Active", "Pending", "Completed"].map((optVal) => {
+                  const isSelected = rawVal === optVal;
+                  return (
+                    <DropdownMenuItem
+                      key={optVal}
+                      onClick={() => setVal(optVal)}
+                      className={`flex items-center justify-between px-3 py-2 text-xs rounded-lg cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-blue-50 text-blue-700 font-semibold"
+                          : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                      }`}
+                    >
+                      <span className="truncate">{optVal}</span>
+                      {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                    </DropdownMenuItem>
+                  );
+                })
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : regField?.inputType === "textarea" ? (
+          <textarea
+            value={rawVal ?? ""}
+            onChange={(e) => setVal(e.target.value)}
+            placeholder={regField?.placeholder || `Enter ${label.toLowerCase()}`}
+            rows={2}
+            className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all resize-y"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          />
         ) : (
           <input
             type={
@@ -597,8 +925,8 @@ export default function DraggableOverviewSections({
                 ? "number"
                 : "text"
             }
-            value={fieldValues[key] || ""}
-            onChange={(e) => onFieldValueChange(key, e.target.value)}
+            value={rawVal ?? ""}
+            onChange={(e) => setVal(e.target.value)}
             placeholder={regField?.placeholder || `Enter ${label.toLowerCase()}`}
             className="w-full px-3 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
             style={{ fontFamily: "Outfit, sans-serif" }}
