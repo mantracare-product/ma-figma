@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Outlet } from "react-router";
 import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, RefreshCw } from "lucide-react";
-import { DndProvider, useDrag, useDrop } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
+import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -1421,7 +1420,7 @@ export default function Clients() {
   const someSelected = currentPageClientIds.some((id) => selectedRows.has(id)) && !allSelected;
 
   return (
-    <DndProvider backend={HTML5Backend}>
+    <>
       <div className="min-h-screen bg-[#fafafa]">
         <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
           <PageHeader
@@ -5069,6 +5068,6 @@ export default function Clients() {
         ]}
         guideUrl="/guide/clients"
       />
-    </DndProvider>
+    </>
   );
 }

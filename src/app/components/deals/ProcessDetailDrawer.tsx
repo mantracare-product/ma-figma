@@ -34,7 +34,31 @@ import {
   ExternalLink,
   ShieldCheck,
   FileCheck,
+  User,
+  Building,
+  Send,
+  Copy,
+  PhoneCall,
+  Sparkles,
+  Workflow,
+  Layers,
+  PhoneIncoming,
+  PhoneOutgoing,
 } from "lucide-react";
+import { toast } from "sonner";
+import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
+import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
+import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
+import { FieldDefinition } from "../../context/FieldRegistryContext";
+import { getStoredProcesses } from "../../../lib/useProcessStore";
+import DocumentsTab from "../profile/DocumentsTab";
+import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
+import {
+  appendActivity,
+  getActivity,
+  subscribeToActivity,
+  formatTimestamp,
+} from "../../../lib/activityEngine";
 
 export interface ProcessDocument {
   id: string;
@@ -48,17 +72,11 @@ export interface ProcessDocument {
   url?: string;
   notes?: string;
 }
-import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
-import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
-import { FieldDefinition } from "../../context/FieldRegistryContext";
-import { getStoredProcesses } from "../../../lib/useProcessStore";
-import DocumentsTab from "../profile/DocumentsTab";
-import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 
 export const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
 export const getDealStageIndex = (stageName: string): number => {
-  const index = dealStageLabels.findIndex(label => label === stageName);
+  const index = dealStageLabels.findIndex((label) => label === stageName);
   if (index !== -1) {
     return index + 1;
   }
@@ -153,7 +171,7 @@ export interface ProcessDetailDrawerProps {
   onClose: () => void;
 
   log: CallLog | null;
-  client: Client | undefined;        // mockClients[log.clientId], resolved by parent
+  client: Client | undefined; // mockClients[log.clientId], resolved by parent
 
   activeTab: "general" | "activity" | "history" | "documents";
   onTabChange: (tab: "general" | "activity" | "history" | "documents") => void;
@@ -162,11 +180,11 @@ export interface ProcessDetailDrawerProps {
   onOpenActivity?: (entry: ActivityLogEntry) => void;
 
   // Stage pipeline
-  stageIdx: number;                  // drawerStageIdx
-  onStageChange: (idx: number) => void;   // must update BOTH callLogs and deals in the parent, same as today
+  stageIdx: number; // drawerStageIdx
+  onStageChange: (idx: number) => void;
 
   // General tab — field rows
-  visibleFieldKeys: string[];        // drawerVisibleFields
+  visibleFieldKeys: string[];
   onVisibleFieldKeysChange: (keys: string[]) => void;
   editedValues: Record<string, string>;
   editingField: string | null;
@@ -175,8 +193,8 @@ export interface ProcessDetailDrawerProps {
 
   showResponsibleDropdown: boolean;
   onToggleResponsibleDropdown: (open: boolean) => void;
-  onOpenTeamMember: (personName: string) => void;   // triggers parent's TeamMemberDrawer
-  isTeamMemberDrawerOpen: boolean;   // for the pointer-events:none behavior on this drawer
+  onOpenTeamMember: (personName: string) => void;
+  isTeamMemberDrawerOpen: boolean;
 
   fieldManagerOpen: boolean;
   fieldManagerMode: "select" | "create";
@@ -184,13 +202,13 @@ export interface ProcessDetailDrawerProps {
   onCloseFieldManager: () => void;
 
   teamMembersData: TeamMember[];
-  dealFields: FieldDefinition[];     // getAllFields("deal")
+  dealFields: FieldDefinition[];
 
   // History tab
   historyFilters: ProcessDetailHistoryFilterState;
   onHistoryFiltersChange: (patch: Partial<ProcessDetailHistoryFilterState>) => void;
 
-  /** Bubbled from parent — opens ScheduleAppointmentDrawer for the Appointment action panel */
+  /** Bubbled from parent — opens ScheduleAppointmentDrawer */
   onOpenScheduleAppointment?: () => void;
 }
 
@@ -227,14 +245,166 @@ export default function ProcessDetailDrawer({
 }: ProcessDetailDrawerProps) {
   const navigate = useNavigate();
   const [draftText, setDraftText] = useState("");
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const clientId = client?.id || log?.clientId || "";
+  const clientName = client?.name || log?.client || "—";
+
+  // Quick activity composer state in General tab
+  const [noteContent, setNoteContent] = useState("");
+  const [noteTag, setNoteTag] = useState<"activity" | "note" | "call" | "task">("activity");
+  const [timelineFilter, setTimelineFilter] = useState<"all" | "stages" | "calls" | "messages">("all");
+  const [liveActivities, setLiveActivities] = useState<any[]>([]);
+
+  const DEFAULT_PROCESS_SECTIONS: OverviewSection[] = [
+    {
+      id: "sec-client-details",
+      title: "Client Details",
+      iconName: "user",
+      fieldKeys: ["client_name", "phone", "email", "source"],
+    },
+    {
+      id: "sec-process-info",
+      title: "Process Information",
+      iconName: "layers",
+      fieldKeys: ["responsible", "created_at"],
+    },
+  ];
+
+  const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
+    const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_PROCESS_SECTIONS));
+    if (visibleFieldKeys && Array.isArray(visibleFieldKeys)) {
+      const customKeys = visibleFieldKeys.filter(
+        (k) => !["client_name", "phone", "email", "source", "responsible", "created_at"].includes(k)
+      );
+      if (customKeys.length > 0) {
+        defaultSecs[1].fieldKeys = [...defaultSecs[1].fieldKeys, ...customKeys];
+      }
+    }
+    return defaultSecs;
+  });
+
+  const fields = React.useMemo(() => {
+    return dealFields
+      .filter((f) => visibleFieldKeys.includes(f.key))
+      .map((f) => {
+        let val = "";
+        if (editedValues[f.key] !== undefined) {
+          val = editedValues[f.key];
+        } else if (
+          log &&
+          (log as any)[f.key] !== undefined &&
+          (log as any)[f.key] !== null &&
+          (log as any)[f.key] !== ""
+        ) {
+          val = (log as any)[f.key];
+        } else {
+          if (f.key === "client_name") val = log?.client || client?.name || "—";
+          else if (f.key === "responsible") val = client?.responsible || "Unassigned";
+          else if (f.key === "deal_type") val = "Organic";
+          else if (f.key === "source")
+            val = (client as any)?.source || (client?.email ? client.email.split("@")[1] || "—" : "WhatsApp");
+          else if (f.key === "start_date")
+            val = log?.date
+              ? new Date(log.date).toLocaleDateString("en-US", {
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })
+              : "August 21, 2026";
+          else if (f.key === "end_date") val = "—";
+          else if (f.key === "email_id") val = client?.email || "—";
+          else if (f.key === "country_code") val = client?.countryCode || "+1";
+          else if (f.key === "country") val = client?.country || "United States";
+          else if (f.key === "time_slot") val = "8AM – 8PM";
+          else if (f.key === "comment") val = "";
+          else if (f.key === "status" || f.key === "stage") val = log?.currentStage || log?.status || "—";
+          else if (f.key === "process") val = log?.process || "—";
+          else val = "—";
+        }
+        return {
+          key: f.key,
+          label: f.label,
+          value: val,
+          type: f.inputType === "select" ? "dropdown" : f.inputType,
+          isClickable: f.key === "client_name",
+          isAvatar: f.key === "responsible",
+        };
+      });
+  }, [dealFields, visibleFieldKeys, editedValues, log, client]);
+
+  const processFieldValues = React.useMemo(() => {
+    const vals: Record<string, any> = {
+      client_name: clientName,
+      phone: client?.phone || (log as any)?.phone || "9667283405",
+      email: client?.email || "anshul@mantracare.com",
+      source: (client as any)?.source || "Inbound Web / WhatsApp",
+      responsible: client?.responsible || (log as any)?.responsible || "Unassigned",
+      created_at: log?.date
+        ? new Date(log.date).toLocaleDateString("en-US", {
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+          })
+        : "August 21, 2026",
+    };
+    if (fields && Array.isArray(fields)) {
+      fields.forEach((f) => {
+        vals[f.key] = f.value;
+      });
+    }
+    return vals;
+  }, [client, log, clientName, fields]);
+
+  // Subscribe to live activity engine
+  useEffect(() => {
+    if (clientId) {
+      const load = () => {
+        const entries = getActivity(clientId, log?.process);
+        setLiveActivities(entries);
+      };
+      load();
+      const unsub = subscribeToActivity(clientId, () => load());
+      return unsub;
+    }
+  }, [clientId, log?.process]);
+
+  const handleCopy = (text: string, label: string) => {
+    if (!text || text === "—") return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(label);
+    toast.success(`${label} copied to clipboard`);
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
+  const handlePostQuickActivity = () => {
+    if (!noteContent.trim()) {
+      toast.error("Please enter a note or activity description");
+      return;
+    }
+
+    appendActivity({
+      clientId,
+      processId: log?.process || "general",
+      processName: log?.process || "General Process",
+      type: "process_entry",
+      createdBy: "user",
+      details: {
+        primary: noteContent.trim(),
+        secondary: `Posted by User · Tag: ${noteTag.toUpperCase()}`,
+      },
+    } as any);
+
+    toast.success("Activity recorded successfully");
+    setNoteContent("");
+  };
 
   const mockHistory = [
     {
       date: "26.05.2024 14:32",
       createdBy: client?.responsible || "System",
       eventType: "Stage changed" as const,
-      description: `New → ${dealStageLabels[stageIdx - 1]}`,
+      description: `New → ${dealStageLabels[stageIdx - 1] || "Current Stage"}`,
     },
     {
       date: "25.05.2024 10:15",
@@ -242,14 +412,14 @@ export default function ProcessDetailDrawer({
       eventType: "Activity created" as const,
       description: "Contact customer: Call for update",
     },
-    { date: "24.05.2024 09:00", createdBy: "System", eventType: "View" as const, description: "" },
+    { date: "24.05.2024 09:00", createdBy: "System", eventType: "View" as const, description: "Process viewed in CRM" },
     {
       date: "23.05.2024 16:45",
       createdBy: client?.responsible || "System",
       eventType: "Stage changed" as const,
-      description: `New → Can't Contact`,
+      description: `New → Initial Contact`,
     },
-    { date: "22.05.2024 11:20", createdBy: "System", eventType: "View" as const, description: "" },
+    { date: "22.05.2024 11:20", createdBy: "System", eventType: "View" as const, description: "Process Initialized" },
   ];
 
   const filteredHistory = mockHistory.filter((h) => {
@@ -267,47 +437,6 @@ export default function ProcessDetailDrawer({
     return true;
   });
 
-  const fields = dealFields
-    .filter((f) => visibleFieldKeys.includes(f.key))
-    .map((f) => {
-      let val = "";
-      if (editedValues[f.key] !== undefined) {
-        val = editedValues[f.key];
-      } else if (log && (log as any)[f.key] !== undefined && (log as any)[f.key] !== null && (log as any)[f.key] !== "") {
-        val = (log as any)[f.key];
-      } else {
-        if (f.key === "client_name") val = log?.client || "—";
-        else if (f.key === "responsible") val = client?.responsible || "Unassigned";
-        else if (f.key === "deal_type") val = "Organic";
-        else if (f.key === "source") val = (client as any)?.source || (client?.email ? client.email.split("@")[1] || "—" : "whatsapp");
-        else if (f.key === "start_date")
-          val = log?.date
-            ? new Date(log.date).toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })
-            : "—";
-        else if (f.key === "end_date") val = "—";
-        else if (f.key === "email_id") val = client?.email || "—";
-        else if (f.key === "country_code") val = client?.countryCode || "—";
-        else if (f.key === "country") val = client?.country || "—";
-        else if (f.key === "time_slot") val = "8AM – 8PM";
-        else if (f.key === "comment") val = "";
-        else if (f.key === "status" || f.key === "stage") val = log?.currentStage || log?.status || "—";
-        else if (f.key === "process") val = log?.process || "—";
-        else val = "—";
-      }
-      return {
-        key: f.key,
-        label: f.label,
-        value: val,
-        type: f.inputType === "select" ? "dropdown" : f.inputType,
-        isClickable: f.key === "client_name",
-        isAvatar: f.key === "responsible",
-      };
-    });
-
   useEffect(() => {
     if (editingField) {
       const f = fields.find((fl) => fl.key === editingField);
@@ -317,400 +446,316 @@ export default function ProcessDetailDrawer({
 
   if (!isOpen || !log) return null;
 
+  // Compute active stages
+  const storedProcesses = getStoredProcesses();
+  const matchedProc = storedProcesses.find(
+    (p) => p.name === log.process || p.name.toLowerCase() === log.process.toLowerCase()
+  );
+  const activeStageList =
+    matchedProc && matchedProc.stages?.length > 0
+      ? matchedProc.stages.map((s) => s.name)
+      : dealStageLabels;
+  const matchedIdx = activeStageList.findIndex(
+    (s) => s.toLowerCase() === log.currentStage.toLowerCase()
+  );
+  const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
+
+  const docCount = getStoredClientDocuments(clientId).length;
+  const totalActivityCount = (activity?.length || 0) + liveActivities.length;
+
+  // Combined timeline items for General tab
+  const timelineItems = [
+    ...liveActivities.map((a) => ({
+      id: a.id,
+      title: a.details?.primary || "Activity Event",
+      subtitle: a.details?.secondary || a.type,
+      type: a.type,
+      timestamp: formatTimestamp(a.timestamp),
+      badge: a.type === "stage_change" || a.type === "stage_update" ? "STAGE PROGRESS" : "ACTIVITY",
+    })),
+    ...(activity || []).map((a) => ({
+      id: a.id,
+      title: a.details?.primary || a.title || "Process Update",
+      subtitle: a.details?.secondary || a.sourceStepName || a.description || "",
+      type: a.type,
+      timestamp: a.timestamp || "Today",
+      badge: a.type?.includes("stage") ? "STAGE PROGRESS" : "ACTIVITY",
+    })),
+  ];
+
+  // Default fallback item if empty
+  if (timelineItems.length === 0) {
+    timelineItems.push({
+      id: "init-stage-1",
+      title: `Moved to ${log.currentStage} in ${log.process}`,
+      subtitle: "Stage progression recorded automatically",
+      type: "stage_change",
+      timestamp: "10:05 AM",
+      badge: "STAGE PROGRESS",
+    });
+  }
+
+  const filteredTimelineItems = timelineItems.filter((item) => {
+    if (timelineFilter === "stages") return item.badge === "STAGE PROGRESS" || item.type?.includes("stage");
+    if (timelineFilter === "calls") return item.type?.includes("call");
+    if (timelineFilter === "messages")
+      return item.type === "whatsapp" || item.type === "sms" || item.type === "email";
+    return true;
+  });
+
   return (
     <>
-      {/* Backdrop */}
+      {/* Backdrop with smooth blur */}
       <div
-        className="fixed inset-0"
-        style={{ backgroundColor: "rgba(0,0,0,0.45)", zIndex: 500 }}
+        className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs transition-opacity duration-300"
+        style={{ zIndex: 500 }}
         onClick={onClose}
       />
-      {/* Right Side Drawer */}
+
+      {/* Drawer Container */}
       <div
-        className="fixed top-0 right-0 bottom-0"
-        style={{ zIndex: 501, pointerEvents: isTeamMemberDrawerOpen ? "none" : "auto" }}
+        className="fixed top-0 right-0 bottom-0 flex justify-end"
+        style={{
+          zIndex: 501,
+          pointerEvents: isTeamMemberDrawerOpen ? "none" : "auto",
+        }}
       >
         <div
-          className="flex flex-col bg-white"
+          className="flex flex-col bg-[#F8FAFC] text-slate-800 shadow-2xl h-screen transition-all duration-300"
           style={{
-            width: "60vw",
-            height: "100vh",
-            borderRadius: "16px 0 0 16px",
-            boxShadow: "-8px 0 40px rgba(0,0,0,0.18)",
-            animation: "slideInDrawer 300ms ease-out",
+            width: "68vw",
+            minWidth: "780px",
+            maxWidth: "1150px",
+            animation: "drawerSlideIn 280ms cubic-bezier(0.16, 1, 0.3, 1)",
             overflow: "hidden",
             pointerEvents: "auto",
           }}
         >
           <style>{`
-            @keyframes slideInDrawer {
+            @keyframes drawerSlideIn {
               from { transform: translateX(100%); }
               to { transform: translateX(0); }
             }
+            .stage-chevron-active {
+              background: #2563eb;
+              color: white;
+            }
+            .stage-chevron-completed {
+              background: #0f172a;
+              color: #f8fafc;
+            }
+            .stage-chevron-pending {
+              background: #ffffff;
+              color: #64748b;
+              border: 1px solid #e2e8f0;
+            }
           `}</style>
 
-          {/* Header */}
-          <div className="flex-shrink-0 px-6 py-4 border-b border-gray-100">
-            <div className="flex items-center justify-between">
+          {/* 1. Header Bar */}
+          <div className="flex-shrink-0 bg-white px-7 py-3.5 border-b border-slate-200 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-xs">
+                <Workflow className="w-4 h-4" />
+              </div>
               <div>
-                <h2
-                  onClick={() => {
-                    onClose();
-                    navigate(`/clients/${client?.id || log?.clientId || "CL-001"}`);
-                  }}
-                  className="text-lg font-bold cursor-pointer hover:text-blue-600 hover:underline transition-colors"
-                  style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
-                  title="Click to view Client Profile"
+                <h1
+                  className="text-base font-bold text-slate-900 tracking-tight"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  {log.client}
-                </h2>
-                <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  <span>Process: <strong className="text-gray-700">{log.process}</strong></span>
+                  Process View
+                </h1>
+                <div className="flex items-center gap-1.5 text-xs text-slate-500 font-medium">
+                  <span>{log.process}</span>
                   <span>•</span>
-                  <span>Stage: <strong className="text-gray-700">{log.currentStage}</strong></span>
+                  <span className="text-blue-600 font-semibold">{log.currentStage}</span>
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {onOpenScheduleAppointment && (
+                <button
+                  onClick={onOpenScheduleAppointment}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors"
+                >
+                  <Calendar className="w-3.5 h-3.5" /> Schedule Call
+                </button>
+              )}
               <button
                 onClick={onClose}
-                className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors"
+                className="w-7 h-7 flex items-center justify-center rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                title="Close"
               >
-                <X className="w-5 h-5 text-gray-500" />
+                <X className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Stage Pipeline - Rectangular Chips */}
-          <div className="flex-shrink-0 px-6 py-4" style={{ backgroundColor: "#F5F7FA" }}>
-            <div className="flex items-center gap-0 overflow-x-auto">
-              {(() => {
-                const storedProcesses = getStoredProcesses();
-                const matchedProc = storedProcesses.find(
-                  (p) => p.name === log.process || p.name.toLowerCase() === log.process.toLowerCase()
-                );
-                const activeStageList = matchedProc ? matchedProc.stages.map((s) => s.name) : dealStageLabels;
-                const matchedIdx = activeStageList.findIndex(
-                  (s) => s.toLowerCase() === log.currentStage.toLowerCase()
-                );
-                const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
-
-                return activeStageList.map((label, i) => {
-                  const idx = i + 1;
-                  const isCompleted = idx < effectiveStageIdx;
-                  const isActive = idx === effectiveStageIdx;
-                  const isFirst = i === 0;
-                  const isLast = i === activeStageList.length - 1;
-
-                  return (
-                    <button
-                      key={label}
-                      onClick={() => onStageChange(idx)}
-                      className="flex-1 min-w-[100px] flex items-center justify-center px-2 text-center transition-all hover:opacity-90"
-                      style={{
-                        height: "40px",
-                        backgroundColor: isCompleted || isActive ? "#1F2937" : "transparent",
-                        color: isCompleted || isActive ? "#FFFFFF" : "#9E9E9E",
-                        fontSize: "12px",
-                        fontWeight: isActive ? 600 : 500,
-                        fontFamily: "Outfit, sans-serif",
-                        borderRadius: isFirst ? "8px 0 0 8px" : isLast ? "0 8px 8px 0" : "0",
-                        border: isCompleted || isActive ? "none" : "1px solid #E8ECF0",
-                        cursor: "pointer",
+          {/* 2. Client & Process Summary Title Box */}
+          <div className="flex-shrink-0 bg-white px-7 py-3 border-b border-slate-100">
+            <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200/80 rounded-xl px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-xs shadow-xs">
+                  {clientName.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span
+                      onClick={() => {
+                        onClose();
+                        navigate(`/clients/${clientId}`);
                       }}
+                      className="text-base font-bold text-slate-900 hover:text-blue-600 cursor-pointer transition-colors"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     >
-                      {isCompleted && "✓ "}
-                      {label}
-                    </button>
-                  );
-                });
-              })()}
+                      {clientName}
+                    </span>
+                    <span className="text-slate-400 font-normal">—</span>
+                    <span className="text-sm font-semibold text-slate-700">{log.currentStage}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    onClose();
+                    navigate(`/clients/${clientId}`);
+                  }}
+                  className="px-2.5 py-1 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 flex items-center gap-1 transition-colors"
+                >
+                  <User className="w-3 h-3 text-slate-400" /> View Profile
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex-shrink-0 flex border-b border-gray-200 px-6">
-            {(["general", "activity", "history", "documents"] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => onTabChange(tab)}
-                className="py-3 mr-6 text-sm font-medium transition-colors flex items-center gap-1.5"
-                style={{
-                  color: activeTab === tab ? "#1F2937" : "#9E9E9E",
-                  borderBottom: activeTab === tab ? "2px solid #1F2937" : "2px solid transparent",
-                  fontFamily: "Outfit, sans-serif",
-                }}
-              >
-                <span>
-                  {tab === "general"
-                    ? "General Information"
-                    : tab === "activity"
-                      ? "Activity"
-                      : tab === "history"
-                        ? "History"
-                        : "Documents"}
-                </span>
-                {tab === "documents" && (
-                  <span
-                    className="px-2 py-0.5 text-xs font-semibold rounded-full"
-                    style={{
-                      backgroundColor: activeTab === "documents" ? "#EBF4FF" : "#F3F4F6",
-                      color: activeTab === "documents" ? "#1E88E5" : "#6B7280",
-                    }}
+          {/* 3. Stage Pipeline - Stepper Ribbon */}
+          <div className="flex-shrink-0 px-7 py-2.5 bg-white border-b border-slate-200">
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-thin">
+              {activeStageList.map((label, i) => {
+                const idx = i + 1;
+                const isCompleted = idx < effectiveStageIdx;
+                const isActive = idx === effectiveStageIdx;
+
+                return (
+                  <button
+                    key={label}
+                    onClick={() => onStageChange(idx)}
+                    className={`flex-1 min-w-[130px] max-w-[200px] h-9 px-3 flex items-center justify-center text-center gap-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs ${isActive
+                        ? "bg-blue-600 text-white shadow-blue-500/20"
+                        : isCompleted
+                          ? "bg-slate-900 text-slate-100 hover:bg-slate-800"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                      }`}
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                    title={`Stage ${idx}: ${label}`}
                   >
-                    {getStoredClientDocuments(client?.id || log?.clientId).length}
-                  </span>
-                )}
-              </button>
-            ))}
+                    {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                    <span className="truncate">{label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Tab content — scrollable */}
-          <div className="flex-1 overflow-y-auto">
+          {/* 4. Tabs Bar (Overview, History, Documents) */}
+          <div className="flex-shrink-0 bg-white px-7 flex border-b border-slate-200 gap-8">
+            {(["general", "history", "documents"] as const).map((tab) => {
+              const isSelected = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => onTabChange(tab as any)}
+                  className={`py-3 text-xs font-semibold transition-all flex items-center gap-2 relative cursor-pointer ${
+                    isSelected ? "text-blue-600" : "text-slate-500 hover:text-slate-800"
+                  }`}
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {tab === "general" && <FileText className="w-3.5 h-3.5" />}
+                  {tab === "history" && <Clock className="w-3.5 h-3.5" />}
+                  {tab === "documents" && <FileCheck className="w-3.5 h-3.5" />}
+
+                  <span>
+                    {tab === "general"
+                      ? "Overview"
+                      : tab === "history"
+                      ? "History"
+                      : "Documents"}
+                  </span>
+
+                  {tab === "documents" && (
+                    <span
+                      className={`px-1.5 py-0.2 text-[10px] font-bold rounded-full ${
+                        isSelected ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {docCount}
+                    </span>
+                  )}
+
+                  {/* Active Indicator Underline */}
+                  {isSelected && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600 rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 5. Scrollable Tab Content */}
+          <div className="flex-1 overflow-y-auto bg-[#F8FAFC]">
+            {/* ─────────────────────────────────────────────────────────────
+                TAB 1: GENERAL (2-Column Split View)
+               ───────────────────────────────────────────────────────────── */}
             {activeTab === "general" && (
-              <div>
-                {fields.map((f, i) => {
-                  const currentValue = f.value;
-                  const isEditing = editingField === f.key;
-
-                  return (
-                    <div
-                      key={f.key}
-                      className="flex items-center px-6"
-                      style={{
-                        height: "44px",
-                        backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA",
-                        borderBottom: "1px solid #F0F0F0",
+              <div className="p-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                  {/* LEFT COLUMN: Draggable Client Details & Process Information Sections */}
+                  <div className="lg:col-span-5 space-y-5">
+                    <DraggableOverviewSections
+                      mode="process"
+                      client={client}
+                      log={log}
+                      sections={processSections}
+                      onSectionsChange={setProcessSections}
+                      fieldValues={processFieldValues}
+                      onFieldValueChange={onFieldSave}
+                      onNavigateToClient={(cId) => {
+                        onClose();
+                        navigate(`/clients/${cId}`);
                       }}
-                    >
-                      <div
-                        style={{
-                          width: "35%",
-                          fontSize: "13px",
-                          color: "#757575",
-                          fontFamily: "Outfit, sans-serif",
-                        }}
-                      >
-                        {f.label}
-                      </div>
-                      <div
-                        style={{
-                          width: "65%",
-                          fontSize: "14px",
-                          color: "#212121",
-                          fontFamily: "DM Sans, sans-serif",
-                        }}
-                      >
-                        {/* Client Name */}
-                        {f.key === "client_name" ? (
-                          <span
-                            onClick={() => {
-                              onClose();
-                              navigate(`/clients/${client?.id || log?.clientId || "CL-001"}`);
-                            }}
-                            className="text-blue-600 text-left font-medium cursor-pointer hover:underline"
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                            title="Click to view Client Profile"
-                          >
-                            {currentValue}
-                          </span>
-                        ) : /* Responsible */
-                          f.key === "responsible" ? (
-                            <div className="flex items-center gap-2 relative">
-                              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
-                                {(currentValue as string).charAt(0)}
-                              </div>
-                              <button
-                                onClick={() => onOpenTeamMember(currentValue as string)}
-                                className="hover:text-blue-600 hover:underline transition-colors"
-                                style={{ fontFamily: "DM Sans, sans-serif" }}
-                              >
-                                <span>{currentValue}</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onToggleResponsibleDropdown(!showResponsibleDropdown);
-                                }}
-                                className="hover:bg-gray-100 rounded p-0.5 transition-colors"
-                              >
-                                <ChevronDown className="w-3 h-3 text-gray-400" />
-                              </button>
-                              {showResponsibleDropdown && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-40"
-                                    onClick={() => onToggleResponsibleDropdown(false)}
-                                  />
-                                  <div className="absolute left-0 top-full mt-1 z-50 bg-white rounded-lg shadow-lg border border-gray-200 py-2 w-56">
-                                    {[
-                                      "John Smith",
-                                      "Emily Davis",
-                                      "Michael Chen",
-                                      "Sarah Johnson",
-                                      "Robert Wilson",
-                                    ].map((person) => (
-                                      <button
-                                        key={person}
-                                        onClick={() => {
-                                          onFieldSave(f.key, person);
-                                          onToggleResponsibleDropdown(false);
-                                        }}
-                                        className="w-full px-3 py-2 text-left hover:bg-blue-50 flex items-center gap-2"
-                                      >
-                                        <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center text-xs font-semibold text-blue-700">
-                                          {person.charAt(0)}
-                                        </div>
-                                        <div className="flex flex-col">
-                                          <span className="text-sm font-medium">{person}</span>
-                                          <span className="text-xs text-gray-500">Team Member</span>
-                                        </div>
-                                      </button>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          ) : /* Select Fields */
-                            f.type === "dropdown" ? (
-                              <select
-                                value={currentValue}
-                                onChange={(e) => onFieldSave(f.key, e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                style={{ fontFamily: "DM Sans, sans-serif", backgroundColor: "white" }}
-                              >
-                                {f.key === "deal_type" && (
-                                  <>
-                                    <option>Organic</option>
-                                    <option>Paid</option>
-                                    <option>Referral</option>
-                                    <option>Web</option>
-                                  </>
-                                )}
-                                {f.key === "country_code" && (
-                                  <>
-                                    <option>+1</option>
-                                    <option>+44</option>
-                                    <option>+91</option>
-                                    <option>+971</option>
-                                  </>
-                                )}
-                                {f.key === "country" && (
-                                  <>
-                                    <option>US</option>
-                                    <option>GB</option>
-                                    <option>IN</option>
-                                    <option>AE</option>
-                                  </>
-                                )}
-                                {f.key === "time_slot" && (
-                                  <>
-                                    <option>8AM – 8PM</option>
-                                    <option>9AM – 5PM</option>
-                                    <option>10AM – 6PM</option>
-                                    <option>24/7</option>
-                                  </>
-                                )}
-                                {f.key !== "deal_type" &&
-                                  f.key !== "country_code" &&
-                                  f.key !== "country" &&
-                                  f.key !== "time_slot" && (
-                                    <>
-                                      <option value="">Select option</option>
-                                      <option value="Option 1">Option 1</option>
-                                      <option value="Option 2">Option 2</option>
-                                    </>
-                                  )}
-                              </select>
-                            ) : /* Date fields */
-                              f.type === "date" ? (
-                                <input
-                                  type="date"
-                                  value={
-                                    currentValue
-                                      ? (() => {
-                                        const d = new Date(currentValue);
-                                        return isNaN(d.getTime()) ? "" : d.toISOString().split("T")[0];
-                                      })()
-                                      : ""
-                                  }
-                                  onChange={(e) => {
-                                    const d = new Date(e.target.value);
-                                    const formatted =
-                                      e.target.value && !isNaN(d.getTime())
-                                        ? d.toLocaleDateString("en-US", {
-                                          month: "long",
-                                          day: "numeric",
-                                          year: "numeric",
-                                        })
-                                        : "";
-                                    onFieldSave(f.key, formatted);
-                                  }}
-                                  className="px-2 py-1 border border-gray-300 rounded-lg hover:border-blue-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                                />
-                              ) : /* Text Fields (inline editable) */
-                                isEditing ? (
-                                  <input
-                                    type="text"
-                                    value={draftText}
-                                    onChange={(e) => setDraftText(e.target.value)}
-                                    onBlur={() => onFieldSave(f.key, draftText)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === "Enter") {
-                                        onFieldSave(f.key, draftText);
-                                      }
-                                      if (e.key === "Escape") {
-                                        onStartEditingField(null);
-                                      }
-                                    }}
-                                    autoFocus
-                                    className="w-full px-2 py-1 border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                                  />
-                                ) : (
-                                  <div
-                                    onClick={() => onStartEditingField(f.key)}
-                                    className="cursor-pointer hover:bg-blue-50 px-2 py-1 rounded transition-colors"
-                                  >
-                                    {currentValue || "—"}
-                                  </div>
-                                )}
-                      </div>
-                    </div>
-                  );
-                })}
+                      customFieldsModule="process"
+                    />
+                  </div>
 
-                {/* Select Fields + Create Field grouped together */}
-                <div style={{ borderTop: "1px solid #F0F0F0" }}>
-                  <div className="flex items-center px-6" style={{ height: "44px", gap: "8px" }}>
-                    <button
-                      onClick={() => onOpenFieldManager("select")}
-                      className="flex items-center gap-2 transition-colors cursor-pointer group"
-                      style={{ color: "#9E9E9E", fontSize: "13px", fontFamily: "Outfit, sans-serif" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = "#1E88E5")}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = "#9E9E9E")}
-                    >
-                      <SettingsIcon className="w-3.5 h-3.5" /> Select fields
-                    </button>
-                    <button
-                      onClick={() => onOpenFieldManager("create")}
-                      className="flex items-center gap-2 transition-colors cursor-pointer"
-                      style={{ color: "#9E9E9E", fontSize: "13px", fontFamily: "Outfit, sans-serif" }}
-                      onMouseEnter={(e) => (e.currentTarget.style.color = "#1E88E5")}
-                      onMouseLeave={(e) => (e.currentTarget.style.color = "#9E9E9E")}
-                    >
-                      + Create field
-                    </button>
+                  {/* RIGHT COLUMN: Full-Featured Activity Tab */}
+                  <div className="lg:col-span-7">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                      <ActivityTab
+                        activity={activity}
+                        onOpenActivity={onOpenActivity}
+                        onOpenCallDetail={(callId, entry) => {
+                          if (onOpenActivity && entry) onOpenActivity(entry);
+                        }}
+                        clientId={clientId}
+                        clientName={clientName}
+                        clientEmail={client?.email}
+                        clientPhone={client?.phone}
+                        onCloseParentDrawer={onClose}
+                        emptyMessage="No activity yet for this process"
+                        onOpenScheduleAppointment={onOpenScheduleAppointment}
+                      />
+                    </div>
                   </div>
                 </div>
 
+                {/* Modals for Field Manager */}
                 {fieldManagerOpen && fieldManagerMode === "select" && (
                   <SelectFieldsModal
-                    onlyModules={["process", "client"]}
                     initiallySelected={visibleFieldKeys}
                     onClose={onCloseFieldManager}
-                    onApply={(keys) => {
-                      onVisibleFieldKeysChange(keys);
-                    }}
+                    onApply={(keys) => onVisibleFieldKeysChange(keys)}
                   />
                 )}
 
@@ -726,575 +771,117 @@ export default function ProcessDetailDrawer({
               </div>
             )}
 
-            {activeTab === "activity" && (
-              <div className="relative p-4">
-                <ActivityTab
-                  activity={activity}
-                  onOpenActivity={onOpenActivity}
-                  onOpenCallDetail={(callId, entry) => {
-                    if (onOpenActivity && entry) {
-                      onOpenActivity(entry);
-                    }
-                  }}
-                  clientId={log?.clientId ? String(log.clientId) : client?.id ? String(client.id) : "CL-001"}
-                  clientName={client?.name}
-                  clientEmail={client?.email}
-                  clientPhone={client?.phone}
-                  onCloseParentDrawer={onClose}
-                  emptyMessage="No activity yet for this process"
-                  onOpenScheduleAppointment={onOpenScheduleAppointment}
-                />
-              </div>
-            )}
 
+
+            {/* ─────────────────────────────────────────────────────────────
+                TAB 3: HISTORY
+               ───────────────────────────────────────────────────────────── */}
             {activeTab === "history" && (
-              <div>
-                {/* Search bar + Filter icon */}
-                <div className="flex items-center gap-2 px-4 py-3 relative">
+              <div className="p-6 space-y-4">
+                {/* Search and Filters Toolbar */}
+                <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-xs flex items-center gap-3">
                   <div className="flex-1 relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search history..."
-                      className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                      style={{
-                        fontFamily: "Outfit, sans-serif",
-                        borderColor: "#E0E0E0",
-                        borderRadius: "8px",
-                        height: "36px",
-                      }}
+                      placeholder="Search audit trail & history logs..."
+                      className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-blue-500"
                     />
                   </div>
-                  <div className="relative">
-                    <button
-                      onClick={() =>
-                        onHistoryFiltersChange({ showPopup: !historyFilters.showPopup })
-                      }
-                      className="w-9 h-9 flex items-center justify-center border rounded-lg transition-colors hover:bg-[#F0F4FF]"
-                      style={{ borderColor: "#E0E0E0", borderRadius: "8px" }}
-                    >
-                      <Filter
-                        className="w-[18px] h-[18px]"
-                        style={{ color: historyFilters.showPopup ? "#1E88E5" : "#757575" }}
-                      />
-                    </button>
+
+                  <button
+                    onClick={() =>
+                      onHistoryFiltersChange({ showPopup: !historyFilters.showPopup })
+                    }
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${historyFilters.filtersActive
+                        ? "bg-blue-50 border-blue-200 text-blue-700"
+                        : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50"
+                      }`}
+                  >
+                    <Filter className="w-3.5 h-3.5" />
+                    <span>Filter</span>
                     {historyFilters.filtersActive && (
-                      <div className="absolute top-0 right-0 w-2 h-2 rounded-full bg-blue-500" />
+                      <span className="w-2 h-2 rounded-full bg-blue-600" />
                     )}
-                  </div>
-                  {historyFilters.showPopup && (
-                    <>
-                      <div
-                        className="fixed inset-0"
-                        style={{ zIndex: 590 }}
-                        onClick={() => onHistoryFiltersChange({ showPopup: false })}
-                      />
-                      <div
-                        className="absolute right-0 bg-white border border-gray-200"
-                        style={{
-                          zIndex: 600,
-                          width: "600px",
-                          top: "calc(100% + 4px)",
-                          borderRadius: "8px",
-                        }}
-                      >
-                        {/* Two Column Layout */}
-                        <div className="flex">
-                          {/* Left Column - Quick Filters */}
-                          <div
-                            className="flex flex-col border-r border-gray-200"
-                            style={{ width: "180px" }}
-                          >
-                            <div className="p-4 border-b border-gray-200">
-                              <p
-                                className="font-bold text-sm"
-                                style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
-                              >
-                                Filter
-                              </p>
-                            </div>
-                            <div className="flex-1 p-2">
-                              <div className="space-y-0.5">
-                                {["Created by me", "Created Today", "Created Yesterday"].map((q) => (
-                                  <button
-                                    key={q}
-                                    onClick={() =>
-                                      onHistoryFiltersChange({
-                                        quickFilter: historyFilters.quickFilter === q ? null : q,
-                                      })
-                                    }
-                                    className="block w-full text-left px-3 py-2 rounded text-sm transition-colors"
-                                    style={{
-                                      fontFamily: "Outfit, sans-serif",
-                                      backgroundColor:
-                                        historyFilters.quickFilter === q ? "#EBF4FF" : "transparent",
-                                      color: historyFilters.quickFilter === q ? "#1E88E5" : "#424242",
-                                    }}
-                                  >
-                                    {q}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="p-3 border-t border-gray-200">
-                              <button
-                                className="flex items-center gap-2 text-xs text-blue-500 hover:text-blue-600"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                Save filter
-                                <SettingsIcon className="w-3.5 h-3.5 ml-auto" />
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Right Column - Filter Fields */}
-                          <div className="flex-1 flex flex-col">
-                            <div className="flex-1 p-4 space-y-3 max-h-[400px] overflow-y-auto">
-                              {/* Event Type */}
-                              {historyFilters.activeFilterFields.includes("Event Type") && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold mb-1.5"
-                                    style={{ color: "#9E9E9E", fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    Event Type
-                                  </p>
-                                  <select
-                                    value={historyFilters.eventTypeFilter}
-                                    onChange={(e) =>
-                                      onHistoryFiltersChange({ eventTypeFilter: e.target.value })
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-blue-500"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    {[
-                                      "Not specified",
-                                      "View",
-                                      "Stage changed",
-                                      "Activity created",
-                                    ].map((o) => (
-                                      <option key={o}>{o}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
-
-                              {/* Created By */}
-                              {historyFilters.activeFilterFields.includes("Created By") && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold mb-1.5"
-                                    style={{ color: "#9E9E9E", fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    Created By
-                                  </p>
-                                  <input
-                                    type="text"
-                                    value={historyFilters.createdByFilter}
-                                    onChange={(e) =>
-                                      onHistoryFiltersChange({ createdByFilter: e.target.value })
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-blue-500"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                    placeholder="Enter name..."
-                                  />
-                                </div>
-                              )}
-
-                              {/* Date */}
-                              {historyFilters.activeFilterFields.includes("Date") && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold mb-1.5"
-                                    style={{ color: "#9E9E9E", fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    Date
-                                  </p>
-                                  <select
-                                    value={historyFilters.dateFilter}
-                                    onChange={(e) =>
-                                      onHistoryFiltersChange({ dateFilter: e.target.value })
-                                    }
-                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-blue-500"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    {[
-                                      "Any date",
-                                      "Today",
-                                      "Yesterday",
-                                      "Last 7 days",
-                                      "Last 30 days",
-                                      "Custom range",
-                                    ].map((o) => (
-                                      <option key={o}>{o}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                              )}
-
-                              {/* Stage */}
-                              {historyFilters.activeFilterFields.includes("Stage") && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold mb-1.5"
-                                    style={{ color: "#9E9E9E", fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    Stage
-                                  </p>
-                                  <select
-                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-blue-500"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    <option>Not specified</option>
-                                    <option>Initial Contact</option>
-                                    <option>Qualification</option>
-                                    <option>Proposal</option>
-                                  </select>
-                                </div>
-                              )}
-
-                              {/* Responsible */}
-                              {historyFilters.activeFilterFields.includes("Responsible") && (
-                                <div>
-                                  <p
-                                    className="text-xs font-semibold mb-1.5"
-                                    style={{ color: "#9E9E9E", fontFamily: "Outfit, sans-serif" }}
-                                  >
-                                    Responsible
-                                  </p>
-                                  <input
-                                    type="text"
-                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-blue-500"
-                                    style={{ fontFamily: "Outfit, sans-serif" }}
-                                    placeholder="Enter name..."
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Add field / Restore default */}
-                            <div className="px-4 py-2 border-t border-gray-200 flex items-center gap-3">
-                              <button
-                                onClick={() => onHistoryFiltersChange({ showAddFieldPopup: true })}
-                                className="text-xs text-blue-500 hover:text-blue-600"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                Add field
-                              </button>
-                              <button
-                                onClick={() =>
-                                  onHistoryFiltersChange({
-                                    activeFilterFields: ["Event Type", "Created By", "Date"],
-                                    eventTypeFilter: "Not specified",
-                                    createdByFilter: "",
-                                    dateFilter: "Any date",
-                                  })
-                                }
-                                className="text-xs text-gray-400 hover:text-gray-600"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                Restore default fields
-                              </button>
-                            </div>
-
-                            {/* Footer - Search and Reset */}
-                            <div className="p-4 border-t border-gray-200 flex gap-2">
-                              <button
-                                onClick={() =>
-                                  onHistoryFiltersChange({
-                                    filtersActive:
-                                      historyFilters.quickFilter !== null ||
-                                      historyFilters.eventTypeFilter !== "Not specified" ||
-                                      !!historyFilters.createdByFilter ||
-                                      historyFilters.dateFilter !== "Any date",
-                                    showPopup: false,
-                                  })
-                                }
-                                className="px-4 py-2 rounded text-sm font-medium text-white flex items-center justify-center gap-1.5"
-                                style={{ backgroundColor: "#1E88E5", fontFamily: "Outfit, sans-serif" }}
-                              >
-                                <Search className="w-3.5 h-3.5" /> Search
-                              </button>
-                              <button
-                                onClick={() =>
-                                  onHistoryFiltersChange({
-                                    eventTypeFilter: "Not specified",
-                                    createdByFilter: "",
-                                    dateFilter: "Any date",
-                                    quickFilter: null,
-                                    filtersActive: false,
-                                    showPopup: false,
-                                    activeFilterFields: ["Event Type", "Created By", "Date"],
-                                  })
-                                }
-                                className="px-4 py-2 rounded text-sm font-medium border border-gray-300 hover:bg-gray-50"
-                                style={{ color: "#757575", fontFamily: "Outfit, sans-serif" }}
-                              >
-                                Reset
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Add Field Sub-Popup */}
-                        {historyFilters.showAddFieldPopup && (
-                          <>
-                            <div
-                              className="absolute inset-0 bg-black/20"
-                              style={{ zIndex: 610, borderRadius: "8px" }}
-                              onClick={() => onHistoryFiltersChange({ showAddFieldPopup: false })}
-                            />
-                            <div
-                              className="absolute bg-white border border-gray-300 shadow-lg"
-                              style={{
-                                zIndex: 620,
-                                top: "50%",
-                                left: "50%",
-                                transform: "translate(-50%, -50%)",
-                                width: "320px",
-                                borderRadius: "8px",
-                              }}
-                            >
-                              <div className="p-4 border-b border-gray-200">
-                                <div className="flex items-center justify-between">
-                                  <p
-                                    className="font-bold text-sm"
-                                    style={{ color: "#212121", fontFamily: "DM Sans, sans-serif" }}
-                                  >
-                                    Filter field settings
-                                  </p>
-                                  <button
-                                    onClick={() =>
-                                      onHistoryFiltersChange({ showAddFieldPopup: false })
-                                    }
-                                    className="text-gray-400 hover:text-gray-600"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="p-4 space-y-2 max-h-[300px] overflow-y-auto">
-                                {["Event Type", "Created By", "Date", "Stage", "Responsible"].map(
-                                  (field) => (
-                                    <label
-                                      key={field}
-                                      className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={historyFilters.selectedAddFields.includes(field)}
-                                        onChange={(e) => {
-                                          if (e.target.checked) {
-                                            onHistoryFiltersChange({
-                                              selectedAddFields: [
-                                                ...historyFilters.selectedAddFields,
-                                                field,
-                                              ],
-                                            });
-                                          } else {
-                                            onHistoryFiltersChange({
-                                              selectedAddFields:
-                                                historyFilters.selectedAddFields.filter(
-                                                  (f) => f !== field
-                                                ),
-                                            });
-                                          }
-                                        }}
-                                        className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-500"
-                                      />
-                                      <span
-                                        className="text-sm"
-                                        style={{ fontFamily: "Outfit, sans-serif", color: "#424242" }}
-                                      >
-                                        {field}
-                                      </span>
-                                    </label>
-                                  )
-                                )}
-                              </div>
-                              <div className="p-4 border-t border-gray-200 flex items-center justify-between">
-                                <button
-                                  onClick={() =>
-                                    onHistoryFiltersChange({
-                                      selectedAddFields: [
-                                        "Event Type",
-                                        "Created By",
-                                        "Date",
-                                        "Stage",
-                                        "Responsible",
-                                      ],
-                                    })
-                                  }
-                                  className="text-sm text-blue-500 hover:text-blue-600"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  Select all
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    onHistoryFiltersChange({
-                                      selectedAddFields: ["Event Type", "Created By", "Date"],
-                                      activeFilterFields: ["Event Type", "Created By", "Date"],
-                                      showAddFieldPopup: false,
-                                    });
-                                  }}
-                                  className="text-sm text-gray-500 hover:text-gray-700"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  Default
-                                </button>
-                              </div>
-                              <div className="p-3 border-t border-gray-200">
-                                <button
-                                  onClick={() => {
-                                    onHistoryFiltersChange({
-                                      activeFilterFields: [...historyFilters.selectedAddFields],
-                                      showAddFieldPopup: false,
-                                    });
-                                  }}
-                                  className="w-full py-2 rounded text-sm font-medium text-white"
-                                  style={{
-                                    backgroundColor: "#1E88E5",
-                                    fontFamily: "Outfit, sans-serif",
-                                  }}
-                                >
-                                  Apply
-                                </button>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </>
-                  )}
+                  </button>
                 </div>
-                <table className="w-full">
-                  <thead>
-                    <tr style={{ backgroundColor: "#1A2B4A", height: "44px" }}>
-                      <th style={{ width: "40px" }} className="px-4">
-                        <input type="checkbox" className="w-4 h-4" />
-                      </th>
-                      <th
-                        className="px-4 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                        style={{ width: "110px" }}
-                      >
-                        Date
-                      </th>
-                      <th
-                        className="px-4 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                        style={{ width: "70px" }}
-                      >
-                        Time
-                      </th>
-                      <th
-                        className="px-4 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                        style={{ width: "150px" }}
-                      >
-                        Created By
-                      </th>
-                      <th
-                        className="px-4 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                        style={{ width: "150px" }}
-                      >
-                        Event Type
-                      </th>
-                      <th className="px-4 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                        Description
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredHistory.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="text-center py-10 text-gray-400 italic text-sm">
-                          {historyFilters.filtersActive
-                            ? "No results found"
-                            : "No history available yet"}
-                        </td>
+
+                {/* History Table */}
+                <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-xs">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-slate-900 text-white text-[11px] font-semibold uppercase tracking-wider">
+                        <th className="px-4 py-3">Date & Time</th>
+                        <th className="px-4 py-3">User / Actor</th>
+                        <th className="px-4 py-3">Event Type</th>
+                        <th className="px-4 py-3">Description</th>
                       </tr>
-                    ) : (
-                      filteredHistory.map((h, i) => (
-                        <tr
-                          key={i}
-                          style={{
-                            height: "40px",
-                            backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA",
-                            borderBottom: "1px solid #EEEEEE",
-                          }}
-                          className="hover:bg-[#F5F8FF] transition-colors"
-                        >
-                          <td className="px-4">
-                            <input type="checkbox" className="w-4 h-4" />
-                          </td>
-                          <td
-                            className="px-4 text-xs"
-                            style={{ color: "#757575", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {h.date.split(" ")[0]}
-                          </td>
-                          <td
-                            className="px-4 text-xs"
-                            style={{ color: "#757575", fontFamily: "Outfit, sans-serif" }}
-                          >
-                            {h.date.split(" ")[1]}
-                          </td>
-                          <td className="px-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-600">
-                                {h.createdBy.charAt(0)}
-                              </div>
-                              <span
-                                className="text-sm"
-                                style={{ fontFamily: "DM Sans, sans-serif", color: "#212121" }}
-                              >
-                                {h.createdBy}
-                              </span>
-                            </div>
-                          </td>
-                          <td
-                            className="px-4 text-sm"
-                            style={{
-                              fontFamily: "Outfit, sans-serif",
-                              color:
-                                h.eventType === "View"
-                                  ? "#9E9E9E"
-                                  : h.eventType === "Stage changed"
-                                    ? "#1E88E5"
-                                    : "#2E7D32",
-                            }}
-                          >
-                            {h.eventType}
-                          </td>
-                          <td
-                            className="px-4 text-sm"
-                            style={{ fontFamily: "DM Sans, sans-serif", color: "#424242" }}
-                          >
-                            {h.description}
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
+                      {filteredHistory.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="text-center py-10 text-slate-400 italic">
+                            No history records found
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                      ) : (
+                        filteredHistory.map((h, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="px-4 py-3 font-medium text-slate-500 whitespace-nowrap">
+                              {h.date}
+                            </td>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px]">
+                                  {h.createdBy.charAt(0)}
+                                </div>
+                                <span className="font-semibold text-slate-800">{h.createdBy}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${h.eventType === "Stage changed"
+                                    ? "bg-blue-100 text-blue-700"
+                                    : h.eventType === "Activity created"
+                                      ? "bg-emerald-100 text-emerald-700"
+                                      : "bg-slate-100 text-slate-600"
+                                  }`}
+                              >
+                                {h.eventType}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 font-medium text-slate-800">{h.description}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
 
+            {/* ───────────────────────────────────────────────────────
+                TAB 4: DOCUMENTS
+               ───────────────────────────────────────────────────────────── */}
             {activeTab === "documents" && (
-              <DocumentsTab
-                client={{
-                  id: client?.id || log?.clientId || "CL-001",
-                  name: client?.name || log?.client || "Client Name",
-                  email: client?.email || "client@email.com",
-                  phone: client?.phone || "—",
-                  companyName: client?.companyName,
-                  jobPosition: client?.jobPosition,
-                  location: client?.location,
-                  responsible: client?.responsible || (log as any)?.responsible,
-                  status: client?.status || log?.status,
-                }}
-                processName={log?.process}
-              />
+              <div className="p-6">
+                <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                  <DocumentsTab
+                    client={{
+                      id: clientId,
+                      name: clientName,
+                      email: client?.email || "client@email.com",
+                      phone: client?.phone || "—",
+                      companyName: client?.companyName,
+                      jobPosition: client?.jobPosition,
+                      location: client?.location,
+                      responsible: client?.responsible || (log as any)?.responsible,
+                      status: client?.status || log?.status,
+                    }}
+                    processName={log?.process}
+                  />
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { RouterProvider } from "react-router";
 import { router } from "./routes";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
 import { AIProviderProvider } from "./context/AIProviderContext";
 import { AuthProvider } from "./context/AuthContext";
 import { HowItWorksProvider } from "./context/HowItWorksContext";
@@ -24,8 +26,10 @@ export default function App() {
                   <FieldRegistryProvider>
                     <ClientFieldsProvider>
                       <InvoiceProvider>
-                        <RouterProvider router={router} />
-                        <Toaster position="bottom-right" />
+                        <DndProvider backend={HTML5Backend}>
+                          <RouterProvider router={router} />
+                          <Toaster position="bottom-right" />
+                        </DndProvider>
                       </InvoiceProvider>
                     </ClientFieldsProvider>
                   </FieldRegistryProvider>

@@ -19,8 +19,7 @@ import { useSidebar } from "../context/SidebarContext";
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
-import { DndProvider, useDrag, useDrop } from "react-dnd";
-import { HTML5Backend } from "react-dnd-html5-backend";
+import { useDrag, useDrop } from "react-dnd";
 import FlowBuilderTab from "../components/process/FlowBuilderTab";
 import { WorkflowStep } from "../types/workflow";
 import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
@@ -2335,26 +2334,24 @@ export default function Process() {
                     <div className="bg-gradient-to-br from-gray-50 to-white rounded-2xl p-6 border border-gray-200 shadow-sm">
                       <h3 className="text-xl font-bold mb-5" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Stages</h3>
 
-                      <DndProvider backend={HTML5Backend}>
-                        <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-                          {selectedProcessData.stages.map((stage, index) => (
-                            <DraggableStage
-                              key={stage.id}
-                              stage={stage}
-                              index={index}
-                              moveStage={moveStage}
-                              onRemove={handleRemoveStage}
-                              onEdit={handleEditStage}
-                            />
-                          ))}
-                          <button
-                            onClick={handleQuickAddStage}
-                            className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-lg hover:shadow-xl"
-                          >
-                            <Plus className="w-6 h-6 text-white" />
-                          </button>
-                        </div>
-                      </DndProvider>
+                      <div className="flex items-center gap-3 overflow-x-auto overflow-y-hidden pb-3 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+                        {selectedProcessData.stages.map((stage, index) => (
+                          <DraggableStage
+                            key={stage.id}
+                            stage={stage}
+                            index={index}
+                            moveStage={moveStage}
+                            onRemove={handleRemoveStage}
+                            onEdit={handleEditStage}
+                          />
+                        ))}
+                        <button
+                          onClick={handleQuickAddStage}
+                          className="flex items-center justify-center w-12 h-12 rounded-full bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 transition-all flex-shrink-0 shadow-lg hover:shadow-xl"
+                        >
+                          <Plus className="w-6 h-6 text-white" />
+                        </button>
+                      </div>
                     </div>
 
                     {/* Knowledge Base */}
@@ -4210,47 +4207,45 @@ export default function Process() {
                                             </p>
                                             <InfoTooltip text="These steps run automatically the moment a client enters this stage, before any call starts." />
                                           </div>
-                                          <DndProvider backend={HTML5Backend}>
-                                            <div className="space-y-2">
-                                              {stageSteps.map((step, idx) => (
-                                                <DraggableWorkflowStep
-                                                  key={step.id}
-                                                  step={step}
-                                                  index={idx}
-                                                  moveStep={moveStageStep}
-                                                  onEdit={() => {
-                                                    resetStepDetailState();
-                                                    setCurrentEditingStep(step);
-                                                    setIsCreatingNewStep(false);
-                                                    setStepTrigger(step.trigger ?? "stage");
-                                                    setExecutionType(step.executionType ?? "wait");
-                                                    setDelayValue(step.delayValue ?? 5);
-                                                    setDelayUnit(step.delayUnit ?? "Minute");
-                                                    restoreStepParams(step.stepKey, step.params);
-                                                    setStepDetailDrawerOpen(true);
-                                                  }}
-                                                  onDuplicate={() => {
-                                                    const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                    const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                    if (fullIdx !== -1) {
-                                                      setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                    }
-                                                    toast.success("Step duplicated successfully");
-                                                  }}
-                                                  onDelete={() => {
-                                                    setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                    toast.success("Step removed successfully");
-                                                  }}
-                                                  StepIcon={StepIcon}
-                                                  connectAfterLabel={(() => {
-                                                    if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
-                                                    const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                    return pred ? `after ${pred.name}` : undefined;
-                                                  })()}
-                                                />
-                                              ))}
-                                            </div>
-                                          </DndProvider>
+                                          <div className="space-y-2">
+                                            {stageSteps.map((step, idx) => (
+                                              <DraggableWorkflowStep
+                                                key={step.id}
+                                                step={step}
+                                                index={idx}
+                                                moveStep={moveStageStep}
+                                                onEdit={() => {
+                                                  resetStepDetailState();
+                                                  setCurrentEditingStep(step);
+                                                  setIsCreatingNewStep(false);
+                                                  setStepTrigger(step.trigger ?? "stage");
+                                                  setExecutionType(step.executionType ?? "wait");
+                                                  setDelayValue(step.delayValue ?? 5);
+                                                  setDelayUnit(step.delayUnit ?? "Minute");
+                                                  restoreStepParams(step.stepKey, step.params);
+                                                  setStepDetailDrawerOpen(true);
+                                                }}
+                                                onDuplicate={() => {
+                                                  const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                  const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                  if (fullIdx !== -1) {
+                                                    setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                  }
+                                                  toast.success("Step duplicated successfully");
+                                                }}
+                                                onDelete={() => {
+                                                  setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                  toast.success("Step removed successfully");
+                                                }}
+                                                StepIcon={StepIcon}
+                                                connectAfterLabel={(() => {
+                                                  if (!step.connectAfterId || step.connectAfterId === 'start') return 'from Start';
+                                                  const pred = workflowSteps.find(s => s.id === step.connectAfterId);
+                                                  return pred ? `after ${pred.name}` : undefined;
+                                                })()}
+                                              />
+                                            ))}
+                                          </div>
                                         </div>
                                       )}
 
@@ -4464,47 +4459,45 @@ export default function Process() {
                                                 </p>
                                                 <InfoTooltip text="These steps run after the call ends — send a follow-up text, update a field, or move the client to the next stage." />
                                               </div>
-                                              <DndProvider backend={HTML5Backend}>
-                                                <div className="space-y-2">
-                                                  {postCallSteps.map((step, idx) => (
-                                                    <DraggableWorkflowStep
-                                                      key={step.id}
-                                                      step={step}
-                                                      index={idx}
-                                                      moveStep={movePostCallStep}
-                                                      onEdit={() => {
-                                                        resetStepDetailState();
-                                                        setCurrentEditingStep(step);
-                                                        setIsCreatingNewStep(false);
-                                                        setStepTrigger(step.trigger ?? "stage");
-                                                        setExecutionType(step.executionType ?? "wait");
-                                                        setDelayValue(step.delayValue ?? 5);
-                                                        setDelayUnit(step.delayUnit ?? "Minute");
-                                                        restoreStepParams(step.stepKey, step.params);
-                                                        setStepDetailDrawerOpen(true);
-                                                      }}
-                                                      onDuplicate={() => {
-                                                        const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
-                                                        const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
-                                                        if (fullIdx !== -1) {
-                                                          setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
-                                                        }
-                                                        toast.success("Step duplicated successfully");
-                                                      }}
-                                                      onDelete={() => {
-                                                        setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
-                                                        toast.success("Step removed successfully");
-                                                      }}
-                                                      StepIcon={StepIcon}
-                                                      connectAfterLabel={(() => {
-                                                        if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
-                                                        const pred = workflowSteps.find(s => s.id === step.connectAfterId);
-                                                        return pred ? `after ${pred.name}` : undefined;
-                                                      })()}
-                                                    />
-                                                  ))}
-                                                </div>
-                                              </DndProvider>
+                                              <div className="space-y-2">
+                                                {postCallSteps.map((step, idx) => (
+                                                  <DraggableWorkflowStep
+                                                    key={step.id}
+                                                    step={step}
+                                                    index={idx}
+                                                    moveStep={movePostCallStep}
+                                                    onEdit={() => {
+                                                      resetStepDetailState();
+                                                      setCurrentEditingStep(step);
+                                                      setIsCreatingNewStep(false);
+                                                      setStepTrigger(step.trigger ?? "stage");
+                                                      setExecutionType(step.executionType ?? "wait");
+                                                      setDelayValue(step.delayValue ?? 5);
+                                                      setDelayUnit(step.delayUnit ?? "Minute");
+                                                      restoreStepParams(step.stepKey, step.params);
+                                                      setStepDetailDrawerOpen(true);
+                                                    }}
+                                                    onDuplicate={() => {
+                                                      const newStep = { ...step, id: `${step.stepKey || step.name}-${Date.now()}` };
+                                                      const fullIdx = workflowSteps.findIndex(s => s.id === step.id);
+                                                      if (fullIdx !== -1) {
+                                                        setWorkflowSteps([...workflowSteps.slice(0, fullIdx + 1), newStep, ...workflowSteps.slice(fullIdx + 1)]);
+                                                      }
+                                                      toast.success("Step duplicated successfully");
+                                                    }}
+                                                    onDelete={() => {
+                                                      setWorkflowSteps(workflowSteps.filter(s => s.id !== step.id));
+                                                      toast.success("Step removed successfully");
+                                                    }}
+                                                    StepIcon={StepIcon}
+                                                    connectAfterLabel={(() => {
+                                                      if (!step.connectAfterId || step.connectAfterId === "start") return "from Start";
+                                                      const pred = workflowSteps.find(s => s.id === step.connectAfterId);
+                                                      return pred ? `after ${pred.name}` : undefined;
+                                                    })()}
+                                                  />
+                                                ))}
+                                              </div>
                                             </div>
                                             {isBlockedCallType && (
                                               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

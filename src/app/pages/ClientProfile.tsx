@@ -4,8 +4,7 @@ import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
-  Briefcase, ToggleLeft, ToggleRight, DollarSign,
-
+  Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -20,7 +19,6 @@ import { Form, INITIAL_FORMS } from "../../data/forms";
 import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
 import { useFieldRegistry, FieldDefinition, resolveVisibility } from "../context/FieldRegistryContext";
-import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
 import { getActivityForClient, getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
@@ -37,6 +35,7 @@ import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
 
 import DrawerShell from "../components/ui/DrawerShell";
+import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
 import {
   Service, EMPLOYEES as SVC_EMPLOYEES, CURRENCIES as SVC_CURRENCIES, INIT_FORM as SVC_INIT_FORM,
   getCurrencySymbol, getStoredServices, addService, onServicesChanged,
@@ -118,6 +117,9 @@ export interface Client {
   jobPosition?: string;
   numberOfEmployees?: string;
   location?: string;
+  visibleFieldKeys?: string[];
+  customSections?: OverviewSection[];
+  [key: string]: any;
 }
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
@@ -360,43 +362,169 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     else navigate("/clients");
   };
 
-  const [clientName, setClientName] = useState("");
-  const [clientEmail, setClientEmail] = useState("");
-  const [clientPhone, setClientPhone] = useState("");
-  const [clientCompany, setClientCompany] = useState("");
-  const [clientRole, setClientRole] = useState("");
-  const [clientStatus, setClientStatus] = useState("");
-  const [clientLocation, setClientLocation] = useState("");
-  const [clientCountry, setClientCountry] = useState("");
-  const [visibleFieldKeys, setVisibleFieldKeys] = useState<string[]>([]);
-  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
-  const [fieldManagerMode, setFieldManagerMode] = useState<"select" | "create">("select");
-  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
+  const DEFAULT_CLIENT_SECTIONS: OverviewSection[] = [
+    {
+      id: "sec-client-details",
+      title: "Client Details",
+      iconName: "user",
+      fieldKeys: ["name", "email", "phone", "location", "country"],
+    },
+    {
+      id: "sec-company-details",
+      title: "Company & Professional",
+      iconName: "briefcase",
+      fieldKeys: ["company", "role"],
+    },
+    {
+      id: "sec-process-pipeline",
+      title: "Processes & Pipeline",
+      iconName: "workflow",
+      fieldKeys: ["status", "processes"],
+    },
+    {
+      id: "sec-custom-fields",
+      title: "Custom Fields",
+      iconName: "file-text",
+      fieldKeys: [],
+    },
+  ];
 
-  const handleSaveChanges = () => {
-    if (!client) return;
-    const updatedClient: Client = {
-      ...client,
+  const [clientName, setClientName] = useState(client?.name || "");
+  const [clientEmail, setClientEmail] = useState(client?.email || "");
+  const [clientPhone, setClientPhone] = useState(client?.phone || "");
+  const [clientCompany, setClientCompany] = useState(client?.companyName || "");
+  const [clientRole, setClientRole] = useState(client?.jobPosition || "");
+  const [clientStatus, setClientStatus] = useState(client?.status || "Active");
+  const [clientLocation, setClientLocation] = useState(client?.location || "");
+  const [clientCountry, setClientCountry] = useState(client?.country || "");
+  const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
+  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
+
+  const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
+    if ((client as any)?.customSections && Array.isArray((client as any).customSections)) {
+      return (client as any).customSections;
+    }
+    const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
+    if (client?.visibleFieldKeys && Array.isArray(client.visibleFieldKeys)) {
+      const customKeys = client.visibleFieldKeys.filter((k: string) => !HARDCODED_KEYS.has(k));
+      if (customKeys.length > 0) {
+        defaultSecs[3].fieldKeys = customKeys;
+      }
+    }
+    return defaultSecs;
+  });
+
+  useEffect(() => {
+    if (client) {
+      setClientName(client.name || "");
+      setClientEmail(client.email || "");
+      setClientPhone(client.phone || "");
+      setClientCompany(client.companyName || "");
+      setClientRole(client.jobPosition || "");
+      setClientStatus(client.status || "Active");
+      setClientLocation(client.location || "");
+      setClientCountry(client.country || "");
+      setSelectedProcesses(client.processes || []);
+
+      if ((client as any).customSections && Array.isArray((client as any).customSections)) {
+        setClientSections((client as any).customSections);
+      } else {
+        const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
+        if (client.visibleFieldKeys && Array.isArray(client.visibleFieldKeys)) {
+          const customKeys = client.visibleFieldKeys.filter((k: string) => !HARDCODED_KEYS.has(k));
+          if (customKeys.length > 0) {
+            defaultSecs[3].fieldKeys = customKeys;
+          }
+        }
+        setClientSections(defaultSecs);
+      }
+
+      const dyn: Record<string, string> = {};
+      Object.keys(client).forEach((k) => {
+        if (!HARDCODED_KEYS.has(k) && typeof (client as any)[k] === "string") {
+          dyn[k] = (client as any)[k];
+        }
+      });
+      setDynamicFieldValues(dyn);
+    }
+  }, [client?.id]);
+
+  const fieldValues = useMemo(() => {
+    return {
       name: clientName,
       email: clientEmail,
       phone: clientPhone,
-      companyName: clientCompany,
-      jobPosition: clientRole,
+      company: clientCompany,
+      role: clientRole,
       status: clientStatus,
-      processes: selectedProcesses,
       location: clientLocation,
       country: clientCountry,
+      processes: selectedProcesses,
+      ...dynamicFieldValues,
     };
+  }, [
+    clientName,
+    clientEmail,
+    clientPhone,
+    clientCompany,
+    clientRole,
+    clientStatus,
+    clientLocation,
+    clientCountry,
+    selectedProcesses,
+    dynamicFieldValues,
+  ]);
 
-    (updatedClient as any).visibleFieldKeys = visibleFieldKeys;
+  const handleFieldValueChange = (key: string, val: any) => {
+    if (key === "name") setClientName(val);
+    else if (key === "email") setClientEmail(val);
+    else if (key === "phone") setClientPhone(val);
+    else if (key === "company") setClientCompany(val);
+    else if (key === "role") setClientRole(val);
+    else if (key === "status") setClientStatus(val);
+    else if (key === "location") setClientLocation(val);
+    else if (key === "country") setClientCountry(val);
+    else {
+      setDynamicFieldValues((prev) => ({ ...prev, [key]: val }));
+    }
 
-    // Save all dynamic fields
-    Object.keys(dynamicFieldValues).forEach((key) => {
-      (updatedClient as any)[key] = dynamicFieldValues[key];
-    });
+    if (client) {
+      setClients((prev) =>
+        prev.map((c) => {
+          if (c.id !== client.id) return c;
+          const updated: any = { ...c };
+          if (key === "name") updated.name = val;
+          else if (key === "email") updated.email = val;
+          else if (key === "phone") updated.phone = val;
+          else if (key === "company") updated.companyName = val;
+          else if (key === "role") updated.jobPosition = val;
+          else if (key === "status") updated.status = val;
+          else if (key === "location") updated.location = val;
+          else if (key === "country") updated.country = val;
+          else {
+            updated[key] = val;
+          }
+          return updated;
+        })
+      );
+    }
+  };
 
-    setClients((prev) => prev.map((c) => (c.id === client.id ? updatedClient : c)));
-    toast.success("Changes saved successfully");
+  const handleSectionsChange = (newSections: OverviewSection[]) => {
+    setClientSections(newSections);
+    if (client) {
+      const allAssignedKeys = newSections.flatMap((s) => s.fieldKeys);
+      setClients((prev) =>
+        prev.map((c) => {
+          if (c.id !== client.id) return c;
+          return {
+            ...c,
+            customSections: newSections,
+            visibleFieldKeys: allAssignedKeys,
+          } as any;
+        })
+      );
+    }
   };
 
   const { getInvoicesByClient, simulatePayment } = useInvoices();
@@ -427,7 +555,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [expandedFlowId, setExpandedFlowId] = useState<number | null>(null);
   const [expandedFormGroupId, setExpandedFormGroupId] = useState<number | null>(null);
   const [activeProcessTabDrawer, setActiveProcessTabDrawer] = useState<string>("all");
-  const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
   const [editingProcesses, setEditingProcesses] = useState(false);
   const [processDropdownOpen, setProcessDropdownOpen] = useState(false);
   const [drawerProcessStages, setDrawerProcessStages] = useState<Record<string, string>>({});
@@ -445,53 +572,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     return unsub;
   }, [client?.id]);
 
-  // ── Sync client profile values and custom field values
-  useEffect(() => {
-    if (client) {
-      setClientName(client.name || "");
-      setClientEmail(client.email || "");
-      setClientPhone(client.phone || "");
-      setClientCompany(client.companyName || "");
-      setClientRole(client.jobPosition || "");
-      setClientStatus(client.status || "");
-      setClientLocation(client.location || "");
-      setClientCountry((client as any).country || "");
 
-      const allClientFields = getAllFields("client");
-
-      // Merge: explicitly selected keys  +  any custom field key that should be
-      // auto-included based on visibility setting or a stored non-empty value.
-      const savedKeys: string[] = (client as any).visibleFieldKeys || [];
-      const savedKeySet = new Set(savedKeys);
-      const autoKeys: string[] = [];
-      allClientFields.forEach(f => {
-        if (HARDCODED_KEYS.has(f.key) || savedKeySet.has(f.key)) return;
-
-        const vis = resolveVisibility(f);
-        // "all" → always auto-include for every client record
-        if (vis === "all") { autoKeys.push(f.key); return; }
-        // "specific" → auto-include only if this client's id is in the list
-        if (vis === "specific" && f.visibleToRecordIds?.includes(client.id)) {
-          autoKeys.push(f.key); return;
-        }
-        // "none" but field has a stored value (e.g. from a form submission) → still surface it
-        const val = (client as any)[f.key];
-        if (val !== undefined && val !== null && val !== "") {
-          autoKeys.push(f.key);
-        }
-      });
-      const mergedKeys = [...savedKeys, ...autoKeys];
-      setVisibleFieldKeys(mergedKeys);
-
-      const values: Record<string, string> = {};
-      allClientFields.forEach(f => {
-        if (!HARDCODED_KEYS.has(f.key)) {
-          values[f.key] = (client as any)[f.key] || "";
-        }
-      });
-      setDynamicFieldValues(values);
-    }
-  }, [id, client]);
 
   // Documents initialization & action handlers with clientDocumentsStore sync
 
@@ -1130,10 +1211,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       />
 
       {/* Drawer panel */}
-      <div className="fixed right-0 top-0 h-full w-[60%] bg-white z-50 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed right-0 top-0 h-full w-[92vw] lg:w-[84vw] xl:w-[76vw] max-w-[1340px] min-w-[780px] bg-[#F8FAFC] z-50 shadow-2xl flex flex-col overflow-hidden">
 
         {/* Hero: client identity */}
-        <div className="p-6 border-b border-border flex-shrink-0">
+        <div className="p-6 border-b border-border flex-shrink-0 bg-white">
           <div className="flex items-start gap-4">
             <div
               className="w-16 h-16 bg-gradient-to-br from-primary to-primary-hover text-primary-foreground rounded-full flex items-center justify-center text-xl font-bold flex-shrink-0 shadow-lg"
@@ -1162,7 +1243,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
             <button
               onClick={handleClose}
-              className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0"
+              className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
             >
               <X className="w-5 h-5" style={{ color: "#6B7280" }} />
             </button>
@@ -1170,13 +1251,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         </div>
 
         {/* Tab Navigation */}
-        <div className="border-b border-border overflow-x-auto flex-shrink-0">
+        <div className="border-b border-border overflow-x-auto flex-shrink-0 bg-white">
           <div className="flex">
             {(
               [
                 { id: "overview" as const, label: "Overview" },
                 { id: "processes" as const, label: "Processes" },
-                { id: "activity" as const, label: "Activity" },
                 { id: "forms" as const, label: "Forms" },
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
@@ -1188,9 +1268,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               <button
                 key={tab.id}
                 onClick={() => setActiveProfileTab(tab.id)}
-                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all ${activeProfileTab === tab.id
+                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-all cursor-pointer ${activeProfileTab === tab.id
                   ? "border-b-2 border-[#1F2937] text-[#1F2937] font-semibold"
-                  : "hover:text-foreground"
+                  : "hover:text-foreground text-slate-500"
                   }`}
                 style={{
                   fontFamily: "Outfit, sans-serif",
@@ -1204,283 +1284,71 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 relative flex-1 overflow-y-auto">
+        <div className="p-6 relative flex-1 overflow-y-auto bg-[#F8FAFC]">
 
-          {/* ── Overview Tab ── */}
+          {/* ── Overview Tab (2-Column Split View) ── */}
           {activeProfileTab === "overview" && (
             <div className="space-y-6">
-              <div className="space-y-0">
-                <div className="space-y-3">
-                  {/* NAME */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      NAME
-                    </label>
-                    <input
-                      type="text"
-                      value={clientName}
-                      onChange={(e) => setClientName(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* STATUS */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      STATUS
-                    </label>
-                    <select
-                      value={clientStatus}
-                      onChange={(e) => setClientStatus(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    >
-                      <option>Active</option>
-                      <option>Inactive</option>
-                      <option>Pending</option>
-                    </select>
-                  </div>
-
-                  {/* PROCESSES */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      PROCESSES
-                    </label>
-                    <div className="flex flex-wrap items-center gap-2">
-                      {selectedProcesses && selectedProcesses.length > 0 ? (
-                        selectedProcesses.map((process, idx) => (
-                          <div
-                            key={idx}
-                            className="group relative px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap select-none transition-all"
-                            style={{ backgroundColor: "#4F8EF7", color: "#ffffff", fontFamily: "Outfit, sans-serif", borderRadius: "20px" }}
-                          >
-                            <span className="pr-5">{process}</span>
-                            <button
-                              onClick={() => {
-                                const updated = selectedProcesses.filter((_, i) => i !== idx);
-                                setSelectedProcesses(updated);
-                                setClients((prev) =>
-                                  prev.map((c) => (c.id === client.id ? { ...c, processes: updated } : c))
-                                );
-                                toast.success("Process removed");
-                              }}
-                              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity w-5 h-5 flex items-center justify-center rounded-full hover:bg-white/20"
-                            >
-                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                                <path d="M1 1L9 9M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))
-                      ) : (
-                        <span className="text-sm" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>
-                          No processes assigned
-                        </span>
-                      )}
-                      <DropdownMenu open={processDropdownOpen} onOpenChange={setProcessDropdownOpen}>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            className="px-3 py-1.5 text-[12px] font-semibold whitespace-nowrap select-none transition-all hover:bg-gray-100"
-                            style={{ backgroundColor: "#F3F4F6", color: "#6B7280", fontFamily: "Outfit, sans-serif", borderRadius: "20px", border: "1px solid #E5E7EB" }}
-                          >
-                            + Add Process
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56">
-                          {availableProcesses
-                            .filter((p) => !selectedProcesses.includes(p))
-                            .map((process) => (
-                              <DropdownMenuItem
-                                key={process}
-                                onClick={() => {
-                                  const updated = [...selectedProcesses, process];
-                                  setSelectedProcesses(updated);
-                                  setClients((prev) =>
-                                    prev.map((c) => (c.id === client.id ? { ...c, processes: updated } : c))
-                                  );
-                                  toast.success(`${process} added`);
-                                  setProcessDropdownOpen(false);
-                                }}
-                              >
-                                {process}
-                              </DropdownMenuItem>
-                            ))}
-                          {availableProcesses.filter((p) => !selectedProcesses.includes(p)).length === 0 && (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">All processes assigned</div>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </div>
-
-                  {/* EMAIL */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      EMAIL
-                    </label>
-                    <input
-                      type="email"
-                      value={clientEmail}
-                      onChange={(e) => setClientEmail(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* PHONE */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      PHONE
-                    </label>
-                    <input
-                      type="tel"
-                      value={clientPhone}
-                      onChange={(e) => setClientPhone(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* LOCATION */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      LOCATION
-                    </label>
-                    <input
-                      type="text"
-                      value={clientLocation}
-                      onChange={(e) => setClientLocation(e.target.value)}
-                      placeholder="City, State or Address"
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* COMPANY */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      COMPANY
-                    </label>
-                    <input
-                      type="text"
-                      value={clientCompany}
-                      onChange={(e) => setClientCompany(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* ROLE */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      ROLE
-                    </label>
-                    <input
-                      type="text"
-                      value={clientRole}
-                      onChange={(e) => setClientRole(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* COUNTRY */}
-                  <div className="flex flex-col gap-1.5">
-                    <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                      COUNTRY
-                    </label>
-                    <input
-                      type="text"
-                      value={clientCountry}
-                      onChange={(e) => setClientCountry(e.target.value)}
-                      className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                      style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                      onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                      onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                    />
-                  </div>
-
-                  {/* Dynamic Fields */}
-                  {visibleFieldKeys
-                    .filter(k => !HARDCODED_KEYS.has(k))
-                    .map((k) => {
-                      const f = getAllFields("client").find(field => field.key === k);
-                      if (!f) return null;
-                      return (
-                        <div key={k} className="flex flex-col gap-1.5">
-                          <label className="uppercase font-bold" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif", letterSpacing: "0.05em", fontSize: "10px" }}>
-                            {f.label.toUpperCase()}
-                          </label>
-                          <input
-                            type={f.inputType === "email" ? "email" : f.inputType === "tel" ? "tel" : "text"}
-                            value={dynamicFieldValues[k] || ""}
-                            onChange={(e) => {
-                              setDynamicFieldValues(prev => ({
-                                ...prev,
-                                [k]: e.target.value
-                              }));
-                            }}
-                            placeholder={f.placeholder || `Enter ${f.label.toLowerCase()}`}
-                            className="px-2.5 py-1.5 text-sm rounded focus:outline-none focus:ring-2 transition-all"
-                            style={{ backgroundColor: "#F8FAFC", border: "1px solid #E5E7EB", borderRadius: "6px", color: "#1F2937", fontFamily: "Outfit, sans-serif" }}
-                            onFocus={(e) => (e.currentTarget.style.borderColor = "#4F8EF7")}
-                            onBlur={(e) => (e.currentTarget.style.borderColor = "#E5E7EB")}
-                          />
-                        </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* LEFT COLUMN: Draggable Structured Information Sections */}
+                <div className="lg:col-span-5 space-y-5">
+                  <DraggableOverviewSections
+                    mode="client"
+                    client={client}
+                    sections={clientSections}
+                    onSectionsChange={handleSectionsChange}
+                    fieldValues={fieldValues}
+                    onFieldValueChange={handleFieldValueChange}
+                    selectedProcesses={selectedProcesses}
+                    onSelectedProcessesChange={(procs) => {
+                      setSelectedProcesses(procs);
+                      setClients((prev) =>
+                        prev.map((c) => (c.id === client.id ? { ...c, processes: procs } : c))
                       );
-                    })}
+                    }}
+                    availableProcesses={availableProcesses}
+                    customFieldsModule="client"
+                  />
                 </div>
 
-                {/* Field action links */}
-                <div className="pt-6 mt-6 border-t border-border">
-                  <div className="flex items-center gap-4">
-                    <button
-                      onClick={() => {
-                        setFieldManagerMode("select");
-                        setFieldManagerOpen(true);
+                {/* RIGHT COLUMN: Full-Featured Activity Tab */}
+                <div className="lg:col-span-7">
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-xs">
+                    <ActivityTab
+                      activity={filteredDrawerActivities as any}
+                      processTabs={[
+                        { id: "all", name: "All" },
+                        ...drawerClientProcesses.map((p) => ({ id: p.id, name: p.name })),
+                      ]}
+                      activeProcessTab={activeProcessTabDrawer}
+                      onProcessTabChange={(tabId) => {
+                        setActiveProcessTabDrawer(tabId);
+                        setShowCallDetailsFromProfile(false);
                       }}
-                      className="text-sm font-medium transition-colors cursor-pointer"
-                      style={{ color: "#4F8EF7", fontFamily: "Outfit, sans-serif", fontSize: "14px", borderBottom: "1px dashed #4F8EF7", paddingBottom: "2px" }}
-                    >
-                      Select field
-                    </button>
+                      onOpenCallDetail={(callId) => {
+                        setSelectedCallId(callId);
+                        setShowCallDetailsFromProfile(true);
+                      }}
+                      clientId={client?.id ? String(client.id) : "CL-001"}
+                      clientName={client.name}
+                      clientEmail={client.email}
+                      clientPhone={client.phone}
+                      emptyMessage="No activity for this client yet"
+                      onOpenScheduleAppointment={() => {
+                        setActivityBookingValues((prev) => ({
+                          ...prev,
+                          client: {
+                            id: 0,
+                            name: client.name,
+                            email: client.email,
+                            phone: client.phone,
+                          },
+                        }));
+                        setShowScheduleApptFromActivity(true);
+                      }}
+                    />
                   </div>
                 </div>
-
-                {/* Save / Discard Buttons */}
-                <div className="flex gap-3 pt-6 mt-6">
-                  <button
-                    onClick={handleSaveChanges}
-                    className="flex-1 py-3 text-white font-bold rounded transition-colors hover:opacity-90"
-                    style={{ backgroundColor: "#4F8EF7", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
-                  >
-                    Save Changes
-                  </button>
-                  <button
-                    onClick={handleClose}
-                    className="px-6 py-3 border font-medium rounded transition-colors hover:bg-gray-50"
-                    style={{ borderColor: "#E5E7EB", color: "#6B7280", fontSize: "16px", fontFamily: "Outfit, sans-serif", height: "44px" }}
-                  >
-                    Discard
-                  </button>
-                </div>
-
-
               </div>
             </div>
           )}
@@ -1763,44 +1631,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
           )}
 
-          {/* ── Activity Tab ── */}
-          {activeProfileTab === "activity" && (
-            <div className="space-y-6">
-              <ActivityTab
-                activity={filteredDrawerActivities as any}
-                processTabs={[
-                  { id: "all", name: "All" },
-                  ...drawerClientProcesses.map((p) => ({ id: p.id, name: p.name })),
-                ]}
-                activeProcessTab={activeProcessTabDrawer}
-                onProcessTabChange={(tabId) => {
-                  setActiveProcessTabDrawer(tabId);
-                  setShowCallDetailsFromProfile(false);
-                }}
-                onOpenCallDetail={(callId) => {
-                  setSelectedCallId(callId);
-                  setShowCallDetailsFromProfile(true);
-                }}
-                clientId={client?.id ? String(client.id) : "CL-001"}
-                clientName={client.name}
-                clientEmail={client.email}
-                clientPhone={client.phone}
-                emptyMessage="No activity for this process yet"
-                onOpenScheduleAppointment={() => {
-                  setActivityBookingValues((prev) => ({
-                    ...prev,
-                    client: {
-                      id: 0,
-                      name: client.name,
-                      email: client.email,
-                      phone: client.phone,
-                    },
-                  }));
-                  setShowScheduleApptFromActivity(true);
-                }}
-              />
-            </div>
-          )}
+
 
           {/* ── Forms Tab ── */}
           {activeProfileTab === "forms" && (
@@ -2699,27 +2530,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             />
           )}
 
-          {/* ── Select/Create Field Modals ── */}
-          {fieldManagerOpen && fieldManagerMode === "select" && (
-            <SelectFieldsModal
-              initiallySelected={visibleFieldKeys}
-              onlyModules={["client"]}
-              onClose={() => setFieldManagerOpen(false)}
-              onApply={(keys) => {
-                setVisibleFieldKeys(keys);
-              }}
-            />
-          )}
-
-          {fieldManagerOpen && fieldManagerMode === "create" && (
-            <CreateFieldModal
-              lockModule="client"
-              onClose={() => setFieldManagerOpen(false)}
-              onCreated={(field) => {
-                setVisibleFieldKeys(prev => [...prev, field.key]);
-              }}
-            />
-          )}
 
           {/* Schedule Appointment from Activity tab */}
           {showScheduleApptFromActivity && (

@@ -106,9 +106,7 @@ import { SettingsMemberProfileDrawer } from "../components/settings/SettingsMemb
 import { RolesPermissionsDrawer, DEFAULT_ROLES } from "../components/settings/RolesPermissionsDrawer";
 import type { ActionScope, Action, ModulePermissions, ItemPermissions, Role } from "../../types/permissions";
 
-import { DndProvider, useDrag, useDrop } from "react-dnd";
-
-import { HTML5Backend } from "react-dnd-html5-backend";
+import { useDrag, useDrop } from "react-dnd";
 
 export type { ActionScope, Action, ModulePermissions, ItemPermissions, Role };
 
@@ -5083,8 +5081,7 @@ export default function Settings() {
 
             {/* AI Voices / Models Tab */}
             {activeTab === "voice-config" && (
-              <DndProvider backend={HTML5Backend}>
-                <div className="space-y-8">
+              <div className="space-y-8">
                   {/* AI Models Section */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
@@ -5458,7 +5455,6 @@ export default function Settings() {
                   </div>
 
                 </div>
-              </DndProvider>
             )}
 
             {/* Numbers Tab */}
@@ -5587,8 +5583,7 @@ export default function Settings() {
                       setShowNumbersScrollLeftIndicator(canScrollLeft);
                     }}
                   >
-                    <DndProvider backend={HTML5Backend}>
-                      <div style={{ minWidth: "1320px" }}>
+                    <div style={{ minWidth: "1320px" }}>
                         <table className="w-full">
                           <thead className="bg-muted/30 border-b border-border">
                             <tr>
@@ -5992,7 +5987,6 @@ export default function Settings() {
                           </tbody>
                         </table>
                       </div>
-                    </DndProvider>
                   </div>
                 </div>
 
