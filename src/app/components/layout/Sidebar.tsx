@@ -65,13 +65,13 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   };
 
   // Primary navigation items matching reference screenshot
-  const primaryLinks = [
+  const primaryLinks: { path: string; label: string; icon: any; badge?: string }[] = [
     { path: "/", label: "Overview", icon: LayoutGrid },
-    { path: "/scribe", label: "AI Scribe", icon: Stethoscope, badge: "Live" },
     { path: "/clients", label: "Clients", icon: Users },
     { path: "/deals", label: "Processes", icon: RefreshCw },
     { path: "/call-logs", label: "Call Logs", icon: Phone },
     { path: "/appointments", label: "Appointments", icon: CalendarIcon },
+    { path: "/scribe", label: "AI Scribe", icon: Stethoscope },
     { path: "/settings", label: "Settings", icon: Settings },
   ];
 

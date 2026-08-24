@@ -36,6 +36,8 @@ export interface ExtractedClinicalData {
   medications: ExtractedMedication[];
   investigations: string[];
   followUpDate?: string;
+  followUpDays?: number;
+  dietaryAdvice?: string;
   doctorNotes?: string;
 }
 
@@ -61,6 +63,7 @@ export interface ScribeSession {
   patientAge?: number;
   patientGender?: string;
   appointmentId?: string;
+  sessionName?: string;
   dealId?: string;
   doctorId: string;
   doctorName: string;
@@ -392,6 +395,8 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     clientName: "Rajesh Kumar",
     patientAge: 54,
     patientGender: "Male",
+    appointmentId: "apt-101",
+    sessionName: "Session #1 (Cataract)",
     doctorId: "doc-1",
     doctorName: "Dr. Priya Sharma",
     sessionDate: "2026-08-24T10:45:00.000Z",
@@ -410,6 +415,8 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     clientName: "Amit Patel",
     patientAge: 62,
     patientGender: "Male",
+    appointmentId: "apt-102",
+    sessionName: "Session #3 (Ortho)",
     doctorId: "doc-2",
     doctorName: "Dr. Rohan Mehta",
     sessionDate: "2026-08-24T09:30:00.000Z",
@@ -446,6 +453,8 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
     clientName: "Pooja Sharma",
     patientAge: 32,
     patientGender: "Female",
+    appointmentId: "apt-104",
+    sessionName: "Session #2 (Lasik)",
     doctorId: "doc-1",
     doctorName: "Dr. Priya Sharma",
     sessionDate: "2026-08-23T14:00:00.000Z",

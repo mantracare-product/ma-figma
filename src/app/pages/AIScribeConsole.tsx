@@ -10,8 +10,10 @@ import {
   Trash2,
   MoreVertical,
   GripVertical,
+  Settings,
   Settings as SettingsIcon,
   Send,
+  Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
@@ -27,6 +29,7 @@ import {
 } from "../../lib/scribeSessionStore";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import NewConsultationDrawer from "../components/scribe/NewConsultationDrawer";
+import TranscriptFieldMappingDrawer from "../components/scribe/TranscriptFieldMappingDrawer";
 
 export default function AIScribeConsole() {
   // Core Data Stores
@@ -43,6 +46,7 @@ export default function AIScribeConsole() {
   const [isDetailDrawerOpen, setIsDetailDrawerOpen] = useState(false);
   const [selectedDetailSession, setSelectedDetailSession] = useState<ScribeSession | null>(null);
   const [isNewConsultationOpen, setIsNewConsultationOpen] = useState(false);
+  const [isFieldMappingOpen, setIsFieldMappingOpen] = useState(false);
 
   // WhatsApp Share Modal
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
@@ -199,6 +203,17 @@ export default function AIScribeConsole() {
               </div>
             </div>
 
+            {/* Settings Gear: Field Mapping Configuration */}
+            <Tooltip text="Configure Field Mappings">
+              <button
+                type="button"
+                onClick={() => setIsFieldMappingOpen(true)}
+                className="h-[44px] w-[44px] rounded-xl border border-input bg-card hover:bg-slate-50 text-muted-foreground hover:text-foreground flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:shadow-xs"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+            </Tooltip>
+
             {/* + Button to Create New Transcript / Open Drawer */}
             <Tooltip text="Create New Transcript">
               <Button variant="primary" onClick={() => setIsNewConsultationOpen(true)}>
@@ -243,6 +258,17 @@ export default function AIScribeConsole() {
                     </div>
                   </th>
 
+                  {/* SESSION */}
+                  <th
+                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 opacity-50" />
+                      SESSION
+                    </div>
+                  </th>
+
                   {/* DURATION */}
                   <th
                     className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
@@ -254,14 +280,25 @@ export default function AIScribeConsole() {
                     </div>
                   </th>
 
-                  {/* LAST CONTACT / DATE */}
+                  {/* RESPONSIBLE */}
                   <th
                     className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
                     style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
                   >
                     <div className="flex items-center gap-2">
                       <GripVertical className="w-4 h-4 opacity-50" />
-                      LAST CONTACT
+                      RESPONSIBLE
+                    </div>
+                  </th>
+
+                  {/* CREATED AT */}
+                  <th
+                    className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                    style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 opacity-50" />
+                      CREATED AT
                     </div>
                   </th>
 
@@ -281,7 +318,7 @@ export default function AIScribeConsole() {
               <tbody className="divide-y divide-border">
                 {filteredTranscripts.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={8} className="py-12 text-center text-muted-foreground">
                       <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
                       <div className="font-bold text-sm text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
                         No Transcripts Found
@@ -386,12 +423,31 @@ export default function AIScribeConsole() {
                         </span>
                       </td>
 
+                      {/* SESSION (Only date of the selected session) */}
+                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {s.appointmentId && s.appointmentId !== "none"
+                          ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })
+                          : (s.sessionDate
+                              ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                              : "—")}
+                      </td>
+
                       {/* DURATION (Clean without subtext) */}
                       <td className="px-4 py-3 font-mono text-xs text-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                          {formatTime(s.durationSeconds)}
-                        </div>
+                        {formatTime(s.durationSeconds)}
+                      </td>
+
+                      {/* RESPONSIBLE (Doctor / Staff) */}
+                      <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        {s.doctorName || "Dr. Priya Sharma"}
                       </td>
 
                       {/* LAST CONTACT / DATE (Clean without subtext) */}
@@ -432,6 +488,12 @@ export default function AIScribeConsole() {
           onSessionCreated={() => {
             setSessions(getScribeSessions());
           }}
+          onViewTranscript={(newSession) => {
+            setSessions(getScribeSessions());
+            setIsNewConsultationOpen(false);
+            setSelectedDetailSession(newSession);
+            setIsDetailDrawerOpen(true);
+          }}
         />
 
         {/* ─── TRANSCRIPT DETAIL INSPECTION DRAWER ─────────────────────────── */}
@@ -443,6 +505,12 @@ export default function AIScribeConsole() {
             setWhatsAppTargetSession(session);
             setShowWhatsAppModal(true);
           }}
+        />
+
+        {/* ─── TRANSCRIPT FIELD MAPPING CONFIGURATION DRAWER ─────────────────── */}
+        <TranscriptFieldMappingDrawer
+          isOpen={isFieldMappingOpen}
+          onClose={() => setIsFieldMappingOpen(false)}
         />
 
         {/* ─── WHATSAPP DIRECT SHARE MODAL ─────────────────────────────────── */}
