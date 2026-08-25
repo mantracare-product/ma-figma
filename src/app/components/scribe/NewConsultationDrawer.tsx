@@ -194,54 +194,61 @@ export default function NewConsultationDrawer({
   };
 
   const handleFinishAndProcess = () => {
-    setIsProcessing(true);
     clearInterval(timerRef.current);
 
     const client = getSelectedClient();
     const scenario = PRESET_SCENARIOS[0];
     const doctor = SCRIBE_DOCTORS[0];
 
-    setTimeout(() => {
-      const session: ScribeSession = {
-        id: `scribe-${Date.now()}`,
-        clientId: client.id,
-        clientName: client.name,
-        patientAge: client.age,
-        patientGender: client.gender,
-        appointmentId: selectedAppointmentId !== "none" ? selectedAppointmentId : undefined,
-        sessionName:
-          selectedAppointmentId !== "none"
-            ? selectedAppointment.label.split("—")[1]?.trim() || "Client Session"
-            : undefined,
-        doctorId: doctor.id,
-        doctorName: doctor.name,
-        sessionDate: new Date().toISOString(),
-        durationSeconds: recordingSec || 76,
-        transcript: {
-          fullText: scenario.transcriptText,
-          utterances: scenario.utterances,
-        },
-        extractedData: JSON.parse(JSON.stringify(scenario.extractedData)),
-        status: "completed",
-        createdAt: Date.now(),
-      };
+    const session: ScribeSession = {
+      id: `scribe-${Date.now()}`,
+      clientId: client.id,
+      clientName: client.name,
+      patientAge: client.age,
+      patientGender: client.gender,
+      appointmentId: selectedAppointmentId !== "none" ? selectedAppointmentId : undefined,
+      sessionName:
+        selectedAppointmentId !== "none"
+          ? selectedAppointment.label.split("—")[1]?.trim() || "Client Session"
+          : undefined,
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      sessionDate: new Date().toISOString(),
+      durationSeconds: recordingSec || 76,
+      transcript: {
+        fullText: scenario.transcriptText,
+        utterances: scenario.utterances,
+      },
+      extractedData: JSON.parse(JSON.stringify(scenario.extractedData)),
+      status: "completed",
+      createdAt: Date.now(),
+    };
 
-      setGeneratedSession(session);
-      setIsProcessing(false);
-      toast.success("AI Transcription & Clinical Entities Extracted!");
-    }, 1200);
+    saveScribeSession(session);
+    issuePrescriptionDocument(session);
+    toast.success(`Transcript created for ${session.clientName}!`);
+
+    // Reset recording state
+    setIsRecording(false);
+    setIsPaused(false);
+    setRecordingSec(0);
+    setUploadedFile(null);
+
+    if (onSessionCreated) onSessionCreated(session);
+    if (onViewTranscript) {
+      onViewTranscript(session);
+    } else {
+      onClose();
+    }
   };
 
   const handleViewTranscript = () => {
-    if (!generatedSession) return;
-    saveScribeSession(generatedSession);
-    issuePrescriptionDocument(generatedSession);
-    toast.success(`Transcript saved for ${generatedSession.clientName}!`);
-    if (onSessionCreated) onSessionCreated(generatedSession);
-    if (onViewTranscript) {
-      onViewTranscript(generatedSession);
-    } else {
-      onClose();
+    if (generatedSession) {
+      if (onViewTranscript) {
+        onViewTranscript(generatedSession);
+      } else {
+        onClose();
+      }
     }
   };
 

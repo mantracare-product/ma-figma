@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "../components/layout/PageHeader";
-import { HowItWorksButton } from "../components/help/HowItWorksModal";
+import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
 import {
@@ -49,6 +49,9 @@ export default function AIScribeConsole() {
   // WhatsApp Share Modal
   const [showWhatsAppModal, setShowWhatsAppModal] = useState(false);
   const [whatsAppTargetSession, setWhatsAppTargetSession] = useState<ScribeSession | null>(null);
+
+  // How It Works Modal
+  const [showHowItWorksModal, setShowHowItWorksModal] = useState(false);
 
   // Sync with store events
   useEffect(() => {
@@ -166,7 +169,7 @@ export default function AIScribeConsole() {
         >
           <div className="flex items-center gap-2.5">
             <HowItWorksButton
-              onClick={() => toast.info("Deepgram Nova-2 Medical STT active. Speak naturally during patient visits.")}
+              onClick={() => setShowHowItWorksModal(true)}
               label="How Scribe Works"
             />
           </div>
@@ -201,12 +204,16 @@ export default function AIScribeConsole() {
               </div>
             </div>
 
-            {/* + Button to Create New Transcript / Open Drawer */}
-            <Tooltip text="Create New Transcript">
-              <Button variant="primary" onClick={() => setIsNewConsultationOpen(true)}>
-                <Plus className="w-4 h-4" />
-              </Button>
-            </Tooltip>
+            {/* Capsule Button to Add Scribe / Open Drawer */}
+            <Button
+              variant="primary"
+              onClick={() => setIsNewConsultationOpen(true)}
+              className="h-[44px] px-5 rounded-full whitespace-nowrap flex items-center gap-2 text-xs font-semibold shadow-xs"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Scribe</span>
+            </Button>
           </div>
         </div>
 
@@ -540,6 +547,22 @@ export default function AIScribeConsole() {
             </div>
           </div>
         )}
+
+        {/* ─── HOW IT WORKS MODAL ─────────────────────────────────────────── */}
+        <HowItWorksModal
+          isOpen={showHowItWorksModal}
+          onClose={() => setShowHowItWorksModal(false)}
+          title="How AI Scribe Works"
+          summary="MantraAssist AI Scribe uses ambient clinical speech recognition and intelligent entity extraction to turn doctor-patient conversations into structured EHR prescriptions and verified clinical notes in real time."
+          bullets={[
+            "Start a live consultation recording or upload existing encounter audio/notes.",
+            "Deepgram Nova-2 Medical STT diarizes doctor vs. patient speech with high clinical accuracy.",
+            "AI automatically extracts diagnosis, medications, dosages, symptoms, precautions, and vitals into 11 EHR sections.",
+            "Customize the prescription layout by dragging & reordering sections or adding custom fields.",
+            "Generate verified clinical prescription PDFs and dispatch them directly to patients via WhatsApp in 1 click.",
+          ]}
+          guideUrl="/guide/ai-scribe"
+        />
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
+  GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -34,6 +35,8 @@ import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
 import AIScribeModal from "../components/scribe/AIScribeModal";
+import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
+import { ScribeSession, getScribeSessions, deleteScribeSession, issuePrescriptionDocument, SCRIBE_EVENT } from "../../lib/scribeSessionStore";
 
 import DrawerShell from "../components/ui/DrawerShell";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
@@ -539,7 +542,37 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "documents" | "products">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "documents" | "products" | "transcripts">("overview");
+
+  // ── Transcripts Tab State ──
+  const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
+  const [selectedTranscriptSession, setSelectedTranscriptSession] = useState<ScribeSession | null>(null);
+  const [isTranscriptDrawerOpen, setIsTranscriptDrawerOpen] = useState(false);
+  const [transcriptSearchQuery, setTranscriptSearchQuery] = useState("");
+  const [showTranscriptWhatsAppModal, setShowTranscriptWhatsAppModal] = useState(false);
+  const [transcriptWhatsAppTarget, setTranscriptWhatsAppTarget] = useState<ScribeSession | null>(null);
+  const [transcriptSelectedRows, setTranscriptSelectedRows] = useState<Set<string>>(new Set());
+  const [transcriptOpenMenuId, setTranscriptOpenMenuId] = useState<string | null>(null);
+
+  // Close transcript kebab menu on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement).closest(".transcript-kebab-container")) {
+        setTranscriptOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Sync Scribe Sessions from store
+  useEffect(() => {
+    const handleUpdate = () => {
+      setScribeSessions(getScribeSessions());
+    };
+    window.addEventListener(SCRIBE_EVENT, handleUpdate);
+    return () => window.removeEventListener(SCRIBE_EVENT, handleUpdate);
+  }, []);
 
   // ── Products tab state ──
   const [clientProductList, setClientProductList] = useState<Service[]>([]);
@@ -1245,14 +1278,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               <button
-                onClick={() => setShowScribeModal(true)}
-                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white text-xs font-semibold shadow-xs hover:opacity-95 transition-all cursor-pointer"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                <Mic className="w-3.5 h-3.5 text-[#60a5fa]" />
-                <span>AI Scribe</span>
-              </button>
-              <button
                 onClick={handleClose}
                 className="hover:bg-gray-100 p-1.5 rounded-lg transition-colors flex-shrink-0 cursor-pointer"
               >
@@ -1274,6 +1299,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
                 { id: "documents" as const, label: "Documents" },
+                { id: "transcripts" as const, label: "Transcripts" },
                 { id: "products" as const, label: "Product/Services" },
               ] as const
             ).map((tab) => (
@@ -2178,6 +2204,410 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             <DocumentsTab client={client} />
           )}
 
+          {/* ── Transcripts Tab (Matches AI Scribe Page Table Layout) ── */}
+          {activeProfileTab === "transcripts" && (() => {
+            const clientTranscripts = scribeSessions.filter((s) => {
+              if (!client) return false;
+              const cId = String(client.id || "").toLowerCase().trim();
+              const sCId = String(s.clientId || "").toLowerCase().trim();
+              const idMatch =
+                (sCId && sCId === cId) ||
+                (sCId && sCId === cId.replace("cl-", "")) ||
+                (parseInt(cId.replace("cl-", ""), 10) > 0 && sCId === String(parseInt(cId.replace("cl-", ""), 10)));
+              const nameMatch =
+                Boolean(s.clientName && client.name && s.clientName.toLowerCase().trim() === client.name.toLowerCase().trim());
+              return idMatch || nameMatch;
+            });
+
+            const filteredTranscripts = clientTranscripts.filter((s) => {
+              if (!transcriptSearchQuery.trim()) return true;
+              const q = transcriptSearchQuery.toLowerCase();
+              return (
+                (client?.name && client.name.toLowerCase().includes(q)) ||
+                s.clientName.toLowerCase().includes(q) ||
+                s.sessionName?.toLowerCase().includes(q) ||
+                s.doctorName?.toLowerCase().includes(q) ||
+                s.extractedData?.diagnosis?.toLowerCase().includes(q) ||
+                s.extractedData?.chiefComplaint?.toLowerCase().includes(q) ||
+                s.transcript?.fullText?.toLowerCase().includes(q)
+              );
+            });
+
+            const allSelected =
+              filteredTranscripts.length > 0 &&
+              filteredTranscripts.every((s) => transcriptSelectedRows.has(s.id));
+            const someSelected =
+              filteredTranscripts.some((s) => transcriptSelectedRows.has(s.id)) && !allSelected;
+
+            const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+              if (e.target.checked) {
+                setTranscriptSelectedRows(new Set(filteredTranscripts.map((s) => s.id)));
+              } else {
+                setTranscriptSelectedRows(new Set());
+              }
+            };
+
+            const handleSelectRow = (id: string) => {
+              const next = new Set(transcriptSelectedRows);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              setTranscriptSelectedRows(next);
+            };
+
+            const formatTranscriptTime = (seconds: number) => {
+              const mins = Math.floor(seconds / 60);
+              const secs = seconds % 60;
+              return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+            };
+
+            const getTranscriptStatusBadge = (status?: string) => {
+              if (status === "recording" || status === "transcribed") {
+                return (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    In Progress
+                  </span>
+                );
+              }
+              if (status === "upcoming" || status === "scheduled") {
+                return (
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Upcoming
+                  </span>
+                );
+              }
+              return (
+                <span
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  Completed
+                </span>
+              );
+            };
+
+            const handleDeleteTranscript = (sessionId: string, e: React.MouseEvent) => {
+              e.stopPropagation();
+              deleteScribeSession(sessionId);
+              setTranscriptOpenMenuId(null);
+              setScribeSessions(getScribeSessions());
+              toast.success("Transcript deleted");
+            };
+
+            return (
+              <div className="space-y-4">
+                {/* ─── Search & Action Bar ───────────────────────────────────────────── */}
+                <div className="bg-card rounded-t-xl p-4 border border-border shadow-sm">
+                  <div className="flex items-center gap-3">
+                    {/* Search Bar */}
+                    <div className="flex-1">
+                      <div className="relative search-bar-container">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground pointer-events-none z-10" />
+                        <div className="w-full h-[44px] bg-input-background border border-input rounded-xl flex items-center pl-10 pr-3">
+                          <input
+                            type="text"
+                            placeholder="Search transcripts by diagnosis, doctor, keyword..."
+                            value={transcriptSearchQuery}
+                            onChange={(e) => setTranscriptSearchQuery(e.target.value)}
+                            className="flex-1 bg-transparent border-none outline-none text-sm text-foreground placeholder:text-muted-foreground h-full"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                          {transcriptSearchQuery && (
+                            <button
+                              onClick={() => setTranscriptSearchQuery("")}
+                              className="text-xs text-muted-foreground hover:text-foreground px-2"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              ✕ Clear
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Capsule Button to Add Scribe */}
+                    <Button
+                      variant="primary"
+                      onClick={() => setShowScribeModal(true)}
+                      className="h-[44px] px-5 rounded-full whitespace-nowrap flex items-center gap-2 text-xs font-semibold shadow-xs"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Scribe</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* ─── Transcripts Table with Dark Gradient Thead ─────────────────────── */}
+                <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden relative">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[760px]">
+                      <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+                        <tr>
+                          {/* Checkbox Column */}
+                          <th className="px-4 py-2.5 w-10">
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              ref={(el) => {
+                                if (el) el.indeterminate = someSelected;
+                              }}
+                              onChange={handleSelectAll}
+                              className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                            />
+                          </th>
+
+                          {/* Hamburger Menu Column Header */}
+                          <th className="px-2 py-2.5 text-center w-8">
+                            <SettingsIcon className="w-4 h-4 text-[#E5E7EB] mx-auto opacity-70" />
+                          </th>
+
+                          {/* NAME */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              NAME
+                            </div>
+                          </th>
+
+                          {/* SESSION */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              SESSION
+                            </div>
+                          </th>
+
+                          {/* DURATION */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              DURATION
+                            </div>
+                          </th>
+
+                          {/* RESPONSIBLE */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              RESPONSIBLE
+                            </div>
+                          </th>
+
+                          {/* CREATED AT */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              CREATED AT
+                            </div>
+                          </th>
+
+                          {/* STATUS */}
+                          <th
+                            className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                            style={{ color: "#FFFFFF", fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <div className="flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 opacity-50" />
+                              STATUS
+                            </div>
+                          </th>
+                        </tr>
+                      </thead>
+
+                      <tbody className="divide-y divide-border">
+                        {filteredTranscripts.length === 0 ? (
+                          <tr>
+                            <td colSpan={8} className="py-12 text-center text-muted-foreground">
+                              <FileText className="h-10 w-10 text-slate-300 mx-auto mb-2" />
+                              <div className="font-bold text-sm text-foreground" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {transcriptSearchQuery ? "No Matching Transcripts" : `No Transcripts for ${client?.name || "this client"}`}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Click the <strong className="text-[#1A73E8]">Add Scribe</strong> button above to record your first consultation.
+                              </p>
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredTranscripts.map((s) => (
+                            <tr
+                              key={s.id}
+                              className={`transition-colors cursor-pointer ${
+                                transcriptSelectedRows.has(s.id) ? "bg-[#E8F0FE]" : "hover:bg-[#F1F5F9]"
+                              }`}
+                              onClick={() => {
+                                setSelectedTranscriptSession(s);
+                                setIsTranscriptDrawerOpen(true);
+                              }}
+                            >
+                              {/* Checkbox */}
+                              <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={transcriptSelectedRows.has(s.id)}
+                                  onChange={() => handleSelectRow(s.id)}
+                                  className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                                />
+                              </td>
+
+                              {/* Hamburger / Kebab Menu with Dropdown in front of name */}
+                              <td className="px-2 py-3 relative transcript-kebab-container" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => setTranscriptOpenMenuId(transcriptOpenMenuId === s.id ? null : s.id)}
+                                  className="p-1 hover:bg-muted rounded transition-colors flex items-center justify-center"
+                                  style={{ width: "24px", height: "24px" }}
+                                >
+                                  <MoreVertical className="w-4 h-4 text-muted-foreground" />
+                                </button>
+
+                                {transcriptOpenMenuId === s.id && (
+                                  <div
+                                    className="absolute left-8 top-1/2 -translate-y-1/2 bg-white rounded-lg shadow-xl z-50 border border-border py-1"
+                                    style={{
+                                      boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+                                      minWidth: "180px",
+                                    }}
+                                  >
+                                    <button
+                                      onClick={() => {
+                                        setTranscriptOpenMenuId(null);
+                                        setSelectedTranscriptSession(s);
+                                        setIsTranscriptDrawerOpen(true);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-[#1A73E8]" /> View Transcript
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setTranscriptOpenMenuId(null);
+                                        issuePrescriptionDocument(s);
+                                        toast.success(`Prescription downloaded for ${client?.name || s.clientName}!`);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-xs hover:bg-blue-50 flex items-center gap-2.5 text-foreground transition-colors"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <Download className="w-3.5 h-3.5 text-[#1A73E8]" /> Download PDF
+                                    </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setTranscriptOpenMenuId(null);
+                                        setTranscriptWhatsAppTarget(s);
+                                        setShowTranscriptWhatsAppModal(true);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-xs hover:bg-emerald-50 flex items-center gap-2.5 text-emerald-700 transition-colors"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <Share2 className="w-3.5 h-3.5 text-emerald-600" /> Share via WhatsApp
+                                    </button>
+
+                                    <div className="border-t border-border my-1" />
+
+                                    <button
+                                      onClick={(e) => handleDeleteTranscript(s.id, e)}
+                                      className="w-full px-3 py-2 text-left text-xs hover:bg-red-50 flex items-center gap-2.5 text-red-600 transition-colors"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5 text-red-500" /> Delete Record
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+
+                              {/* NAME (Clean - shows current client's name) */}
+                              <td className="px-4 py-3">
+                                <span
+                                  className="font-medium text-sm text-[#1A73E8] hover:underline cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  {client?.name || s.clientName}
+                                </span>
+                              </td>
+
+                              {/* SESSION (Only date of the selected session) */}
+                              <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {s.appointmentId && s.appointmentId !== "none"
+                                  ? new Date(s.sessionDate || s.createdAt).toLocaleDateString("en-IN", {
+                                      month: "short",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })
+                                  : (s.sessionDate
+                                      ? new Date(s.sessionDate).toLocaleDateString("en-IN", {
+                                          month: "short",
+                                          day: "numeric",
+                                          year: "numeric",
+                                        })
+                                      : "—")}
+                              </td>
+
+                              {/* DURATION (Clean without subtext) */}
+                              <td className="px-4 py-3 font-mono text-xs text-foreground">
+                                {formatTranscriptTime(s.durationSeconds)}
+                              </td>
+
+                              {/* RESPONSIBLE (Doctor / Staff) */}
+                              <td className="px-4 py-3 text-xs text-foreground font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>
+                                {s.doctorName || "Dr. Priya Sharma"}
+                              </td>
+
+                              {/* CREATED AT (Clean without subtext) */}
+                              <td className="px-4 py-3 text-xs text-muted-foreground">
+                                <span style={{ fontFamily: "Outfit, sans-serif" }}>
+                                  {new Date(s.createdAt).toLocaleDateString("en-IN", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              </td>
+
+                              {/* STATUS (Completed / Upcoming / In Progress) */}
+                              <td className="px-4 py-3">
+                                {getTranscriptStatusBadge(s.status)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Table Footer */}
+                  <div className="px-4 py-3 border-t border-border bg-slate-50/60 flex items-center justify-between text-xs text-muted-foreground">
+                    <span style={{ fontFamily: "Outfit, sans-serif" }}>
+                      Showing <strong>{filteredTranscripts.length}</strong> transcripts • Click any row or the menu icon to inspect
+                    </span>
+                    <span className="font-mono text-[11px]">Deepgram Nova-2 Medical STT</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Products & Services Tab ── */}
           {activeProfileTab === "products" && (() => {
             const assignedIds = new Set(clientProductList.map((p) => p.id));
@@ -2703,7 +3133,74 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             clientName={client.name}
             patientAge={54}
             patientGender="Male"
+            onViewTranscript={(newSession) => {
+              setShowScribeModal(false);
+              setScribeSessions(getScribeSessions());
+              setSelectedTranscriptSession(newSession);
+              setIsTranscriptDrawerOpen(true);
+            }}
           />
+
+          {/* Transcript Detail Inspection Drawer */}
+          <TranscriptDetailDrawer
+            isOpen={isTranscriptDrawerOpen}
+            onClose={() => {
+              setIsTranscriptDrawerOpen(false);
+              setSelectedTranscriptSession(null);
+            }}
+            session={selectedTranscriptSession}
+            onOpenWhatsApp={(session) => {
+              setTranscriptWhatsAppTarget(session);
+              setShowTranscriptWhatsAppModal(true);
+            }}
+          />
+
+          {/* WhatsApp Direct Share Modal for Transcripts */}
+          {showTranscriptWhatsAppModal && transcriptWhatsAppTarget && (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+              <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl border border-border">
+                <div className="flex items-center justify-between pb-3 border-b border-border">
+                  <h3 className="text-sm font-bold text-foreground flex items-center gap-2" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <Share2 className="h-4 w-4 text-emerald-600" />
+                    Send Prescription via WhatsApp
+                  </h3>
+                  <button onClick={() => setShowTranscriptWhatsAppModal(false)} className="text-slate-400 hover:text-slate-600">
+                    ✕
+                  </button>
+                </div>
+
+                <div className="my-4 text-xs text-muted-foreground">
+                  <p className="mb-2">Dispatch digital prescription link to:</p>
+                  <div className="rounded-lg bg-slate-50 p-2.5 border border-border font-mono text-xs font-bold text-foreground">
+                    {transcriptWhatsAppTarget.clientName}
+                  </div>
+                  <div className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-[11px] text-emerald-800 border border-emerald-200">
+                    "Hello {transcriptWhatsAppTarget.clientName}, your prescription from {transcriptWhatsAppTarget.doctorName} for{" "}
+                    {transcriptWhatsAppTarget.extractedData?.diagnosis || "consultation"} is ready to download: https://crm.mantracare.com/rx/doc89421"
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowTranscriptWhatsAppModal(false)}
+                    className="rounded-lg px-3.5 py-1.5 text-xs text-muted-foreground hover:bg-slate-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowTranscriptWhatsAppModal(false);
+                      toast.success(`WhatsApp message sent to ${transcriptWhatsAppTarget.clientName}!`);
+                    }}
+                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-4 py-1.5 text-xs font-semibold text-white shadow-xs flex items-center gap-1.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Send className="h-3.5 w-3.5" /> Send Message Now
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

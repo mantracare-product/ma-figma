@@ -30,6 +30,7 @@ interface AIScribeModalProps {
   clientName?: string;
   patientAge?: number;
   patientGender?: string;
+  onViewTranscript?: (session: ScribeSession) => void;
 }
 
 export default function AIScribeModal({
@@ -39,6 +40,7 @@ export default function AIScribeModal({
   clientName = "Rajesh Kumar",
   patientAge = 54,
   patientGender = "Male",
+  onViewTranscript,
 }: AIScribeModalProps) {
   const [workflowState, setWorkflowState] = useState<"idle" | "recording" | "processing" | "review" | "prescribed">("idle");
   const [recordingTime, setRecordingTime] = useState(0);
@@ -72,33 +74,36 @@ export default function AIScribeModal({
   };
 
   const handleFinish = () => {
-    setWorkflowState("processing");
     clearInterval(timerRef.current);
 
-    setTimeout(() => {
-      const scenario = PRESET_SCENARIOS[0];
-      const newSession: ScribeSession = {
-        id: `scribe-${Date.now()}`,
-        clientId: clientId,
-        clientName: clientName,
-        patientAge: patientAge,
-        patientGender: patientGender,
-        doctorId: "doc-1",
-        doctorName: "Priya Sharma",
-        sessionDate: new Date().toISOString(),
-        durationSeconds: recordingTime || 68,
-        transcript: {
-          fullText: scenario.transcriptText,
-          utterances: scenario.utterances,
-        },
-        extractedData: JSON.parse(JSON.stringify(scenario.extractedData)),
-        status: "extracted",
-        createdAt: Date.now(),
-      };
-      setActiveSession(newSession);
-      setWorkflowState("review");
-      toast.success("Clinical entities extracted!");
-    }, 1500);
+    const scenario = PRESET_SCENARIOS[0];
+    const newSession: ScribeSession = {
+      id: `scribe-${Date.now()}`,
+      clientId: clientId,
+      clientName: clientName,
+      patientAge: patientAge,
+      patientGender: patientGender,
+      doctorId: "doc-1",
+      doctorName: "Dr. Priya Sharma",
+      sessionDate: new Date().toISOString(),
+      durationSeconds: recordingTime || 68,
+      transcript: {
+        fullText: scenario.transcriptText,
+        utterances: scenario.utterances,
+      },
+      extractedData: JSON.parse(JSON.stringify(scenario.extractedData)),
+      status: "completed",
+      createdAt: Date.now(),
+    };
+
+    saveScribeSession(newSession);
+    issuePrescriptionDocument(newSession);
+    toast.success(`Transcript ready for ${clientName}!`);
+
+    if (onViewTranscript) {
+      onViewTranscript(newSession);
+    }
+    onClose();
   };
 
   const handleApprove = () => {

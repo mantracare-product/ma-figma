@@ -1091,6 +1091,95 @@ const GUIDE_DATA: GuidePageData[] = [
             },
         ],
     },
+    {
+        slug: "ai-scribe",
+        title: "AI Scribe & Clinical Voice Intelligence",
+        intro:
+            "MantraAssist AI Scribe is an ambient clinical voice intelligence and EHR prescription engine. It captures natural doctor-patient consultations, generates speaker-diarized transcripts using Deepgram Nova-2 Medical STT, extracts clinical entities into 11 customizable prescription sections, and enables 1-click PDF generation and WhatsApp dispatch.",
+        icon: FileText,
+        group: "Core",
+        features: [
+            {
+                title: "Live Ambient Consultation Recorder",
+                whatItDoes: "Captures live doctor-patient consultations in the background using an ambient microphone with live audio visualizer and elapsed time counter.",
+                whyHelps: "Eliminates documentation burnout by allowing clinicians to focus 100% on the patient encounter rather than typing notes.",
+                howToUse: "Click Add Scribe or + New Consultation, select the patient and doctor, and click Start Live Recording.",
+            },
+            {
+                title: "Deepgram Nova-2 Medical STT & Speaker Diarization",
+                whatItDoes: "Transcribes audio with medical-grade terminology accuracy and automatically separates speech into Doctor and Patient turns with timestamps.",
+                whyHelps: "Creates a readable, structured transcript with zero manual speaker tagging required.",
+                howToUse: "View the interactive transcript canvas on the right side of the consultation detail drawer.",
+            },
+            {
+                title: "11-Section EHR Entity Extraction",
+                whatItDoes: "Automatically populates 11 clinical sections: Patient Demographics, Chief Complaints, Diagnosis (ICD-10), Medications & Dosage, Symptoms, Precautions, Vitals, Lab Tests, Lifestyle Advice, Follow-up Date, and Doctor Notes.",
+                whyHelps: "Translates conversational speech into structured electronic health records in seconds.",
+                howToUse: "Open any transcript session to view and edit the AI-extracted clinical sections on the left panel.",
+            },
+            {
+                title: "Drag & Drop Custom EHR Layout Engine",
+                whatItDoes: "Allows doctors to reorder entire clinical sections, drag fields within sections, add custom fields, and create custom sections on the fly.",
+                whyHelps: "Gives healthcare providers complete flexibility to match their clinic's exact prescription format.",
+                howToUse: "Drag section headers via the grip icon to reorder, click + Add Field to insert custom variables, or click + Add Section at the bottom.",
+            },
+            {
+                title: "Dynamic Multi-Tag Chip Lists",
+                whatItDoes: "Renders symptoms, precautions, and complaints as clickable chips with 1-click removal (✕) and quick inline additions.",
+                whyHelps: "Makes reviewing and fine-tuning clinical bullet points fast and effortless.",
+                howToUse: "Click the ✕ icon on any chip to remove it, or type in the input box and press Enter to add a new chip.",
+            },
+            {
+                title: "Verified Prescription PDF Engine",
+                whatItDoes: "Generates an official, beautifully formatted clinical prescription document with clinic header, Rx badge, signature line, and verified watermark.",
+                whyHelps: "Produces compliant, print-ready or digital PDF prescriptions instantly without third-party EHR software.",
+                howToUse: "Click Generate PDF Prescription in the consultation detail drawer to preview and download the PDF.",
+            },
+            {
+                title: "1-Click Patient WhatsApp Dispatch",
+                whatItDoes: "Sends the verified digital prescription link directly to the patient's verified WhatsApp phone number with a personalized clinical message.",
+                whyHelps: "Delivers immediate post-visit care plans to patients, increasing prescription adherence and patient satisfaction.",
+                howToUse: "Click Send via WhatsApp from the table action menu or inside the transcript detail drawer, review the message preview, and confirm.",
+            },
+            {
+                title: "Transcripts Catalog & Search",
+                whatItDoes: "A centralized table listing all consultations with patient name, doctor, session date, duration, status badges, and instant keyword/ICD search.",
+                whyHelps: "Allows clinic staff to locate past consultations, audit clinical history, and reprint past prescriptions instantly.",
+                howToUse: "Type patient names or medical keywords in the search bar, or click any row to inspect the full session.",
+            },
+        ],
+        workflows: [
+            {
+                title: "Recording a live patient consultation",
+                steps: [
+                    "Navigate to the AI Scribe console from the left sidebar.",
+                    "Click Add Scribe to open the new consultation drawer.",
+                    "Select or enter the Patient Name, Responsible Doctor, and Department.",
+                    "Click Start Live Recording to begin capturing audio during the encounter.",
+                    "When the visit ends, click End Consultation to automatically diarize the audio and extract the 11 EHR sections.",
+                ],
+            },
+            {
+                title: "Reviewing, customizing, and issuing a prescription",
+                steps: [
+                    "Click the patient's consultation row in the AI Scribe table to open the 2-column detail drawer.",
+                    "Review the AI-extracted Diagnosis, Medications, Symptoms, and Precautions against the audio playback and transcript.",
+                    "Use the drag handles to reorder sections to your preferred layout, or add custom notes.",
+                    "Click Generate PDF Prescription to compile the signed document.",
+                    "Click Send via WhatsApp to dispatch the download link directly to the patient.",
+                ],
+            },
+            {
+                title: "Uploading an existing voice note or transcript",
+                steps: [
+                    "Click Add Scribe in the AI Scribe console.",
+                    "Switch to the Upload Audio / Text tab.",
+                    "Select an audio file (.mp3, .wav, .m4a) or paste raw consultation text into the editor.",
+                    "Click Create Transcript — Deepgram Nova-2 processes the encounter and populates the EHR schema.",
+                ],
+            },
+        ],
+    },
 ];
 
 const GROUP_ORDER = ["Core", "Automation", "Team & Admin", "Billing"];

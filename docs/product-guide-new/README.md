@@ -40,6 +40,7 @@ Explore step-by-step documentation for every screen in the system:
 | **Web Forms & Builder** | Capsule metric cards, form templates, drag-and-drop builder, and sandbox tests. | [Web Forms & Form Builder](web-forms.md) |
 | **Live Chat** | Real-time texting interface and historic message logs with clients. | [Live Chat Messaging](chats.md) |
 | **Appointments & Bookings** | Logged bookings list, interactive calendar views, and team schedules. | [Appointments & Calendar](appointments.md) |
+| **AI Scribe & Voice Intelligence** | Ambient clinical voice capture, speaker diarization, 11-section EHR builder, and 1-click PDF/WhatsApp prescriptions. | [AI Scribe & Clinical Voice Intelligence](ai-scribe.md) |
 | **Services Setup** | Business offerings details, service durations, and pricing lists. | [Services Management](services.md) |
 | **Team & User Roles** | Managing user roles (Admin, Agent, Manager) and calendar sync configurations. | [Team & User Management](users-team.md) |
 | **Organizations & Branches** | Switching business profiles and branch locations. | [Organizations](organizations.md) |
