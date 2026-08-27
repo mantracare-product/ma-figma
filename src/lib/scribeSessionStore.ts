@@ -15,6 +15,7 @@ export interface ScribeUtterance {
 export interface ExtractedMedication {
   id: string;
   drugName: string;
+  name?: string;
   dosage: string;
   frequency: string;
   duration: string;
@@ -30,11 +31,14 @@ export interface ExtractedClinicalData {
     temperature?: string;
     weight?: string;
     spo2?: string;
+    heartRate?: string;
   };
   diagnosis: string;
+  icd10Code?: string;
   secondaryDiagnosis?: string[];
   medications: ExtractedMedication[];
   investigations: string[];
+  advice?: string[];
   followUpDate?: string;
   followUpDays?: number;
   dietaryAdvice?: string;

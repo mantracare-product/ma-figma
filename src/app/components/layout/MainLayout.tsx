@@ -3,7 +3,7 @@ import { Outlet, useLocation } from "react-router";
 import { motion, AnimatePresence } from "motion/react";
 import Sidebar from "./Sidebar";
 import { Menu } from "lucide-react";
-import ThemeSwitcher from "../ThemeSwitcher";
+import AIScribeFloatingWidget from "../scribe/AIScribeFloatingWidget";
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -39,7 +39,9 @@ export default function MainLayout() {
           </motion.div>
         </AnimatePresence>
       </main>
-      <ThemeSwitcher />
+
+      {/* Persistent AI Scribe Floating Widget */}
+      <AIScribeFloatingWidget />
     </div>
   );
 }

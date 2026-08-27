@@ -285,15 +285,7 @@ export default function NewConsultationDrawer({
                   >
                     <Square className="w-3.5 h-3.5 fill-white" /> Finish & Extract
                   </button>
-                ) : (
-                  <button
-                    onClick={handleStartRecording}
-                    className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] px-5 py-2 text-xs font-semibold text-white shadow-sm hover:shadow transition-all cursor-pointer"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <Mic className="w-3.5 h-3.5" /> Start Recording
-                  </button>
-                )
+                ) : null
               ) : (
                 <button
                   onClick={handleFinishAndProcess}

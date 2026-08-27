@@ -12,7 +12,8 @@
  *  - WebFormsTest.tsx   (write on handleSubmit)
  */
 
-import { CLIENT_FORM_SUBMISSIONS, ClientFormSubmission } from "./clientFormSubmissions";
+import { CLIENT_FORM_SUBMISSIONS, type ClientFormSubmission } from "./clientFormSubmissions";
+export type { ClientFormSubmission };
 
 const STORAGE_KEY = "clientFormSubmissions";
 

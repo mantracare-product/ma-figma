@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import {
   Search, Plus, FileText, CheckCircle2, ArrowRight, ShieldCheck, Printer,
   Loader2, User, Building, Mail, Phone, MapPin, Download, ChevronDown, Check,
-  Sparkles, FileCode, RefreshCw, FileSpreadsheet, Share2
+  Sparkles, FileCode, RefreshCw, FileSpreadsheet, Share2, Database, Mic, Info
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -14,6 +14,8 @@ import {
   StoredClientDocument,
   saveClientDocument,
 } from "../../../lib/clientDocumentsStore";
+import { loadClientSubmissions, ClientFormSubmission } from "../../../data/submissionsStore";
+import { getScribeSessions, ScribeSession } from "../../../lib/scribeSessionStore";
 import { generateClientPdf } from "../../../lib/pdfGenerator";
 import AddDocumentTemplateDrawer from "./AddDocumentTemplateDrawer";
 import ShareDocumentDrawer from "./ShareDocumentDrawer";
@@ -48,6 +50,12 @@ export default function GenerateDocumentDrawer({
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTemplate, setSelectedTemplate] = useState<DocumentTemplate | null>(initialTemplate);
 
+  // Source selection state ("current" | "webform_{id}" | "transcript_{id}")
+  const [selectedSourceId, setSelectedSourceId] = useState<string>("current");
+  const [selectedSourceType, setSelectedSourceType] = useState<"current" | "webform" | "transcript">("current");
+  const [sourceTypeDropdownOpen, setSourceTypeDropdownOpen] = useState(false);
+  const [recordDropdownOpen, setRecordDropdownOpen] = useState(false);
+
   // Loading state when generating document
   const [isGeneratingDoc, setIsGeneratingDoc] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -60,6 +68,25 @@ export default function GenerateDocumentDrawer({
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
   const [shareDrawerOpen, setShareDrawerOpen] = useState(false);
 
+  // WebForm submissions for dropdown
+  const allSubmissions = loadClientSubmissions();
+  const clientSubmissions = allSubmissions.filter(
+    (s) =>
+      s.clientId === client.id ||
+      s.fields["Full Name"]?.toLowerCase() === client.name.toLowerCase() ||
+      s.fields["Email"]?.toLowerCase() === client.email.toLowerCase()
+  );
+  const webformSources = clientSubmissions.length > 0 ? clientSubmissions : allSubmissions.slice(0, 4);
+
+  // Scribe sessions for dropdown
+  const allScribeSessions = getScribeSessions();
+  const clientScribeSessions = allScribeSessions.filter(
+    (s) =>
+      s.clientName.toLowerCase().includes(client.name.toLowerCase()) ||
+      client.name.toLowerCase().includes(s.clientName.toLowerCase().split(" ")[0])
+  );
+  const transcriptSources = clientScribeSessions.length > 0 ? clientScribeSessions : allScribeSessions.slice(0, 4);
+
   // Listen to template store updates
   useEffect(() => {
     const handleUpdate = () => setTemplates(getStoredDocumentTemplates());
@@ -67,25 +94,15 @@ export default function GenerateDocumentDrawer({
     return () => window.removeEventListener(DOCUMENT_TEMPLATES_EVENT, handleUpdate);
   }, []);
 
-  // Update selectedTemplate when initialTemplate prop changes
-  useEffect(() => {
-    if (initialTemplate) {
-      handleSelectTemplate(initialTemplate);
-    }
-  }, [initialTemplate]);
-
-  // When a template is selected, initialize filled field values and simulate loading state
-  const handleSelectTemplate = (tpl: DocumentTemplate) => {
-    setSelectedTemplate(tpl);
-    setIsGeneratingDoc(true);
-
+  // Helper to compute field values for a specific source ID
+  const getSourceFieldValues = (sourceId: string, tpl: DocumentTemplate | null): Record<string, string> => {
     const dateStr = new Date().toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
 
-    const initialValues: Record<string, string> = {
+    const defaultValues: Record<string, string> = {
       client_name: client.name || "",
       name: client.name || "",
       email: client.email || "",
@@ -110,7 +127,129 @@ export default function GenerateDocumentDrawer({
       tax_rate: "5%",
     };
 
-    // Include extracted fields from template
+    if (sourceId.startsWith("webform_")) {
+      const subId = sourceId.replace("webform_", "");
+      const sub = loadClientSubmissions().find((s) => s.id === subId);
+      if (sub) {
+        const wfValues: Record<string, string> = {
+          ...defaultValues,
+          client_name: sub.fields["Full Name"] || sub.fields["Name"] || client.name,
+          name: sub.fields["Full Name"] || sub.fields["Name"] || client.name,
+          email: sub.fields["Email"] || client.email,
+          phone: sub.fields["Phone"] || sub.fields["Phone Number"] || client.phone,
+          company_name: sub.fields["Company"] || sub.fields["Company Name"] || client.companyName || "",
+          job_position: sub.fields["Job Title"] || sub.fields["Job Position"] || client.jobPosition || "",
+          location: sub.fields["Location"] || sub.fields["Address"] || client.location || "",
+          medical_notes: sub.fields["Medical History"] || sub.fields["Message"] || "WebForm submission response",
+          allergies: sub.fields["Allergies"] || "None Reported",
+        };
+        Object.entries(sub.fields).forEach(([k, v]) => {
+          const snakeKey = k.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+          wfValues[snakeKey] = v;
+        });
+        return wfValues;
+      }
+    }
+
+    if (sourceId.startsWith("transcript_")) {
+      const sessionId = sourceId.replace("transcript_", "");
+      const session = getScribeSessions().find((s) => s.id === sessionId);
+      if (session) {
+        const medSummary = session.extractedData.medications && session.extractedData.medications.length > 0
+          ? session.extractedData.medications.map((m) => `${m.name || m.drugName} ${m.dosage} (${m.frequency})`).join("; ")
+          : "Take medicines as prescribed";
+
+        return {
+          ...defaultValues,
+          client_name: session.clientName || client.name,
+          name: session.clientName || client.name,
+          responsible: session.doctorName || client.responsible || "Dr. Priya Sharma",
+          doctor_name: session.doctorName || "Dr. Priya Sharma",
+          chief_complaint: session.extractedData.chiefComplaint || "Visual impairment",
+          diagnosis: session.extractedData.diagnosis || "Nuclear Cataract",
+          icd10_code: session.extractedData.icd10Code || "H25.13",
+          medications: medSummary,
+          medical_notes: `Diagnosis: ${session.extractedData.diagnosis || "Nuclear Cataract"}. Chief complaint: "${session.extractedData.chiefComplaint || "Visual impairment"}". Prescribed: ${medSummary}.`,
+          advice: session.extractedData.advice ? session.extractedData.advice.join(". ") : "Rest eyes and take medication as prescribed.",
+          follow_up_date: session.extractedData.followUpDate || "14 days",
+          investigations: session.extractedData.investigations ? session.extractedData.investigations.join(", ") : "Visual Acuity",
+          vitals: session.extractedData.vitals
+            ? `BP: ${session.extractedData.vitals.bloodPressure || '120/80'}, HR: ${session.extractedData.vitals.heartRate || '72 bpm'}`
+            : "BP 120/80, HR 72 bpm",
+        };
+      }
+    }
+
+    return defaultValues;
+  };
+
+  const getSourceTypeFromId = (id: string): "current" | "webform" | "transcript" => {
+    if (id.startsWith("webform_")) return "webform";
+    if (id.startsWith("transcript_")) return "transcript";
+    return "current";
+  };
+
+  // Handler for source record selection
+  const handleSourceChange = (newSourceId: string) => {
+    setSelectedSourceId(newSourceId);
+    setSelectedSourceType(getSourceTypeFromId(newSourceId));
+    const newVals = getSourceFieldValues(newSourceId, selectedTemplate);
+
+    if (selectedTemplate?.extractedFields) {
+      selectedTemplate.extractedFields.forEach((field) => {
+        if (!newVals[field]) {
+          newVals[field] = (client as any)[field] || field.replace(/_/g, " ");
+        }
+      });
+    }
+
+    setFieldValues(newVals);
+
+    if (newSourceId === "current") {
+      toast.info("Filled document fields from Client Profile Data");
+    } else if (newSourceId.startsWith("webform_")) {
+      const subId = newSourceId.replace("webform_", "");
+      toast.success(`Filled document fields from WebForm Response #${subId}`);
+    } else if (newSourceId.startsWith("transcript_")) {
+      const sessionId = newSourceId.replace("transcript_", "");
+      toast.success(`Filled document fields from AI Scribe Transcript #${sessionId}`);
+    }
+  };
+
+  // Handler for source type category selection (Step 1)
+  const handleSourceTypeChange = (newType: "current" | "webform" | "transcript") => {
+    setSelectedSourceType(newType);
+    if (newType === "current") {
+      handleSourceChange("current");
+    } else if (newType === "webform") {
+      if (webformSources.length > 0) {
+        handleSourceChange(`webform_${webformSources[0].id}`);
+      } else {
+        handleSourceChange("current");
+      }
+    } else if (newType === "transcript") {
+      if (transcriptSources.length > 0) {
+        handleSourceChange(`transcript_${transcriptSources[0].id}`);
+      } else {
+        handleSourceChange("current");
+      }
+    }
+  };
+
+  // Update selectedTemplate when initialTemplate prop changes
+  useEffect(() => {
+    if (initialTemplate) {
+      handleSelectTemplate(initialTemplate);
+    }
+  }, [initialTemplate]);
+
+  // When a template is selected, initialize filled field values and simulate loading state
+  const handleSelectTemplate = (tpl: DocumentTemplate) => {
+    setSelectedTemplate(tpl);
+    setIsGeneratingDoc(true);
+
+    const initialValues = getSourceFieldValues(selectedSourceId, tpl);
+
     if (tpl.extractedFields) {
       tpl.extractedFields.forEach((field) => {
         if (!initialValues[field]) {
@@ -277,6 +416,49 @@ export default function GenerateDocumentDrawer({
         ...selectedTemplate.fieldMappings.map((m) => m.templateField),
       ]))
     : [];
+
+  const getSelectedSourceInfo = () => {
+    if (selectedSourceId === "current") {
+      return {
+        title: "Current Profile Data (Default)",
+        subtitle: "Pre-filled with system profile fields",
+        badge: "PROFILE DATA",
+        icon: <User className="w-3.5 h-3.5 text-slate-700" />,
+        bgColor: "bg-slate-100",
+      };
+    }
+    if (selectedSourceId.startsWith("webform_")) {
+      const subId = selectedSourceId.replace("webform_", "");
+      const sub = loadClientSubmissions().find((s) => s.id === subId);
+      return {
+        title: `WebForm Response #${subId}`,
+        subtitle: sub ? `Form #${sub.formId} • Submitted ${sub.submittedAt}` : "WebForm submission response",
+        badge: "WEBFORM RESPONSE",
+        icon: <FileText className="w-3.5 h-3.5 text-slate-700" />,
+        bgColor: "bg-slate-100",
+      };
+    }
+    if (selectedSourceId.startsWith("transcript_")) {
+      const sessionId = selectedSourceId.replace("transcript_", "");
+      const session = getScribeSessions().find((s) => s.id === sessionId);
+      return {
+        title: `Transcript #${sessionId}`,
+        subtitle: session ? `${session.extractedData.diagnosis || "Clinical Note"} • ${session.createdAt}` : "AI Scribe extraction",
+        badge: "AI TRANSCRIPT",
+        icon: <Mic className="w-3.5 h-3.5 text-slate-700" />,
+        bgColor: "bg-slate-100",
+      };
+    }
+    return {
+      title: "Current Profile Data (Default)",
+      subtitle: "Pre-filled with system profile fields",
+      badge: "PROFILE DATA",
+      icon: <User className="w-3.5 h-3.5 text-slate-700" />,
+      bgColor: "bg-slate-100",
+    };
+  };
+
+  const selectedSourceInfo = getSelectedSourceInfo();
 
   return (
     <>
@@ -574,18 +756,269 @@ export default function GenerateDocumentDrawer({
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleSelectTemplate(selectedTemplate)}
+                    onClick={() => handleSourceChange("current")}
                     className="text-[11px] text-slate-500 hover:text-slate-900 flex items-center gap-1 cursor-pointer font-medium"
-                    title="Reset to system defaults"
+                    title="Reset to system profile defaults"
                   >
                     <RefreshCw className="w-3 h-3" />
                     <span>Reset Defaults</span>
                   </button>
                 </div>
 
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 max-h-[calc(100vh-280px)] overflow-y-auto">
+                {/* DATA SOURCE SELECTOR (Conditional 2nd Dropdown & Minimal Clean UI with Info Icon) */}
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Database className="w-3.5 h-3.5 text-slate-700" />
+                      <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        Auto-Fill From Source
+                      </span>
+                      <div className="group relative inline-flex items-center">
+                        <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                          Maps and populates template placeholders automatically.
+                        </div>
+                      </div>
+                    </div>
+                    <span
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200/80 text-slate-800 uppercase tracking-wider"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      {selectedSourceInfo.badge}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    {/* STEP 1: Select Source Type Category (Custom Styled Popover) */}
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1.5">
+                        <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          SELECT SOURCE
+                        </label>
+                        <div className="group relative inline-flex items-center">
+                          <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                            Choose category of data to pre-fill template placeholders.
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSourceTypeDropdownOpen(!sourceTypeDropdownOpen);
+                            setRecordDropdownOpen(false);
+                          }}
+                          className="w-full p-2.5 bg-white border border-slate-200 hover:border-slate-400 rounded-xl flex items-center justify-between gap-2 text-xs font-bold text-slate-900 shadow-2xs hover:shadow-xs transition-all cursor-pointer text-left"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          <span className="truncate">
+                            {selectedSourceType === "current" && "Current Profile Data"}
+                            {selectedSourceType === "webform" && `WebForm Responses (${webformSources.length})`}
+                            {selectedSourceType === "transcript" && `AI Scribe Transcripts (${transcriptSources.length})`}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${sourceTypeDropdownOpen ? "rotate-180 text-slate-700" : ""}`} />
+                        </button>
+
+                        {sourceTypeDropdownOpen && (
+                          <>
+                            <div className="fixed inset-0 z-40" onClick={() => setSourceTypeDropdownOpen(false)} />
+                            <div
+                              className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1 space-y-0.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                              style={{ fontFamily: "Outfit, sans-serif" }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSourceTypeChange("current");
+                                  setSourceTypeDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedSourceType === "current" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                <span>Current Profile Data</span>
+                                {selectedSourceType === "current" && <Check className="w-3.5 h-3.5 text-slate-900" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSourceTypeChange("webform");
+                                  setSourceTypeDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedSourceType === "webform" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                <span>WebForm Responses ({webformSources.length})</span>
+                                {selectedSourceType === "webform" && <Check className="w-3.5 h-3.5 text-slate-900" />}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSourceTypeChange("transcript");
+                                  setSourceTypeDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedSourceType === "transcript" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                }`}
+                              >
+                                <span>AI Scribe Transcripts ({transcriptSources.length})</span>
+                                {selectedSourceType === "transcript" && <Check className="w-3.5 h-3.5 text-slate-900" />}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* STEP 2: Select Specific Record (Custom Styled Popover ONLY for webform and transcript) */}
+                    {selectedSourceType !== "current" && (
+                      <div className="space-y-1 animate-in fade-in-50 duration-150">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            SELECT RECORD
+                          </label>
+                          <div className="group relative inline-flex items-center">
+                            <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                              Select specific response or session record to extract data.
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="relative">
+                          {selectedSourceType === "webform" && (
+                            <>
+                              {webformSources.length === 0 ? (
+                                <div className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                                  No WebForm responses available
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRecordDropdownOpen(!recordDropdownOpen);
+                                      setSourceTypeDropdownOpen(false);
+                                    }}
+                                    className="w-full p-2.5 bg-white border border-slate-200 hover:border-slate-400 rounded-xl flex items-center justify-between gap-2 text-xs font-bold text-slate-900 shadow-2xs hover:shadow-xs transition-all cursor-pointer text-left truncate"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <span className="truncate">
+                                      {(() => {
+                                        const currentWf = webformSources.find((s) => `webform_${s.id}` === selectedSourceId);
+                                        return currentWf ? `WebForm Response #${currentWf.id} (${currentWf.submittedAt})` : "Select WebForm Response";
+                                      })()}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${recordDropdownOpen ? "rotate-180 text-slate-700" : ""}`} />
+                                  </button>
+
+                                  {recordDropdownOpen && (
+                                    <>
+                                      <div className="fixed inset-0 z-40" onClick={() => setRecordDropdownOpen(false)} />
+                                      <div
+                                        className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1 max-h-60 overflow-y-auto space-y-0.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      >
+                                        {webformSources.map((wf) => {
+                                          const isSelected = selectedSourceId === `webform_${wf.id}`;
+                                          return (
+                                            <button
+                                              key={`wf_${wf.id}`}
+                                              type="button"
+                                              onClick={() => {
+                                                handleSourceChange(`webform_${wf.id}`);
+                                                setRecordDropdownOpen(false);
+                                              }}
+                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                                isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                              }`}
+                                            >
+                                              <span className="truncate">WebForm Response #{wf.id} ({wf.submittedAt})</span>
+                                              {isSelected && <Check className="w-3.5 h-3.5 text-slate-900 shrink-0 ml-2" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          )}
+
+                          {selectedSourceType === "transcript" && (
+                            <>
+                              {transcriptSources.length === 0 ? (
+                                <div className="w-full p-2.5 bg-slate-100 border border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                                  No AI Scribe transcripts available
+                                </div>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setRecordDropdownOpen(!recordDropdownOpen);
+                                      setSourceTypeDropdownOpen(false);
+                                    }}
+                                    className="w-full p-2.5 bg-white border border-slate-200 hover:border-slate-400 rounded-xl flex items-center justify-between gap-2 text-xs font-bold text-slate-900 shadow-2xs hover:shadow-xs transition-all cursor-pointer text-left truncate"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <span className="truncate">
+                                      {(() => {
+                                        const currentTr = transcriptSources.find((s) => `transcript_${s.id}` === selectedSourceId);
+                                        return currentTr ? `Transcript #${currentTr.id} — ${currentTr.extractedData.diagnosis || "Clinical Note"}` : "Select Transcript";
+                                      })()}
+                                    </span>
+                                    <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ${recordDropdownOpen ? "rotate-180 text-slate-700" : ""}`} />
+                                  </button>
+
+                                  {recordDropdownOpen && (
+                                    <>
+                                      <div className="fixed inset-0 z-40" onClick={() => setRecordDropdownOpen(false)} />
+                                      <div
+                                        className="absolute left-0 right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1 max-h-60 overflow-y-auto space-y-0.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      >
+                                        {transcriptSources.map((tr) => {
+                                          const isSelected = selectedSourceId === `transcript_${tr.id}`;
+                                          return (
+                                            <button
+                                              key={`tr_${tr.id}`}
+                                              type="button"
+                                              onClick={() => {
+                                                handleSourceChange(`transcript_${tr.id}`);
+                                                setRecordDropdownOpen(false);
+                                              }}
+                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
+                                                isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                              }`}
+                                            >
+                                              <span className="truncate">Transcript #{tr.id} — {tr.extractedData.diagnosis || "Clinical Note"}</span>
+                                              {isSelected && <Check className="w-3.5 h-3.5 text-slate-900 shrink-0 ml-2" />}
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    </>
+                                  )}
+                                </>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-3 max-h-[calc(100vh-360px)] overflow-y-auto">
                   <p className="text-[11px] text-slate-500 leading-normal" style={{ fontFamily: "Outfit, sans-serif" }}>
-                    The placeholders below were pre-filled with {client.name}'s profile data. You can manually edit any field value to update the document in real time:
+                    The placeholders below were pre-filled from <strong>{selectedSourceId === "current" ? `${client.name}'s profile data` : selectedSourceId.startsWith("webform_") ? "WebForm submission response" : "AI Scribe transcript extraction"}</strong>. You can manually edit any field value:
                   </p>
 
                   {activePlaceholders.length === 0 ? (

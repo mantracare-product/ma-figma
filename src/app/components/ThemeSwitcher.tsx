@@ -3,6 +3,7 @@ import { Palette, ChevronDown } from "lucide-react";
 import { useTheme, ThemePalette } from "../context/ThemeContext";
 
 export default function ThemeSwitcher() {
+  return null;
   const { theme, setTheme, accentColor, setAccentColor } = useTheme();
   const [isOpen, setIsOpen] = useState(false);
 
