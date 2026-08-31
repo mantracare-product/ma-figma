@@ -331,6 +331,15 @@ export default function GenerateDocumentDrawer({
       const renderedText = getRenderedText();
       const baseName = `${client.name.replace(/\s+/g, "_")}_${selectedTemplate.name.replace(/\s+/g, "_")}`;
 
+      const valueBySource =
+        selectedSourceId === "current"
+          ? "Client Profile Data"
+          : selectedSourceId.startsWith("webform_")
+            ? `WebForm Response #${selectedSourceId.replace("webform_", "")}`
+            : selectedSourceId.startsWith("transcript_")
+              ? `AI Scribe Transcript #${selectedSourceId.replace("transcript_", "")}`
+              : "Client Profile Data";
+
       if (format === "pdf") {
         const pdfResult = await generateClientPdf(selectedTemplate, renderedText, client);
         const blobUrl = URL.createObjectURL(pdfResult.blob);
@@ -339,7 +348,8 @@ export default function GenerateDocumentDrawer({
           id: `doc-${Date.now()}`,
           clientId: client.id,
           name: `${baseName}.pdf`,
-          category: "General",
+          category: selectedTemplate.category || "General",
+          valueBy: valueBySource,
           fileType: "pdf",
           fileSize: `${(pdfResult.blob.size / (1024 * 1024)).toFixed(2)} MB`,
           uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
@@ -372,7 +382,8 @@ export default function GenerateDocumentDrawer({
           id: `doc-${Date.now()}`,
           clientId: client.id,
           name: `${baseName}.docx`,
-          category: "General",
+          category: selectedTemplate.category || "General",
+          valueBy: valueBySource,
           fileType: "doc",
           fileSize: "1.2 MB",
           uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
@@ -412,9 +423,9 @@ export default function GenerateDocumentDrawer({
   // Extract unique placeholders present in the selected template
   const activePlaceholders = selectedTemplate
     ? Array.from(new Set([
-        ...selectedTemplate.extractedFields,
-        ...selectedTemplate.fieldMappings.map((m) => m.templateField),
-      ]))
+      ...selectedTemplate.extractedFields,
+      ...selectedTemplate.fieldMappings.map((m) => m.templateField),
+    ]))
     : [];
 
   const getSelectedSourceInfo = () => {
@@ -638,13 +649,48 @@ export default function GenerateDocumentDrawer({
                   <thead>
                     <tr style={{ backgroundColor: "#1F2937", height: "42px" }} className="text-white">
                       <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Template Name
+                        <div className="flex items-center gap-1">
+                          <span>Template Name</span>
+                          <div className="group relative inline-flex items-center">
+                            <Info className="w-3.5 h-3.5 text-slate-300 hover:text-white cursor-pointer" />
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-44 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit font-normal border border-slate-700">
+                              Name and title of the document template
+                            </div>
+                          </div>
+                        </div>
                       </th>
                       <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Fillable Fields
+                        <div className="flex items-center gap-1">
+                          <span>Category</span>
+                          <div className="group relative inline-flex items-center">
+                            <Info className="w-3.5 h-3.5 text-slate-300 hover:text-white cursor-pointer" />
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-44 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit font-normal border border-slate-700">
+                              Assigned functional template category
+                            </div>
+                          </div>
+                        </div>
                       </th>
                       <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Created Date
+                        <div className="flex items-center gap-1">
+                          <span>Fillable Fields</span>
+                          <div className="group relative inline-flex items-center">
+                            <Info className="w-3.5 h-3.5 text-slate-300 hover:text-white cursor-pointer" />
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-44 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit font-normal border border-slate-700">
+                              Total dynamic placeholders populated from client data
+                            </div>
+                          </div>
+                        </div>
+                      </th>
+                      <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        <div className="flex items-center gap-1">
+                          <span>Created Date</span>
+                          <div className="group relative inline-flex items-center">
+                            <Info className="w-3.5 h-3.5 text-slate-300 hover:text-white cursor-pointer" />
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-44 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit font-normal border border-slate-700">
+                              Date when this template was created
+                            </div>
+                          </div>
+                        </div>
                       </th>
                       <th className="px-3 py-2 text-right font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Action
@@ -654,7 +700,7 @@ export default function GenerateDocumentDrawer({
                   <tbody>
                     {filteredTemplates.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="text-center py-10 text-slate-400 italic text-sm">
+                        <td colSpan={5} className="text-center py-10 text-slate-400 italic text-sm">
                           No matching document templates found. Click "Create New Template" to add one.
                         </td>
                       </tr>
@@ -663,15 +709,16 @@ export default function GenerateDocumentDrawer({
                         <tr
                           key={tpl.id}
                           onClick={() => handleSelectTemplate(tpl)}
-                          className={`cursor-pointer transition-colors hover:bg-slate-100/60 ${
-                            idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
-                          }`}
+                          className={`cursor-pointer transition-colors hover:bg-slate-100/60 ${idx % 2 === 0 ? "bg-white" : "bg-slate-50/50"
+                            }`}
                         >
                           <td className="px-3 py-3 font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                            <div className="flex items-center gap-2">
-                              <FileText className="w-4 h-4 text-slate-700 shrink-0" />
-                              <span>{tpl.name}</span>
-                            </div>
+                            {tpl.name}
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                              {tpl.category || "General"}
+                            </span>
                           </td>
                           <td className="px-3 py-3 text-slate-600 font-mono">
                             {tpl.extractedFields.length} fillable fields
@@ -775,7 +822,7 @@ export default function GenerateDocumentDrawer({
                       </span>
                       <div className="group relative inline-flex items-center">
                         <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
-                        <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                        <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit border border-slate-700">
                           Maps and populates template placeholders automatically.
                         </div>
                       </div>
@@ -797,7 +844,7 @@ export default function GenerateDocumentDrawer({
                         </label>
                         <div className="group relative inline-flex items-center">
                           <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
-                          <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit border border-slate-700">
                             Choose category of data to pre-fill template placeholders.
                           </div>
                         </div>
@@ -834,9 +881,8 @@ export default function GenerateDocumentDrawer({
                                   handleSourceTypeChange("current");
                                   setSourceTypeDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                  selectedSourceType === "current" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
-                                }`}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${selectedSourceType === "current" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                  }`}
                               >
                                 <span>Current Profile Data</span>
                                 {selectedSourceType === "current" && <Check className="w-3.5 h-3.5 text-slate-900" />}
@@ -848,9 +894,8 @@ export default function GenerateDocumentDrawer({
                                   handleSourceTypeChange("webform");
                                   setSourceTypeDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                  selectedSourceType === "webform" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
-                                }`}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${selectedSourceType === "webform" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                  }`}
                               >
                                 <span>WebForm Responses ({webformSources.length})</span>
                                 {selectedSourceType === "webform" && <Check className="w-3.5 h-3.5 text-slate-900" />}
@@ -862,9 +907,8 @@ export default function GenerateDocumentDrawer({
                                   handleSourceTypeChange("transcript");
                                   setSourceTypeDropdownOpen(false);
                                 }}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                  selectedSourceType === "transcript" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
-                                }`}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${selectedSourceType === "transcript" ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                  }`}
                               >
                                 <span>AI Scribe Transcripts ({transcriptSources.length})</span>
                                 {selectedSourceType === "transcript" && <Check className="w-3.5 h-3.5 text-slate-900" />}
@@ -884,7 +928,7 @@ export default function GenerateDocumentDrawer({
                           </label>
                           <div className="group relative inline-flex items-center">
                             <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-pointer" />
-                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-1.5 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-xl z-50 pointer-events-none text-center font-outfit">
+                            <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit border border-slate-700">
                               Select specific response or session record to extract data.
                             </div>
                           </div>
@@ -934,9 +978,8 @@ export default function GenerateDocumentDrawer({
                                                 handleSourceChange(`webform_${wf.id}`);
                                                 setRecordDropdownOpen(false);
                                               }}
-                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                                isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
-                                              }`}
+                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                                }`}
                                             >
                                               <span className="truncate">WebForm Response #{wf.id} ({wf.submittedAt})</span>
                                               {isSelected && <Check className="w-3.5 h-3.5 text-slate-900 shrink-0 ml-2" />}
@@ -994,9 +1037,8 @@ export default function GenerateDocumentDrawer({
                                                 handleSourceChange(`transcript_${tr.id}`);
                                                 setRecordDropdownOpen(false);
                                               }}
-                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${
-                                                isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
-                                              }`}
+                                              className={`w-full text-left px-3 py-2 rounded-lg text-xs font-semibold flex items-center justify-between transition-colors cursor-pointer ${isSelected ? "bg-slate-100 text-slate-900 font-bold" : "hover:bg-slate-50 text-slate-700"
+                                                }`}
                                             >
                                               <span className="truncate">Transcript #{tr.id} — {tr.extractedData.diagnosis || "Clinical Note"}</span>
                                               {isSelected && <Check className="w-3.5 h-3.5 text-slate-900 shrink-0 ml-2" />}
@@ -1079,3 +1121,5 @@ export default function GenerateDocumentDrawer({
     </>
   );
 }
+
+

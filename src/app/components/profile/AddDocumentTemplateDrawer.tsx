@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   UploadCloud, FileText, CheckCircle2, Settings, AlertCircle, Loader2,
   LayoutTemplate, Layers, ChevronDown, ChevronRight, Check, Users, Hash, X, Search, Plus,
-  Sparkles, RotateCcw, Code, Eye
+  Sparkles, RotateCcw, Code, Eye, Folder, Tag, Info, HelpCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import mammoth from "mammoth";
@@ -11,6 +11,9 @@ import {
   DocumentTemplateFieldMapping,
   saveDocumentTemplate,
   extractTemplateFields,
+  getStoredTemplateCategories,
+  saveTemplateCategory,
+  DOCUMENT_CATEGORIES_EVENT,
 } from "../../../lib/documentTemplatesStore";
 import { CreateFieldModal } from "../help/FieldManager";
 import {
@@ -105,7 +108,7 @@ const AVAILABLE_WEBFORMS = [
   {
     id: "wf-1",
     title: "Client Intake & Consent WebForm",
-    category: "Medical / Intake",
+    category: "Consent forms",
     fields: ["client_name", "email", "phone", "location", "consent_signature", "date"],
     sampleText: `CLIENT INTAKE & CONSENT WEBFORM
 
@@ -124,7 +127,7 @@ Assigned Staff: {responsible}`,
   {
     id: "wf-2",
     title: "KYC & Identity Verification WebForm",
-    category: "Identification",
+    category: "General",
     fields: ["client_name", "email", "phone", "company_name", "job_position", "id_number", "date"],
     sampleText: `KYC & IDENTITY VERIFICATION WEBFORM
 
@@ -143,7 +146,7 @@ Status: Verified`,
   {
     id: "wf-3",
     title: "Medical History Intake WebForm",
-    category: "Medical / Intake",
+    category: "Patient Intake form",
     fields: ["client_name", "phone", "allergies", "medical_notes", "emergency_contact", "date"],
     sampleText: `MEDICAL HISTORY INTAKE WEBFORM
 
@@ -319,6 +322,42 @@ function MappedFieldSelector({
   );
 }
 
+function FieldTooltip({ text }: { text: string }) {
+  const [visible, setVisible] = React.useState(false);
+  const [pos, setPos] = React.useState({ top: 0, left: 0 });
+  const iconRef = React.useRef<HTMLSpanElement>(null);
+
+  const handleEnter = () => {
+    if (iconRef.current) {
+      const rect = iconRef.current.getBoundingClientRect();
+      setPos({
+        top: rect.bottom + 8,
+        left: rect.left + rect.width / 2,
+      });
+    }
+    setVisible(true);
+  };
+
+  return (
+    <span
+      ref={iconRef}
+      className="inline-flex items-center ml-1.5 align-middle cursor-pointer"
+      onMouseEnter={handleEnter}
+      onMouseLeave={() => setVisible(false)}
+    >
+      <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-700" />
+      {visible && (
+        <span
+          className="fixed -translate-x-1/2 w-56 p-2.5 bg-slate-900 text-white text-[11px] font-normal rounded-xl shadow-2xl pointer-events-none text-center font-outfit leading-snug whitespace-normal border border-slate-700/80"
+          style={{ top: pos.top, left: pos.left, zIndex: 999999 }}
+        >
+          {text}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export default function AddDocumentTemplateDrawer({
   isOpen,
   onClose,
@@ -334,6 +373,18 @@ export default function AddDocumentTemplateDrawer({
   const [fieldMappings, setFieldMappings] = useState<DocumentTemplateFieldMapping[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+
+  // Category state
+  const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
+  const [category, setCategory] = useState<string>("Prescription");
+  const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState("");
+
+  useEffect(() => {
+    const handleCatUpdate = () => setCategories(getStoredTemplateCategories());
+    window.addEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
+    return () => window.removeEventListener(DOCUMENT_CATEGORIES_EVENT, handleCatUpdate);
+  }, []);
 
   // Webform selection state
   const [selectedWebFormId, setSelectedWebFormId] = useState<string>("");
@@ -612,7 +663,7 @@ export default function AddDocumentTemplateDrawer({
     const newTemplate: DocumentTemplate = {
       id: `tpl-${Date.now()}`,
       name: templateName.trim(),
-      category: "General",
+      category: category.trim() || "General",
       fileName: fileName || `${templateName.trim().toLowerCase().replace(/\s+/g, "_")}.docx`,
       templateText: templateText.trim(),
       extractedFields: extracted,
@@ -661,9 +712,12 @@ export default function AddDocumentTemplateDrawer({
         <div className="space-y-6">
           {/* Template Name */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Template Name *
-            </label>
+            <div className="flex items-center gap-1 mb-1">
+              <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Template Name *
+              </label>
+              <FieldTooltip text="Enter the official display name for this document template" />
+            </div>
             <input
               type="text"
               required
@@ -675,11 +729,111 @@ export default function AddDocumentTemplateDrawer({
             />
           </div>
 
+          {/* Assign Category Section */}
+          <div>
+            <div className="flex items-center gap-1 mb-1">
+              <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Assign Category *
+              </label>
+              <FieldTooltip text="Select or type a custom category to group this template (e.g. Prescription, Session Notes, Consent forms, Patient Intake form)" />
+            </div>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setCategoryDropdownOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 bg-white border border-slate-200 rounded-xl text-left hover:border-slate-400 focus:outline-none transition-all cursor-pointer shadow-2xs"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <span className="text-xs font-bold text-slate-900">{category || "Select Category"}</span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${categoryDropdownOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {/* Custom Popover Dropdown Menu for Categories */}
+              {categoryDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setCategoryDropdownOpen(false)} />
+                  <div
+                    className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 overflow-hidden p-1.5 animate-in fade-in-50 zoom-in-95 duration-100"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <div className="relative mb-1">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search or enter category name..."
+                        value={categorySearchQuery}
+                        onChange={(e) => setCategorySearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-slate-500"
+                        autoFocus
+                      />
+                    </div>
+
+                    <div className="max-h-52 overflow-y-auto space-y-0.5">
+                      {categories
+                        .filter((c) => c.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+                        .map((cat) => {
+                          const isSelected = category.toLowerCase() === cat.toLowerCase();
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => {
+                                setCategory(cat);
+                                setCategoryDropdownOpen(false);
+                                setCategorySearchQuery("");
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg transition-all flex items-center justify-between group cursor-pointer ${
+                                isSelected
+                                  ? "bg-[#1F2937] text-white font-bold shadow-xs"
+                                  : "hover:bg-slate-100 text-slate-800"
+                              }`}
+                            >
+                              <span className={`text-xs ${isSelected ? "text-white font-bold" : "text-slate-800 font-medium"}`}>
+                                {cat}
+                              </span>
+                              {isSelected && <Check className="w-4 h-4 text-emerald-400 shrink-0" />}
+                            </button>
+                          );
+                        })}
+
+                      {/* If search query does not match any existing category, show + Add custom category */}
+                      {categorySearchQuery.trim().length > 0 &&
+                        !categories.some((c) => c.toLowerCase() === categorySearchQuery.trim().toLowerCase()) && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newCat = categorySearchQuery.trim();
+                              if (newCat) {
+                                saveTemplateCategory(newCat);
+                                setCategory(newCat);
+                                setCategorySearchQuery("");
+                                setCategoryDropdownOpen(false);
+                                toast.success(`Category "${newCat}" added!`);
+                              }
+                            }}
+                            className="w-full text-left px-3 py-2 rounded-lg bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 text-slate-900 transition-all flex items-center gap-2 cursor-pointer mt-1"
+                          >
+                            <Plus className="w-3.5 h-3.5 text-slate-700" />
+                            <span className="text-xs font-bold text-slate-900">
+                              + Add "{categorySearchQuery.trim()}"
+                            </span>
+                          </button>
+                        )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
           {/* Custom Modern Dropdown for Template Source & Method */}
           <div>
-            <label className="block text-xs font-semibold text-slate-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-              Choose Template Source & Method
-            </label>
+            <div className="flex items-center gap-1 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Choose Template Source & Method
+              </label>
+              <FieldTooltip text="Choose how to create this template: Upload a Word doc, import a WebForm structure, or build using Canvas" />
+            </div>
             <div className="relative">
               <button
                 type="button"
@@ -750,9 +904,12 @@ export default function AddDocumentTemplateDrawer({
           {/* MODE 1: DEVICE UPLOAD (ONLY shown when templateMode === 'device') */}
           {templateMode === "device" && (
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Upload Word / Text Document (.docx / .txt)
-              </label>
+              <div className="flex items-center gap-1 mb-1">
+                <label className="block text-xs font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Upload Word / Text Document (.docx / .txt)
+                </label>
+                <FieldTooltip text="Upload .docx or .txt files. Placeholders like {client_name} are auto-extracted into fillable fields" />
+              </div>
               <label className="p-5 border-2 border-dashed border-slate-200 hover:border-slate-400 rounded-xl bg-slate-50/60 hover:bg-slate-100/50 flex flex-col items-center justify-center cursor-pointer transition-colors">
                 {isExtracting ? (
                   <div className="flex flex-col items-center py-2 text-slate-700">
@@ -790,9 +947,12 @@ export default function AddDocumentTemplateDrawer({
           {/* MODE 2: IMPORT FROM WEBFORMS (Custom Popover Selector) */}
           {templateMode === "webforms" && (
             <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <label className="block text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Select Available WebForm
-              </label>
+              <div className="flex items-center gap-1">
+                <label className="block text-xs font-bold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Select Available WebForm
+                </label>
+                <FieldTooltip text="Import layout and fillable fields from one of your active WebForms" />
+              </div>
               <div className="relative">
                 <button
                   type="button"
@@ -1150,9 +1310,12 @@ export default function AddDocumentTemplateDrawer({
           {templateMode === "device" && (
             <div className="space-y-3 pt-2 border-t border-slate-200">
               <div>
-                <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                  Extracted Fillable Fields ({fieldMappings.length})
-                </h3>
+                <div className="flex items-center gap-1">
+                  <h3 className="font-bold text-sm text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                    Extracted Fillable Fields ({fieldMappings.length})
+                  </h3>
+                  <FieldTooltip text="Placeholders formatted with curly brackets {field_name} in the document. Map each to client profile fields" />
+                </div>
                 <p className="text-xs text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
                   Map each extracted template field to system or custom client profile fields
                 </p>
@@ -1169,10 +1332,16 @@ export default function AddDocumentTemplateDrawer({
                     <thead>
                       <tr style={{ backgroundColor: "#1F2937", height: "40px" }} className="text-white">
                         <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Extracted Placeholder
+                          <div className="flex items-center gap-1">
+                            <span>Extracted Placeholder</span>
+                            <FieldTooltip text="The exact placeholder token found inside your template" />
+                          </div>
                         </th>
                         <th className="px-3 py-2 text-left font-semibold" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          Mapped Client Field
+                          <div className="flex items-center gap-1">
+                            <span>Mapped Client Field</span>
+                            <FieldTooltip text="The client profile data source value to inject into this placeholder" />
+                          </div>
                         </th>
                       </tr>
                     </thead>
@@ -1211,7 +1380,10 @@ export default function AddDocumentTemplateDrawer({
                   <Settings className="w-3.5 h-3.5 text-white" />
                 </div>
                 <div className="text-left">
-                  <p className="text-xs font-bold text-slate-900">Advance Settings</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold text-slate-900">Advance Settings</p>
+                    <FieldTooltip text="Configure template security roles and automated sequence numbering" />
+                  </div>
                   <p className="text-[11px] text-slate-500">Configure template access permissions & document auto-numbering</p>
                 </div>
               </div>

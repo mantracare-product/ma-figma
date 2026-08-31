@@ -2,7 +2,8 @@ export interface StoredClientDocument {
   id: string;
   clientId: string;
   name: string;
-  category: "Identification" | "Contract" | "Financial" | "Medical / Intake" | "General";
+  category: string;
+  valueBy?: string;
   fileType: "pdf" | "doc" | "sheet" | "image";
   fileSize: string;
   uploadedDate: string;

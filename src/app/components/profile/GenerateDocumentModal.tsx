@@ -53,10 +53,11 @@ export default function GenerateDocumentModal({
   if (!isOpen) return null;
 
   const filteredTemplates = templates.filter((tpl) => {
+    const cat = tpl.category || "General";
     const matchesSearch =
       tpl.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      tpl.category.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || tpl.category === selectedCategory;
+      cat.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || cat === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 

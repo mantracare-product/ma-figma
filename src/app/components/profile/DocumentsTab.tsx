@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   FileText, FileSpreadsheet, FileImage, Plus, Search, Eye, Download,
-  Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles
+  Trash2, MoreVertical, ChevronDown, ChevronRight, Upload, PlusCircle, Sparkles,
+  Folder, Tag, Info, User, Layers
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -15,6 +16,8 @@ import {
   DocumentTemplate,
   getStoredDocumentTemplates,
   DOCUMENT_TEMPLATES_EVENT,
+  getStoredTemplateCategories,
+  DOCUMENT_CATEGORIES_EVENT,
 } from "../../../lib/documentTemplatesStore";
 import GenerateDocumentDrawer from "./GenerateDocumentDrawer";
 import DocumentPreviewDrawer from "./DocumentPreviewDrawer";
@@ -35,6 +38,17 @@ export interface DocumentsTabProps {
   processName?: string;
 }
 
+function TabFieldTooltip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex items-center ml-1 align-middle">
+      <Info className="w-3.5 h-3.5 text-slate-300 hover:text-white cursor-pointer" />
+      <span className="absolute left-1/2 -translate-x-1/2 top-full mt-2 hidden group-hover:block w-48 p-2 bg-slate-900 text-white text-[10px] font-normal rounded-lg shadow-2xl z-[99999] pointer-events-none text-center font-outfit leading-tight whitespace-normal border border-slate-700">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 export default function DocumentsTab({ client, processName }: DocumentsTabProps) {
   const [documents, setDocuments] = useState<StoredClientDocument[]>([]);
   const [docSearchQuery, setDocSearchQuery] = useState("");
@@ -47,6 +61,14 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
   // Upload & Template Dropdown State
   const [showActionDropdown, setShowActionDropdown] = useState(false);
   const [availableTemplates, setAvailableTemplates] = useState<DocumentTemplate[]>(getStoredDocumentTemplates);
+  const [categories, setCategories] = useState<string[]>(getStoredTemplateCategories);
+  const [templateSearchQuery, setTemplateSearchQuery] = useState("");
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    Prescription: true,
+    "Session Notes": true,
+    "Consent forms": true,
+    "Patient Intake form": true,
+  });
   const [drawerInitialTemplate, setDrawerInitialTemplate] = useState<DocumentTemplate | null>(null);
   const [showAddTemplateDrawer, setShowAddTemplateDrawer] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -81,12 +103,18 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     }
   };
 
-  // Sync templates list
+  // Sync templates and categories list
   useEffect(() => {
     const refreshTemplates = () => setAvailableTemplates(getStoredDocumentTemplates());
+    const refreshCategories = () => setCategories(getStoredTemplateCategories());
     refreshTemplates();
+    refreshCategories();
     window.addEventListener(DOCUMENT_TEMPLATES_EVENT, refreshTemplates);
-    return () => window.removeEventListener(DOCUMENT_TEMPLATES_EVENT, refreshTemplates);
+    window.addEventListener(DOCUMENT_CATEGORIES_EVENT, refreshCategories);
+    return () => {
+      window.removeEventListener(DOCUMENT_TEMPLATES_EVENT, refreshTemplates);
+      window.removeEventListener(DOCUMENT_CATEGORIES_EVENT, refreshCategories);
+    };
   }, []);
 
   // Sync documents list from store and default initial documents
@@ -100,11 +128,12 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           id: `doc-1-${client.id}`,
           clientId: client.id,
           name: `${cName.replace(/\s+/g, "_")}_KYC_Identity.pdf`,
-          category: "Identification",
+          category: "General",
+          valueBy: "WebForm Response #wf-2",
           fileType: "pdf",
           fileSize: "2.4 MB",
           uploadedDate: "2024-05-24 11:30",
-          uploadedBy: `${cName} (via WebForm)`,
+          uploadedBy: cName,
           status: "Verified",
           notes: "Government photo ID & address verification matched.",
         },
@@ -112,7 +141,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           id: `doc-2-${client.id}`,
           clientId: client.id,
           name: `Signed_Agreement_${(processName || "Service").replace(/\s+/g, "_")}.pdf`,
-          category: "Contract",
+          category: "Consent forms",
+          valueBy: "Client Profile Data",
           fileType: "pdf",
           fileSize: "1.8 MB",
           uploadedDate: "2024-05-23 16:45",
@@ -124,7 +154,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           id: `doc-3-${client.id}`,
           clientId: client.id,
           name: "Financial_Income_Statement.xlsx",
-          category: "Financial",
+          category: "General",
+          valueBy: "Manual File Upload",
           fileType: "sheet",
           fileSize: "840 KB",
           uploadedDate: "2024-05-25 09:15",
@@ -136,7 +167,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           id: `doc-4-${client.id}`,
           clientId: client.id,
           name: "Client_Intake_Medical_Form.docx",
-          category: "Medical / Intake",
+          category: "Patient Intake form",
+          valueBy: "WebForm Response #wf-1",
           fileType: "doc",
           fileSize: "512 KB",
           uploadedDate: "2024-05-22 14:00",
@@ -226,7 +258,8 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       id: `doc-gen-${Date.now()}`,
       clientId: client.id,
       name: `${(client.name || "Client").replace(/\s+/g, "_")}_${template.name.replace(/\s+/g, "_")}.pdf`,
-      category: (template.category as any) || "General",
+      category: template.category || "General",
+      valueBy: "Client Profile Data",
       fileType: "pdf",
       fileSize: "1.6 MB",
       uploadedDate: dateStr,
@@ -255,6 +288,7 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
       clientId: client.id,
       name: file.name,
       category: "General",
+      valueBy: "Manual File Upload",
       fileType,
       fileSize: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
       uploadedDate: new Date().toISOString().replace("T", " ").substring(0, 16),
@@ -267,12 +301,39 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const toggleCategoryExpand = (cat: string) => {
+    setExpandedCategories((prev) => ({
+      ...prev,
+      [cat]: !prev[cat],
+    }));
+  };
+
   const filteredDocuments = documents.filter((doc) => {
     const matchesSearch =
       doc.name.toLowerCase().includes(docSearchQuery.toLowerCase()) ||
+      (doc.category && doc.category.toLowerCase().includes(docSearchQuery.toLowerCase())) ||
+      (doc.valueBy && doc.valueBy.toLowerCase().includes(docSearchQuery.toLowerCase())) ||
       (doc.notes && doc.notes.toLowerCase().includes(docSearchQuery.toLowerCase()));
     const matchesStatus = selectedDocStatus === "All" || doc.status === selectedDocStatus;
     return matchesSearch && matchesStatus;
+  });
+
+  // Group templates by categories (Strictly 5 standard categories + custom ones, excluding legacy)
+  const legacyToExclude = new Set(["identification", "contract", "financial"]);
+  const allCategoryNames = Array.from(
+    new Set([
+      ...categories,
+      ...availableTemplates.map((t) => t.category || "General"),
+    ])
+  ).filter((cat) => Boolean(cat) && !legacyToExclude.has(cat.toLowerCase()));
+
+  const filteredCategoriesList = allCategoryNames.filter((catName) => {
+    if (!templateSearchQuery.trim()) return true;
+    const q = templateSearchQuery.toLowerCase();
+    const catMatches = catName.toLowerCase().includes(q);
+    const templatesInCat = availableTemplates.filter((t) => (t.category || "General").toLowerCase() === catName.toLowerCase());
+    const templateMatches = templatesInCat.some((t) => t.name.toLowerCase().includes(q));
+    return catMatches || templateMatches;
   });
 
   return (
@@ -306,10 +367,10 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-gray-400" />
             <input
               type="text"
-              placeholder="Search documents..."
+              placeholder="Search documents, category..."
               value={docSearchQuery}
               onChange={(e) => setDocSearchQuery(e.target.value)}
-              className="pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 w-44"
+              className="pl-8 pr-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-blue-500 w-48"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
           </div>
@@ -331,67 +392,131 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setShowActionDropdown(false)} />
                 <div
-                  className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
+                  className="absolute right-0 top-full mt-1.5 w-80 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden text-left animate-in fade-in-50 zoom-in-95 duration-100"
                   style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  {/* Available Templates Header */}
-                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      AVAILABLE TEMPLATES ({availableTemplates.length})
-                    </span>
+                  {/* Available Templates Header & Search */}
+                  <div className="p-2.5 bg-slate-50 border-b border-slate-100 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        TEMPLATES BY CATEGORY ({filteredCategoriesList.length})
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search category or template..."
+                        value={templateSearchQuery}
+                        onChange={(e) => setTemplateSearchQuery(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:border-slate-500"
+                      />
+                    </div>
                   </div>
 
-                  {/* List of Available Templates (Text Only, No Left Icons, No Purple) */}
-                  <div className="max-h-52 overflow-y-auto divide-y divide-slate-50 p-1">
-                    {availableTemplates.map((tpl) => (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        onClick={() => {
-                          setShowActionDropdown(false);
-                          setDrawerInitialTemplate(tpl);
-                          setShowGenerateDocDrawer(true);
-                        }}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-between group"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <p className="text-xs font-semibold text-slate-800 truncate group-hover:text-slate-950">{tpl.name}</p>
-                          <p className="text-[10px] text-slate-400 truncate mt-0.5">{tpl.category || "General"}</p>
+                   {/* Grouped Category Dropdown Accordions */}
+                  <div className="max-h-64 overflow-y-auto">
+                    {filteredCategoriesList.map((catName) => {
+                      const templatesInCat = availableTemplates.filter(
+                        (t) => (t.category || "General").toLowerCase() === catName.toLowerCase()
+                      );
+                      const isExpanded = expandedCategories[catName] ?? (templatesInCat.length > 0);
+
+                      return (
+                        <div key={catName}>
+                          {/* Category Header — clearly a section label */}
+                          <button
+                            type="button"
+                            onClick={() => toggleCategoryExpand(catName)}
+                            className={`w-full px-3 py-2 flex items-center justify-between text-left transition-colors cursor-pointer ${
+                              isExpanded
+                                ? "bg-slate-100 border-l-2 border-slate-600"
+                                : "hover:bg-slate-50 border-l-2 border-transparent"
+                            }`}
+                          >
+                            <span className={`text-[11px] font-bold uppercase tracking-wide ${
+                              isExpanded ? "text-slate-800" : "text-slate-500"
+                            }`}>
+                              {catName}
+                            </span>
+                            <ChevronDown
+                              className={`w-3 h-3 text-slate-400 transition-transform duration-150 shrink-0 ${
+                                isExpanded ? "rotate-180 text-slate-600" : ""
+                              }`}
+                            />
+                          </button>
+
+                          {/* Templates List — visually subordinate to category */}
+                          {isExpanded && (
+                            <div className="bg-white border-l-2 border-slate-200 ml-0 animate-in fade-in-50 duration-100">
+                              {templatesInCat.length === 0 ? (
+                                <div className="py-2 px-4 flex items-center gap-2">
+                                  <p className="text-[11px] text-slate-400 italic">No templates in this category.</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setShowActionDropdown(false);
+                                      setShowAddTemplateDrawer(true);
+                                    }}
+                                    className="text-[11px] text-blue-600 font-semibold hover:underline cursor-pointer"
+                                  >
+                                    + Add
+                                  </button>
+                                </div>
+                              ) : (
+                                templatesInCat.map((tpl) => (
+                                  <button
+                                    key={tpl.id}
+                                    type="button"
+                                    onClick={() => {
+                                      setShowActionDropdown(false);
+                                      setDrawerInitialTemplate(tpl);
+                                      setShowGenerateDocDrawer(true);
+                                    }}
+                                    className="w-full text-left px-4 py-2 hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between group border-b border-slate-50 last:border-b-0"
+                                  >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="w-1 h-1 rounded-full bg-slate-300 group-hover:bg-blue-400 shrink-0 transition-colors" />
+                                      <p className="text-xs text-slate-700 truncate group-hover:text-blue-700 font-medium">
+                                        {tpl.name}
+                                      </p>
+                                    </div>
+                                    <ChevronRight className="w-3 h-3 text-slate-300 group-hover:text-blue-500 transition-colors shrink-0 ml-1" />
+                                  </button>
+                                ))
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-slate-700 transition-colors shrink-0" />
-                      </button>
-                    ))}
-                    {availableTemplates.length === 0 && (
-                      <p className="text-center text-xs text-slate-400 py-3">No templates created yet.</p>
+                      );
+                    })}
+
+                    {filteredCategoriesList.length === 0 && (
+                      <p className="text-center text-xs text-slate-400 py-3">No matching categories found.</p>
                     )}
                   </div>
 
                   {/* Action Options (Text Only, Brand Slate Palette) */}
-                  <div className="p-1 border-t border-slate-100 bg-slate-50/70 space-y-1">
-                    {/* Option 1: Upload Document */}
+                  <div className="p-1.5 border-t border-slate-100 bg-slate-50/70 space-y-1">
                     <button
                       type="button"
                       onClick={() => {
                         setShowActionDropdown(false);
                         fileInputRef.current?.click();
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-800 transition-colors cursor-pointer"
+                      className="w-full py-1.5 px-3 text-left text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer block border border-slate-200/80 bg-white"
                     >
-                      <p className="text-xs font-bold text-slate-900">+ Upload Document</p>
-                      <p className="text-[10px] text-slate-500 mt-0.5">Upload PDF, Word, Excel, or image file</p>
+                      + Upload Document
                     </button>
-
-                    {/* Option 2: Create New Template */}
                     <button
                       type="button"
                       onClick={() => {
                         setShowActionDropdown(false);
                         setShowAddTemplateDrawer(true);
                       }}
-                      className="w-full text-left px-3 py-2 rounded-lg bg-slate-100 border border-slate-200 hover:bg-slate-200/80 text-slate-900 transition-colors cursor-pointer"
+                      className="w-full py-1.5 px-3 text-left text-xs font-semibold text-slate-700 hover:text-slate-950 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer block border border-slate-200/80 bg-white"
                     >
-                      <p className="text-xs font-bold text-slate-900">+ Create New Template</p>
-                      <p className="text-[10px] text-slate-600 mt-0.5">Open template creator drawer</p>
+                      + Create New Template
                     </button>
                   </div>
                 </div>
@@ -403,38 +528,49 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
 
       {/* Available Documents Table */}
       <div className="overflow-x-auto border border-gray-200 rounded-xl shadow-xs">
-        <table className="w-full">
+        <table className="w-full table-fixed">
           <thead>
-            <tr style={{ backgroundColor: "#1F2937", height: "48px" }}>
-              <th style={{ width: "44px" }} className="px-5 text-center">
+            <tr style={{ backgroundColor: "#1F2937", height: "44px" }}>
+              <th style={{ width: "48px" }} className="px-3 text-center align-middle">
                 <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
               </th>
-              <th className="px-5 text-left text-xs font-semibold uppercase tracking-wider text-white">
-                Document Name
+              <th style={{ width: "26%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Document Name</span>
+                  <TabFieldTooltip text="Official file title and document format" />
+                </div>
               </th>
-
-              <th
-                className="px-5 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                style={{ width: "180px" }}
-              >
-                Uploaded By
+              <th style={{ width: "16%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Category</span>
+                  <TabFieldTooltip text="Functional category classification assigned to this document" />
+                </div>
               </th>
-              <th
-                className="px-5 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                style={{ width: "150px" }}
-              >
-                Date
+              <th style={{ width: "18%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Value By</span>
+                  <TabFieldTooltip text="The source from which field values and placeholders were filled" />
+                </div>
               </th>
-              <th
-                className="px-5 text-left text-xs font-semibold uppercase tracking-wider text-white"
-                style={{ width: "90px" }}
-              >
-                Size
+              <th style={{ width: "15%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Uploaded By</span>
+                  <TabFieldTooltip text="Staff member, client, or system service that generated this file" />
+                </div>
               </th>
-              <th
-                className="px-5 text-right text-xs font-semibold uppercase tracking-wider text-white"
-                style={{ width: "70px" }}
-              >
+              <th style={{ width: "13%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Date</span>
+                  <TabFieldTooltip text="Creation and upload timestamp" />
+                </div>
+              </th>
+              <th style={{ width: "8%" }} className="px-3 text-left text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
+                <div className="flex items-center gap-1">
+                  <span>Size</span>
+                  <TabFieldTooltip text="Document file size on storage" />
+                </div>
+              </th>
+              <th style={{ width: "48px" }} className="px-3 text-center text-[11px] font-semibold uppercase tracking-wider text-white align-middle">
                 Actions
               </th>
             </tr>
@@ -442,83 +578,57 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
           <tbody>
             {filteredDocuments.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center py-12 text-gray-400 italic text-sm">
+                <td colSpan={8} className="text-center py-12 text-gray-400 italic text-sm">
                   No documents found for this client.
                 </td>
               </tr>
             ) : (
               filteredDocuments.map((doc, i) => {
-                const isPdf = doc.fileType === "pdf";
-                const isSheet = doc.fileType === "sheet";
-                const isDoc = doc.fileType === "doc";
-                const isImage = doc.fileType === "image";
-
                 return (
                   <tr
                     key={doc.id}
                     style={{
-                      height: "60px",
+                      height: "52px",
                       backgroundColor: i % 2 === 0 ? "#fff" : "#FAFAFA",
                       borderBottom: "1px solid #EEEEEE",
                     }}
                     className="hover:bg-[#F5F8FF] transition-colors"
                   >
-                    <td className="px-5 text-center">
+                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
                       <input type="checkbox" className="w-4 h-4 rounded border-gray-300" />
                     </td>
-                    <td className="px-5">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div
-                          className="w-7 h-7 rounded flex items-center justify-center flex-shrink-0 text-xs"
-                          style={{
-                            backgroundColor: isPdf
-                              ? "#FEF2F2"
-                              : isSheet
-                                ? "#ECFDF5"
-                                : isDoc
-                                  ? "#EFF6FF"
-                                  : "#F3E8FF",
-                            color: isPdf
-                              ? "#EF4444"
-                              : isSheet
-                                ? "#10B981"
-                                : isDoc
-                                  ? "#3B82F6"
-                                  : "#A855F7",
-                          }}
-                        >
-                          {isSheet ? (
-                            <FileSpreadsheet className="w-4 h-4" />
-                          ) : isImage ? (
-                            <FileImage className="w-4 h-4" />
-                          ) : (
-                            <FileText className="w-4 h-4" />
-                          )}
-                        </div>
-                        <button
-                          onClick={() => setPreviewDoc(doc)}
-                          className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {doc.name}
-                        </button>
-                      </div>
+                    <td style={{ width: "26%" }} className="px-3 align-middle">
+                      <button
+                        onClick={() => setPreviewDoc(doc)}
+                        className="text-left font-medium text-sm text-gray-900 hover:text-blue-600 transition-colors truncate cursor-pointer w-full block"
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                        title={doc.name}
+                      >
+                        {doc.name}
+                      </button>
                     </td>
 
-                    <td
-                      className="px-5 text-xs whitespace-nowrap"
-                      style={{ fontFamily: "DM Sans, sans-serif", color: "#424242" }}
-                    >
+                    {/* Category Column */}
+                    <td style={{ width: "16%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-800 font-medium align-middle">
+                      {doc.category || "General"}
+                    </td>
+
+                    {/* Value By Column */}
+                    <td style={{ width: "18%", fontFamily: "DM Sans, sans-serif" }} className="px-3 text-xs truncate text-slate-700 font-medium align-middle">
+                      {doc.valueBy || (doc.templateId ? "Client Profile Data" : doc.uploadedBy.includes("WebForm") ? "WebForm Submission" : "Manual Upload")}
+                    </td>
+
+                    <td style={{ width: "15%", fontFamily: "DM Sans, sans-serif", color: "#424242" }} className="px-3 text-xs truncate align-middle">
                       {doc.uploadedBy}
                     </td>
-                    <td className="px-5 text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <td style={{ width: "13%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
                       {doc.uploadedDate}
                     </td>
-                    <td className="px-5 text-xs text-gray-500 whitespace-nowrap" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <td style={{ width: "8%", fontFamily: "Outfit, sans-serif" }} className="px-3 text-xs text-gray-500 whitespace-nowrap align-middle">
                       {doc.fileSize}
                     </td>
-                    <td className="px-5 text-right">
-                      <div className="flex items-center justify-end">
+                    <td style={{ width: "48px" }} className="px-3 text-center align-middle">
+                      <div className="flex items-center justify-center">
                         <button
                           onClick={(e) => handleOpenDocMenu(e, doc)}
                           className={`w-7 h-7 flex items-center justify-center rounded transition-colors cursor-pointer ${
@@ -634,3 +744,4 @@ export default function DocumentsTab({ client, processName }: DocumentsTabProps)
     </div>
   );
 }
+
