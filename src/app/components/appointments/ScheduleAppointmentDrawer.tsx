@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
+import { getStoredServices } from "../../../lib/servicesStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
-import { ChevronDown, ChevronUp, Plus, Trash2, Receipt } from "lucide-react";
+import { ChevronDown, ChevronUp, Plus, Trash2, Receipt, User } from "lucide-react";
+import { initialClients } from "../../pages/ClientProfile";
 
 export interface ClientOption {
   id: number | string;
@@ -38,6 +40,7 @@ export interface BookingFormValues {
   client: ClientOption | null;
   provider: Employee | null;
   serviceId?: string;
+  serviceName?: string;
   generateInvoice?: boolean;
   lineItems?: InvoiceLineItem[];
   discountAmount?: number;
@@ -85,6 +88,55 @@ export default function ScheduleAppointmentDrawer({
 }: ScheduleAppointmentDrawerProps) {
   const [invoiceSectionExpanded, setInvoiceSectionExpanded] = useState(true);
 
+  const allAvailableClients: ClientOption[] = useMemo(() => {
+    const list: ClientOption[] = [];
+    const seenIds = new Set<string>();
+
+    // 1. First add passed clients prop
+    if (clients && clients.length > 0) {
+      clients.forEach((c) => {
+        const idKey = String(c.id);
+        if (!seenIds.has(idKey)) {
+          seenIds.add(idKey);
+          list.push(c);
+        }
+      });
+    }
+
+    // 2. Load from sessionStorage and fallback initialClients
+    try {
+      const raw = sessionStorage.getItem("clients");
+      const loaded = raw ? JSON.parse(raw) : initialClients;
+      if (Array.isArray(loaded)) {
+        loaded.forEach((c: any) => {
+          const idKey = String(c.id);
+          if (!seenIds.has(idKey)) {
+            seenIds.add(idKey);
+            list.push({
+              id: c.id,
+              name: c.name,
+              email: c.email || "",
+              phone: c.phone || "",
+              status: c.status,
+              process: Array.isArray(c.processes) ? c.processes[0] : c.processes,
+              specialty: Array.isArray(c.processes) ? c.processes[0] : undefined,
+              avatar: c.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2),
+            });
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+
+    // 3. Ensure selected client is always present
+    if (values.client && !seenIds.has(String(values.client.id))) {
+      list.unshift(values.client);
+    }
+
+    return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+  }, [clients, values.client]);
+
   const isValid = !!(values.title.trim() && values.provider && values.client && values.date);
   const endHour = (values.startHour + 1) % 24;
   const endMin = values.startMinute;
@@ -101,13 +153,51 @@ export default function ScheduleAppointmentDrawer({
     );
   };
 
+  const allAvailableServices = useMemo(() => {
+    const list: Array<{ id: string; name: string; price: number; duration: number; tax?: number }> = [];
+    const seenNames = new Set<string>();
+
+    try {
+      const stored = getStoredServices();
+      if (Array.isArray(stored)) {
+        stored.forEach((s) => {
+          if (!seenNames.has(s.name.toLowerCase())) {
+            seenNames.add(s.name.toLowerCase());
+            list.push({
+              id: String(s.id),
+              name: s.name,
+              price: s.price,
+              duration: s.duration || 30,
+              tax: s.tax || 0,
+            });
+          }
+        });
+      }
+    } catch { /* ignore */ }
+
+    MOCK_SERVICES.forEach((m) => {
+      if (!seenNames.has(m.name.toLowerCase())) {
+        seenNames.add(m.name.toLowerCase());
+        list.push({
+          id: m.id,
+          name: m.name,
+          price: m.price,
+          duration: m.duration || 30,
+          tax: m.tax || 0,
+        });
+      }
+    });
+
+    return list;
+  }, []);
+
   const handleServiceSelect = (serviceId: string) => {
-    const srv = MOCK_SERVICES.find((s) => s.id === serviceId);
+    const srv = allAvailableServices.find((s) => String(s.id) === String(serviceId));
     if (srv) {
       const newLineItem: InvoiceLineItem = {
         id: `li-${Date.now()}`,
         source: "service",
-        serviceId: srv.id,
+        serviceId: String(srv.id),
         description: srv.name,
         quantity: 1,
         unitPrice: srv.price,
@@ -115,13 +205,14 @@ export default function ScheduleAppointmentDrawer({
       };
 
       onChange({
-        serviceId: srv.id,
+        serviceId: String(srv.id),
+        serviceName: srv.name,
         title: values.title.trim() ? values.title : `${srv.name} Appointment`,
         generateInvoice: values.generateInvoice ?? true,
         lineItems: [newLineItem],
       });
     } else {
-      onChange({ serviceId: "", lineItems: [] });
+      onChange({ serviceId: "", serviceName: "", lineItems: [] });
     }
   };
 
@@ -217,7 +308,7 @@ export default function ScheduleAppointmentDrawer({
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <option value="">Select a service (optional)</option>
-            {MOCK_SERVICES.map((srv) => (
+            {allAvailableServices.map((srv) => (
               <option key={srv.id} value={srv.id}>
                 {srv.name} (${srv.price} · {srv.duration} mins)
               </option>
@@ -285,16 +376,16 @@ export default function ScheduleAppointmentDrawer({
             <select
               value={values.client?.id ?? ""}
               onChange={(e) => {
-                const cl = clients.find((x) => String(x.id) === String(e.target.value));
+                const cl = allAvailableClients.find((x) => String(x.id) === String(e.target.value));
                 onChange({ client: cl || null });
               }}
               className={inputCls}
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              <option value="">Select a client</option>
-              {clients.map((cl) => (
+              <option value="">Select a client ({allAvailableClients.length} available)</option>
+              {allAvailableClients.map((cl) => (
                 <option key={cl.id} value={cl.id}>
-                  {cl.name}
+                  {cl.name} {cl.phone || cl.email ? `(${cl.phone || cl.email})` : ""}
                 </option>
               ))}
             </select>

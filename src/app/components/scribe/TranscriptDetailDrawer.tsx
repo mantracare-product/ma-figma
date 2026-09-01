@@ -19,6 +19,7 @@ export interface TranscriptDetailDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   session: ScribeSession | null;
+  client?: any;
   onOpenWhatsApp?: (session: ScribeSession) => void;
 }
 
@@ -118,6 +119,7 @@ export default function TranscriptDetailDrawer({
   isOpen,
   onClose,
   session,
+  client,
 }: TranscriptDetailDrawerProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSec, setPlaybackSec] = useState(0);
@@ -125,6 +127,26 @@ export default function TranscriptDetailDrawer({
   const [rating, setRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
   const timerRef = useRef<any>(null);
+
+  // Dynamic Client Resolution
+  const resolvedClientName = client?.name || session?.clientName || "Patient";
+  const resolvedClientId =
+    client?.id ||
+    (session?.clientId
+      ? session.clientId.startsWith("CL-")
+        ? session.clientId
+        : `CL-${String(session.clientId).padStart(3, "0")}`
+      : "CL-001");
+  const resolvedGender =
+    client?.gender ||
+    session?.patientGender ||
+    (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(
+      resolvedClientName
+    )
+      ? "Female"
+      : "Male");
+  const resolvedAge =
+    client?.age || session?.patientAge || (resolvedGender === "Female" ? 34 : 45);
 
   // Sections State (Separate Medication 1, Medication 2, Medication 3 sections with common fields)
   const [sections, setSections] = useState<OverviewSection[]>(() => {
@@ -182,18 +204,18 @@ export default function TranscriptDetailDrawer({
       ];
     }
 
-    const sessionDate = new Date(session.createdAt).toLocaleDateString("en-IN", {
+    const sessionDate = new Date(session.sessionDate || session.createdAt).toLocaleDateString("en-US", {
       day: "numeric",
       month: "long",
       year: "numeric",
     });
 
     const initialValues: Record<string, any> = {
-      // 1. Patient Information
-      patient_name: session.clientName || "Rahul Sharma",
-      patient_age_sex: `${session.patientAge || 32} years / ${session.patientGender || "Male"}`,
+      // 1. Patient Information (Linked to Real Client Profile)
+      patient_name: resolvedClientName,
+      patient_age_sex: `${resolvedAge} years / ${resolvedGender}`,
       consultation_date: sessionDate,
-      patient_id: `PT-${Math.floor(10000 + Math.random() * 90000)}`,
+      patient_id: resolvedClientId,
 
       // 2. Chief Complaint
       symptoms: extractedSymptoms,
@@ -270,14 +292,14 @@ export default function TranscriptDetailDrawer({
       follow_up_criteria: "If symptoms worsen or do not improve within 5 days.",
 
       // 11. Doctor Information
-      doctor_name: session.doctorName || "Dr. Ankit Mehra",
+      doctor_name: session.doctorName || "Dr. Priya Sharma",
       doctor_qualification: "MBBS, MD",
-      registration_no: "MCI-482910",
+      registration_no: "MC-89421",
       doctor_signature_date: sessionDate,
     };
 
     setFieldValues(initialValues);
-  }, [session]);
+  }, [session, resolvedClientName, resolvedClientId, resolvedAge, resolvedGender]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -328,6 +350,25 @@ export default function TranscriptDetailDrawer({
     }));
   };
 
+  // Speech text dynamic client personalization helper
+  const formatSpeechText = (text: string) => {
+    if (!resolvedClientName) return text;
+    const firstName = resolvedClientName.split(" ")[0];
+    const lastName = resolvedClientName.split(" ")[1] || firstName;
+    const prefix = resolvedGender === "Female" ? "Ms." : "Mr.";
+    return text
+      .replace(/Mr\.\s*Rajesh/gi, `${prefix} ${lastName}`)
+      .replace(/Rajesh/gi, firstName)
+      .replace(/Mrs\.\s*Sunita/gi, `Ms. ${lastName}`)
+      .replace(/Sunita/gi, firstName)
+      .replace(/Mr\.\s*Amit/gi, `Mr. ${lastName}`)
+      .replace(/Amit/gi, firstName)
+      .replace(/Pooja/gi, firstName)
+      .replace(/Mrs\.\s*Meena/gi, `Ms. ${lastName}`)
+      .replace(/Meena/gi, firstName)
+      .replace(/Rahul Sharma/gi, resolvedClientName);
+  };
+
   // Generate a clean narrative summary from extractedData
   const getClinicalSummary = () => {
     const d: any = session.extractedData || {};
@@ -336,7 +377,7 @@ export default function TranscriptDetailDrawer({
         ? d.medications.map((m: any) => `${m.drugName} (${m.dosage}, ${m.frequency})`).join(", ")
         : "Standard supportive care";
 
-    return `${session.clientName}, a ${session.patientAge || 54}-year-old ${session.patientGender || "patient"}, had a clinical consultation with ${session.doctorName}. Chief complaint presented was "${d.chiefComplaint || "Visual impairment"}". Following examination and dialogue evaluation, the primary diagnosis was established as ${d.diagnosis || "Nuclear Cataract"}. The prescribed treatment plan includes ${medsText}. Additional investigations: ${d.investigations?.join(", ") || "Visual Acuity"}. Follow-up review is scheduled for ${d.followUpDate || "14 days"}.`;
+    return `${resolvedClientName}, a ${resolvedAge}-year-old ${resolvedGender}, had a clinical consultation with ${session.doctorName || "Dr. Priya Sharma"}. Chief complaint presented was "${d.chiefComplaint || "Visual & clinical checkup"}". Following examination and dialogue evaluation, the primary diagnosis was established as ${d.diagnosis || "Clinical Review"}. The prescribed treatment plan includes ${medsText}. Additional investigations: ${d.investigations?.join(", ") || "Visual Acuity & Routine Labs"}. Follow-up review is scheduled for ${d.followUpDate || "7–14 days"}.`;
   };
 
   return (
@@ -358,7 +399,7 @@ export default function TranscriptDetailDrawer({
             className="text-xl font-bold text-foreground"
             style={{ fontFamily: "DM Sans, sans-serif" }}
           >
-            Conversation with {session.clientName}
+            Conversation with {resolvedClientName}
           </h2>
           <button
             onClick={onClose}
@@ -397,12 +438,12 @@ export default function TranscriptDetailDrawer({
                     <span>Recording</span>
                   </div>
                   <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[11px] font-mono text-muted-foreground">
-                    {new Date(session.createdAt).toLocaleDateString("en-IN", {
+                    {new Date(session.sessionDate || session.createdAt).toLocaleDateString("en-US", {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
                     })}
-                    , {new Date(session.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    , {new Date(session.sessionDate || session.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
 
@@ -528,7 +569,7 @@ export default function TranscriptDetailDrawer({
                           <div className="flex items-start gap-2.5 max-w-[88%]">
                             <div className="rounded-2xl rounded-tr-xs bg-white border border-border p-3.5 shadow-2xs">
                               <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                                {u.text}
+                                {formatSpeechText(u.text)}
                               </p>
                             </div>
                             <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-[#181e25] mt-0.5">
@@ -553,7 +594,7 @@ export default function TranscriptDetailDrawer({
                           </div>
                           <div className="rounded-2xl rounded-tl-xs bg-slate-50 border border-slate-100 p-3.5">
                             <p className="text-xs text-foreground leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {u.text}
+                              {formatSpeechText(u.text)}
                             </p>
                           </div>
                         </div>

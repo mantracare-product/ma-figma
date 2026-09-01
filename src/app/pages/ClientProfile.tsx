@@ -5,7 +5,7 @@ import {
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
-  GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope,
+  GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -36,7 +36,15 @@ import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
 import AIScribeModal from "../components/scribe/AIScribeModal";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
-import { ScribeSession, getScribeSessions, deleteScribeSession, issuePrescriptionDocument, SCRIBE_EVENT } from "../../lib/scribeSessionStore";
+import {
+  ScribeSession,
+  getScribeSessions,
+  saveScribeSession,
+  deleteScribeSession,
+  issuePrescriptionDocument,
+  SCRIBE_EVENT,
+  PRESET_SCENARIOS,
+} from "../../lib/scribeSessionStore";
 
 import DrawerShell from "../components/ui/DrawerShell";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
@@ -45,6 +53,7 @@ import {
   getCurrencySymbol, getStoredServices, addService, onServicesChanged,
   getClientProducts, assignProductToClient, unassignProductFromClient,
 } from "../../lib/servicesStore";
+import { MOCK_SERVICES } from "../../lib/mockServicesData";
 
 const HARDCODED_KEYS = new Set(["name", "email", "phone", "status", "processes", "company", "role", "location", "country"]);
 
@@ -617,7 +626,28 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
   const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  // ── Appointments Tab State ──
+  const [appointmentSearchQuery, setAppointmentSearchQuery] = useState("");
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<string>("all");
+  const [appointmentRefreshKey, setAppointmentRefreshKey] = useState(0);
+
+  const handleUpdateApptStatus = (apptId: any, newStatus: string) => {
+    const stored = sessionStorage.getItem("appointments_v1");
+    const all: any[] = stored ? JSON.parse(stored) : [];
+    const updated = all.map((a: any) => (String(a.id) === String(apptId) ? { ...a, status: newStatus } : a));
+    sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+    setAppointmentRefreshKey((k) => k + 1);
+    toast.success(`Appointment marked as ${newStatus}`);
+  };
+
+  const handleDeleteAppt = (apptId: any) => {
+    const stored = sessionStorage.getItem("appointments_v1");
+    const all: any[] = stored ? JSON.parse(stored) : [];
+    const updated = all.filter((a: any) => String(a.id) !== String(apptId));
+    sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+    setAppointmentRefreshKey((k) => k + 1);
+    toast.success("Appointment deleted");
+  };
 
   // Schedule appointment from Activity tab
   const [showScheduleApptFromActivity, setShowScheduleApptFromActivity] = useState(false);
@@ -653,13 +683,24 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     // Save to appointments_v1
     const stored = sessionStorage.getItem("appointments_v1");
     const existing: any[] = stored ? JSON.parse(stored) : [];
+
+    const chosenServiceName =
+      activityBookingValues.serviceName ||
+      (activityBookingValues.serviceId
+        ? getStoredServices().find((s) => String(s.id) === String(activityBookingValues.serviceId))?.name ||
+          MOCK_SERVICES.find((s) => s.id === activityBookingValues.serviceId)?.name
+        : "") ||
+      "Initial Consultation";
+
     const newAppt = {
       id: existing.length > 0 ? Math.max(...existing.map((a: any) => a.id ?? 0)) + 1 : Date.now(),
       clientName: activityBookingValues.client.name,
       clientEmail: activityBookingValues.client.email,
       clientPhone: activityBookingValues.client.phone,
       employeeId: activityBookingValues.provider.id,
-      serviceId: 1,
+      serviceId: activityBookingValues.serviceId || 1,
+      service: chosenServiceName,
+      serviceName: chosenServiceName,
       date: activityBookingValues.date,
       time: timeStr,
       duration: 60,
@@ -668,6 +709,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       title: activityBookingValues.title.trim(),
     };
     sessionStorage.setItem("appointments_v1", JSON.stringify([...existing, newAppt]));
+    setAppointmentRefreshKey((k) => k + 1);
     // Append activity entry
     if (client) {
       const pId = activityBookingValues.processId;
@@ -1962,46 +2004,312 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             const stored = sessionStorage.getItem("appointments_v1");
             const all: any[] = stored ? JSON.parse(stored) : [];
             const clientAppts = all.filter((a: any) =>
-              (client?.email && a.clientEmail === client.email) ||
-              (client?.phone && a.clientPhone === client.phone) ||
-              (client?.name && a.clientName === client.name)
+              (client?.email && a.clientEmail && a.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
+              (client?.phone && a.clientPhone && a.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, "")) ||
+              (client?.name && a.clientName && a.clientName.toLowerCase() === client.name.toLowerCase())
             );
+
+            const getResolvedServiceName = (appt: any) => {
+              if (appt.service && appt.service !== "—") return appt.service;
+              if (appt.serviceName) return appt.serviceName;
+              if (appt.serviceId !== undefined && appt.serviceId !== null) {
+                const fromStore = getStoredServices().find((s) => String(s.id) === String(appt.serviceId));
+                if (fromStore) return fromStore.name;
+                const fromMock = MOCK_SERVICES.find((s) => s.id === String(appt.serviceId) || s.id === `srv-${appt.serviceId}`);
+                if (fromMock) return fromMock.name;
+              }
+              if (appt.title) {
+                for (const s of getStoredServices()) {
+                  if (appt.title.toLowerCase().includes(s.name.toLowerCase())) return s.name;
+                }
+                for (const m of MOCK_SERVICES) {
+                  if (appt.title.toLowerCase().includes(m.name.toLowerCase())) return m.name;
+                }
+                if (appt.title.toLowerCase().includes("initial consultation")) return "Initial Consultation";
+                if (appt.title.toLowerCase().includes("consultation")) return "Consultation";
+                if (appt.title.toLowerCase().includes("follow-up") || appt.title.toLowerCase().includes("follow up")) return "Follow-up Visit";
+                if (appt.title.toLowerCase().includes("dental")) return "Dental Cleaning";
+                if (appt.title.toLowerCase().includes("x-ray") || appt.title.toLowerCase().includes("xray")) return "X-Ray Imaging";
+              }
+              return "—";
+            };
+
+            const searchLower = appointmentSearchQuery.toLowerCase().trim();
+            const filteredAppts = clientAppts.filter((appt: any) => {
+              const srvName = getResolvedServiceName(appt).toLowerCase();
+              const matchesSearch =
+                !searchLower ||
+                (appt.title && appt.title.toLowerCase().includes(searchLower)) ||
+                (appt.service && appt.service.toLowerCase().includes(searchLower)) ||
+                srvName.includes(searchLower) ||
+                (appt.date && appt.date.toLowerCase().includes(searchLower));
+              const matchesStatus =
+                appointmentStatusFilter === "all" ||
+                appt.status === appointmentStatusFilter ||
+                (appointmentStatusFilter === "pending" && (appt.status === "pending-accept" || appt.status === "pending"));
+              return matchesSearch && matchesStatus;
+            });
+
+            const handleOpenApptTranscript = (appt: any, pName: string) => {
+              const currentSessions = getScribeSessions();
+              const matched = currentSessions.find((s) =>
+                (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}`)) ||
+                (s.clientId === String(client.id) && (s.sessionName?.includes(String(appt.id)) || s.transcript?.fullText?.includes(appt.title)))
+              );
+
+              if (matched) {
+                setSelectedTranscriptSession(matched);
+                setIsTranscriptDrawerOpen(true);
+                return;
+              }
+
+              // Create & link a structured transcript for this appointment
+              const srvName = getResolvedServiceName(appt);
+              const scenario = PRESET_SCENARIOS[0];
+              const newSession: ScribeSession = {
+                id: `scribe-apt-${appt.id}-${Date.now()}`,
+                clientId: String(client.id),
+                clientName: client.name,
+                patientAge: client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45),
+                patientGender: client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male"),
+                appointmentId: String(appt.id),
+                sessionName: `${appt.title || "Consultation"} (${appt.date || "Scheduled"})`,
+                doctorId: String(appt.employeeId || "doc-1"),
+                doctorName: pName || "Dr. Priya Sharma",
+                sessionDate: appt.date || new Date().toISOString(),
+                durationSeconds: 76,
+                status: "completed",
+                createdAt: Date.now(),
+                transcript: {
+                  fullText: scenario.transcriptText,
+                  utterances: scenario.utterances,
+                },
+                extractedData: {
+                  ...scenario.extractedData,
+                  chiefComplaint: appt.notes || `${appt.title || "Patient"} consultation encounter`,
+                  diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
+                },
+              };
+
+              saveScribeSession(newSession);
+              setScribeSessions(getScribeSessions());
+              setSelectedTranscriptSession(newSession);
+              setIsTranscriptDrawerOpen(true);
+            };
+
+            const ALL_EMPLOYEES_MAP: Record<string, string> = {
+              "1": "John Smith",
+              "2": "Sarah Johnson",
+              "4": "Emily Davis",
+              "5": "Dr. Robert Martinez",
+              "6": "Lisa Anderson",
+            };
+
+            const formatDateTime = (dateStr: string, timeStr: string) => {
+              let datePart = dateStr || "—";
+              try {
+                const parts = dateStr?.split("-");
+                if (parts?.length === 3) {
+                  const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                  datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+                }
+              } catch { /* noop */ }
+              if (!timeStr) return datePart;
+              try {
+                const [h, m] = timeStr.split(":");
+                const hour = parseInt(h, 10);
+                const ampm = hour >= 12 ? "PM" : "AM";
+                const h12 = hour % 12 || 12;
+                return `${datePart}, ${h12}:${m} ${ampm}`;
+              } catch { return datePart; }
+            };
+
+            const getStatusPill = (status: string) => {
+              const s = (status || "").toLowerCase();
+              let cls = "bg-amber-100 text-amber-800";
+              let label = status;
+              if (s === "completed") { cls = "bg-emerald-100 text-emerald-800"; label = "Completed"; }
+              else if (s === "scheduled" || s === "confirmed") { cls = "bg-blue-100 text-blue-800"; label = "Scheduled"; }
+              else if (s === "cancelled") { cls = "bg-rose-100 text-rose-800"; label = "Cancelled"; }
+              else if (s === "no-show") { cls = "bg-slate-100 text-slate-700"; label = "No Show"; }
+              else if (s === "pending-accept" || s === "pending") { cls = "bg-amber-100 text-amber-800"; label = "Pending"; }
+              return (
+                <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${cls}`}>
+                  {label}
+                </span>
+              );
+            };
+
             return (
-              <div className="space-y-4">
-                {clientAppts.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <Calendar className="w-12 h-12 mb-4" style={{ color: "#D1D5DB" }} />
-                    <p className="text-sm font-medium" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>No appointments yet</p>
-                    <p className="text-xs mt-1" style={{ color: "#9CA3AF", fontFamily: "Outfit, sans-serif" }}>Appointments booked through web forms will appear here.</p>
+              <div className="space-y-4" key={appointmentRefreshKey}>
+                {/* Toolbar */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 flex-wrap flex-1 w-full sm:w-auto">
+                    <div className="relative flex-1 min-w-[200px] max-w-xs">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search appointment or service..."
+                        value={appointmentSearchQuery}
+                        onChange={(e) => setAppointmentSearchQuery(e.target.value)}
+                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                        style={{ fontFamily: "Outfit, sans-serif" }}
+                      />
+                    </div>
+                    <select
+                      value={appointmentStatusFilter}
+                      onChange={(e) => setAppointmentStatusFilter(e.target.value)}
+                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="scheduled">Scheduled</option>
+                      <option value="completed">Completed</option>
+                      <option value="pending">Pending</option>
+                      <option value="cancelled">Cancelled</option>
+                    </select>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setActivityBookingValues({
+                        title: "Consultation Appointment",
+                        description: "",
+                        note: "",
+                        tags: "",
+                        processId: client.processes?.[0] || "",
+                        stageId: "",
+                        date: new Date().toISOString().split("T")[0],
+                        startHour: 10,
+                        startMinute: 0,
+                        sessionType: "video",
+                        client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
+                        provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+                      });
+                      setShowScheduleApptFromActivity(true);
+                    }}
+                    className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    <Plus className="w-4 h-4" /> Book Appointment
+                  </button>
+                </div>
+
+                {/* Table */}
+                {filteredAppts.length === 0 ? (
+                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
+                    <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      {clientAppts.length === 0 ? "No appointments yet" : "No appointments match your filter"}
+                    </p>
                   </div>
                 ) : (
-                  clientAppts.map((appt: any, idx: number) => (
-                    <div key={appt.id || idx} className="flex items-start gap-4 p-4 rounded-xl border" style={{ borderColor: "#E5E7EB", backgroundColor: "#F9FAFB" }}>
-                      <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#EEF2FF" }}>
-                        <CalendarClock className="w-5 h-5" style={{ color: "#4F8EF7" }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-semibold" style={{ color: "#1F2937", fontFamily: "Outfit, sans-serif" }}>
-                            {appt.service || "Appointment"}
-                          </p>
-                          <span
-                            className="text-xs px-2 py-0.5 rounded-full font-medium"
-                            style={{
-                              backgroundColor: appt.status === "confirmed" ? "#D1FAE5" : appt.status === "cancelled" ? "#FEE2E2" : "#FEF3C7",
-                              color: appt.status === "confirmed" ? "#065F46" : appt.status === "cancelled" ? "#991B1B" : "#92400E",
-                              fontFamily: "Outfit, sans-serif",
-                            }}
-                          >
-                            {appt.status || "Pending"}
-                          </span>
-                        </div>
-                        <p className="text-xs mt-1" style={{ color: "#6B7280", fontFamily: "Outfit, sans-serif" }}>
-                          {[appt.date, appt.time].filter(Boolean).join(" · ")}
-                        </p>
-                      </div>
-                    </div>
-                  ))
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead style={{ backgroundColor: "#1F2937" }}>
+                        <tr>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Title</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Date &amp; Time</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Provider</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Product / Service</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">View Transcript</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Status</th>
+                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-medium">
+                        {filteredAppts.map((appt: any, idx: number) => {
+                          const providerName =
+                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
+                            appt.provider?.name ||
+                            "John Smith";
+                          const isCompleted = appt.status === "completed";
+                          const isCancelled = appt.status === "cancelled";
+
+                          return (
+                            <tr key={appt.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                              <td className="py-3 px-4 font-bold text-slate-900 max-w-[180px] truncate">
+                                {appt.title || "Appointment"}
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
+                                {formatDateTime(appt.date, appt.time)}
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
+                                {providerName}
+                              </td>
+                              <td className="py-3 px-4 text-slate-600 max-w-[180px] truncate">
+                                {getResolvedServiceName(appt)}
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenApptTranscript(appt, providerName)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1A73E8] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                                  style={{ fontFamily: "Outfit, sans-serif" }}
+                                >
+                                  <FileText className="w-3.5 h-3.5 text-[#1A73E8]" />
+                                  View Transcript
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap">
+                                {getStatusPill(appt.status)}
+                              </td>
+                              <td className="py-3 px-4 whitespace-nowrap text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button
+                                      type="button"
+                                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
+                                      title="Actions"
+                                    >
+                                      <MoreVertical className="w-4 h-4" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-40 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
+                                    <DropdownMenuItem
+                                      onClick={() => handleOpenApptTranscript(appt, providerName)}
+                                      className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <FileText className="w-3.5 h-3.5" />
+                                      View Transcript
+                                    </DropdownMenuItem>
+                                    {!isCompleted && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleUpdateApptStatus(appt.id, "completed")}
+                                        className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      >
+                                        <Check className="w-3.5 h-3.5" />
+                                        Complete
+                                      </DropdownMenuItem>
+                                    )}
+                                    {!isCancelled && !isCompleted && (
+                                      <DropdownMenuItem
+                                        onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
+                                        className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
+                                        style={{ fontFamily: "Outfit, sans-serif" }}
+                                      >
+                                        <X className="w-3.5 h-3.5" />
+                                        Cancel
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem
+                                      onClick={() => handleDeleteAppt(appt.id)}
+                                      className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      Delete
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
             );
@@ -3143,8 +3451,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             onClose={() => setShowScribeModal(false)}
             clientId={String(client.id)}
             clientName={client.name}
-            patientAge={54}
-            patientGender="Male"
+            patientAge={client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45)}
+            patientGender={client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male")}
             onViewTranscript={(newSession) => {
               setShowScribeModal(false);
               setScribeSessions(getScribeSessions());
@@ -3161,6 +3469,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               setSelectedTranscriptSession(null);
             }}
             session={selectedTranscriptSession}
+            client={client}
             onOpenWhatsApp={(session) => {
               setTranscriptWhatsAppTarget(session);
               setShowTranscriptWhatsAppModal(true);

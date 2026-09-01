@@ -34,6 +34,7 @@ import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldMan
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
+import { initialClients } from "./ClientProfile";
 
 interface Appointment {
   id: number;
@@ -263,57 +264,41 @@ export default function Appointments() {
   const [providerSpecialtyFilter, setProviderSpecialtyFilter] = useState<string>("all");
   const [providerLocationFilter, setProviderLocationFilter] = useState<string>("all");
 
-  // Mock clients data
-  const clients = [
-    {
-      id: 1,
-      name: "James Wilson",
-      email: "james.w@example.com",
-      phone: "+1 (555) 123-4567",
-      specialty: "Annual Checkup",
-      avatar: "JW",
-      availability: "Available Now",
-      status: "Active",
-      process: "Patient Intake",
-      responsiblePerson: "John Smith"
-    },
-    {
-      id: 2,
-      name: "Emma Brown",
-      email: "emma.b@example.com",
-      phone: "+1 (555) 234-5678",
-      specialty: "Follow-up Visit",
-      avatar: "EB",
-      availability: "Available Today",
-      status: "Active",
-      process: "Appointment Scheduling",
-      responsiblePerson: "Sarah Johnson"
-    },
-    {
-      id: 3,
-      name: "Oliver Davis",
-      email: "oliver.d@example.com",
-      phone: "+1 (555) 345-6789",
-      specialty: "Dental Cleaning",
-      avatar: "OD",
-      availability: "Available Tomorrow",
-      status: "Inactive",
-      process: "Follow-up Calls",
-      responsiblePerson: "Emily Davis"
-    },
-    {
-      id: 4,
-      name: "Sophia Martinez",
-      email: "sophia.m@example.com",
-      phone: "+1 (555) 456-7890",
-      specialty: "X-Ray Imaging",
-      avatar: "SM",
-      availability: "Available This Week",
-      status: "Active",
-      process: "Patient Intake",
-      responsiblePerson: "John Smith"
-    },
-  ];
+  // Dynamic clients data loaded from sessionStorage + initialClients
+  const [storedClients, setStoredClients] = useState<any[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("clients");
+      return raw ? JSON.parse(raw) : initialClients;
+    } catch {
+      return initialClients;
+    }
+  });
+
+  useEffect(() => {
+    const handleStorageUpdate = () => {
+      try {
+        const raw = sessionStorage.getItem("clients");
+        if (raw) setStoredClients(JSON.parse(raw));
+      } catch {
+        // ignore
+      }
+    };
+    window.addEventListener("storage", handleStorageUpdate);
+    return () => window.removeEventListener("storage", handleStorageUpdate);
+  }, []);
+
+  const clients = (storedClients && storedClients.length > 0 ? storedClients : initialClients).map((c: any, idx: number) => ({
+    id: c.id ?? idx + 1,
+    name: c.name,
+    email: c.email || "",
+    phone: c.phone || "",
+    specialty: Array.isArray(c.processes) ? c.processes[0] : (c.process || "General Consultation"),
+    avatar: (c.name || "CL").split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2),
+    availability: "Available",
+    status: c.status || "Active",
+    process: Array.isArray(c.processes) ? c.processes[0] : (c.process || "Patient Intake"),
+    responsiblePerson: c.responsible || "John Smith",
+  }));
 
   // Time slots
   const timeSlots = [
