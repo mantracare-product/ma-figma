@@ -5,18 +5,23 @@ import { toast } from "sonner";
 
 const FIELD_TYPE_MAP: Record<string, FieldInputType> = {
   "String": "text",
+  "Table": "table",
   "List": "select",
   "Multi-Select List": "multiselect",
   "Date/Time": "date_time",
   "Date": "date",
-  "Book a Resource": "text",
-  "Address": "textarea",
-  "Link": "link",
-  "File": "text",
-  "Money": "money",
-  "Yes/No": "yes_no",
   "Number": "number",
+  "Money": "money",
+  "Address": "textarea",
+  "Rich Text": "richtext",
+  "Link": "link",
   "WhatsApp Link": "whatsapp_link",
+  "Yes/No": "yes_no",
+  "File": "file",
+  "Rating": "rating",
+  "User / Member": "user",
+  "Formula": "formula",
+  "Book a Resource": "resource",
 };
 
 const MODULE_LABELS: Record<Exclude<FieldModule, "deal">, string> = {

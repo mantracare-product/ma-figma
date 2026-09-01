@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   GripVertical,
   Settings as SettingsIcon,
@@ -13,7 +13,116 @@ import {
   Star,
   X,
   ListChecks,
+  PenTool,
 } from "lucide-react";
+
+// ---------------------------------------------------------------------------
+// SignaturePad — interactive canvas for drawing / signing
+// ---------------------------------------------------------------------------
+function SignaturePad({ onChange }: { onChange?: (dataUrl: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasSignature, setHasSignature] = useState(false);
+
+  const getPos = (e: MouseEvent | TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    if (e instanceof TouchEvent) {
+      const t = e.touches[0];
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    }
+    return { x: (e as MouseEvent).clientX - rect.left, y: (e as MouseEvent).clientY - rect.top };
+  };
+
+  const startDraw = useCallback((e: MouseEvent | TouchEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    drawing.current = true;
+    const ctx = canvas.getContext("2d")!;
+    const { x, y } = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }, []);
+
+  const draw = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!drawing.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    const ctx = canvas.getContext("2d")!;
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const { x, y } = getPos(e, canvas);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  }, []);
+
+  const stopDraw = useCallback(() => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const canvas = canvasRef.current;
+    if (canvas && onChange) onChange(canvas.toDataURL());
+  }, [onChange]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("mouseup", stopDraw);
+    canvas.addEventListener("mouseleave", stopDraw);
+    canvas.addEventListener("touchstart", startDraw, { passive: false });
+    canvas.addEventListener("touchmove", draw, { passive: false });
+    canvas.addEventListener("touchend", stopDraw);
+    return () => {
+      canvas.removeEventListener("mousedown", startDraw);
+      canvas.removeEventListener("mousemove", draw);
+      canvas.removeEventListener("mouseup", stopDraw);
+      canvas.removeEventListener("mouseleave", stopDraw);
+      canvas.removeEventListener("touchstart", startDraw);
+      canvas.removeEventListener("touchmove", draw);
+      canvas.removeEventListener("touchend", stopDraw);
+    };
+  }, [startDraw, draw, stopDraw]);
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d")!;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+    if (onChange) onChange("");
+  };
+
+  return (
+    <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white overflow-hidden" style={{ cursor: "crosshair" }}>
+      <canvas
+        ref={canvasRef}
+        width={480}
+        height={120}
+        className="w-full h-[120px] block"
+      />
+      <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-t border-gray-200">
+        <span className="flex items-center gap-1 text-xs text-gray-400">
+          <PenTool size={11} />
+          Draw your signature above
+        </span>
+        {hasSignature && (
+          <button
+            type="button"
+            onClick={clear}
+            className="text-xs text-red-400 hover:text-red-600 font-medium flex items-center gap-1 transition-colors"
+          >
+            <X size={11} /> Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface FieldOption {
   id: number;
@@ -361,16 +470,7 @@ export default function FieldRenderer({
         );
 
       case "signature":
-        return (
-          <div className="border-2 border-gray-300 rounded-lg p-4 bg-white">
-            <div className="border-b-2 border-dashed border-gray-300 h-24 flex items-end justify-center pb-2">
-              <span className="text-xs text-gray-400 italic" style={{ fontFamily: "Courier New, monospace" }}>
-                Sign here
-              </span>
-            </div>
-            <button className="mt-2 text-xs text-primary hover:text-primary/80 font-medium">Clear</button>
-          </div>
-        );
+        return <SignaturePad onChange={(dataUrl) => onFieldChange(dataUrl)} />;
 
       case "rating":
         return (

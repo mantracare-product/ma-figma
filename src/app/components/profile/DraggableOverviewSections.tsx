@@ -24,6 +24,17 @@ import {
   Shield,
   Tag,
   FolderPlus,
+  Star,
+  Link as LinkIcon,
+  ExternalLink,
+  Paperclip,
+  Clock,
+  DollarSign,
+  Table as TableIcon,
+  PanelRight,
+  ArrowRight,
+  PenTool,
+  Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useFieldRegistry, FieldDefinition, FieldModule } from "../../context/FieldRegistryContext";
@@ -74,6 +85,142 @@ const SECTION_ICONS: Record<string, React.ReactNode> = {
   tag: <Tag className="w-3.5 h-3.5 text-purple-600" />,
 };
 
+const SignatureDrawingPad: React.FC<{
+  value?: string;
+  onChange: (val: string) => void;
+  label: string;
+}> = ({ value, onChange, label }) => {
+  const canvasRef = React.useRef<HTMLCanvasElement>(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [hasDrawn, setHasDrawn] = useState(false);
+  const [isEditing, setIsEditing] = useState(!value);
+
+  React.useEffect(() => {
+    setIsEditing(!value);
+  }, [value]);
+
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.beginPath();
+    ctx.moveTo(clientX - rect.left, clientY - rect.top);
+    setIsDrawing(true);
+    setHasDrawn(true);
+  };
+
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDrawing) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    ctx.lineTo(clientX - rect.left, clientY - rect.top);
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.stroke();
+  };
+
+  const stopDrawing = () => {
+    if (!isDrawing) return;
+    setIsDrawing(false);
+    const canvas = canvasRef.current;
+    if (canvas) {
+      onChange(canvas.toDataURL("image/png"));
+    }
+  };
+
+  const clearCanvas = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    setHasDrawn(false);
+    onChange("");
+  };
+
+  if (!isEditing && value) {
+    return (
+      <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+            <PenTool className="w-3.5 h-3.5 text-blue-600" />
+            {label}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsEditing(true)}
+            className="text-xs font-medium text-blue-600 hover:text-blue-700 cursor-pointer"
+          >
+            Redraw
+          </button>
+        </div>
+        <div className="border border-slate-100 rounded-lg p-2 bg-slate-50/50 flex items-center justify-center min-h-[70px]">
+          <img src={value} alt="Signature" className="max-h-16 object-contain" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+      <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+        <div className="flex items-center gap-1.5 text-xs text-slate-700 font-semibold">
+          <PenTool className="w-3.5 h-3.5 text-blue-600" />
+          <span>{label}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={clearCanvas}
+            className="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 font-medium transition-colors cursor-pointer"
+          >
+            <Eraser className="w-3 h-3" /> Clear
+          </button>
+          {value && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
+            >
+              Done
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="relative p-2 bg-white">
+        <canvas
+          ref={canvasRef}
+          width={360}
+          height={90}
+          onMouseDown={startDrawing}
+          onMouseMove={draw}
+          onMouseUp={stopDrawing}
+          onMouseLeave={stopDrawing}
+          onTouchStart={startDrawing}
+          onTouchMove={draw}
+          onTouchEnd={stopDrawing}
+          className="w-full h-[90px] bg-slate-50/60 rounded-lg border border-dashed border-slate-200 cursor-crosshair touch-none"
+        />
+        {!hasDrawn && !value && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-xs text-slate-400 italic">
+            Draw signature / sketch here...
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 export default function DraggableOverviewSections({
   mode,
   client,
@@ -106,7 +253,7 @@ export default function DraggableOverviewSections({
   onNavigateToClient,
   customFieldsModule = "client",
 }: DraggableOverviewSectionsProps) {
-  const { getAllFields } = useFieldRegistry();
+  const { getAllFields, addCustomSection, updateCustomSection, deleteCustomSection } = useFieldRegistry();
 
   // All custom field definitions
   const allRegistryFields = useMemo(() => {
@@ -156,34 +303,39 @@ export default function DraggableOverviewSections({
     setTimeout(() => setCopiedKey(null), 2000);
   };
 
-  // ── Section Drag & Drop Handlers ───────────────────────────────────────────
+  // ── Drag & Drop Section Reordering ─────────────────────────────────────────
   const handleSectionDragStart = (e: React.DragEvent, index: number) => {
-    e.dataTransfer.setData("text/plain", `section:${index}`);
-    e.dataTransfer.effectAllowed = "move";
     setDraggedSectionIdx(index);
+    e.dataTransfer.effectAllowed = "move";
   };
 
   const handleSectionDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
-    if (draggedField !== null) return; // ignore if dragging a field
-    if (draggedSectionIdx === null || draggedSectionIdx === index) return;
-    setDragOverSectionIdx(index);
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverSectionIdx !== index) {
+      setDragOverSectionIdx(index);
+    }
   };
 
-  const handleSectionDrop = (e: React.DragEvent, targetIndex: number) => {
+  const handleSectionDrop = (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    if (draggedSectionIdx === null || draggedSectionIdx === targetIndex) {
+    if (draggedSectionIdx === null || draggedSectionIdx === dropIndex) {
       setDraggedSectionIdx(null);
       setDragOverSectionIdx(null);
       return;
     }
     const updated = [...sections];
     const [moved] = updated.splice(draggedSectionIdx, 1);
-    updated.splice(targetIndex, 0, moved);
+    updated.splice(dropIndex, 0, moved);
     onSectionsChange(updated);
     setDraggedSectionIdx(null);
     setDragOverSectionIdx(null);
     toast.success("Sections reordered");
+  };
+
+  const handleSectionDragEnd = () => {
+    setDraggedSectionIdx(null);
+    setDragOverSectionIdx(null);
   };
 
   // ── Field Drag & Drop Handlers ─────────────────────────────────────────────
@@ -267,6 +419,7 @@ export default function DraggableOverviewSections({
   const handleDeleteSection = (sectionId: string) => {
     const target = sections.find((s) => s.id === sectionId);
     if (!target) return;
+    deleteCustomSection(customFieldsModule, sectionId);
     onSectionsChange(sections.filter((s) => s.id !== sectionId));
     toast.success(`Section "${target.title}" deleted`);
   };
@@ -282,6 +435,7 @@ export default function DraggableOverviewSections({
       }
       return sec;
     });
+    updateCustomSection(customFieldsModule, sectionId, { title: editingSectionTitle.trim() });
     onSectionsChange(updated);
     setEditingSectionId(null);
     toast.success("Section renamed");
@@ -292,23 +446,31 @@ export default function DraggableOverviewSections({
       toast.error("Please enter a section name");
       return;
     }
-    const newSectionId = `sec-${Date.now()}`;
-    const newSection: OverviewSection = {
-      id: newSectionId,
+    const registered = addCustomSection(customFieldsModule, {
       title: newSectionTitle.trim(),
       description: newSectionDescription.trim() || undefined,
-      iconName: "layers",
+      module: customFieldsModule,
+      iconName: newSectionIcon || "layers",
+      fieldKeys: selectedInitialFields || [],
+    });
+
+    const newSection: OverviewSection = {
+      id: registered.id,
+      title: registered.title,
+      description: registered.description,
+      iconName: (registered.iconName as any) || "layers",
       isCustom: true,
-      fieldKeys: [],
+      fieldKeys: selectedInitialFields || [],
     };
     onSectionsChange([...sections, newSection]);
     setNewSectionTitle("");
     setNewSectionDescription("");
+    setSelectedInitialFields([]);
     setAddSectionModalOpen(false);
     toast.success(`Section "${newSection.title}" created`);
 
     // Automatically open the Add Field modal for this new section
-    setTargetSectionIdForField(newSectionId);
+    setTargetSectionIdForField(registered.id);
     setFieldModalOpen(true);
   };
 
@@ -745,6 +907,157 @@ export default function DraggableOverviewSections({
               );
             })()}
           </div>
+        ) : regField?.inputType === "table" ? (
+          /* ── Table Custom Field ── */
+          <div className="space-y-2.5">
+            {(() => {
+              const cols: { id: string; name: string; type?: string }[] =
+                regField?.tableColumns && regField.tableColumns.length > 0
+                  ? regField.tableColumns
+                  : [
+                      { id: "col_1", name: "Column 1" },
+                      { id: "col_2", name: "Column 2" },
+                    ];
+
+              // Parse rows
+              let rows: Record<string, string>[] = [];
+              if (Array.isArray(rawVal)) {
+                rows = rawVal;
+              } else if (typeof rawVal === "string" && rawVal.trim()) {
+                try {
+                  const parsed = JSON.parse(rawVal);
+                  if (Array.isArray(parsed)) rows = parsed;
+                } catch {
+                  rows = [];
+                }
+              }
+
+              const handleCellChange = (rowIndex: number, colKey: string, val: string) => {
+                const updated = [...rows];
+                updated[rowIndex] = { ...updated[rowIndex], [colKey]: val };
+                setVal(updated);
+              };
+
+              const handleAddRow = () => {
+                const newRow: Record<string, string> = { id: `row_${Date.now()}` };
+                cols.forEach((col) => {
+                  newRow[col.id || col.name] = "";
+                });
+                const updated = [...rows, newRow];
+                setVal(updated);
+                toast.success(`Row added to ${label}`);
+              };
+
+              const handleRemoveRow = (rowIndex: number) => {
+                const updated = rows.filter((_, i) => i !== rowIndex);
+                setVal(updated);
+                toast.success(`Row removed from ${label}`);
+              };
+
+              return (
+                <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                  {/* Table Header Bar */}
+                  <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                      <TableIcon className="w-3.5 h-3.5 text-blue-600" />
+                      <span>{label}</span>
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-slate-200 text-slate-600">
+                        {rows.length} {rows.length === 1 ? "entry" : "entries"}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddRow}
+                      className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-blue-600 text-xs font-semibold rounded-lg flex items-center gap-1 transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3 h-3" /> Add Row
+                    </button>
+                  </div>
+
+                  {/* Table Body / Rows */}
+                  {rows.length === 0 ? (
+                    <div className="p-4 text-center">
+                      <p className="text-xs text-slate-400">No entries added yet.</p>
+                      <button
+                        type="button"
+                        onClick={handleAddRow}
+                        className="mt-2 inline-flex items-center gap-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add First Entry
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50/80 border-b border-slate-200">
+                            <th className="w-8 px-2.5 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                              #
+                            </th>
+                            {cols.map((col) => (
+                              <th
+                                key={col.id || col.name}
+                                className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[120px]"
+                              >
+                                {col.name}
+                              </th>
+                            ))}
+                            <th className="w-10 px-2 py-2 text-center" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {rows.map((row, rIdx) => (
+                            <tr key={row.id || rIdx} className="hover:bg-slate-50/50 transition-colors group">
+                              <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
+                                {rIdx + 1}
+                              </td>
+                              {cols.map((col) => {
+                                const colKey = col.id || col.name;
+                                return (
+                                  <td key={colKey} className="px-2 py-1.5">
+                                    <input
+                                      type={col.type === "Number" || col.type === "Money" ? "number" : "text"}
+                                      value={row[colKey] ?? row[col.name] ?? ""}
+                                      onChange={(e) => handleCellChange(rIdx, colKey, e.target.value)}
+                                      placeholder={`Enter ${col.name.toLowerCase()}...`}
+                                      className="w-full px-2.5 py-1.5 bg-slate-50/70 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+                                      style={{ fontFamily: "Outfit, sans-serif" }}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              <td className="px-2 py-1.5 text-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveRow(rIdx)}
+                                  className="p-1 text-slate-300 hover:text-red-600 rounded-md hover:bg-red-50 transition-colors cursor-pointer"
+                                  title="Delete row"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+
+                </div>
+              );
+            })()}
+          </div>
+        ) : regField?.inputType === "signature" ||
+            regField?.inputType === "drawing" ||
+            key.includes("signature") ||
+            key.includes("drawing") ||
+            (typeof rawVal === "string" && rawVal.startsWith("data:image")) ? (
+          <SignatureDrawingPad
+            label={label}
+            value={typeof rawVal === "string" ? rawVal : ""}
+            onChange={(val) => setVal(val)}
+          />
         ) : key === "symptoms" ||
             key === "patient_instructions" ||
             key === "patient_precautions" ||
@@ -752,12 +1065,12 @@ export default function DraggableOverviewSections({
             regField?.key === "patient_instructions" ||
             regField?.key === "patient_precautions" ||
             regField?.inputType === "multiselect" ||
-            Array.isArray(rawVal) ? (
+            (Array.isArray(rawVal) && (rawVal.length === 0 || typeof rawVal[0] === "string")) ? (
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-1.5 min-h-[30px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
               {(() => {
                 const currentArr: string[] = Array.isArray(rawVal)
-                  ? rawVal
+                  ? (rawVal as string[])
                   : typeof rawVal === "string" && rawVal.trim()
                   ? rawVal
                       .split(/[\n;]+/)
@@ -779,7 +1092,7 @@ export default function DraggableOverviewSections({
                     className="group relative inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 text-xs font-semibold rounded-lg shadow-2xs select-none hover:border-blue-400 transition-colors"
                     style={{ fontFamily: "Outfit, sans-serif" }}
                   >
-                    <span>{item}</span>
+                    <span>{typeof item === "string" ? item : JSON.stringify(item)}</span>
                     <button
                       type="button"
                       onClick={() => {
@@ -844,6 +1157,132 @@ export default function DraggableOverviewSections({
                 Add
               </button>
             </div>
+          </div>
+        ) : regField?.inputType === "money" ? (
+          /* ── Currency / Money Field ── */
+          <div className="flex items-center bg-slate-50/70 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+            <span className="px-3 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 border-r border-slate-200 select-none">
+              ₹
+            </span>
+            <input
+              type="number"
+              value={rawVal ?? ""}
+              onChange={(e) => setVal(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-1.5 bg-transparent text-xs font-medium text-slate-800 outline-none"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+          </div>
+        ) : regField?.inputType === "rating" ? (
+          /* ── Rating / Score Field ── */
+          <div className="flex items-center gap-1.5 py-1">
+            {[1, 2, 3, 4, 5].map((score) => {
+              const currentScore = Number(rawVal) || 0;
+              const isFilled = score <= currentScore;
+              return (
+                <button
+                  key={score}
+                  type="button"
+                  onClick={() => setVal(score)}
+                  className="p-1 hover:scale-110 transition-transform cursor-pointer"
+                  title={`Rate ${score} of 5`}
+                >
+                  <Star
+                    className={`w-5 h-5 ${
+                      isFilled
+                        ? "text-amber-400 fill-amber-400"
+                        : "text-slate-200 fill-slate-100 hover:text-amber-300"
+                    }`}
+                  />
+                </button>
+              );
+            })}
+            <span className="text-xs font-bold text-slate-600 ml-2">
+              {rawVal ? `${rawVal} / 5` : "Not rated"}
+            </span>
+            {rawVal && (
+              <button
+                type="button"
+                onClick={() => setVal("")}
+                className="text-[10px] text-slate-400 hover:text-red-500 ml-1 cursor-pointer"
+              >
+                (Clear)
+              </button>
+            )}
+          </div>
+        ) : regField?.inputType === "yes_no" ? (
+          /* ── Yes / No Toggle ── */
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setVal(rawVal === "Yes" ? "No" : "Yes")}
+              className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                rawVal === "Yes"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : rawVal === "No"
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              {rawVal || "Select (Yes / No)"}
+            </button>
+            <span className="text-xs text-slate-400">Click to toggle</span>
+          </div>
+        ) : regField?.inputType === "link" ? (
+          /* ── Link Field ── */
+          <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:bg-white focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 transition-all">
+            <LinkIcon className="w-3.5 h-3.5 text-slate-400 shrink-0 mr-1.5" />
+            <input
+              type="url"
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
+              placeholder="https://example.com"
+              className="w-full bg-transparent text-xs text-slate-800 outline-none"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+            {rawVal && (
+              <a
+                href={rawVal.startsWith("http") ? rawVal : `https://${rawVal}`}
+                target="_blank"
+                rel="noreferrer"
+                className="p-1 text-blue-600 hover:text-blue-700 rounded transition-colors shrink-0"
+                title="Open link in new tab"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
+        ) : regField?.inputType === "whatsapp_link" ? (
+          /* ── WhatsApp Link Field ── */
+          <div className="flex items-center justify-between bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:bg-white focus-within:border-emerald-500 focus-within:ring-1 focus-within:ring-emerald-500 transition-all">
+            <span className="text-xs font-bold text-slate-500 mr-1">+91</span>
+            <input
+              type="tel"
+              value={rawVal || ""}
+              onChange={(e) => setVal(e.target.value)}
+              placeholder="9876543210"
+              className="w-full bg-transparent text-xs text-slate-800 outline-none"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            />
+            {rawVal && (
+              <a
+                href={`https://wa.me/${rawVal.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="px-2 py-0.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded text-[10px] font-bold shrink-0 transition-colors"
+              >
+                Chat ↗
+              </a>
+            )}
+          </div>
+        ) : regField?.inputType === "file" ? (
+          /* ── File / Attachment Field ── */
+          <div className="border-2 border-dashed border-slate-200 rounded-xl p-3 bg-slate-50/40 hover:bg-slate-50 hover:border-blue-400 transition-all text-center cursor-pointer">
+            <Paperclip className="w-4 h-4 text-slate-400 mx-auto mb-1" />
+            <p className="text-xs font-semibold text-slate-600">
+              {rawVal || `Upload ${label.toLowerCase()}`}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">PDF, DOCX, JPG up to 10MB</p>
           </div>
         ) : regField?.inputType === "select" ? (
           <DropdownMenu>

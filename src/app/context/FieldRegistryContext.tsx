@@ -24,8 +24,37 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
 };
 
-export type FieldInputType = "text" | "email" | "tel" | "select" | "multiselect" | "textarea" | "date"
-  | "date_time" | "number" | "money" | "link" | "whatsapp_link" | "yes_no";
+export type FieldInputType =
+  | "text"
+  | "email"
+  | "tel"
+  | "select"
+  | "multiselect"
+  | "textarea"
+  | "richtext"
+  | "date"
+  | "date_time"
+  | "number"
+  | "money"
+  | "link"
+  | "whatsapp_link"
+  | "yes_no"
+  | "table"
+  | "signature"
+  | "drawing"
+  | "drawer"
+  | "list"
+  | "file"
+  | "rating"
+  | "user"
+  | "formula"
+  | "resource";
+
+export interface TableColumnConfig {
+  id: string;
+  name: string;
+  type: string;
+}
 
 export interface FieldOption { id: number; label: string; value: string; }
 
@@ -38,7 +67,9 @@ export interface FieldDefinition {
   inputType: FieldInputType;
   placeholder?: string;
   validation?: string;
-  options?: FieldOption[];    // for select/dropdown types
+  options?: FieldOption[];    // for select/dropdown/list types
+  tableColumns?: TableColumnConfig[]; // for table type
+  sectionId?: string;        // assigned section id
   required?: boolean;
   showAlways?: boolean;       // legacy — kept for backward compat, do not write for new fields
   /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
@@ -46,6 +77,19 @@ export interface FieldDefinition {
   sourceFormId?: number;      // if created via a WebForm field, provenance
   createdAt: number;
 }
+
+export interface SectionDefinition {
+  id: string;
+  title: string;
+  description?: string;
+  module: FieldModule;
+  source: "system" | "custom";
+  iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
+  fieldKeys: string[];
+  createdAt: number;
+}
+
+export const SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
 
 /**
  * Resolve the effective auto-display visibility of a field.
@@ -637,6 +681,275 @@ export function getLiveTeamMembers() {
   }));
 }
 
+export const SYSTEM_SECTIONS: Record<Exclude<FieldModule, "deal">, SectionDefinition[]> = {
+  client: [
+    {
+      id: "sec-general-info",
+      title: "General Information",
+      description: "Basic client identity and contact information",
+      module: "client",
+      source: "system",
+      iconName: "user",
+      fieldKeys: ["name", "email", "phone", "location", "country"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-company-role",
+      title: "Company & Role",
+      description: "Organization details and job position",
+      module: "client",
+      source: "system",
+      iconName: "briefcase",
+      fieldKeys: ["company", "role"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-process-pipeline",
+      title: "Processes & Pipeline",
+      description: "Assigned processes and workflow state",
+      module: "client",
+      source: "system",
+      iconName: "workflow",
+      fieldKeys: ["status", "processes"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-custom-fields",
+      title: "Custom Fields",
+      description: "User-defined custom client properties",
+      module: "client",
+      source: "system",
+      iconName: "file-text",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  process: [
+    {
+      id: "sec-process-info",
+      title: "Process Information",
+      description: "Core workflow metadata and priority",
+      module: "process",
+      source: "system",
+      iconName: "workflow",
+      fieldKeys: ["title", "type", "priority", "responsible"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-timeline",
+      title: "Timeline & Deadlines",
+      description: "Creation dates and deadline tracking",
+      module: "process",
+      source: "system",
+      iconName: "calendar",
+      fieldKeys: ["createdDate", "deadline"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-process-custom",
+      title: "Custom Parameters",
+      description: "Custom parameters and step attributes",
+      module: "process",
+      source: "system",
+      iconName: "layers",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  appointment: [
+    {
+      id: "sec-appt-details",
+      title: "Appointment Details",
+      description: "Date, time, duration, and assigned provider",
+      module: "appointment",
+      source: "system",
+      iconName: "calendar",
+      fieldKeys: ["appointmentDate", "appointmentTime", "service", "provider"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-appt-client",
+      title: "Client Information",
+      description: "Client contact details and notes",
+      module: "appointment",
+      source: "system",
+      iconName: "user",
+      fieldKeys: ["clientName", "email", "phone"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-appt-custom",
+      title: "Custom Fields",
+      description: "Additional appointment custom attributes",
+      module: "appointment",
+      source: "system",
+      iconName: "file-text",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  call: [
+    {
+      id: "sec-call-meta",
+      title: "Call Metadata",
+      description: "Caller number, duration, direction, and agent",
+      module: "call",
+      source: "system",
+      iconName: "phone",
+      fieldKeys: ["callerName", "phoneNumber", "duration", "status"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-call-outcome",
+      title: "Outcome & Analysis",
+      description: "Call sentiment, recording, and summary",
+      module: "call",
+      source: "system",
+      iconName: "sparkles",
+      fieldKeys: ["sentiment", "recording", "notes"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-call-custom",
+      title: "Custom Fields",
+      description: "Additional call custom properties",
+      module: "call",
+      source: "system",
+      iconName: "layers",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  service: [
+    {
+      id: "sec-service-info",
+      title: "Service Details",
+      description: "Service name, category, and description",
+      module: "service",
+      source: "system",
+      iconName: "tag",
+      fieldKeys: ["name", "category", "price", "duration"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-service-custom",
+      title: "Custom Fields",
+      description: "Additional service attributes",
+      module: "service",
+      source: "system",
+      iconName: "layers",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  organization: [
+    {
+      id: "sec-org-info",
+      title: "Organization Info",
+      description: "Company name, industry, and address",
+      module: "organization",
+      source: "system",
+      iconName: "briefcase",
+      fieldKeys: ["name", "industry", "email", "phone"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-org-custom",
+      title: "Custom Fields",
+      description: "Custom organization properties",
+      module: "organization",
+      source: "system",
+      iconName: "layers",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  teamMember: [
+    {
+      id: "sec-team-info",
+      title: "Member Profile",
+      description: "Full name, email, role, and department",
+      module: "teamMember",
+      source: "system",
+      iconName: "user",
+      fieldKeys: ["fullName", "email", "phone", "role"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-team-avail",
+      title: "Availability & Settings",
+      description: "Work hours, timezone, and calendar",
+      module: "teamMember",
+      source: "system",
+      iconName: "settings",
+      fieldKeys: ["timezone", "status"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-team-custom",
+      title: "Custom Fields",
+      description: "Additional team custom attributes",
+      module: "teamMember",
+      source: "system",
+      iconName: "layers",
+      fieldKeys: [],
+      createdAt: 0,
+    },
+  ],
+  scribe: [
+    {
+      id: "sec-patient-info",
+      title: "Patient Information",
+      description: "Demographics, age, sex, and visit date",
+      module: "scribe",
+      source: "system",
+      iconName: "user",
+      fieldKeys: ["patient_name", "patient_age_sex", "consultation_date", "patient_id"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-complaint",
+      title: "Chief Complaint",
+      description: "Presenting symptoms and symptom duration",
+      module: "scribe",
+      source: "system",
+      iconName: "file-text",
+      fieldKeys: ["symptoms", "complaint_duration"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-diagnosis",
+      title: "Diagnosis & Clinical Findings",
+      description: "Primary diagnosis, ICD-10 code, and examination notes",
+      module: "scribe",
+      source: "system",
+      iconName: "shield",
+      fieldKeys: ["primary_diagnosis", "icd_code", "diagnosis_type", "clinical_findings"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-medications",
+      title: "Medications",
+      description: "Prescribed drugs, dosage, frequency, and duration table",
+      module: "scribe",
+      source: "system",
+      iconName: "table",
+      fieldKeys: ["med_name", "med_strength", "med_form", "med_dosage", "med_frequency", "med_duration", "med_route"],
+      createdAt: 0,
+    },
+    {
+      id: "sec-follow-up",
+      title: "Instructions & Follow-up",
+      description: "Care advice, warnings, prognosis, and return review",
+      module: "scribe",
+      source: "system",
+      iconName: "workflow",
+      fieldKeys: ["patient_instructions", "patient_precautions", "prognosis_status", "expected_course", "complication_risk", "follow_up_review", "follow_up_criteria"],
+      createdAt: 0,
+    },
+  ],
+};
+
 interface FieldRegistryContextValue {
   getSystemFields: (module: FieldModule) => FieldDefinition[];
   getCustomFields: (module: FieldModule) => FieldDefinition[];
@@ -644,13 +957,23 @@ interface FieldRegistryContextValue {
   addCustomField: (module: FieldModule, field: Omit<FieldDefinition, "id" | "source" | "createdAt">) => FieldDefinition;
   updateCustomField: (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => void;
   deleteCustomField: (module: FieldModule, id: number) => void;
+
+  // Sections
+  getSystemSections: (module: FieldModule) => SectionDefinition[];
+  getCustomSections: (module: FieldModule) => SectionDefinition[];
+  getAllSections: (module: FieldModule) => SectionDefinition[];
+  addCustomSection: (module: FieldModule, section: Omit<SectionDefinition, "id" | "source" | "createdAt">) => SectionDefinition;
+  updateCustomSection: (module: FieldModule, id: string, patch: Partial<SectionDefinition>) => void;
+  deleteCustomSection: (module: FieldModule, id: string) => void;
+  assignFieldToSection: (module: FieldModule, sectionId: string, fieldKey: string) => void;
+  removeFieldFromSection: (module: FieldModule, sectionId: string, fieldKey: string) => void;
 }
 
 const FieldRegistryContext = createContext<FieldRegistryContextValue | null>(null);
 
 export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   const [customFields, setCustomFields] = useState<Record<Exclude<FieldModule, "deal">, FieldDefinition[]>>(() => {
-    const saved = sessionStorage.getItem("fieldRegistry_v2") || sessionStorage.getItem("fieldRegistry_v1");
+    const saved = sessionStorage.getItem("fieldRegistry_v3") || sessionStorage.getItem("fieldRegistry_v2") || sessionStorage.getItem("fieldRegistry_v1");
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -659,6 +982,22 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
           parsed.process = parsed.deal;
           delete parsed.deal;
         }
+
+        // Clean misassigned scribe medication fields from non-scribe modules
+        const scribeMedKeys = new Set(["med_form", "med_dosage", "med_frequency", "med_duration", "med_route", "med_name", "med_strength", "symptoms", "complaint_duration", "primary_diagnosis", "icd_code", "diagnosis_type"]);
+        (["client", "process", "appointment", "call", "service", "organization", "teamMember"] as const).forEach((mod) => {
+          if (Array.isArray(parsed[mod])) {
+            parsed[mod] = parsed[mod].filter((f: FieldDefinition) => !scribeMedKeys.has(f.key));
+            // Deduplicate by key
+            const seenKeys = new Set<string>();
+            parsed[mod] = parsed[mod].filter((f: FieldDefinition) => {
+              if (seenKeys.has(f.key)) return false;
+              seenKeys.add(f.key);
+              return true;
+            });
+          }
+        });
+
         // Always load latest comprehensive scribe fields
         parsed.scribe = INITIAL_SCRIBE_CUSTOM_FIELDS;
         return parsed;
@@ -701,9 +1040,39 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     };
   });
 
+  const [customSections, setCustomSections] = useState<Record<Exclude<FieldModule, "deal">, SectionDefinition[]>>(() => {
+    const saved = sessionStorage.getItem("sectionRegistry_v1");
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error("Error parsing sectionRegistry", e);
+      }
+    }
+    return {
+      client: [],
+      process: [],
+      appointment: [],
+      call: [],
+      service: [],
+      organization: [],
+      teamMember: [],
+      scribe: [],
+    };
+  });
+
   useEffect(() => {
+    sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(customFields));
+    sessionStorage.setItem("fieldRegistry_v2", JSON.stringify(customFields));
     sessionStorage.setItem("fieldRegistry_v1", JSON.stringify(customFields));
   }, [customFields]);
+
+  useEffect(() => {
+    sessionStorage.setItem("sectionRegistry_v1", JSON.stringify(customSections));
+    try {
+      window.dispatchEvent(new CustomEvent(SECTION_REGISTRY_EVENT));
+    } catch {}
+  }, [customSections]);
 
   const normalizeModule = (module: FieldModule): Exclude<FieldModule, "deal"> => {
     return module === "deal" ? "process" : module;
@@ -752,6 +1121,12 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
       ...prev,
       [norm]: [...(prev[norm] || []), newField],
     }));
+
+    // If sectionId provided, also assign key to that section
+    if (newField.sectionId) {
+      assignFieldToSection(norm, newField.sectionId, newField.key);
+    }
+
     return newField;
   };
 
@@ -770,9 +1145,98 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const deleteCustomField = (module: FieldModule, id: number) => {
     const norm = normalizeModule(module);
+    const targetField = (customFields[norm] || []).find((f) => f.id === id);
     setCustomFields((prev) => ({
       ...prev,
       [norm]: (prev[norm] || []).filter((f) => f.id !== id),
+    }));
+
+    if (targetField) {
+      // Remove from all sections in module
+      setCustomSections((prev) => ({
+        ...prev,
+        [norm]: (prev[norm] || []).map((sec) => ({
+          ...sec,
+          fieldKeys: sec.fieldKeys.filter((k) => k !== targetField.key),
+        })),
+      }));
+    }
+  };
+
+  // Section Methods
+  const getSystemSections = (module: FieldModule): SectionDefinition[] => {
+    const norm = normalizeModule(module);
+    return SYSTEM_SECTIONS[norm] || [];
+  };
+
+  const getCustomSections = (module: FieldModule): SectionDefinition[] => {
+    const norm = normalizeModule(module);
+    return customSections[norm] || [];
+  };
+
+  const getAllSections = (module: FieldModule): SectionDefinition[] => {
+    return [...getSystemSections(module), ...getCustomSections(module)];
+  };
+
+  const addCustomSection = (
+    module: FieldModule,
+    sectionData: Omit<SectionDefinition, "id" | "source" | "createdAt">
+  ): SectionDefinition => {
+    const norm = normalizeModule(module);
+    const newSection: SectionDefinition = {
+      ...sectionData,
+      id: `sec-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      module: norm,
+      source: "custom",
+      createdAt: Date.now(),
+      fieldKeys: sectionData.fieldKeys || [],
+    };
+    setCustomSections((prev) => ({
+      ...prev,
+      [norm]: [...(prev[norm] || []), newSection],
+    }));
+    return newSection;
+  };
+
+  const updateCustomSection = (module: FieldModule, id: string, patch: Partial<SectionDefinition>) => {
+    const norm = normalizeModule(module);
+    setCustomSections((prev) => ({
+      ...prev,
+      [norm]: (prev[norm] || []).map((s) =>
+        s.id === id ? { ...s, ...patch } : s
+      ),
+    }));
+  };
+
+  const deleteCustomSection = (module: FieldModule, id: string) => {
+    const norm = normalizeModule(module);
+    setCustomSections((prev) => ({
+      ...prev,
+      [norm]: (prev[norm] || []).filter((s) => s.id !== id),
+    }));
+  };
+
+  const assignFieldToSection = (module: FieldModule, sectionId: string, fieldKey: string) => {
+    const norm = normalizeModule(module);
+    setCustomSections((prev) => ({
+      ...prev,
+      [norm]: (prev[norm] || []).map((s) =>
+        s.id === sectionId && !s.fieldKeys.includes(fieldKey)
+          ? { ...s, fieldKeys: [...s.fieldKeys, fieldKey] }
+          : s
+      ),
+    }));
+  };
+
+  const removeFieldFromSection = (module: FieldModule, sectionId: string, fieldKey: string) => {
+    const norm = normalizeModule(module);
+    setCustomSections((prev) => ({
+      ...prev,
+      [norm]: (prev[norm] || []).map((s) =>
+        s.id === sectionId
+          ? { ...s, fieldKeys: s.fieldKeys.filter((k) => k !== fieldKey) }
+          : s
+      ),
     }));
   };
 
@@ -785,6 +1249,14 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         addCustomField,
         updateCustomField,
         deleteCustomField,
+        getSystemSections,
+        getCustomSections,
+        getAllSections,
+        addCustomSection,
+        updateCustomSection,
+        deleteCustomSection,
+        assignFieldToSection,
+        removeFieldFromSection,
       }}
     >
       {children}

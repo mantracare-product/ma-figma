@@ -222,9 +222,15 @@ function SubmissionDrawer({ submission, formName, onClose }: {
               <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                 {label}
               </p>
-              <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
-                {value}
-              </p>
+              {typeof value === "string" && value.startsWith("data:image") ? (
+                <div className="border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center max-w-xs">
+                  <img src={value} alt={label} className="max-h-20 object-contain" />
+                </div>
+              ) : (
+                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#020817" }}>
+                  {value}
+                </p>
+              )}
             </div>
           ))}
         </div>

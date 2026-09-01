@@ -402,7 +402,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [clientLocation, setClientLocation] = useState(client?.location || "");
   const [clientCountry, setClientCountry] = useState(client?.country || "");
   const [selectedProcesses, setSelectedProcesses] = useState<string[]>(client?.processes ?? []);
-  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, string>>({});
+  const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, any>>({});
 
   const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
     if ((client as any)?.customSections && Array.isArray((client as any).customSections)) {
@@ -443,9 +443,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         setClientSections(defaultSecs);
       }
 
-      const dyn: Record<string, string> = {};
+      const dyn: Record<string, any> = {};
       Object.keys(client).forEach((k) => {
-        if (!HARDCODED_KEYS.has(k) && typeof (client as any)[k] === "string") {
+        if (!HARDCODED_KEYS.has(k)) {
           dyn[k] = (client as any)[k];
         }
       });
@@ -1795,9 +1795,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                                               {label}
                                             </p>
-                                            <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
-                                              {value}
-                                            </p>
+                                            {typeof value === "string" && value.startsWith("data:image") ? (
+                                              <div className="border border-slate-200 rounded-lg p-2 bg-white flex items-center justify-center max-w-xs">
+                                                <img src={value} alt={label} className="max-h-20 object-contain" />
+                                              </div>
+                                            ) : (
+                                              <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                                                {value}
+                                              </p>
+                                            )}
                                           </div>
                                         ))}
                                       </div>
@@ -1906,9 +1912,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                                 <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ fontFamily: "Outfit, sans-serif", color: "#94A3B8" }}>
                                                   {label}
                                                 </p>
-                                                <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
-                                                  {value}
-                                                </p>
+                                                {typeof value === "string" && value.startsWith("data:image") ? (
+                                                  <div className="border border-slate-200 rounded-lg p-2 bg-slate-50 flex items-center justify-center max-w-xs">
+                                                    <img src={value} alt={label} className="max-h-20 object-contain" />
+                                                  </div>
+                                                ) : (
+                                                  <p className="text-sm" style={{ fontFamily: "Outfit, sans-serif", color: "#1F2937" }}>
+                                                    {value}
+                                                  </p>
+                                                )}
                                               </div>
                                             ))}
                                           </div>

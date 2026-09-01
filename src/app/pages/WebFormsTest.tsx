@@ -4,12 +4,12 @@
  * Available in all builds (this project is a prototype — not gated by environment).
  */
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   FlaskConical, ArrowLeft, ChevronRight, CheckCircle2,
   AlertCircle, User, Layers, Eye, RefreshCw, Send,
-  ClipboardList, Info, X
+  ClipboardList, Info, X, PenTool
 } from "lucide-react";
 import { toast } from "sonner";
 import { INITIAL_FORMS, Form, FieldDef } from "../../data/forms";
@@ -130,6 +130,107 @@ function FormCard({ form, active, onClick }: { form: Form; active: boolean; onCl
   );
 }
 
+// ─── Signature / Drawing pad ──────────────────────────────────────────────────
+
+function SignaturePad({ onChange }: { onChange: (dataUrl: string) => void }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const drawing = useRef(false);
+  const [hasSignature, setHasSignature] = useState(false);
+
+  const getPos = (e: MouseEvent | TouchEvent, canvas: HTMLCanvasElement) => {
+    const rect = canvas.getBoundingClientRect();
+    if (e instanceof TouchEvent) {
+      const t = e.touches[0];
+      return { x: t.clientX - rect.left, y: t.clientY - rect.top };
+    }
+    return { x: (e as MouseEvent).clientX - rect.left, y: (e as MouseEvent).clientY - rect.top };
+  };
+
+  const startDraw = useCallback((e: MouseEvent | TouchEvent) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    drawing.current = true;
+    const ctx = canvas.getContext("2d")!;
+    const { x, y } = getPos(e, canvas);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }, []);
+
+  const draw = useCallback((e: MouseEvent | TouchEvent) => {
+    if (!drawing.current) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    e.preventDefault();
+    const ctx = canvas.getContext("2d")!;
+    ctx.strokeStyle = "#1e293b";
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    const { x, y } = getPos(e, canvas);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    setHasSignature(true);
+  }, []);
+
+  const stopDraw = useCallback(() => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    const canvas = canvasRef.current;
+    if (canvas) onChange(canvas.toDataURL());
+  }, [onChange]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("mouseup", stopDraw);
+    canvas.addEventListener("mouseleave", stopDraw);
+    canvas.addEventListener("touchstart", startDraw, { passive: false });
+    canvas.addEventListener("touchmove", draw, { passive: false });
+    canvas.addEventListener("touchend", stopDraw);
+    return () => {
+      canvas.removeEventListener("mousedown", startDraw);
+      canvas.removeEventListener("mousemove", draw);
+      canvas.removeEventListener("mouseup", stopDraw);
+      canvas.removeEventListener("mouseleave", stopDraw);
+      canvas.removeEventListener("touchstart", startDraw);
+      canvas.removeEventListener("touchmove", draw);
+      canvas.removeEventListener("touchend", stopDraw);
+    };
+  }, [startDraw, draw, stopDraw]);
+
+  const clear = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    canvas.getContext("2d")!.clearRect(0, 0, canvas.width, canvas.height);
+    setHasSignature(false);
+    onChange("");
+  };
+
+  return (
+    <div className="rounded-xl border-2 border-dashed border-gray-300 bg-white overflow-hidden" style={{ cursor: "crosshair" }}>
+      <canvas ref={canvasRef} width={520} height={130} className="w-full block" style={{ height: 130 }} />
+      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
+        <span className="flex items-center gap-1.5 text-xs text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>
+          <PenTool size={12} /> Draw your signature above
+        </span>
+        {hasSignature && (
+          <button
+            type="button"
+            onClick={clear}
+            className="text-xs text-red-400 hover:text-red-600 font-medium flex items-center gap-1 transition-colors"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            <X size={11} /> Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FieldInput({
   field,
   value,
@@ -141,6 +242,10 @@ function FieldInput({
 }) {
   const baseClass =
     "w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-400 transition-all";
+
+  if (field.type === "signature" || field.type === "drawing") {
+    return <SignaturePad onChange={onChange} />;
+  }
 
   if (field.type === "textarea") {
     return (
@@ -236,7 +341,13 @@ function ResultPanel({ result, onClose }: { result: SubmitResult; onClose: () =>
               {Object.entries(result.fieldData).map(([k, v]) => (
                 <div key={k} className="flex items-start gap-2 text-sm bg-gray-50 rounded-xl px-3 py-2">
                   <span className="font-medium min-w-[120px]" style={{ fontFamily: "DM Sans, sans-serif", color: "#020817" }}>{k}</span>
-                  <span style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{v || <em className="text-gray-400">empty</em>}</span>
+                  {typeof v === "string" && v.startsWith("data:image") ? (
+                    <div className="border border-gray-200 rounded-lg p-1.5 bg-white flex items-center justify-center">
+                      <img src={v} alt={k} className="max-h-12 object-contain" />
+                    </div>
+                  ) : (
+                    <span style={{ fontFamily: "Outfit, sans-serif", color: "#64748B" }}>{v || <em className="text-gray-400">empty</em>}</span>
+                  )}
                 </div>
               ))}
             </div>
@@ -291,6 +402,10 @@ export default function WebFormsTest() {
   function handleReset() {
     setFieldValues({});
     setResult(null);
+  }
+
+  function handleFieldChange(label: string, value: string) {
+    setFieldValues((prev) => ({ ...prev, [label]: value }));
   }
 
   function handleSubmit() {
@@ -349,8 +464,8 @@ export default function WebFormsTest() {
           let updatedAny = false;
           fields.forEach((f) => {
             const val = fieldValues[f.label];
-            if (!val || !f.sourceFieldKey) return;
-            const key = f.sourceFieldKey;
+            if (!val) return;
+            const key = f.sourceFieldKey || f.label.toLowerCase().replace(/\s+/g, "_");
             if (key === "email" && !updated.email) { updated.email = val; updatedAny = true; }
             else if (key === "phone" && !updated.phone) { updated.phone = val.replace(/\D/g, ""); updatedAny = true; }
             else if (key === "company") { (updated as any).companyName = val; updatedAny = true; }
@@ -364,13 +479,11 @@ export default function WebFormsTest() {
               }
             }
 
-            // Also make sure it's in visibleFieldKeys if it's a client-module field
-            if (f.module === "client") {
-              const visible = (updated as any).visibleFieldKeys || [];
-              if (!visible.includes(key)) {
-                (updated as any).visibleFieldKeys = [...visible, key];
-                updatedAny = true;
-              }
+            // Also make sure it's in visibleFieldKeys
+            const visible = (updated as any).visibleFieldKeys || [];
+            if (!visible.includes(key)) {
+              (updated as any).visibleFieldKeys = [...visible, key];
+              updatedAny = true;
             }
           });
 
@@ -381,10 +494,6 @@ export default function WebFormsTest() {
           // Precedence rule: a form field explicitly bound to the "processes" system
           // key (sourceFieldKey === "processes") or whose label matches /process/i
           // takes precedence over the form-level autoCreateProcessId default.
-          // Resolve process and country strictly from explicitly linked registry fields.
-          // Label-matching fallbacks are intentionally removed to prevent Form Elements
-          // (e.g. a Short Text labeled "Country") from accidentally routing data into
-          // client/process records.
           const processField = fields.find(
             (f) => f.sourceFieldKey === "processes" && f.module === "client"
           );
@@ -418,21 +527,19 @@ export default function WebFormsTest() {
 
           const visibleKeys: string[] = [];
 
-          // Map every submitted field value that has a sourceFieldKey onto the
-          // client record so custom fields (patient_id, insurance_provider, role,
-          // company, etc.) are actually persisted, not just shown in the modal.
+          // Map every submitted field value onto the client record
           fields.forEach((f) => {
             const val = fieldValues[f.label];
-            if (!val || !f.sourceFieldKey) return;
-            const key = f.sourceFieldKey;
+            if (!val) return;
+            const key = f.sourceFieldKey || f.label.toLowerCase().replace(/\s+/g, "_");
             
-            if (f.module === "client") {
+            if (!visibleKeys.includes(key)) {
               visibleKeys.push(key);
             }
 
             // Skip fields already mapped above
             if (["email", "phone", "processes", "country"].includes(key)) return;
-            if (key === "name") return; // already in newClient.name
+            if (key === "name") return;
             if (key === "company") { (newClient as any).companyName = val; return; }
             if (key === "role") { (newClient as any).jobPosition = val; return; }
             (newClient as unknown as Record<string, unknown>)[key] = val;
@@ -721,8 +828,4 @@ export default function WebFormsTest() {
       {result && <ResultPanel result={result} onClose={() => setResult(null)} />}
     </div>
   );
-
-  function handleFieldChange(fieldLabel: string, value: string) {
-    setFieldValues((prev) => ({ ...prev, [fieldLabel]: value }));
-  }
 }

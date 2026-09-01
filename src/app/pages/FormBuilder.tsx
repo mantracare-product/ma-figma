@@ -182,12 +182,17 @@ export default function FormBuilder() {
 
   const inferFieldFromCustom = (cf: CustomField): Partial<FormField> => {
     const t = cf.type.toUpperCase();
+    if (t === "SIGNATURE" || t === "DRAWING") return { type: "signature" };
     if (t === "DATE") return { type: "date" };
     if (t === "DATE_TIME" || t === "DATETIME") return { type: "time" };
-    if (t === "DROPDOWN" || t === "LIST") return { type: "select", options: [{ id: 1, label: "Option 1", value: "option_1" }, { id: 2, label: "Option 2", value: "option_2" }] };
+    if (t === "DROPDOWN" || t === "LIST" || t === "SELECT") return { type: "select", options: [{ id: 1, label: "Option 1", value: "option_1" }, { id: 2, label: "Option 2", value: "option_2" }] };
+    if (t === "MULTISELECT" || t === "MULTI_SELECT") return { type: "multiselect", options: [{ id: 1, label: "Option 1", value: "option_1" }, { id: 2, label: "Option 2", value: "option_2" }] };
     if (t === "YES_NO" || t === "YESNO") return { type: "radio", options: [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] };
     if (t === "NUMBER" || t === "MONEY") return { type: "number" };
     if (t === "LINK" || t === "WHATSAPP_LINK") return { type: "url" };
+    if (t === "FILE") return { type: "file" };
+    if (t === "RATING") return { type: "rating" };
+    if (t === "TEXTAREA" || t === "RICHTEXT") return { type: "textarea" };
     return { type: "text" };
   };
 
@@ -208,16 +213,20 @@ export default function FormBuilder() {
     const newField: FormField = {
       id: Date.now(),
       name: sf.label,
-      type: sf.inputType === "email" ? "email" :
+      type: sf.inputType === "signature" || sf.inputType === "drawing" ? "signature" :
+        sf.inputType === "rating" ? "rating" :
+        sf.inputType === "file" ? "file" :
+        sf.inputType === "multiselect" ? "multiselect" :
+        sf.inputType === "email" ? "email" :
         sf.inputType === "tel" ? "tel" :
-          sf.inputType === "select" ? "select" :
-            sf.inputType === "date" ? "date" :
-              sf.inputType === "date_time" ? "time" :
-                sf.inputType === "number" || sf.inputType === "money" ? "number" :
-                  sf.inputType === "textarea" ? "textarea" :
-                    sf.inputType === "link" || sf.inputType === "whatsapp_link" ? "url" :
-                      sf.inputType === "yes_no" ? "radio" :
-                        "text",
+        sf.inputType === "select" || sf.inputType === "list" ? "select" :
+        sf.inputType === "date" ? "date" :
+        sf.inputType === "date_time" ? "time" :
+        sf.inputType === "number" || sf.inputType === "money" ? "number" :
+        sf.inputType === "textarea" || sf.inputType === "richtext" ? "textarea" :
+        sf.inputType === "link" || sf.inputType === "whatsapp_link" ? "url" :
+        sf.inputType === "yes_no" ? "radio" :
+        "text",
       placeholder: sf.placeholder || `Enter ${sf.label.toLowerCase()}`,
       required: sf.required || false,
       essential: ["name", "email", "phone"].includes(sf.key) && sf.module === "client",

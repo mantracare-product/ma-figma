@@ -12,6 +12,7 @@ import { useSidebar } from "../context/SidebarContext";
 import { useFieldRegistry, FieldDefinition, FieldModule } from "../context/FieldRegistryContext";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
+import { SelectFieldsModal } from "../components/help/FieldManager";
 import {
   Save,
   Plus,
@@ -68,6 +69,23 @@ import {
   Ban,
   Building2,
   Sliders,
+  Layers,
+  Table as TableIcon,
+  Tag,
+  Briefcase,
+  Workflow,
+  Sparkles,
+  Star,
+  Hash,
+  DollarSign,
+  Type,
+  AlignLeft,
+  File as FileIcon,
+  FolderPlus,
+  PanelRight,
+  ArrowRight,
+  PenTool,
+  Eraser,
 } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
 import {
@@ -1177,7 +1195,19 @@ export default function Settings() {
   }, [allUsers]);
 
   // Custom Fields Context
-  const { getCustomFields, addCustomField, updateCustomField, deleteCustomField } = useFieldRegistry();
+  // Custom Fields & Layout Registry Context
+  const {
+    getCustomFields,
+    getAllFields,
+    addCustomField,
+    updateCustomField,
+    deleteCustomField,
+    getCustomSections,
+    getAllSections,
+    addCustomSection,
+    updateCustomSection,
+    deleteCustomSection,
+  } = useFieldRegistry();
 
   const tabToModule: Record<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe", FieldModule> = {
     "clients": "client",
@@ -1190,50 +1220,136 @@ export default function Settings() {
   };
 
   const FIELD_TYPE_MAP: Record<string, any> = {
-    "String": "text",
-    "List": "select",
-    "Date/Time": "date_time",
+    "String / Text": "text",
+    "Table": "table",
+    "Drawing / Signature": "signature",
+    "List (Dropdown)": "select",
+    "Multi-Select": "multiselect",
     "Date": "date",
-    "Book a Resource": "text",
-    "Address": "textarea",
-    "Link": "link",
-    "File": "text",
-    "Money": "money",
-    "Yes/No": "yes_no",
+    "Date & Time": "date_time",
     "Number": "number",
+    "Money / Currency": "money",
+    "Address / Text Area": "textarea",
+    "Rich Text": "richtext",
+    "Link": "link",
     "WhatsApp Link": "whatsapp_link",
+    "Yes / No": "yes_no",
+    "File / Attachment": "file",
+    "Rating / Score": "rating",
+    "User / Member": "user",
   };
 
   const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
-    "text": "String",
-    "select": "List",
-    "date_time": "Date/Time",
+    "text": "String / Text",
+    "table": "Table",
+    "signature": "Drawing / Signature",
+    "drawing": "Drawing / Signature",
+    "select": "List (Dropdown)",
+    "multiselect": "Multi-Select",
     "date": "Date",
-    "textarea": "Address",
-    "link": "Link",
-    "money": "Money",
-    "yes_no": "Yes/No",
+    "date_time": "Date & Time",
     "number": "Number",
+    "money": "Money / Currency",
+    "textarea": "Address / Text Area",
+    "richtext": "Rich Text",
+    "link": "Link",
     "whatsapp_link": "WhatsApp Link",
+    "yes_no": "Yes / No",
+    "file": "File / Attachment",
+    "rating": "Rating / Score",
+    "user": "User / Member",
   };
 
-  // Custom Fields Tab State
+  // Layout View Tabs: Custom Fields vs Custom Sections
+  const [layoutViewTab, setLayoutViewTab] = useState<"fields" | "sections">("fields");
+  const [layoutSearchQuery, setLayoutSearchQuery] = useState("");
+  // Table field preview rows
+  const [tablePreviewRows, setTablePreviewRows] = useState<Record<string, string>[]>([{}]);
+
+  // Module filter tab
   const [customFieldsTab, setCustomFieldsTab] = useState<"clients" | "call-logs" | "processes" | "appointments" | "forms" | "team" | "scribe">("clients");
 
   const currentModule = tabToModule[customFieldsTab || "clients"];
   const [editingFieldId, setEditingFieldId] = useState<number | null>(null);
-  const [editingFieldData, setEditingFieldData] = useState({ label: "", type: "String" });
+  const [editingFieldData, setEditingFieldData] = useState<{
+    label: string;
+    type: string;
+    sectionId?: string;
+    required?: boolean;
+    options?: { id: number; label: string; value: string }[];
+    tableColumns?: { id: string; name: string; type: string }[];
+  }>({
+    label: "",
+    type: "String / Text",
+    sectionId: "",
+    required: false,
+    options: [],
+    tableColumns: [],
+  });
 
   const [showAddFieldModal, setShowAddFieldModal] = useState(false);
-  const [newFieldData, setNewFieldData] = useState({
+  const [showAddFieldDrawer, setShowAddFieldDrawer] = useState(false);
+  const [showAddSectionDrawer, setShowAddSectionDrawer] = useState(false);
+  const [fieldTypePickerOpen, setFieldTypePickerOpen] = useState(false);
+  const [editFieldTypePickerOpen, setEditFieldTypePickerOpen] = useState(false);
+  const [newFieldData, setNewFieldData] = useState<{
+    label: string;
+    key: string;
+    type: string;
+    sectionId: string;
+    required: boolean;
+    multiple: boolean;
+    showAlways: boolean;
+    enableTooltip: boolean;
+    visibleToSelected: boolean;
+    options: { id: number; label: string; value: string }[];
+    tableColumns: { id: string; name: string; type: string }[];
+  }>({
     label: "",
     key: "",
-    type: "String",
+    type: "String / Text",
+    sectionId: "",
     required: false,
     multiple: false,
     showAlways: true,
     enableTooltip: false,
-    visibleToSelected: false
+    visibleToSelected: false,
+    options: [
+      { id: 1, label: "Option 1", value: "option_1" },
+      { id: 2, label: "Option 2", value: "option_2" },
+    ],
+    tableColumns: [
+      { id: "col_1", name: "Item Name", type: "Text" },
+      { id: "col_2", name: "Quantity", type: "Number" },
+      { id: "col_3", name: "Unit Price", type: "Money" },
+    ],
+  });
+
+  // Section Modal States
+  const [showAddSectionModal, setShowAddSectionModal] = useState(false);
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(null);
+  const [sectionFieldPickerTarget, setSectionFieldPickerTarget] = useState<"add" | "edit" | null>(null);
+  const [newSectionData, setNewSectionData] = useState<{
+    title: string;
+    description: string;
+    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
+    fieldKeys: string[];
+  }>({
+    title: "",
+    description: "",
+    iconName: "layers",
+    fieldKeys: [],
+  });
+  const [editingSectionData, setEditingSectionData] = useState<{
+    title: string;
+    description: string;
+    iconName: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
+    fieldKeys: string[];
+  }>({
+    title: "",
+    description: "",
+    iconName: "layers",
+    fieldKeys: [],
   });
 
   // Phone Numbers State
@@ -2572,7 +2688,11 @@ export default function Settings() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab) setActiveTab(tab);
+    if (tab === 'layout' || tab === 'custom-fields') {
+      setActiveTab('custom-fields');
+    } else if (tab) {
+      setActiveTab(tab);
+    }
 
     const integrationId = params.get('integration');
     const category = params.get('category');
@@ -2893,7 +3013,7 @@ export default function Settings() {
     },
     { id: "voice-config", label: "AI Voices / Models", icon: Volume2 },
     { id: "numbers", label: "Numbers", icon: Phone },
-    { id: "custom-fields", label: "Custom Fields", icon: ClipboardList },
+    { id: "custom-fields", label: "Layout", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
     { id: "security", label: "Security", icon: ShieldCheck },
@@ -5994,171 +6114,338 @@ export default function Settings() {
               </div>
             )}
 
-            {/* Custom Fields Tab */}
-            {activeTab === "custom-fields" && (
-              <div className="space-y-6">
-                {/* Page Header */}
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h1 className="text-[32px] font-bold text-[#111827] leading-tight">Custom Fields</h1>
-                    <p className="text-sm text-muted-foreground mt-2 max-w-xl">
-                      Manage custom data structures for clients and call interactions.
-                    </p>
+            {/* Layout Tab (Custom Fields & Custom Sections) */}
+            {(activeTab === "custom-fields" || activeTab === "layout") && (
+              <div className="space-y-5">
+                <div className="flex items-center justify-between">
+                  <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Layout</h1>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    <button
+                      onClick={() => setLayoutViewTab("fields")}
+                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        layoutViewTab === "fields"
+                          ? "bg-white text-[#111827] shadow-xs font-bold"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Custom Fields
+                    </button>
+                    <button
+                      onClick={() => setLayoutViewTab("sections")}
+                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                        layoutViewTab === "sections"
+                          ? "bg-white text-[#111827] shadow-xs font-bold"
+                          : "text-gray-500 hover:text-gray-800"
+                      }`}
+                    >
+                      Custom Sections
+                    </button>
                   </div>
-                  <button
-                    onClick={() => setShowAddFieldModal(true)}
-                    className="px-5 py-2.5 bg-[#111827] text-white rounded-full text-sm font-medium hover:bg-[#1f2937] transition-colors flex items-center gap-2"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Field
-                  </button>
+
+                  <div className="relative w-64">
+                    <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder={layoutViewTab === "fields" ? "Search fields..." : "Search sections..."}
+                      value={layoutSearchQuery}
+                      onChange={(e) => setLayoutSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all placeholder:text-gray-400"
+                    />
+                    {layoutSearchQuery && (
+                      <button
+                        onClick={() => setLayoutSearchQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                {/* Tab Switcher */}
-                <div className="inline-flex items-center gap-1 p-1 bg-[#F3F4F6] rounded-full">
-                  <button
-                    onClick={() => setCustomFieldsTab("clients")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "clients"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Clients
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("call-logs")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "call-logs"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Call Logs
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("processes")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "processes"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Processes
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("appointments")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "appointments"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Appointments
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("forms")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "forms"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Forms
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("team")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "team"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    Team
-                  </button>
-                  <button
-                    onClick={() => setCustomFieldsTab("scribe")}
-                    className={`px-5 py-1.5 rounded-full text-sm font-medium transition-all ${customFieldsTab === "scribe"
-                      ? "bg-white shadow-sm text-[#111827]"
-                      : "text-muted-foreground hover:text-foreground"
-                      }`}
-                  >
-                    AI Scribe
-                  </button>
-                </div>
-
-                {/* Table Card */}
-                <div className="bg-white rounded-xl border border-border overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-[#F8F9FA]">
-                      <tr>
-                        <th className="text-left px-6 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Label</th>
-                        <th className="text-left px-6 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Type</th>
-                        <th className="text-right px-6 py-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(() => {
-                        const currentFields = getCustomFields(currentModule);
-
-                        return currentFields.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="px-6 py-12 text-center">
-                              <p className="text-sm text-muted-foreground">No custom fields yet</p>
-                              <p className="text-xs text-muted-foreground mt-1">Add custom fields to capture additional information</p>
-                              <button
-                                onClick={() => setShowAddFieldModal(true)}
-                                className="mt-4 px-5 py-2.5 bg-[#111827] text-white rounded-full text-sm font-medium hover:bg-[#1f2937] transition-colors inline-flex items-center gap-2"
-                              >
-                                <Plus className="w-4 h-4" />
-                                Add Field
-                              </button>
-                            </td>
-                          </tr>
-                        ) : (
-                          currentFields.map((field) => (
-                            <tr key={field.id} className="border-b border-[#F0F0F0] last:border-0">
-                              <td className="px-6 py-4 text-sm font-semibold text-[#111827]">{field.label}</td>
-                              <td className="px-6 py-4">
-                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
-                                  {FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase()}
-                                </span>
-                              </td>
-                              <td className="px-6 py-4">
-                                <div className="flex items-center justify-end gap-3">
-                                  <button
-                                    onClick={() => {
-                                      setEditingFieldId(field.id);
-                                      setEditingFieldData({
-                                        label: field.label,
-                                        type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String"
-                                      });
-                                    }}
-                                    className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                                    title="Edit field"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      if (confirm(`Are you sure you want to delete custom field "${field.label}"?`)) {
-                                        deleteCustomField(currentModule, field.id);
-                                        toast.success("Field deleted successfully");
-                                      }
-                                    }}
-                                    className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
-                                    title="Delete field"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                {/* UNIFIED CONTAINER: TAB BAR JOINED DIRECTLY WITH TABLE */}
+                <div className="bg-white rounded-xl border border-gray-200 shadow-2xs overflow-hidden">
+                  {/* Module Tabs Bar */}
+                  <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-gray-200 bg-white">
+                    {/* Rectangular Module Tabs (No Count Badges) */}
+                    <div className="flex items-center gap-1 overflow-x-auto">
+                      {[
+                        { id: "clients", label: "Clients", module: "client" },
+                        { id: "call-logs", label: "Call Logs", module: "call" },
+                        { id: "processes", label: "Processes", module: "process" },
+                        { id: "appointments", label: "Appointments", module: "appointment" },
+                        { id: "forms", label: "Forms", module: "appointment" },
+                        { id: "team", label: "Team", module: "organization" },
+                        { id: "scribe", label: "AI Scribe", module: "scribe" },
+                      ].map((m) => {
+                        const isSelected = customFieldsTab === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => setCustomFieldsTab(m.id as any)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                              isSelected
+                                ? "bg-[#111827] text-white shadow-xs"
+                                : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                            }`}
+                          >
+                            {m.label}
+                          </button>
                         );
-                      })()}
-                    </tbody>
-                  </table>
+                      })}
+                    </div>
+
+                    {/* Action Button inside Bar */}
+                    {layoutViewTab === "fields" ? (
+                      <button
+                        onClick={() => {
+                          setNewFieldData({
+                            label: "",
+                            key: "",
+                            type: "String / Text",
+                            sectionId: "",
+                            required: false,
+                            multiple: false,
+                            showAlways: true,
+                            enableTooltip: false,
+                            visibleToSelected: false,
+                            options: [
+                              { id: 1, label: "Option 1", value: "option_1" },
+                              { id: 2, label: "Option 2", value: "option_2" },
+                            ],
+                            tableColumns: [
+                              { id: "col_1", name: "Item Name", type: "Text" },
+                              { id: "col_2", name: "Quantity", type: "Number" },
+                              { id: "col_3", name: "Unit Price", type: "Money" },
+                            ],
+                          });
+                          setShowAddFieldDrawer(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Field
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          setNewSectionData({ title: "", description: "", iconName: "layers", fieldKeys: [] });
+                          setShowAddSectionDrawer(true);
+                        }}
+                        className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 ml-3"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add Section
+                      </button>
+                    )}
+                  </div>
+
+                  {/* TAB 1: CUSTOM FIELDS TABLE VIEW */}
+                  {layoutViewTab === "fields" && (
+                    <table className="w-full">
+                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
+                        <tr>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
+                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const currentFields = getCustomFields(currentModule);
+                          const sections = getAllSections(currentModule);
+
+                          const filteredFields = currentFields.filter((field) => {
+                            if (!layoutSearchQuery.trim()) return true;
+                            const q = layoutSearchQuery.toLowerCase();
+                            const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
+                            return (
+                              field.label.toLowerCase().includes(q) ||
+                              field.key.toLowerCase().includes(q) ||
+                              typeName.includes(q)
+                            );
+                          });
+
+                          return filteredFields.map((field) => {
+                            const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
+                            const typeName = FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+
+                            // Type badge style
+                            let typeBadgeStyle = "bg-blue-50 text-blue-700";
+                            let TypeIcon = Type;
+                            if (field.inputType === "table") { typeBadgeStyle = "bg-indigo-50 text-indigo-700"; TypeIcon = TableIcon; }
+                            else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                            else if (field.inputType === "select" || field.inputType === "list") { typeBadgeStyle = "bg-emerald-50 text-emerald-700"; TypeIcon = ClipboardList; }
+                            else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                            else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
+                            else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
+                            else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }
+                            else if (field.inputType === "textarea" || field.inputType === "richtext") { typeBadgeStyle = "bg-orange-50 text-orange-700"; TypeIcon = AlignLeft; }
+                            else if (field.inputType === "link" || field.inputType === "whatsapp_link") { typeBadgeStyle = "bg-sky-50 text-sky-700"; TypeIcon = LinkIcon; }
+                            else if (field.inputType === "yes_no") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = CheckCircle2; }
+                            else if (field.inputType === "file") { typeBadgeStyle = "bg-violet-50 text-violet-700"; TypeIcon = FileIcon; }
+                            else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
+                            else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
+
+                            return (
+                              <tr key={field.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
+                                <td className="px-5 py-3.5">
+                                  <span className="text-sm font-medium text-[#111827]">{field.label}</span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
+                                    <TypeIcon className="w-3.5 h-3.5" />
+                                    <span>{typeName}</span>
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  {field.required ? (
+                                    <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
+                                  ) : (
+                                    <span className="text-xs text-gray-400">Optional</span>
+                                  )}
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setEditingFieldId(field.id);
+                                        setEditingFieldData({
+                                          label: field.label,
+                                          type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
+                                          sectionId: assignedSection?.id || "",
+                                          required: field.required || false,
+                                          options: field.options || [
+                                            { id: 1, label: "Option 1", value: "option_1" },
+                                            { id: 2, label: "Option 2", value: "option_2" },
+                                          ],
+                                          tableColumns: field.tableColumns || [
+                                            { id: "col_1", name: "Item Name", type: "Text" },
+                                            { id: "col_2", name: "Quantity", type: "Number" },
+                                          ],
+                                        });
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                                      title="Edit field"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        if (confirm(`Delete field "${field.label}"?`)) {
+                                          deleteCustomField(currentModule, field.id);
+                                          toast.success("Field deleted");
+                                        }
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                      title="Delete field"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  )}
+
+                  {/* TAB 2: CUSTOM SECTIONS TABLE VIEW */}
+                  {layoutViewTab === "sections" && (
+                    <table className="w-full">
+                      <thead className="bg-[#F8FAFC] border-b border-gray-200">
+                        <tr>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
+                          <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          const allSecs = getAllSections(currentModule);
+
+                          const filteredSections = allSecs.filter((sec) => {
+                            if (!layoutSearchQuery.trim()) return true;
+                            const q = layoutSearchQuery.toLowerCase();
+                            return (
+                              sec.title.toLowerCase().includes(q) ||
+                              (sec.description && sec.description.toLowerCase().includes(q))
+                            );
+                          });
+
+                          return filteredSections.map((sec) => {
+                            const isSystem = sec.source === "system";
+                            const assignedFieldCount = (sec.fieldKeys || []).length;
+                            return (
+                              <tr key={sec.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
+                                <td className="px-5 py-3.5">
+                                  <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  {isSystem ? (
+                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">System</span>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">Custom</span>
+                                  )}
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <span className="text-xs text-gray-500 font-medium">
+                                    {assignedFieldCount} {assignedFieldCount === 1 ? 'field' : 'fields'}
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setEditingSectionId(sec.id);
+                                        setEditingSectionData({
+                                          title: sec.title,
+                                          description: sec.description || "",
+                                          iconName: sec.iconName || "layers",
+                                          fieldKeys: sec.fieldKeys || [],
+                                        });
+                                      }}
+                                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                                      title="Edit section"
+                                    >
+                                      <Edit className="w-3.5 h-3.5" />
+                                    </button>
+                                    {!isSystem ? (
+                                      <button
+                                        onClick={() => {
+                                          if (confirm(`Delete section "${sec.title}"?`)) {
+                                            deleteCustomSection(currentModule, sec.id);
+                                            toast.success("Section deleted");
+                                          }
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete section"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : <span className="w-7" />}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          });
+                        })()}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             )}
-
-
-
 
             {/* Audit Logs Tab */}
 
@@ -11115,216 +11402,913 @@ export default function Settings() {
           </div>
         </Modal>
 
-        {/* Add Custom Field Modal */}
-        {showAddFieldModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Create Custom Field</h3>
-                <button
-                  onClick={() => {
-                    setShowAddFieldModal(false);
-                    setNewFieldData({ label: "", key: "", type: "String", required: false, multiple: false, showAlways: true, enableTooltip: false, visibleToSelected: false });
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="w-5 h-5" />
+        {/* ====== ADD FIELD DRAWER ====== */}
+        {showAddFieldDrawer && (
+          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
+            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setShowAddFieldDrawer(false)} />
+            <div
+              className="flex flex-col bg-white"
+              style={{
+                width: '520px', height: '100vh',
+                boxShadow: '-4px 0 32px rgba(0,0,0,0.12)',
+                animation: 'slideInFromRight 240ms ease-out',
+                pointerEvents: 'auto',
+              }}
+            >
+              <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+              {/* Drawer Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-[#111827]">Add Custom Field</h2>
+                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
+                </div>
+                <button onClick={() => setShowAddFieldDrawer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
-              <div className="p-6 space-y-4">
+
+              {/* Drawer Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                {/* Field Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Name</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={newFieldData.label}
-                    onChange={(e) => setNewFieldData({ ...newFieldData, label: e.target.value })}
-                    placeholder="e.g. Insurance ID"
-                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const autoKey = val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                      setNewFieldData({ ...newFieldData, label: val, key: autoKey });
+                    }}
+                    placeholder="e.g. Policy Coverage"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                    autoFocus
                   />
+                  {newFieldData.key && (
+                    <p className="text-[11px] font-mono text-gray-400 mt-1">Key: <span className="text-gray-600">{newFieldData.key}</span></p>
+                  )}
                 </div>
+
+                {/* Field Type - Custom Styled Dropdown */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Type</label>
-                  <select
-                    value={newFieldData.type}
-                    onChange={(e) => setNewFieldData({ ...newFieldData, type: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white appearance-none bg-no-repeat bg-right pr-10"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
-                      backgroundPosition: 'right 0.5rem center',
-                      backgroundSize: '1.5em 1.5em',
-                    }}
-                  >
-                    <option value="String">String</option>
-                    <option value="List">List</option>
-                    <option value="Date/Time">Date/Time</option>
-                    <option value="Date">Date</option>
-                    <option value="Book a Resource">Book a Resource</option>
-                    <option value="Address">Address</option>
-                    <option value="Link">Link</option>
-                    <option value="File">File</option>
-                    <option value="Money">Money</option>
-                    <option value="Yes/No">Yes/No</option>
-                    <option value="Number">Number</option>
-                    <option value="WhatsApp Link">WhatsApp Link</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Type</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setFieldTypePickerOpen(!fieldTypePickerOpen)}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      <span className="font-medium text-[#111827]">{newFieldData.type}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${fieldTypePickerOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {fieldTypePickerOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        {([
+                          { group: 'Text', items: ['String / Text', 'Address / Text Area', 'Rich Text', 'Link', 'WhatsApp Link'] },
+                          { group: 'Numbers', items: ['Number', 'Money / Currency', 'Rating / Score'] },
+                          { group: 'Date & Time', items: ['Date', 'Date & Time'] },
+                          { group: 'Options', items: ['List (Dropdown)', 'Multi-Select', 'Yes / No'] },
+                          { group: 'Advanced', items: ['Table', 'Drawing / Signature', 'File / Attachment', 'User / Member'] },
+                        ] as { group: string; items: string[] }[]).map((grp) => (
+                          <div key={grp.group}>
+                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
+                            {grp.items.map((typeName) => (
+                              <button
+                                key={typeName}
+                                type="button"
+                                onClick={() => { setNewFieldData({ ...newFieldData, type: typeName }); setFieldTypePickerOpen(false); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between ${
+                                  newFieldData.type === typeName ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-[#111827]'
+                                }`}
+                              >
+                                <span>{typeName}</span>
+                                {newFieldData.type === typeName && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-3">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newFieldData.multiple || false}
-                      onChange={(e) => setNewFieldData({ ...newFieldData, multiple: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">Multiple</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newFieldData.showAlways !== undefined ? newFieldData.showAlways : true}
-                      onChange={(e) => setNewFieldData({ ...newFieldData, showAlways: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700 flex items-center gap-1">
-                      Show always
-                      <Info className="w-3 h-3 text-gray-400" />
-                    </span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newFieldData.enableTooltip || false}
-                      onChange={(e) => setNewFieldData({ ...newFieldData, enableTooltip: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">Enable field tooltip</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newFieldData.visibleToSelected || false}
-                      onChange={(e) => setNewFieldData({ ...newFieldData, visibleToSelected: e.target.checked })}
-                      className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                    />
-                    <span className="text-sm text-gray-700">Make this field visible to selected users only</span>
-                  </label>
-                </div>
-                <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowAddFieldModal(false);
-                      setNewFieldData({ label: "", key: "", type: "String", required: false, multiple: false, showAlways: true, enableTooltip: false, visibleToSelected: false });
-                    }}
-                    className="text-sm"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!newFieldData.label}
-                    onClick={() => {
-                      if (!newFieldData.label) {
-                        toast.error("Please enter a field name");
-                        return;
-                      }
-                      const key = newFieldData.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                      const inputType = FIELD_TYPE_MAP[newFieldData.type] || "text";
 
-                      addCustomField(currentModule, {
-                        label: newFieldData.label,
-                        key: key,
-                        module: currentModule,
-                        inputType: inputType,
-                        required: newFieldData.required,
-                        placeholder: `Enter ${newFieldData.label.toLowerCase()}`
-                      });
+                {/* ===== FIELD TYPE LIVE PREVIEW ===== */}
+                {(() => {
+                  const ft = newFieldData.type;
+                  const cols = newFieldData.tableColumns || [];
+                  const opts = newFieldData.options || [];
+                  return (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white">
+                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Preview — {ft}</span>
+                      </div>
+                      <div className="p-4">
 
-                      setShowAddFieldModal(false);
-                      setNewFieldData({ label: "", key: "", type: "String", required: false, multiple: false, showAlways: true, enableTooltip: false, visibleToSelected: false });
-                      toast.success("Custom field created successfully");
-                    }}
-                    className="text-sm bg-blue-600 hover:bg-blue-700"
-                  >
-                    Create Field
-                  </Button>
+                        {/* TEXT */}
+                        {ft === 'String / Text' && (
+                          <input disabled placeholder={newFieldData.label || 'Enter text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />
+                        )}
+
+                        {/* TEXT AREA */}
+                        {ft === 'Address / Text Area' && (
+                          <textarea disabled rows={3} placeholder={newFieldData.label || 'Enter address or long text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed resize-none" />
+                        )}
+
+                        {/* RICH TEXT */}
+                        {ft === 'Rich Text' && (
+                          <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
+                              {['B','I','U','—'].map(t => <span key={t} className="px-2 py-0.5 text-xs font-bold text-gray-500 hover:bg-gray-200 rounded cursor-not-allowed">{t}</span>)}
+                            </div>
+                            <div className="px-3 py-2 text-sm text-gray-400 min-h-[60px]">Rich text content here...</div>
+                          </div>
+                        )}
+
+                        {/* NUMBER */}
+                        {ft === 'Number' && (
+                          <input type="number" disabled placeholder="0" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />
+                        )}
+
+                        {/* MONEY */}
+                        {ft === 'Money / Currency' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">₹</span>
+                            <input type="number" disabled placeholder="0.00" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
+                          </div>
+                        )}
+
+                        {/* DATE */}
+                        {ft === 'Date' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
+                            <Calendar className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-400">DD / MM / YYYY</span>
+                          </div>
+                        )}
+
+                        {/* DATE TIME */}
+                        {ft === 'Date & Time' && (
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2 flex-1">
+                              <Calendar className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-400">DD / MM / YYYY</span>
+                            </div>
+                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
+                              <Clock className="w-4 h-4 text-gray-400" />
+                              <span className="text-sm text-gray-400">HH : MM</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* LIST DROPDOWN */}
+                        {ft === 'List (Dropdown)' && (
+                          <div className="flex items-center justify-between border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
+                            <span className="text-sm text-gray-400">{opts[0]?.label || 'Select an option'}</span>
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          </div>
+                        )}
+
+                        {/* MULTI SELECT */}
+                        {ft === 'Multi-Select' && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(opts.length ? opts : [{label:'Option 1'},{label:'Option 2'}]).map((o,i) => (
+                              <span key={i} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${i===0?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200'}`}>{o.label}</span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* YES NO */}
+                        {ft === 'Yes / No' && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-not-allowed">
+                              <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow" />
+                            </div>
+                            <span className="text-sm font-medium text-blue-700">Yes</span>
+                          </div>
+                        )}
+
+                        {/* RATING */}
+                        {ft === 'Rating / Score' && (
+                          <div className="flex items-center gap-1">
+                            {[1,2,3,4,5].map(s => <Star key={s} className={`w-6 h-6 ${s<=3?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}`} />)}
+                            <span className="text-sm text-gray-500 ml-2">3 / 5</span>
+                          </div>
+                        )}
+
+                        {/* LINK */}
+                        {ft === 'Link' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
+                            <LinkIcon className="w-4 h-4 text-gray-400" />
+                            <span className="text-sm text-gray-400">https://example.com</span>
+                          </div>
+                        )}
+
+                        {/* WHATSAPP */}
+                        {ft === 'WhatsApp Link' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">+91</span>
+                            <input disabled placeholder="9876543210" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
+                          </div>
+                        )}
+
+                        {/* FILE */}
+                        {ft === 'File / Attachment' && (
+                          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 bg-white">
+                            <FileIcon className="w-8 h-8 text-gray-300" />
+                            <span className="text-xs text-gray-400">Click to upload or drag & drop</span>
+                            <span className="text-[10px] text-gray-300">PDF, DOCX, JPG, PNG up to 10MB</span>
+                          </div>
+                        )}
+
+                        {/* USER MEMBER */}
+                        {ft === 'User / Member' && (
+                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><User className="w-3.5 h-3.5 text-blue-600" /></div>
+                            <span className="text-sm text-gray-400">Select team member</span>
+                            <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
+                          </div>
+                        )}
+
+                        {/* DRAWING / SIGNATURE */}
+                        {ft === 'Drawing / Signature' && (
+                          <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                                <PenTool className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Signature / Drawing Pad</span>
+                              </div>
+                              <button type="button" className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 flex items-center gap-1">
+                                <Eraser className="w-3 h-3" /> Clear
+                              </button>
+                            </div>
+                            <div className="p-4 flex flex-col items-center justify-center min-h-[90px] bg-slate-50/40 relative">
+                              <svg className="w-48 h-10 text-slate-700 opacity-60" viewBox="0 0 200 60" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M 15 40 Q 35 15 55 35 T 95 20 T 135 45 T 175 15 T 190 35" />
+                              </svg>
+                              <div className="w-full border-b border-dashed border-gray-300 mt-2" />
+                              <span className="text-[10px] text-gray-400 mt-1">Sign or draw above the line</span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* TABLE — fully interactive rows */}
+                        {ft === 'Table' && (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead className="bg-gray-50 border-b border-gray-200">
+                                  <tr>
+                                    {(cols.length ? cols : [{name:'Column 1'},{name:'Column 2'}]).map((col,ci) => (
+                                      <th key={ci} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-r border-gray-100 last:border-r-0">{col.name}</th>
+                                    ))}
+                                    <th className="px-3 py-2 w-8" />
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                  {tablePreviewRows.map((row, ri) => (
+                                    <tr key={ri} className="hover:bg-blue-50/30">
+                                      {(cols.length ? cols : [{name:'Column 1',id:'c1'},{name:'Column 2',id:'c2'}] as any[]).map((col: any, ci: number) => (
+                                        <td key={ci} className="border-r border-gray-100 last:border-r-0">
+                                          <input
+                                            value={row[col.id || col.name] || ''}
+                                            onChange={e => {
+                                              const updated = [...tablePreviewRows];
+                                              updated[ri] = { ...updated[ri], [col.id || col.name]: e.target.value };
+                                              setTablePreviewRows(updated);
+                                            }}
+                                            placeholder={col.name}
+                                            className="w-full px-3 py-2 text-xs bg-transparent focus:outline-none focus:bg-blue-50/40 transition-colors min-w-[100px]"
+                                          />
+                                        </td>
+                                      ))}
+                                      <td className="px-2 py-1 text-center">
+                                        <button type="button" onClick={() => setTablePreviewRows(tablePreviewRows.filter((_,i) => i !== ri))} className="p-1 text-gray-300 hover:text-red-400 cursor-pointer">
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div className="px-3 py-2 border-t border-gray-100">
+                              <button
+                                type="button"
+                                onClick={() => setTablePreviewRows([...tablePreviewRows, {}])}
+                                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                              >
+                                <Plus className="w-3.5 h-3.5" /> Add Row
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Options manager for List / Multi-Select */}
+                {(newFieldData.type === "List (Dropdown)" || newFieldData.type === "Multi-Select") && (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <span className="text-xs font-semibold text-gray-700">Options</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextId = (newFieldData.options?.length || 0) + 1;
+                          setNewFieldData({ ...newFieldData, options: [...(newFieldData.options || []), { id: nextId, label: `Option ${nextId}`, value: `option_${nextId}` }] });
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add
+                      </button>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {(newFieldData.options || []).map((opt, idx) => (
+                        <div key={opt.id} className="flex items-center gap-2 px-3 py-2">
+                          <span className="text-xs text-gray-400 w-5 text-center">{idx + 1}</span>
+                          <input
+                            type="text"
+                            value={opt.label}
+                            onChange={(e) => {
+                              const updated = [...(newFieldData.options || [])];
+                              updated[idx] = { ...updated[idx], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
+                              setNewFieldData({ ...newFieldData, options: updated });
+                            }}
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400"
+                            placeholder="Option label"
+                          />
+                          <button type="button" onClick={() => setNewFieldData({ ...newFieldData, options: (newFieldData.options || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Columns manager for Table */}
+                {newFieldData.type === "Table" && (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <span className="text-xs font-semibold text-gray-700">Table Columns</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextIdx = (newFieldData.tableColumns?.length || 0) + 1;
+                          setNewFieldData({ ...newFieldData, tableColumns: [...(newFieldData.tableColumns || []), { id: `col_${nextIdx}`, name: `Column ${nextIdx}`, type: "Text" }] });
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Add Column
+                      </button>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {(newFieldData.tableColumns || []).map((col, idx) => (
+                        <div key={col.id} className="flex items-center gap-2 px-3 py-2">
+                          <input
+                            type="text" value={col.name}
+                            onChange={(e) => { const u = [...(newFieldData.tableColumns || [])]; u[idx] = { ...u[idx], name: e.target.value }; setNewFieldData({ ...newFieldData, tableColumns: u }); }}
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400"
+                            placeholder="Column name"
+                          />
+                          <select
+                            value={col.type}
+                            onChange={(e) => { const u = [...(newFieldData.tableColumns || [])]; u[idx] = { ...u[idx], type: e.target.value }; setNewFieldData({ ...newFieldData, tableColumns: u }); }}
+                            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400 cursor-pointer"
+                          >
+                            <option>Text</option><option>Number</option><option>Money</option><option>Date</option><option>Select</option>
+                          </select>
+                          <button type="button" onClick={() => setNewFieldData({ ...newFieldData, tableColumns: (newFieldData.tableColumns || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer">
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Toggles */}
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                  {[
+                    { key: 'required', label: 'Required field' },
+                    { key: 'showAlways', label: 'Always show in profile view' },
+                    { key: 'visibleToSelected', label: 'Visible to selected users only' },
+                  ].map((toggle) => (
+                    <label key={toggle.key} className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={(newFieldData as any)[toggle.key] ?? false}
+                        onChange={(e) => setNewFieldData({ ...newFieldData, [toggle.key]: e.target.checked } as any)}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">{toggle.label}</span>
+                    </label>
+                  ))}
                 </div>
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                <button onClick={() => setShowAddFieldDrawer(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
+                <button
+                  disabled={!newFieldData.label.trim()}
+                  onClick={() => {
+                    if (!newFieldData.label.trim()) { toast.error("Please enter a field name"); return; }
+                    const key = newFieldData.key || newFieldData.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+                    addCustomField(currentModule, {
+                      label: newFieldData.label.trim(), key, module: currentModule,
+                      inputType: FIELD_TYPE_MAP[newFieldData.type] || 'text',
+                      sectionId: newFieldData.sectionId || undefined,
+                      required: newFieldData.required, options: newFieldData.options, tableColumns: newFieldData.tableColumns,
+                      placeholder: `Enter ${newFieldData.label.toLowerCase()}`,
+                    });
+                    setShowAddFieldDrawer(false);
+                    toast.success(`Field "${newFieldData.label}" created`);
+                  }}
+                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                >Create Field</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Edit Custom Field Modal */}
+        {/* ====== EDIT FIELD DRAWER ====== */}
         {editingFieldId !== null && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-            <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
-              <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">Edit Custom Field</h3>
-                <button
-                  onClick={() => setEditingFieldId(null)}
-                  className="text-gray-400 hover:text-gray-600 cursor-pointer"
-                >
-                  <X className="w-5 h-5" />
+          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
+            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setEditingFieldId(null)} />
+            <div
+              className="flex flex-col bg-white"
+              style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}
+            >
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-[#111827]">Edit Field</h2>
+                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
+                </div>
+                <button onClick={() => setEditingFieldId(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-gray-500" />
                 </button>
               </div>
-              <div className="p-6 space-y-4">
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Name</label>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Name</label>
                   <input
-                    type="text"
-                    value={editingFieldData.label}
+                    type="text" value={editingFieldData.label}
                     onChange={(e) => setEditingFieldData({ ...editingFieldData, label: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                   />
                 </div>
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Field Type</label>
-                  <select
-                    value={editingFieldData.type}
-                    onChange={(e) => setEditingFieldData({ ...editingFieldData, type: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white appearance-none bg-no-repeat bg-right pr-10"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3E%3Cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3E%3C/svg%3E")`,
-                      backgroundPosition: 'right 0.5rem center',
-                      backgroundSize: '1.5em 1.5em',
-                    }}
-                  >
-                    <option value="String">String</option>
-                    <option value="List">List</option>
-                    <option value="Date/Time">Date/Time</option>
-                    <option value="Date">Date</option>
-                    <option value="Book a Resource">Book a Resource</option>
-                    <option value="Address">Address</option>
-                    <option value="Link">Link</option>
-                    <option value="File">File</option>
-                    <option value="Money">Money</option>
-                    <option value="Yes/No">Yes/No</option>
-                    <option value="Number">Number</option>
-                    <option value="WhatsApp Link">WhatsApp Link</option>
-                  </select>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Type</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setEditFieldTypePickerOpen(!editFieldTypePickerOpen)}
+                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                    >
+                      <span className="font-medium text-[#111827]">{editingFieldData.type}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${editFieldTypePickerOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {editFieldTypePickerOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                        {([
+                          { group: 'Text', items: ['String / Text', 'Address / Text Area', 'Rich Text', 'Link', 'WhatsApp Link'] },
+                          { group: 'Numbers', items: ['Number', 'Money / Currency', 'Rating / Score'] },
+                          { group: 'Date & Time', items: ['Date', 'Date & Time'] },
+                          { group: 'Options', items: ['List (Dropdown)', 'Multi-Select', 'Yes / No'] },
+                          { group: 'Advanced', items: ['Table', 'Drawing / Signature', 'File / Attachment', 'User / Member'] },
+                        ] as { group: string; items: string[] }[]).map((grp) => (
+                          <div key={grp.group}>
+                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
+                            {grp.items.map((typeName) => (
+                              <button
+                                key={typeName} type="button"
+                                onClick={() => { setEditingFieldData({ ...editingFieldData, type: typeName }); setEditFieldTypePickerOpen(false); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between ${
+                                  editingFieldData.type === typeName ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-[#111827]'
+                                }`}
+                              >
+                                <span>{typeName}</span>
+                                {editingFieldData.type === typeName && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                              </button>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-end gap-2 pt-4 border-t border-gray-200">
-                  <Button variant="outline" onClick={() => setEditingFieldId(null)}>Cancel</Button>
-                  <Button
-                    variant="primary"
-                    disabled={!editingFieldData.label}
-                    onClick={() => {
-                      const inputType = FIELD_TYPE_MAP[editingFieldData.type] || "text";
-                      updateCustomField(currentModule, editingFieldId, {
-                        label: editingFieldData.label,
-                        inputType: inputType
-                      });
-                      setEditingFieldId(null);
-                      toast.success("Field updated successfully");
-                    }}
-                    className="text-sm bg-blue-600 hover:bg-blue-700"
-                  >
-                    Save Changes
-                  </Button>
+                {/* ===== FIELD TYPE LIVE PREVIEW (Edit) ===== */}
+                {(() => {
+                  const ft = editingFieldData.type;
+                  const cols = editingFieldData.tableColumns || [];
+                  const opts = editingFieldData.options || [];
+                  return (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 overflow-hidden">
+                      <div className="flex items-center px-4 py-2 border-b border-gray-100 bg-white">
+                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Preview — {ft}</span>
+                      </div>
+                      <div className="p-4">
+                        {ft === 'String / Text' && <input disabled placeholder={editingFieldData.label || 'Enter text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />}
+                        {ft === 'Address / Text Area' && <textarea disabled rows={3} placeholder="Enter address or long text..." className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed resize-none" />}
+                        {ft === 'Rich Text' && (
+                          <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
+                              {['B','I','U','—'].map(t => <span key={t} className="px-2 py-0.5 text-xs font-bold text-gray-500 rounded cursor-not-allowed">{t}</span>)}
+                            </div>
+                            <div className="px-3 py-2 text-sm text-gray-400 min-h-[60px]">Rich text content here...</div>
+                          </div>
+                        )}
+                        {ft === 'Number' && <input type="number" disabled placeholder="0" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />}
+                        {ft === 'Money / Currency' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">₹</span>
+                            <input type="number" disabled placeholder="0.00" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
+                          </div>
+                        )}
+                        {ft === 'Date' && <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><Calendar className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">DD / MM / YYYY</span></div>}
+                        {ft === 'Date & Time' && (
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2 flex-1"><Calendar className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">DD / MM / YYYY</span></div>
+                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><Clock className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">HH : MM</span></div>
+                          </div>
+                        )}
+                        {ft === 'List (Dropdown)' && (
+                          <div className="flex items-center justify-between border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
+                            <span className="text-sm text-gray-400">{opts[0]?.label || 'Select an option'}</span>
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          </div>
+                        )}
+                        {ft === 'Multi-Select' && (
+                          <div className="flex flex-wrap gap-1.5">
+                            {(opts.length ? opts : [{label:'Option 1'},{label:'Option 2'}]).map((o,i) => (
+                              <span key={i} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${i===0?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200'}`}>{o.label}</span>
+                            ))}
+                          </div>
+                        )}
+                        {ft === 'Yes / No' && (
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-not-allowed"><div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow" /></div>
+                            <span className="text-sm font-medium text-blue-700">Yes</span>
+                          </div>
+                        )}
+                        {ft === 'Rating / Score' && (
+                          <div className="flex items-center gap-1">
+                            {[1,2,3,4,5].map(s => <Star key={s} className={`w-6 h-6 ${s<=3?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}`} />)}
+                            <span className="text-sm text-gray-500 ml-2">3 / 5</span>
+                          </div>
+                        )}
+                        {ft === 'Link' && <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><LinkIcon className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">https://example.com</span></div>}
+                        {ft === 'WhatsApp Link' && (
+                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
+                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">+91</span>
+                            <input disabled placeholder="9876543210" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
+                          </div>
+                        )}
+                        {ft === 'File / Attachment' && (
+                          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 bg-white">
+                            <FileIcon className="w-8 h-8 text-gray-300" />
+                            <span className="text-xs text-gray-400">Click to upload or drag & drop</span>
+                            <span className="text-[10px] text-gray-300">PDF, DOCX, JPG, PNG up to 10MB</span>
+                          </div>
+                        )}
+                        {ft === 'User / Member' && (
+                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
+                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><User className="w-3.5 h-3.5 text-blue-600" /></div>
+                            <span className="text-sm text-gray-400">Select team member</span>
+                            <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
+                          </div>
+                        )}
+                        {ft === 'Drawing / Signature' && (
+                          <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
+                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
+                                <PenTool className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Signature / Drawing Pad</span>
+                              </div>
+                              <button type="button" className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 flex items-center gap-1">
+                                <Eraser className="w-3 h-3" /> Clear
+                              </button>
+                            </div>
+                            <div className="p-4 flex flex-col items-center justify-center min-h-[90px] bg-slate-50/40 relative">
+                              <svg className="w-48 h-10 text-slate-700 opacity-60" viewBox="0 0 200 60" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M 15 40 Q 35 15 55 35 T 95 20 T 135 45 T 175 15 T 190 35" />
+                              </svg>
+                              <div className="w-full border-b border-dashed border-gray-300 mt-2" />
+                              <span className="text-[10px] text-gray-400 mt-1">Sign or draw above the line</span>
+                            </div>
+                          </div>
+                        )}
+                        {ft === 'Table' && (
+                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs">
+                                <thead className="bg-gray-50 border-b border-gray-200">
+                                  <tr>
+                                    {(cols.length ? cols : [{name:'Column 1'},{name:'Column 2'}]).map((col,ci) => (
+                                      <th key={ci} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-r border-gray-100 last:border-r-0">{col.name}</th>
+                                    ))}
+                                    <th className="px-3 py-2 w-8" />
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                  {tablePreviewRows.map((row, ri) => (
+                                    <tr key={ri} className="hover:bg-blue-50/30">
+                                      {(cols.length ? cols : [{name:'Column 1',id:'c1'},{name:'Column 2',id:'c2'}] as any[]).map((col: any, ci: number) => (
+                                        <td key={ci} className="border-r border-gray-100 last:border-r-0">
+                                          <input value={row[col.id||col.name]||''} onChange={e => { const u=[...tablePreviewRows]; u[ri]={...u[ri],[col.id||col.name]:e.target.value}; setTablePreviewRows(u); }} placeholder={col.name} className="w-full px-3 py-2 text-xs bg-transparent focus:outline-none focus:bg-blue-50/40 transition-colors min-w-[80px]" />
+                                        </td>
+                                      ))}
+                                      <td className="px-2 py-1 text-center"><button type="button" onClick={() => setTablePreviewRows(tablePreviewRows.filter((_,i)=>i!==ri))} className="p-1 text-gray-300 hover:text-red-400 cursor-pointer"><X className="w-3 h-3" /></button></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <div className="px-3 py-2 border-t border-gray-100">
+                              <button type="button" onClick={() => setTablePreviewRows([...tablePreviewRows, {}])} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
+                                <Plus className="w-3.5 h-3.5" /> Add Row
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Options manager for List / Multi-Select */}
+                {(editingFieldData.type === "List (Dropdown)" || editingFieldData.type === "Multi-Select") && (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <span className="text-xs font-semibold text-gray-700">Options</span>
+                      <button type="button" onClick={() => { const nid = (editingFieldData.options?.length || 0) + 1; setEditingFieldData({ ...editingFieldData, options: [...(editingFieldData.options || []), { id: nid, label: `Option ${nid}`, value: `option_${nid}` }] }); }} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
+                        <Plus className="w-3.5 h-3.5" /> Add
+                      </button>
+                    </div>
+                    <div className="divide-y divide-gray-50">
+                      {(editingFieldData.options || []).map((opt, idx) => (
+                        <div key={opt.id} className="flex items-center gap-2 px-3 py-2">
+                          <span className="text-xs text-gray-400 w-5 text-center">{idx + 1}</span>
+                          <input type="text" value={opt.label}
+                            onChange={(e) => { const u = [...(editingFieldData.options || [])]; u[idx] = { ...u[idx], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') }; setEditingFieldData({ ...editingFieldData, options: u }); }}
+                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400" placeholder="Option label"
+                          />
+                          <button type="button" onClick={() => setEditingFieldData({ ...editingFieldData, options: (editingFieldData.options || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+
+                <div className="pt-2 border-t border-gray-100">
+                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input type="checkbox" checked={editingFieldData.required || false} onChange={(e) => setEditingFieldData({ ...editingFieldData, required: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span className="text-sm text-gray-700">Required field</span>
+                  </label>
                 </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                <button onClick={() => setEditingFieldId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
+                <button
+                  disabled={!editingFieldData.label.trim()}
+                  onClick={() => {
+                    updateCustomField(currentModule, editingFieldId, {
+                      label: editingFieldData.label.trim(),
+                      inputType: FIELD_TYPE_MAP[editingFieldData.type] || 'text',
+                      sectionId: editingFieldData.sectionId || undefined,
+                      required: editingFieldData.required,
+                      options: editingFieldData.options, tableColumns: editingFieldData.tableColumns,
+                    });
+                    setEditingFieldId(null);
+                    toast.success("Field updated");
+                  }}
+                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
+                >Save Changes</button>
               </div>
             </div>
           </div>
+        )}
+
+        {/* ====== ADD SECTION DRAWER ====== */}
+        {showAddSectionDrawer && (
+          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
+            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setShowAddSectionDrawer(false)} />
+            <div className="flex flex-col bg-white" style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-[#111827]">Add Custom Section</h2>
+                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
+                </div>
+                <button onClick={() => setShowAddSectionDrawer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name <span className="text-red-500">*</span></label>
+                  <input type="text" value={newSectionData.title} onChange={(e) => setNewSectionData({ ...newSectionData, title: e.target.value })} placeholder="e.g. Insurance & Billing" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" autoFocus />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
+                  <input type="text" value={newSectionData.description} onChange={(e) => setNewSectionData({ ...newSectionData, description: e.target.value })} placeholder="Optional subtitle" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                </div>
+                <div className="border-t border-gray-100 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700">Assigned Fields</label>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {newSectionData.fieldKeys.length} {newSectionData.fieldKeys.length === 1 ? 'field' : 'fields'} assigned
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSectionFieldPickerTarget("add")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Select Fields
+                    </button>
+                  </div>
+
+                  {newSectionData.fieldKeys.length === 0 ? (
+                    <div
+                      onClick={() => setSectionFieldPickerTarget("add")}
+                      className="p-5 border border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50/50 rounded-xl text-center cursor-pointer transition-colors"
+                    >
+                      <p className="text-xs text-gray-600 font-medium">No fields assigned yet</p>
+                      <p className="text-[11px] text-gray-400 mt-1">Click "Select Fields" to pick fields from this module</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50/80 border border-gray-200 rounded-xl max-h-48 overflow-y-auto">
+                      {newSectionData.fieldKeys.map((key) => {
+                        const found = getAllFields(currentModule).find((f) => f.key === key);
+                        const label = found ? found.label : key;
+                        return (
+                          <div
+                            key={key}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 text-[#111827] text-xs font-medium rounded-lg shadow-2xs"
+                          >
+                            <span>{label}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setNewSectionData({
+                                  ...newSectionData,
+                                  fieldKeys: newSectionData.fieldKeys.filter((k) => k !== key),
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                              title="Remove field"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                <button onClick={() => setShowAddSectionDrawer(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
+                <button
+                  disabled={!newSectionData.title.trim()}
+                  onClick={() => {
+                    if (!newSectionData.title.trim()) { toast.error("Please enter a section name"); return; }
+                    addCustomSection(currentModule, { title: newSectionData.title.trim(), description: newSectionData.description.trim() || undefined, iconName: "layers", module: currentModule, fieldKeys: newSectionData.fieldKeys });
+                    setShowAddSectionDrawer(false);
+                    toast.success(`Section "${newSectionData.title}" created`);
+                  }}
+                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
+                >Create Section</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ====== EDIT SECTION DRAWER ====== */}
+        {editingSectionId !== null && (
+          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
+            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setEditingSectionId(null)} />
+            <div className="flex flex-col bg-white" style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}>
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
+                <div>
+                  <h2 className="text-base font-bold text-[#111827]">Edit Section</h2>
+                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
+                </div>
+                <button onClick={() => setEditingSectionId(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name</label>
+                  <input type="text" value={editingSectionData.title} onChange={(e) => setEditingSectionData({ ...editingSectionData, title: e.target.value })} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
+                  <input type="text" value={editingSectionData.description} onChange={(e) => setEditingSectionData({ ...editingSectionData, description: e.target.value })} placeholder="Optional subtitle" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
+                </div>
+                <div className="border-t border-gray-100 pt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-700">Assigned Fields</label>
+                      <p className="text-[11px] text-gray-400 mt-0.5">
+                        {editingSectionData.fieldKeys.length} {editingSectionData.fieldKeys.length === 1 ? 'field' : 'fields'} assigned
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setSectionFieldPickerTarget("edit")}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Select Fields
+                    </button>
+                  </div>
+
+                  {editingSectionData.fieldKeys.length === 0 ? (
+                    <div
+                      onClick={() => setSectionFieldPickerTarget("edit")}
+                      className="p-5 border border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50/50 rounded-xl text-center cursor-pointer transition-colors"
+                    >
+                      <p className="text-xs text-gray-600 font-medium">No fields assigned yet</p>
+                      <p className="text-[11px] text-gray-400 mt-1">Click "Select Fields" to pick fields from this module</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50/80 border border-gray-200 rounded-xl max-h-48 overflow-y-auto">
+                      {editingSectionData.fieldKeys.map((key) => {
+                        const found = getAllFields(currentModule).find((f) => f.key === key);
+                        const label = found ? found.label : key;
+                        return (
+                          <div
+                            key={key}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 text-[#111827] text-xs font-medium rounded-lg shadow-2xs"
+                          >
+                            <span>{label}</span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSectionData({
+                                  ...editingSectionData,
+                                  fieldKeys: editingSectionData.fieldKeys.filter((k) => k !== key),
+                                });
+                              }}
+                              className="w-3.5 h-3.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
+                              title="Remove field"
+                            >
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
+                <button onClick={() => setEditingSectionId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
+                <button
+                  disabled={!editingSectionData.title.trim()}
+                  onClick={() => {
+                    updateCustomSection(currentModule, editingSectionId, { title: editingSectionData.title.trim(), description: editingSectionData.description.trim() || undefined, iconName: "layers", fieldKeys: editingSectionData.fieldKeys });
+                    setEditingSectionId(null);
+                    toast.success("Section updated");
+                  }}
+                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
+                >Save Changes</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Global Select Fields Modal for Custom Section Assignment */}
+        {sectionFieldPickerTarget && (
+          <SelectFieldsModal
+            initiallySelected={
+              sectionFieldPickerTarget === "add"
+                ? newSectionData.fieldKeys
+                : editingSectionData.fieldKeys
+            }
+            onlyModules={[currentModule]}
+            onClose={() => setSectionFieldPickerTarget(null)}
+            onApply={(selectedKeys) => {
+              if (sectionFieldPickerTarget === "add") {
+                setNewSectionData((prev) => ({ ...prev, fieldKeys: selectedKeys }));
+              } else {
+                setEditingSectionData((prev) => ({ ...prev, fieldKeys: selectedKeys }));
+              }
+              setSectionFieldPickerTarget(null);
+            }}
+          />
         )}
 
         {/* Business Profile Modal */}

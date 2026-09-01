@@ -13,6 +13,7 @@ import {
   User,
   ChevronDown,
   ChevronRight,
+  Layers
 } from "lucide-react";
 
 export interface SettingsSubnavProps {
@@ -36,14 +37,14 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
     (location.pathname === "/organizations"
       ? "organizations"
       : location.pathname === "/process"
-      ? "process-settings"
-      : location.pathname === "/web-forms"
-      ? "forms"
-      : location.pathname === "/knowledge-base"
-      ? "knowledge-base"
-      : location.pathname === "/profile"
-      ? "account"
-      : "organizations");
+        ? "process-settings"
+        : location.pathname === "/web-forms"
+          ? "forms"
+          : location.pathname === "/knowledge-base"
+            ? "knowledge-base"
+            : location.pathname === "/profile"
+              ? "account"
+              : "organizations");
 
   const handleItemClick = (item: any) => {
     if (item.isParent) {
@@ -78,9 +79,9 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
     },
     {
       id: "custom-fields",
-      label: "Custom Fields",
-      icon: ClipboardList,
-      path: "/settings?tab=custom-fields",
+      label: "Layout",
+      icon: Layers,
+      path: "/settings?tab=layout",
     },
     {
       id: "forms",
@@ -148,13 +149,12 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
               <button
                 type="button"
                 onClick={() => handleItemClick(item)}
-                className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${
-                  isActive && !item.isParent
-                    ? "text-white shadow-sm"
-                    : isActive && item.isParent
+                className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${isActive && !item.isParent
+                  ? "text-white shadow-sm"
+                  : isActive && item.isParent
                     ? "text-[#181e25] bg-slate-100/70"
                     : "text-[#45515e] hover:text-[#222222] hover:bg-slate-100/60"
-                }`}
+                  }`}
               >
                 {isActive && !item.isParent && (
                   <motion.div
@@ -166,11 +166,10 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
 
                 <div className="flex items-center gap-3 min-w-0">
                   <Icon
-                    className={`w-4 h-4 flex-shrink-0 transition-colors ${
-                      isActive && !item.isParent
-                        ? "text-white"
-                        : "text-slate-500"
-                    }`}
+                    className={`w-4 h-4 flex-shrink-0 transition-colors ${isActive && !item.isParent
+                      ? "text-white"
+                      : "text-slate-500"
+                      }`}
                   />
                   <span className="truncate">{item.label}</span>
                 </div>
@@ -201,11 +200,10 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
                             navigate(child.path);
                           }
                         }}
-                        className={`w-full text-left px-3 py-1.5 rounded-full text-xs transition-colors cursor-pointer flex items-center justify-between ${
-                          isChildActive
-                            ? "text-[#1456f0] bg-blue-50/80 font-bold"
-                            : "text-[#64748b] hover:text-[#222222] hover:bg-slate-100/50 font-medium"
-                        }`}
+                        className={`w-full text-left px-3 py-1.5 rounded-full text-xs transition-colors cursor-pointer flex items-center justify-between ${isChildActive
+                          ? "text-[#1456f0] bg-blue-50/80 font-bold"
+                          : "text-[#64748b] hover:text-[#222222] hover:bg-slate-100/50 font-medium"
+                          }`}
                       >
                         <span>{child.label}</span>
                         {isChildActive && (
