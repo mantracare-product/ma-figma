@@ -110,6 +110,22 @@ export interface SystemActivityEntry extends ActivityBase {
   direction?: "inbound" | "outbound";
 }
 
+export interface RcmActivityEntry extends ActivityBase {
+  type:
+    | "claim_submitted"
+    | "claim_denied"
+    | "claim_paid"
+    | "payment_posted"
+    | "statement_sent"
+    | "balance_updated"
+    | "eligibility_checked";
+  claimId?: string;
+  payerName?: string;
+  amount?: number;
+  reason?: string;
+  statusLabel?: string;
+}
+
 /** Discriminated union of all activity entry types */
 export type ActivityEntry =
   | CallActivityEntry
@@ -121,7 +137,8 @@ export type ActivityEntry =
   | StageActivityEntry
   | FieldUpdateActivityEntry
   | NoteActivityEntry
-  | SystemActivityEntry;
+  | SystemActivityEntry
+  | RcmActivityEntry;
 
 /**
  * Distributive Omit — applies Omit to each union member individually,

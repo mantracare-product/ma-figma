@@ -134,6 +134,21 @@ export default function CustomReportBuilderModal({
       name: "Messaging & WhatsApp",
       desc: "Outbound templates, message volume & bot containment",
     },
+    {
+      id: "claims",
+      name: "Claims & Adjudication (RCM)",
+      desc: "Electronic 837P claims, adjudication status, allowed amounts & timely filing",
+    },
+    {
+      id: "denials",
+      name: "Denials & CARC Analysis (RCM)",
+      desc: "Payer denial clusters, CARC/RARC codes, appeal drafts & at-risk balances",
+    },
+    {
+      id: "collections",
+      name: "Patient A/R & Remittances (RCM)",
+      desc: "7-bucket patient aging, 835 ERAs, and PR sequencing balances",
+    },
   ];
 
   const clientCustomFields = getAllFields("client");
@@ -175,6 +190,12 @@ export default function CustomReportBuilderModal({
         return ["member", "role", "calls", "appts", "rating", "status", "created", "responsible"];
       case "messaging":
         return ["id", "client", "channel", "status", "messages", "botContained", "created", "responsible"];
+      case "claims":
+        return ["id", "client", "payer", "serviceDate", "billed", "allowed", "paid", "patientResp", "status", "timelyDays"];
+      case "denials":
+        return ["id", "payer", "carc", "description", "amount", "status", "priority"];
+      case "collections":
+        return ["id", "client", "payer", "totalBalance", "invoiceableBalance", "agingBucket", "status"];
       default:
         return ["id", "client", "status", "created"];
     }

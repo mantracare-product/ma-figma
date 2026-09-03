@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { CustomSideDrawer } from "../ui/drawer";
 import { useInvoices } from "../../context/InvoiceContext";
+import { useRcm } from "../../context/RcmContext";
 import { getClientList } from "../../../lib/getClientList";
 import { MOCK_SERVICES } from "../../../lib/mockServicesData";
 import { getStoredServices } from "../../../lib/servicesStore";
@@ -87,6 +88,7 @@ export default function CreateInvoiceDrawer({
     addClientCredit,
     recordPayment,
   } = useInvoices();
+  const { patientBalances } = useRcm();
   const clientsList = getClientList();
 
   const [activeTab, setActiveTab] = useState<"general" | "activity" | "documents" | "payments">("general");
@@ -691,6 +693,40 @@ export default function CreateInvoiceDrawer({
                   </option>
                 ))}
               </select>
+
+              {(() => {
+                const prRecord = patientBalances.find((b) => b.clientId === selectedClientId);
+                if (!prRecord || prRecord.invoiceableBalance <= 0) return null;
+                return (
+                  <div className="mt-2.5 p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl flex items-center justify-between text-xs text-blue-950 animate-in fade-in">
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                      <span>
+                        <strong>Adjudicated Balance:</strong> ${prRecord.invoiceableBalance.toFixed(2)}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLineItems((prev) => [
+                          ...prev,
+                          {
+                            id: `li-pr-${Date.now()}`,
+                            description: `Patient Responsibility (Adjudicated - ${prRecord.primaryPayer})`,
+                            quantity: 1,
+                            unitPrice: prRecord.invoiceableBalance,
+                            total: prRecord.invoiceableBalance,
+                          },
+                        ]);
+                        toast.success("Imported patient responsibility into invoice line items");
+                      }}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-[11px] shadow-2xs transition-all"
+                    >
+                      + Import to Line Items
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* Due Date & Payment Mode Grid */}

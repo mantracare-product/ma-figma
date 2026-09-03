@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { ClientInvoice, InvoiceLineItem, InvoiceStatus, ReportDefinition, ReportDataSource, InvoiceFieldRule, InvoiceFieldRulesMap, Payment } from "../types/invoiceTypes";
 import { addActivityEntry } from "../../lib/activityLog";
 import { useFieldRegistry } from "./FieldRegistryContext";
+import { getStoredClaims, getStoredDenialClusters, getStoredPatientBalances } from "../../lib/rcmStore";
 
 interface CreateInvoiceOptions {
   appointmentId?: string;
@@ -1197,6 +1198,56 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       });
       return base;
+    }
+
+    if (dataSource === "claims") {
+      const storedClaims = getStoredClaims();
+      return storedClaims.map((c) => ({
+        id: c.id,
+        client: c.clientName,
+        payer: c.payerName,
+        serviceDate: c.serviceDate,
+        amount: c.billedAmount,
+        billed: c.billedAmount,
+        allowed: c.allowedAmount || 0,
+        paid: c.paidAmount || 0,
+        patientResp: c.patientResponsibility || 0,
+        timelyDays: c.timelyDaysRemaining,
+        status: c.status,
+        faultAttribution: c.faultAttribution || "none",
+        created: c.createdAt.split("T")[0],
+      }));
+    }
+
+    if (dataSource === "denials") {
+      const clusters = getStoredDenialClusters();
+      return clusters.map((cl) => ({
+        id: cl.id,
+        payer: cl.payerName,
+        carc: cl.carc.code,
+        description: cl.carc.description,
+        amount: cl.totalAmountAtRisk,
+        status: cl.status,
+        priority: cl.priority,
+        claimCount: cl.claimCount,
+        created: new Date().toISOString().split("T")[0],
+      }));
+    }
+
+    if (dataSource === "collections") {
+      const balances = getStoredPatientBalances();
+      return balances.map((b) => ({
+        id: b.id,
+        client: b.clientName,
+        payer: b.primaryPayer,
+        amount: b.totalBalance,
+        totalBalance: b.totalBalance,
+        invoiceableBalance: b.invoiceableBalance,
+        nonInvoiceableBalance: b.nonInvoiceableBalance,
+        agingBucket: b.agingBucket,
+        status: b.nonInvoiceableBalance > 0 ? "gated_denial" : "invoiceable",
+        created: new Date().toISOString().split("T")[0],
+      }));
     }
 
     return (MOCK_REPORT_ROWS[dataSource] || []).map((row) => ({ ...row }));

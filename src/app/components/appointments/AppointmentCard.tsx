@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Calendar, Clock, Check, X, Video, MessageCircle, Star, User, MoreVertical, CalendarIcon, XCircle, AlertCircle, Trash2 } from "lucide-react";
+import { Calendar, Clock, Check, X, Video, MessageCircle, Star, User, MoreVertical, CalendarIcon, XCircle, AlertCircle, Trash2, ShieldCheck, ShieldAlert, Shield, RefreshCw } from "lucide-react";
+import { useEligibility } from "../../context/RcmContext";
 import { toast } from "sonner";
 
 interface Appointment {
@@ -53,6 +54,15 @@ export default function AppointmentCard({
   onMarkComplete,
 }: AppointmentCardProps) {
   const [showMenu, setShowMenu] = useState(false);
+  const [showEligibilityPopover, setShowEligibilityPopover] = useState(false);
+  const { eligibilityChecks, recheckEligibility } = useEligibility();
+
+  const clientCheck = eligibilityChecks.find(
+    (c) =>
+      c.clientName.toLowerCase() === appointment.clientName.toLowerCase() ||
+      String(c.appointmentId) === String(appointment.id)
+  );
+  const elgStatus = clientCheck?.status || "pending";
 
   const formatDate = (date: string, time: string) => {
     const d = new Date(date + "T" + time);
@@ -201,8 +211,107 @@ export default function AppointmentCard({
           </div>
         </div>
 
-        {/* Status Dot & Three-Dot Menu */}
+        {/* Status Dot & Eligibility Badge & Three-Dot Menu */}
         <div className="flex items-center gap-2">
+          {/* Eligibility Badge */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowEligibilityPopover(!showEligibilityPopover)}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition-all hover:opacity-90 shadow-2xs"
+              style={{
+                fontFamily: "DM Sans, sans-serif",
+                backgroundColor:
+                  elgStatus === "active"
+                    ? "#DCFCE7"
+                    : elgStatus === "inactive" || elgStatus === "not_covered"
+                    ? "#FEE2E2"
+                    : elgStatus === "inconclusive"
+                    ? "#FEF3C7"
+                    : elgStatus === "self_pay"
+                    ? "#E0E7FF"
+                    : "#F1F5F9",
+                color:
+                  elgStatus === "active"
+                    ? "#166534"
+                    : elgStatus === "inactive" || elgStatus === "not_covered"
+                    ? "#991B1B"
+                    : elgStatus === "inconclusive"
+                    ? "#92400E"
+                    : elgStatus === "self_pay"
+                    ? "#3730A3"
+                    : "#475569",
+                border: "1px solid rgba(0,0,0,0.06)",
+              }}
+              title="Insurance Coverage Status"
+            >
+              {elgStatus === "active" ? (
+                <ShieldCheck className="w-3 h-3 text-emerald-600" />
+              ) : elgStatus === "inconclusive" || elgStatus === "inactive" ? (
+                <ShieldAlert className="w-3 h-3" />
+              ) : (
+                <Shield className="w-3 h-3" />
+              )}
+              <span>{elgStatus === "self_pay" ? "Self-Pay" : elgStatus.charAt(0).toUpperCase() + elgStatus.slice(1).replace("_", " ")}</span>
+            </button>
+
+            {/* Eligibility Detail Popover */}
+            {showEligibilityPopover && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowEligibilityPopover(false)}
+                />
+                <div
+                  className="absolute right-0 top-7 z-50 w-64 p-3 bg-white rounded-xl shadow-xl border border-slate-200 text-left"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-900">Insurance Verification</span>
+                    <span className="text-[10px] font-mono text-slate-400">RCM Pre-Visit</span>
+                  </div>
+                  <div className="py-2 space-y-1.5 text-xs text-slate-600">
+                    <div>
+                      <span className="text-slate-400">Payer:</span>{" "}
+                      <strong className="text-slate-800">{clientCheck?.payerName || "Unassigned"}</strong>
+                    </div>
+                    {clientCheck?.copayAmount !== undefined && (
+                      <div>
+                        <span className="text-slate-400">Estimated Copay:</span>{" "}
+                        <strong className="text-slate-800 font-mono">${clientCheck.copayAmount.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {clientCheck?.deductibleRemaining !== undefined && (
+                      <div>
+                        <span className="text-slate-400">Deductible Remaining:</span>{" "}
+                        <strong className="text-slate-800 font-mono">${clientCheck.deductibleRemaining.toFixed(2)}</strong>
+                      </div>
+                    )}
+                    {clientCheck?.inconclusiveReason && (
+                      <div className="p-1.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-800">
+                        {clientCheck.inconclusiveReason}
+                      </div>
+                    )}
+                  </div>
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (clientCheck) {
+                          recheckEligibility(clientCheck.id);
+                          setShowEligibilityPopover(false);
+                        }
+                      }}
+                      className="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-semibold transition-colors"
+                    >
+                      <RefreshCw className="w-3 h-3" /> Re-run Verification
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           {getStatusDot()}
           <button
             onClick={() => setShowMenu(!showMenu)}

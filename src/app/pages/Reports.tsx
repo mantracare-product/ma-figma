@@ -67,6 +67,34 @@ const PREBUILT_TEMPLATES: Array<{
     dataSource: "processes",
     fields: ["id", "client", "process", "stage", "status", "timeInStage"],
   },
+  {
+    id: "tpl-aging-ar",
+    name: "A/R Aging & Patient Balances",
+    desc: "7 standard aging buckets (0-30 to 366+), invoiceable PR vs denial-gated balances",
+    dataSource: "collections",
+    fields: ["id", "client", "payer", "totalBalance", "invoiceableBalance", "agingBucket", "status"],
+  },
+  {
+    id: "tpl-denials",
+    name: "Denial Root-Cause & CARC Analysis",
+    desc: "CARC/RARC denial clusters, total amount at risk, appeal drafts & settlement tracking",
+    dataSource: "denials",
+    fields: ["id", "payer", "carc", "description", "amount", "status", "priority"],
+  },
+  {
+    id: "tpl-claims",
+    name: "Claims Adjudication & Timely Filing",
+    desc: "Electronic 837P claims, timely filing countdown, clearinghouse status & allowed amounts",
+    dataSource: "claims",
+    fields: ["id", "client", "payer", "serviceDate", "billed", "allowed", "paid", "patientResp", "status", "timelyDays"],
+  },
+  {
+    id: "tpl-collections",
+    name: "Payment Posting & Remittance Summary",
+    desc: "835 ERA remittance lines, contractual adjustments, and copays posted to patient ledger",
+    dataSource: "collections",
+    fields: ["id", "client", "payer", "amount", "status"],
+  },
 ];
 
 export default function Reports() {

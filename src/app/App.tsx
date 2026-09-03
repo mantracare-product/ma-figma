@@ -11,6 +11,7 @@ import { SidebarProvider } from "./context/SidebarContext";
 import { ClientFieldsProvider } from "./context/ClientFieldsContext";
 import { FieldRegistryProvider } from "./context/FieldRegistryContext";
 import { InvoiceProvider } from "./context/InvoiceContext";
+import { RcmProvider } from "./context/RcmContext";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
@@ -26,10 +27,12 @@ export default function App() {
                   <FieldRegistryProvider>
                     <ClientFieldsProvider>
                       <InvoiceProvider>
-                        <DndProvider backend={HTML5Backend}>
-                          <RouterProvider router={router} />
-                          <Toaster position="bottom-right" />
-                        </DndProvider>
+                        <RcmProvider>
+                          <DndProvider backend={HTML5Backend}>
+                            <RouterProvider router={router} />
+                            <Toaster position="bottom-right" />
+                          </DndProvider>
+                        </RcmProvider>
                       </InvoiceProvider>
                     </ClientFieldsProvider>
                   </FieldRegistryProvider>

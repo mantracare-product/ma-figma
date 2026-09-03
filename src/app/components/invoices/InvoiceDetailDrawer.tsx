@@ -196,6 +196,14 @@ export default function InvoiceDetailDrawer({
                   <span className="text-xl font-bold text-gray-900" style={{ fontFamily: "Outfit, sans-serif" }}>
                     {invoice.id}
                   </span>
+                  {invoice.claimId && (
+                    <Link
+                      to={`/revenue-cycle/claims?search=${invoice.claimId}`}
+                      className="px-2.5 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-[10px] font-bold font-mono hover:bg-blue-100 transition-colors inline-flex items-center gap-1"
+                    >
+                      <FileCheck className="w-3 h-3" /> Claim: {invoice.claimId}
+                    </Link>
+                  )}
                   <InvoiceProgressBar
                     status={invoice.status}
                     onStatusChange={(newSt) => updateInvoiceStatus(invoice.id, newSt)}
@@ -445,11 +453,17 @@ export default function InvoiceDetailDrawer({
                   <span>${invoice.taxAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between pt-1.5 border-t border-slate-200 font-bold text-slate-900 text-sm">
-                  <span>Total</span>
+                  <span>Total Charges</span>
                   <span>${invoice.total.toFixed(2)}</span>
                 </div>
+                {invoice.insurancePaidAmount !== undefined && invoice.insurancePaidAmount > 0 && (
+                  <div className="flex justify-between pt-1 text-blue-700 font-semibold font-mono text-xs">
+                    <span>Insurance Remittance</span>
+                    <span>-${invoice.insurancePaidAmount.toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between pt-1 text-emerald-600 font-semibold">
-                  <span>Amount Paid</span>
+                  <span>Patient Paid</span>
                   <span>${(invoice.amountPaid || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold text-xs">

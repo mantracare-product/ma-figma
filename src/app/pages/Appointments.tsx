@@ -34,6 +34,7 @@ import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldMan
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
+import { useEncounters } from "../context/RcmContext";
 import { initialClients } from "./ClientProfile";
 
 interface Appointment {
@@ -81,6 +82,7 @@ const processStages: Record<string, string[]> = {
 
 export default function Appointments() {
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
+  const { createEncounterFromAppointment } = useEncounters();
   // Mock data
   const employees: Employee[] = [
     { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
@@ -633,6 +635,24 @@ export default function Appointments() {
 
   const handleStatusChange = (appointmentId: number, status: Appointment["status"]) => {
     setAppointments(appointments.map((a) => (a.id === appointmentId ? { ...a, status } : a)));
+    
+    // ── Track A -> Track B Seam: Completed Appointment generates billable Encounter ──
+    if (status === "completed") {
+      const apt = appointments.find((a) => a.id === appointmentId);
+      if (apt) {
+        createEncounterFromAppointment(
+          apt.id,
+          {
+            id: (apt as any).clientId || `CL-${apt.id}`,
+            name: apt.clientName,
+            email: apt.clientEmail,
+            phone: apt.clientPhone,
+          },
+          false // Will be 'pending_documentation' until Scribe/manual doc lock
+        );
+      }
+    }
+
     if (status === "cancelled") {
       const linkedInvoice = invoices.find(i => String(i.appointmentId) === String(appointmentId));
       if (linkedInvoice && linkedInvoice.status !== "paid") {
@@ -2111,10 +2131,7 @@ export default function Appointments() {
                           }
                         }}
                         onMarkComplete={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "completed", rating: 4 } : a
-                          ));
-                          toast.success("Appointment marked as completed");
+                          handleStatusChange(id, "completed");
                         }}
                       />
                     );

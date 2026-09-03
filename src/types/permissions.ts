@@ -17,6 +17,7 @@ export interface ItemPermissions {
   webForms: ModulePermissions;
   appointments: ModulePermissions;
   services: ModulePermissions;
+  revenueCycle?: ModulePermissions;
 
   // Dynamic: one entry per real process, keyed by process id.
   processInstances: Record<string, ModulePermissions>;

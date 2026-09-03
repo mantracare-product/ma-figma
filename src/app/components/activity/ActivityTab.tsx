@@ -4,7 +4,8 @@ import { toast } from "sonner";
 import {
   LogIn, ArrowRightCircle, CheckCircle2, Phone, MessageCircle, MessageSquare,
   Mail, Zap, Calendar, Pencil, Globe, PhoneIncoming, PhoneOutgoing, PhoneOff,
-  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings
+  MoreVertical, X, Clock, CalendarClock, ChevronRight, Send, FileText, Paperclip, Settings,
+  DollarSign, CreditCard, ShieldCheck,
 } from "lucide-react";
 import {
   appendActivity,
@@ -95,6 +96,10 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_booked: "Appointment Booked", process_completed: "Process Completed",
   website_message: "Website Message", website: "Website Message",
   form_submitted: "Form Submitted", note: "Note",
+  claim_submitted: "Claim Submitted", claim_denied: "Claim Denied",
+  claim_paid: "Claim Paid", payment_posted: "Payment Posted",
+  statement_sent: "Statement Sent", balance_updated: "Balance Updated",
+  eligibility_checked: "Eligibility Verified",
 };
 
 // ─── Status pill ──────────────────────────────────────────────────────────────
@@ -118,6 +123,8 @@ const STATUS_PILL: Record<string, { bg: string; color: string; label: string }> 
   bounced:    { bg: "#FEE2E2", color: "#DC2626", label: "Bounced" },
   cancelled:  { bg: "#F1F5F9", color: "#64748B", label: "Cancelled" },
   no_show:    { bg: "#FFF7ED", color: "#C2410C", label: "No Show" },
+  denied:     { bg: "#FEE2E2", color: "#DC2626", label: "Denied" },
+  paid:       { bg: "#DCFCE7", color: "#16A34A", label: "Paid" },
 };
 
 function StatusPill({ status }: { status?: string }) {
@@ -159,6 +166,13 @@ function ActivityIcon({ type, direction, status }: { type: string; direction?: s
     case "note":              return <FileText className={cls} />;
     case "website_message":
     case "website":           return <Globe className={cls} />;
+    case "claim_submitted":   return <Send className={cls} />;
+    case "claim_denied":      return <AlertTriangle className={cls} />;
+    case "claim_paid":        return <CheckCircle2 className={cls} />;
+    case "payment_posted":    return <CreditCard className={cls} />;
+    case "statement_sent":    return <DollarSign className={cls} />;
+    case "balance_updated":   return <DollarSign className={cls} />;
+    case "eligibility_checked": return <ShieldCheck className={cls} />;
     default:                  return <Pencil className={cls} />;
   }
 }

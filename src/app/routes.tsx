@@ -31,6 +31,23 @@ import ReferAndEarn from "./pages/ReferAndEarn";
 import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import AIScribeConsole from "./pages/AIScribeConsole";
+import RevenueCycleLayout from "./components/rcm/RevenueCycleLayout";
+import RevenueOverview from "./pages/rcm/RevenueOverview";
+import ClaimsList from "./pages/rcm/ClaimsList";
+import EncountersList from "./pages/rcm/EncountersList";
+import EligibilityWorklist from "./pages/rcm/EligibilityWorklist";
+import DenialBoard from "./pages/rcm/DenialBoard";
+import RejectionsWorklist from "./pages/rcm/RejectionsWorklist";
+import PaymentPostingWorklist from "./pages/rcm/PaymentPostingWorklist";
+import PendingDocsWorklist from "./pages/rcm/PendingDocsWorklist";
+import PatientBalances from "./pages/rcm/PatientBalances";
+import BillingHub from "./pages/rcm/BillingHub";
+import BillingRules from "./pages/rcm/BillingRules";
+import FeeSchedule from "./pages/rcm/FeeSchedule";
+import PriorAuthList from "./pages/rcm/PriorAuthList";
+import CredentialingList from "./pages/rcm/CredentialingList";
+import PayerPerformance from "./pages/rcm/PayerPerformance";
+import RevenueAnalysis from "./pages/rcm/RevenueAnalysis";
 
 export const router = createBrowserRouter([
   {
@@ -82,6 +99,29 @@ export const router = createBrowserRouter([
           { path: "guide", Component: GuidePageRoute },
           { path: "guide/:slug", Component: GuidePageRoute },
           { path: "refer-and-earn", Component: ReferAndEarn },
+          {
+            path: "revenue-cycle",
+            Component: RevenueCycleLayout,
+            children: [
+              { index: true, Component: RevenueOverview },
+              { path: "overview", Component: RevenueOverview },
+              { path: "payer-performance", Component: PayerPerformance },
+              { path: "revenue-analysis", Component: RevenueAnalysis },
+              { path: "eligibility", Component: EligibilityWorklist },
+              { path: "encounters", Component: EncountersList },
+              { path: "claims", Component: ClaimsList },
+              { path: "billing", Component: BillingHub },
+              { path: "patient-balances", Component: PatientBalances },
+              { path: "worklist/denials", Component: DenialBoard },
+              { path: "worklist/rejections", Component: RejectionsWorklist },
+              { path: "worklist/posting", Component: PaymentPostingWorklist },
+              { path: "worklist/pending-docs", Component: PendingDocsWorklist },
+              { path: "credentialing", Component: CredentialingList },
+              { path: "automation/rules", Component: BillingRules },
+              { path: "automation/prior-auth", Component: PriorAuthList },
+              { path: "automation/fee-schedule", Component: FeeSchedule },
+            ],
+          },
         ],
       },
     ],

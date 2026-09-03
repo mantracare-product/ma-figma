@@ -567,6 +567,15 @@ export const SYSTEM_SEEDS: Record<Exclude<FieldModule, "deal">, Omit<FieldDefini
     { key: "language", label: "Language", module: "client", inputType: "text", placeholder: "e.g. English", showAlways: true },
     { key: "country", label: "Country", module: "client", inputType: "text", placeholder: "e.g. United States", showAlways: true },
     { key: "responsible", label: "Responsible Person", module: "client", inputType: "select", placeholder: "Unassigned", showAlways: true },
+    // ── RCM Fields ───────────────────────────────────────────
+    { key: "claimStatus", label: "Active Claim Status", module: "client", inputType: "text", placeholder: "e.g. In Adjudication", showAlways: false },
+    { key: "balanceDue", label: "Patient Balance Due", module: "client", inputType: "money", placeholder: "$0.00", showAlways: false },
+    { key: "payerName", label: "Primary Insurance Payer", module: "client", inputType: "text", placeholder: "e.g. Blue Cross Blue Shield", showAlways: false },
+    { key: "lastDenialReason", label: "Last Denial Reason", module: "client", inputType: "text", placeholder: "e.g. CO-16 Missing Info", showAlways: false },
+    { key: "agingBucket", label: "A/R Aging Bucket", module: "client", inputType: "text", placeholder: "e.g. 31-60", showAlways: false },
+    { key: "faultAttribution", label: "Fault Attribution", module: "client", inputType: "text", placeholder: "Site Action Required", showAlways: false },
+    { key: "eligibilityStatus", label: "Eligibility Status", module: "client", inputType: "text", placeholder: "Active", showAlways: false },
+    { key: "documentationLocked", label: "Docs Locked", module: "client", inputType: "yes_no", placeholder: "Yes/No", showAlways: false },
   ],
   process: [
     { key: "process_name", label: "Process Name", module: "process", inputType: "text", placeholder: "Process name", showAlways: true },

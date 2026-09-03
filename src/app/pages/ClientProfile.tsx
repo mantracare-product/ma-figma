@@ -6,6 +6,7 @@ import {
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -29,6 +30,9 @@ import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../compone
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
 import { useInvoices } from "../context/InvoiceContext";
+import { useRcm } from "../context/RcmContext";
+import ClaimDetailDrawer from "../components/rcm/ClaimDetailDrawer";
+import { Claim } from "../types/rcmTypes";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
@@ -551,7 +555,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
 
   // All state variables verbatim from Clients.tsx drawer
-  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "documents" | "products" | "transcripts">("overview");
+  const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "billing" | "documents" | "products" | "transcripts">("overview");
+  const { claims: allRcmClaims, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility } = useRcm();
+  const [selectedRcmClaim, setSelectedRcmClaim] = useState<Claim | null>(null);
 
   // ── Transcripts Tab State ──
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
@@ -1340,6 +1346,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
                 { id: "invoices" as const, label: "Invoices" },
+                { id: "billing" as const, label: "Billing & Insurance" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "transcripts" as const, label: "Transcripts" },
                 { id: "products" as const, label: "Product/Services" },
@@ -2519,6 +2526,193 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             );
           })()}
 
+          {/* ── Billing & Insurance Tab (RCM) ── */}
+          {activeProfileTab === "billing" && (() => {
+            const clientEligibility = allRcmEligibility.find(
+              (e) => e.clientId === client.id || e.clientName.toLowerCase() === client.name.toLowerCase()
+            );
+            const clientBalance = allRcmBalances.find(
+              (b) => b.clientId === client.id || b.clientName.toLowerCase() === client.name.toLowerCase()
+            );
+            const clientClaims = allRcmClaims.filter(
+              (c) => c.clientId === client.id || c.clientName.toLowerCase() === client.name.toLowerCase()
+            );
+            const activeDenials = clientClaims.filter((c) => c.status === "denied");
+
+            return (
+              <div className="p-8 space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {/* Active Denial Alert Banner if applicable */}
+                {activeDenials.length > 0 && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-3 text-rose-950">
+                      <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold">
+                        !
+                      </div>
+                      <div>
+                        <h4 className="font-bold">Active Payer Denials Pending Resolution ({activeDenials.length})</h4>
+                        <p className="text-rose-800/80">
+                          {activeDenials.map((d) => `${d.id} (${d.denialCarc || "Denied"})`).join(", ")}. Patient statements are gated until settled.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/revenue-cycle/worklist/denials`)}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-2xs"
+                    >
+                      Open Denial Board
+                    </button>
+                  </div>
+                )}
+
+                {/* Top Metrics Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                  {/* Insurance Coverage */}
+                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Primary Insurance Policy
+                    </span>
+                    <div className="text-base font-bold text-slate-900">
+                      {clientEligibility?.payerName || clientBalance?.primaryPayer || "No Primary Payer Assigned"}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <span className="text-xs font-mono text-slate-500">
+                        ID: {clientEligibility?.memberId || "N/A"}
+                      </span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${
+                          clientEligibility?.status === "active"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : clientEligibility?.status === "inconclusive"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {clientEligibility?.status || "Unverified"}
+                      </span>
+                    </div>
+                    {clientEligibility?.copayAmount !== undefined && (
+                      <div className="text-xs text-slate-600 pt-1 font-mono">
+                        Copay: <strong>${clientEligibility.copayAmount.toFixed(2)}</strong> • Ded: $
+                        {(clientEligibility.deductibleRemaining || 0).toFixed(2)}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Balance Breakdown */}
+                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Patient Responsibility Ledger
+                    </span>
+                    <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
+                      ${(clientBalance?.totalBalance || 0).toFixed(2)}
+                    </div>
+                    <div className="text-xs text-slate-500 flex justify-between pt-1">
+                      <span>Invoiceable: ${ (clientBalance?.invoiceableBalance || 0).toFixed(2)}</span>
+                      <span>Aging: {clientBalance?.agingBucket || "0-30"}d</span>
+                    </div>
+                  </div>
+
+                  {/* Active Claims Velocity */}
+                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
+                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                      Claims in Lifecycle
+                    </span>
+                    <div className="text-2xl font-bold font-mono text-blue-700 tabular-nums">
+                      {clientClaims.length} Claims
+                    </div>
+                    <div className="text-xs text-slate-500 pt-1">
+                      {clientClaims.filter((c) => c.status === "paid").length} Settled •{" "}
+                      {clientClaims.filter((c) => c.status === "in_adjudication").length} In Adjudication
+                    </div>
+                  </div>
+                </div>
+
+                {/* Claims Table */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+                  <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Patient Claims & Encounter Packages
+                      </h4>
+                      <p className="text-xs text-slate-500">Click any claim to open full adjudication detail</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/revenue-cycle/claims?search=${encodeURIComponent(client.name)}`)}
+                      className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
+                    >
+                      View in RCM Claims Module <ExternalLink className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-400 font-bold uppercase text-[10px]">
+                          <th className="px-5 py-3">Claim ID</th>
+                          <th className="px-5 py-3">Service Date</th>
+                          <th className="px-5 py-3">Payer</th>
+                          <th className="px-5 py-3 text-right">Billed</th>
+                          <th className="px-5 py-3 text-right">Insurance Paid</th>
+                          <th className="px-5 py-3 text-right">Patient Due</th>
+                          <th className="px-5 py-3 text-center">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 font-sans">
+                        {clientClaims.length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="text-center py-8 text-slate-400">
+                              No claims filed for this patient record yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          clientClaims.map((cl) => (
+                            <tr
+                              key={cl.id}
+                              onClick={() => setSelectedRcmClaim(cl)}
+                              className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                            >
+                              <td className="px-5 py-3 font-mono font-bold text-blue-600">{cl.id}</td>
+                              <td className="px-5 py-3 font-mono text-slate-600">{cl.serviceDate}</td>
+                              <td className="px-5 py-3 text-slate-900 font-medium">{cl.payerName}</td>
+                              <td className="px-5 py-3 text-right font-mono font-bold text-slate-900 tabular-nums">
+                                ${cl.billedAmount.toFixed(2)}
+                              </td>
+                              <td className="px-5 py-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
+                                {cl.paidAmount !== undefined ? `$${cl.paidAmount.toFixed(2)}` : "$0.00"}
+                              </td>
+                              <td className="px-5 py-3 text-right font-mono font-bold text-blue-700 tabular-nums">
+                                {cl.patientResponsibility !== undefined
+                                  ? `$${cl.patientResponsibility.toFixed(2)}`
+                                  : "-"}
+                              </td>
+                              <td className="px-5 py-3 text-center">
+                                <span
+                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono ${
+                                    cl.status === "paid"
+                                      ? "bg-emerald-100 text-emerald-800"
+                                      : cl.status === "denied"
+                                      ? "bg-rose-100 text-rose-800"
+                                      : cl.status === "rejected"
+                                      ? "bg-red-100 text-red-900"
+                                      : "bg-slate-100 text-slate-700"
+                                  }`}
+                                >
+                                  {cl.status.replace("_", " ")}
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* ── Documents Tab ── */}
           {activeProfileTab === "documents" && (
             <DocumentsTab client={client} />
@@ -3524,6 +3718,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           )}
         </div>
       </div>
+
+      <ClaimDetailDrawer
+        claim={selectedRcmClaim}
+        isOpen={!!selectedRcmClaim}
+        onClose={() => setSelectedRcmClaim(null)}
+      />
     </>
   );
 }

@@ -25,6 +25,7 @@ import {
   Check,
   Plus,
   Stethoscope,
+  Landmark,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -71,6 +72,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/deals", label: "Processes", icon: RefreshCw },
     { path: "/call-logs", label: "Call Logs", icon: Phone },
     { path: "/appointments", label: "Appointments", icon: CalendarIcon },
+    { path: "/revenue-cycle", label: "Revenue Cycle", icon: Landmark },
     { path: "/scribe", label: "AI Scribe", icon: Stethoscope },
     { path: "/settings", label: "Settings", icon: Settings },
   ];

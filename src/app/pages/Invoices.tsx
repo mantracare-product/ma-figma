@@ -10,6 +10,7 @@ import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { toast } from "sonner";
+import { useNavigate } from "react-router";
 import {
   Search,
   Settings as SettingsIcon,
@@ -30,9 +31,11 @@ import {
   ChevronRight,
   ChevronsRight,
   FileText,
+  Shield,
 } from "lucide-react";
 
 export default function Invoices() {
+  const navigate = useNavigate();
   const { invoices, updateInvoiceStatus, sendInvoice, recordPayment, deleteInvoice, voidInvoice } = useInvoices();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -567,6 +570,18 @@ export default function Invoices() {
                               {inv.clientName}
                             </button>
                             <span className="text-xs text-slate-400 font-mono block">{inv.id}</span>
+                            {inv.claimId && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/revenue-cycle/claims?search=${inv.claimId}`);
+                                }}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 mt-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-mono font-bold transition-colors"
+                              >
+                                <Shield className="w-2.5 h-2.5 text-blue-600" /> Claim {inv.claimId}
+                              </button>
+                            )}
                           </td>
                         )}
 
@@ -953,6 +968,21 @@ export default function Invoices() {
                                   {inv.dueDate}
                                 </span>
                               </div>
+
+                              {inv.claimId && (
+                                <div className="mb-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      navigate(`/revenue-cycle/claims?search=${inv.claimId}`);
+                                    }}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded text-[10px] font-mono font-bold transition-colors"
+                                  >
+                                    <Shield className="w-2.5 h-2.5 text-blue-600" /> Claim {inv.claimId}
+                                  </button>
+                                </div>
+                              )}
 
                               {/* Row 5: Stage Progress Bar */}
                               <div className="flex items-center gap-1.5 mb-2 pt-1 border-t border-slate-100">

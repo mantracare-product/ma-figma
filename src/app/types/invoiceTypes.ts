@@ -39,6 +39,9 @@ export interface ClientInvoice {
   paidAt?: string;
   paymentLinkUrl?: string;    // e.g. "https://pay.mantraassist.mock/inv-1042"
   paymentMode?: string;       // e.g. "Bank Transfer", "Cash", "Card", "Insurance-EMI"
+  claimId?: string;           // RCM: present when invoice originated from a claim
+  encounterId?: string;       // RCM: links back to clinical encounter
+  insurancePaidAmount?: number; // RCM: amount covered by insurance before patient responsibility
 }
 
 export interface Payment {
@@ -85,7 +88,17 @@ export interface MockService {
   tax?: number;
 }
 
-export type ReportDataSource = "calls" | "appointments" | "revenue" | "clients" | "team" | "messaging" | "processes";
+export type ReportDataSource =
+  | "calls"
+  | "appointments"
+  | "revenue"
+  | "clients"
+  | "team"
+  | "messaging"
+  | "processes"
+  | "claims"
+  | "denials"
+  | "collections";
 
 export interface ReportDefinition {
   id: string;
