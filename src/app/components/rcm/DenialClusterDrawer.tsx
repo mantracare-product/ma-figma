@@ -229,7 +229,14 @@ export default function DenialClusterDrawer({
                 {cluster.claims.map((cl) => (
                   <tr key={cl.claimId} className="hover:bg-slate-50/80">
                     <td className="py-2 font-mono font-bold text-blue-700">{cl.claimId}</td>
-                    <td className="py-2 font-medium text-slate-900">{cl.clientName}</td>
+                    <td className="py-2 font-medium text-slate-900">
+                      <a
+                        href={`/clients/${cl.clientId}`}
+                        className="hover:text-blue-600 hover:underline font-semibold"
+                      >
+                        {cl.clientName}
+                      </a>
+                    </td>
                     <td className="py-2 text-slate-600 font-mono">{cl.serviceDate}</td>
                     <td className="py-2 text-right font-mono font-bold text-slate-900 tabular-nums">
                       ${cl.amount.toFixed(2)}

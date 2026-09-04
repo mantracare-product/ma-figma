@@ -6,6 +6,7 @@ import { getStoredServices } from "../../../lib/servicesStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
 import { ChevronDown, ChevronUp, Plus, Trash2, Receipt, User } from "lucide-react";
 import { initialClients } from "../../pages/ClientProfile";
+import { getClientList } from "../../../lib/getClientList";
 
 export interface ClientOption {
   id: number | string;
@@ -92,7 +93,24 @@ export default function ScheduleAppointmentDrawer({
     const list: ClientOption[] = [];
     const seenIds = new Set<string>();
 
-    // 1. First add passed clients prop
+    // 1. Add core clients from getClientList
+    const core = getClientList();
+    core.forEach((c) => {
+      const idKey = String(c.id);
+      if (!seenIds.has(idKey)) {
+        seenIds.add(idKey);
+        list.push({
+          id: c.id,
+          name: c.name,
+          email: c.email || "",
+          phone: c.phoneNumber || "",
+          status: "Active",
+          avatar: c.name?.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2),
+        });
+      }
+    });
+
+    // 2. Add passed clients prop
     if (clients && clients.length > 0) {
       clients.forEach((c) => {
         const idKey = String(c.id);
@@ -103,7 +121,7 @@ export default function ScheduleAppointmentDrawer({
       });
     }
 
-    // 2. Load from sessionStorage and fallback initialClients
+    // 3. Load from sessionStorage and fallback initialClients
     try {
       const raw = sessionStorage.getItem("clients");
       const loaded = raw ? JSON.parse(raw) : initialClients;
@@ -129,7 +147,7 @@ export default function ScheduleAppointmentDrawer({
       // ignore
     }
 
-    // 3. Ensure selected client is always present
+    // 4. Ensure selected client is always present
     if (values.client && !seenIds.has(String(values.client.id))) {
       list.unshift(values.client);
     }

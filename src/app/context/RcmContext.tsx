@@ -9,13 +9,29 @@ import {
   submitClaim as storeSubmitClaim,
   resubmitClaim as storeResubmitClaim,
   voidClaim as storeVoidClaim,
+  assignClaim as storeAssignClaim,
+  deferClaim as storeDeferClaim,
+  cancelDeferClaim as storeCancelDeferClaim,
   acceptScrubIssue as storeAcceptScrub,
   rejectScrubIssue as storeRejectScrub,
   updateDenialClusterStatus as storeUpdateCluster,
   saveAppealDraft as storeSaveAppeal,
   executePostingAction as storeExecutePosting,
+  cancelPatientBalance as storeCancelBalance,
+  writeOffPatientBalance as storeWriteOffBalance,
+  batchChargeSavedCards as storeBatchCharge,
   recheckEligibility as storeRecheckEligibility,
+  updateClientInsuranceInStore as storeUpdateInsurance,
   toggleScrubRule as storeToggleRule,
+  addScrubRule as storeAddRule,
+  updateScrubRule as storeUpdateRule,
+  addFeeScheduleItem as storeAddFee,
+  updateFeeScheduleItem as storeUpdateFee,
+  addPriorAuth as storeAddPriorAuth,
+  updatePriorAuth as storeUpdatePriorAuth,
+  deletePriorAuth as storeDeletePriorAuth,
+  addCredentialingRecord as storeAddCred,
+  updateCredentialingRecord as storeUpdateCred,
 } from "../../lib/rcmStore";
 import {
   EligibilityCheck,
@@ -30,6 +46,7 @@ import {
   CredentialingRecord,
   PayerPerformanceRow,
   PostingAction,
+  ClientInsurance,
 } from "../types/rcmTypes";
 import { useInvoices } from "./InvoiceContext";
 import { appendActivity } from "../../lib/activityEngine";
@@ -60,6 +77,9 @@ interface RcmContextValue {
   submitClaim: (claimId: string) => void;
   resubmitClaim: (claimId: string) => void;
   voidClaim: (claimId: string) => void;
+  assignClaim: (claimId: string, assignedTo: string) => void;
+  deferClaim: (claimId: string, deferReason: string, deferredUntil: string) => void;
+  cancelDeferClaim: (claimId: string) => void;
   acceptScrubIssue: (claimId: string, issueId: string) => void;
   rejectScrubIssue: (claimId: string, issueId: string, reason: string) => void;
   updateDenialClusterStatus: (
@@ -72,25 +92,36 @@ interface RcmContextValue {
     action: PostingAction,
     params?: { customNote?: string; adjustmentAmount?: number }
   ) => void;
+  cancelPatientBalance: (balanceId: string) => { success: boolean; message: string };
+  writeOffPatientBalance: (balanceId: string) => { success: boolean; message: string };
+  batchChargeSavedCards: (clientIds: string[], floor?: number, ceiling?: number) => { count: number; total: number; results: any[] };
   recheckEligibility: (checkId: string) => void;
+  updateClientInsurance: (clientId: string, clientName: string, insurance: ClientInsurance) => void;
   toggleScrubRule: (ruleId: string) => void;
+  addScrubRule: (rule: Partial<ScrubRule>) => ScrubRule;
+  updateScrubRule: (ruleId: string, patch: Partial<ScrubRule>) => void;
+  addFeeScheduleItem: (item: Partial<FeeScheduleItem>) => FeeScheduleItem;
+  updateFeeScheduleItem: (itemId: string, patch: Partial<FeeScheduleItem>) => void;
+  addPriorAuth: (record: Partial<PriorAuthRecord>) => PriorAuthRecord;
+  updatePriorAuth: (authId: string, patch: Partial<PriorAuthRecord>) => void;
+  deletePriorAuth: (authId: string) => void;
+  addCredentialingRecord: (record: Partial<CredentialingRecord>) => CredentialingRecord;
+  updateCredentialingRecord: (recordId: string, patch: Partial<CredentialingRecord>) => void;
   generatePatientStatement: (balanceId: string) => boolean;
 }
 
 const RcmContext = createContext<RcmContextValue | null>(null);
 
 export function RcmProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<RcmStoreState>(() => getStoredRcmState());
+  const [state, setState] = useState<RcmStoreState>(getStoredRcmState);
   const { invoices } = useInvoices();
 
   useEffect(() => {
-    const handleUpdate = () => {
+    const handleStoreUpdate = () => {
       setState(getStoredRcmState());
     };
-    window.addEventListener(RCM_STORE_EVENT, handleUpdate);
-    return () => {
-      window.removeEventListener(RCM_STORE_EVENT, handleUpdate);
-    };
+    window.addEventListener(RCM_STORE_EVENT, handleStoreUpdate);
+    return () => window.removeEventListener(RCM_STORE_EVENT, handleStoreUpdate);
   }, []);
 
   const createEncounterFromAppointment = useCallback(
@@ -100,162 +131,255 @@ export function RcmProvider({ children }: { children: ReactNode }) {
       documentationLocked = false,
       providerName = "Dr. Amanda Clark"
     ) => {
-      const encounter = storeCreateEncounter(
-        appointmentId,
-        clientInfo,
-        documentationLocked,
-        providerName
-      );
+      const enc = storeCreateEncounter(appointmentId, clientInfo, documentationLocked, providerName);
       appendActivity({
-        id: `act-enc-${Date.now()}`,
+        id: `act-${Date.now()}`,
         timestamp: new Date().toISOString(),
         clientId: clientInfo.id,
         createdBy: "system",
-        type: "process_entry",
-        details: {
-          primary: `Encounter #${encounter.id} created`,
-          secondary: documentationLocked ? "Ready to bill" : "Pending clinician documentation lock",
-        },
+        type: "field_update",
+        fieldLabel: "RCM Encounter Created",
+        newValue: `Encounter #${enc.id} created from Appointment #${appointmentId}. Status: ${enc.status}`,
       });
-      return encounter;
+      return enc;
     },
     []
   );
 
-  const lockEncounterDocumentation = useCallback((encounterId: string, source: "scribe" | "manual" = "manual") => {
-    storeLockDocumentation(encounterId, source);
-    toast.success("Documentation locked — Encounter is now Ready to Bill");
-  }, []);
+  const lockEncounterDocumentation = useCallback(
+    (encounterId: string, source: "scribe" | "manual" = "manual") => {
+      storeLockDocumentation(encounterId, source);
+      const curr = getStoredRcmState();
+      const enc = curr.encounters.find((e) => e.id === encounterId);
+      if (enc) {
+        appendActivity({
+          id: `act-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          clientId: enc.clientId,
+          createdBy: source === "scribe" ? "ai_scribe" : "user",
+          type: "field_update",
+          fieldLabel: "Documentation Signed & Locked",
+          newValue: `Encounter #${encounterId} documentation locked via ${source}. Claim ready for billing.`,
+        });
+      }
+      toast.success(`Documentation locked for Encounter ${encounterId}`);
+    },
+    []
+  );
 
   const submitClaim = useCallback((claimId: string) => {
     storeSubmitClaim(claimId);
-    appendActivity({
-      id: `act-clm-${Date.now()}`,
-      timestamp: new Date().toISOString(),
-      createdBy: "user",
-      type: "field_update",
-      fieldLabel: "Claim Submission",
-      newValue: `Submitted to Clearinghouse (Claim #${claimId})`,
-    });
-    toast.success(`Claim ${claimId} successfully submitted to Clearinghouse`);
+    const curr = getStoredRcmState();
+    const cl = curr.claims.find((c) => c.id === claimId);
+    if (cl) {
+      appendActivity({
+        id: `act-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        clientId: cl.clientId,
+        createdBy: "user",
+        type: "field_update",
+        fieldLabel: "Claim Submitted (EDI 837)",
+        newValue: `Claim #${claimId} ($${cl.billedAmount}) sent to ${cl.payerName}.`,
+      });
+    }
+    toast.success(`Claim ${claimId} submitted to clearinghouse`);
   }, []);
 
   const resubmitClaim = useCallback((claimId: string) => {
     storeResubmitClaim(claimId);
-    toast.success(`Claim ${claimId} resubmitted with corrected billing data`);
+    const curr = getStoredRcmState();
+    const cl = curr.claims.find((c) => c.id === claimId);
+    if (cl) {
+      appendActivity({
+        id: `act-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        clientId: cl.clientId,
+        createdBy: "user",
+        type: "field_update",
+        fieldLabel: "Claim Resubmitted",
+        newValue: `Claim #${claimId} resubmitted to ${cl.payerName} after correction.`,
+      });
+    }
+    toast.success(`Claim ${claimId} resubmitted successfully`);
   }, []);
 
   const voidClaim = useCallback((claimId: string) => {
     storeVoidClaim(claimId);
-    toast.info(`Claim ${claimId} marked as void`);
+    toast.info(`Claim ${claimId} voided`);
+  }, []);
+
+  const assignClaim = useCallback((claimId: string, assignedTo: string) => {
+    storeAssignClaim(claimId, assignedTo);
+    toast.success(`Claim ${claimId} assigned to ${assignedTo}`);
+  }, []);
+
+  const deferClaim = useCallback((claimId: string, deferReason: string, deferredUntil: string) => {
+    storeDeferClaim(claimId, deferReason, deferredUntil);
+    toast.info(`Claim ${claimId} deferred until ${deferredUntil}`);
+  }, []);
+
+  const cancelDeferClaim = useCallback((claimId: string) => {
+    storeCancelDeferClaim(claimId);
+    toast.success(`Deferral removed for Claim ${claimId}`);
   }, []);
 
   const acceptScrubIssue = useCallback((claimId: string, issueId: string) => {
     storeAcceptScrub(claimId, issueId);
-    toast.success("AI scrub proposal accepted");
+    toast.success("AI scrub fix accepted and applied");
   }, []);
 
   const rejectScrubIssue = useCallback((claimId: string, issueId: string, reason: string) => {
     storeRejectScrub(claimId, issueId, reason);
-    toast.info("Scrub issue dismissed with audit note");
+    toast.info("Scrub suggestion dismissed with reason recorded");
   }, []);
 
   const updateDenialClusterStatus = useCallback(
     (clusterId: string, newStatus: "denied" | "under_review" | "resubmitted" | "reconciled") => {
       storeUpdateCluster(clusterId, newStatus);
-      toast.success(`Denial Cluster updated to ${newStatus.replace("_", " ")}`);
+      toast.success(`Cluster ${clusterId} moved to ${newStatus.replace("_", " ")}`);
     },
     []
   );
 
   const saveAppealDraft = useCallback((clusterId: string, newDraft: string) => {
     storeSaveAppeal(clusterId, newDraft);
-    toast.success("AI Appeal Letter draft saved");
+    toast.success("Appeal letter template updated");
   }, []);
 
   const executePostingAction = useCallback(
     (remittanceId: string, action: PostingAction, params?: { customNote?: string; adjustmentAmount?: number }) => {
       storeExecutePosting(remittanceId, action, params);
-      toast.success(`Remittance posted with action: ${action.replace(/_/g, " ")}`);
+      toast.success(`Posting action '${action.replace("_", " ")}' executed`);
     },
     []
   );
 
+  const cancelPatientBalance = useCallback((balanceId: string) => {
+    const res = storeCancelBalance(balanceId);
+    if (res.success) {
+      toast.success(res.message);
+    } else {
+      toast.error(res.message);
+    }
+    return res;
+  }, []);
+
+  const writeOffPatientBalance = useCallback((balanceId: string) => {
+    const res = storeWriteOffBalance(balanceId);
+    toast.success(res.message);
+    return res;
+  }, []);
+
+  const batchChargeSavedCards = useCallback((clientIds: string[], floor = 20, ceiling = 500) => {
+    const res = storeBatchCharge(clientIds, floor, ceiling);
+    toast.success(`Charged ${res.count} patients a total of $${res.total.toFixed(2)}`);
+    return res;
+  }, []);
+
   const recheckEligibility = useCallback((checkId: string) => {
     storeRecheckEligibility(checkId);
-    toast.success("Eligibility re-verified successfully");
+    toast.success("Eligibility re-verified. Coverage active.");
+  }, []);
+
+  const updateClientInsurance = useCallback((clientId: string, clientName: string, insurance: ClientInsurance) => {
+    storeUpdateInsurance(clientId, clientName, insurance);
+    toast.success(`Insurance coverage updated for ${clientName}`);
   }, []);
 
   const toggleScrubRule = useCallback((ruleId: string) => {
     storeToggleRule(ruleId);
   }, []);
 
-  // ─── Patient Responsibility Sequencing Rule ──────────────────────────────────
+  const addScrubRule = useCallback((rule: Partial<ScrubRule>) => {
+    const created = storeAddRule(rule);
+    toast.success(`Billing Rule ${created.ruleCode} created`);
+    return created;
+  }, []);
+
+  const updateScrubRule = useCallback((ruleId: string, patch: Partial<ScrubRule>) => {
+    storeUpdateRule(ruleId, patch);
+    toast.success("Billing rule updated");
+  }, []);
+
+  const addFeeScheduleItem = useCallback((item: Partial<FeeScheduleItem>) => {
+    const created = storeAddFee(item);
+    toast.success(`Fee code ${created.cptCode} added to schedule`);
+    return created;
+  }, []);
+
+  const updateFeeScheduleItem = useCallback((itemId: string, patch: Partial<FeeScheduleItem>) => {
+    storeUpdateFee(itemId, patch);
+    toast.success("Fee schedule code updated");
+  }, []);
+
+  const addPriorAuth = useCallback((record: Partial<PriorAuthRecord>) => {
+    const created = storeAddPriorAuth(record);
+    toast.success(`Prior Auth ${created.authNumber} recorded`);
+    return created;
+  }, []);
+
+  const updatePriorAuth = useCallback((authId: string, patch: Partial<PriorAuthRecord>) => {
+    storeUpdatePriorAuth(authId, patch);
+    toast.success("Prior auth updated");
+  }, []);
+
+  const deletePriorAuth = useCallback((authId: string) => {
+    storeDeletePriorAuth(authId);
+    toast.info("Prior auth removed");
+  }, []);
+
+  const addCredentialingRecord = useCallback((record: Partial<CredentialingRecord>) => {
+    const created = storeAddCred(record);
+    toast.success(`Credentialing entry created for ${created.providerName}`);
+    return created;
+  }, []);
+
+  const updateCredentialingRecord = useCallback((recordId: string, patch: Partial<CredentialingRecord>) => {
+    storeUpdateCred(recordId, patch);
+    toast.success("Credentialing record updated");
+  }, []);
+
   const generatePatientStatement = useCallback(
     (balanceId: string): boolean => {
       const curr = getStoredRcmState();
       const balance = curr.patientBalances.find((b) => b.id === balanceId);
-      if (!balance) {
-        toast.error("Balance record not found");
+      if (!balance || balance.invoiceableBalance <= 0) {
+        toast.error("No invoiceable patient balance available to generate statement.");
         return false;
       }
 
-      // Sequencing rule: Denied portion sitting alongside PR blocks statement
-      if (balance.nonInvoiceableBalance > 0) {
-        toast.error(
-          `Cannot generate statement: $${balance.nonInvoiceableBalance.toFixed(
-            2
-          )} in active denials is pending resolution. Patient Responsibility is not fully settled.`
-        );
-        return false;
-      }
-
-      if (balance.invoiceableBalance <= 0) {
-        toast.info("No outstanding patient responsibility to invoice");
-        return false;
-      }
-
-      // Create linked ClientInvoice in localStorage/sessionStorage
-      const invId = `INV-STMT-${Math.floor(1000 + Math.random() * 9000)}`;
+      const invId = `INV-PR-${Math.floor(1000 + Math.random() * 9000)}`;
       const newInvoice = {
         id: invId,
+        invoiceNumber: invId,
         clientId: balance.clientId,
         clientName: balance.clientName,
-        clientEmail: balance.clientEmail,
-        clientPhone: balance.clientPhone,
-        status: "sent" as const,
-        currency: "$",
-        lineItems: [
-          {
-            id: `li-${Date.now()}`,
-            source: "manual" as const,
-            description: `Patient Responsibility (Post-Adjudication: ${balance.primaryPayer})`,
-            quantity: 1,
-            unitPrice: balance.invoiceableBalance,
-            discountAmount: 0,
-            taxPercent: 0,
-          },
-        ],
+        clientEmail: balance.clientEmail || "",
+        clientPhone: balance.clientPhone || "",
+        date: new Date().toISOString().split("T")[0],
+        dueDate: new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0],
+        status: "pending" as const,
+        totalAmount: balance.invoiceableBalance,
+        paidAmount: 0,
         subtotal: balance.invoiceableBalance,
         discountAmount: 0,
-        taxAmount: 0,
-        total: balance.invoiceableBalance,
-        amountPaid: 0,
-        paymentType: "self_pay" as const,
-        createdAt: new Date().toISOString(),
-        createdBy: "system" as const,
-        dueDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
-        sentAt: new Date().toISOString(),
-        sentVia: "email" as const,
-        paymentLinkUrl: `https://pay.mantraassist.mock/stmt-${balance.clientId.toLowerCase()}`,
+        lineItems: [
+          {
+            id: `item-${Date.now()}`,
+            description: `Adjudicated Patient Responsibility — ${balance.primaryPayer}`,
+            quantity: 1,
+            unitPrice: balance.invoiceableBalance,
+            totalPrice: balance.invoiceableBalance,
+          },
+        ],
         claimId: balance.linkedClaimIds[0],
         encounterId: balance.linkedEncounterIds[0],
-        insurancePaidAmount: 250, // Adjudicated insurance amount
+        paymentLinkUrl: `https://pay.mantraassist.com/${invId}`,
       };
 
       try {
-        const rawInvoices = sessionStorage.getItem("invoices");
-        const parsedInvoices = rawInvoices ? JSON.parse(rawInvoices) : [];
+        const storedInvoices = sessionStorage.getItem("invoices");
+        const parsedInvoices = storedInvoices ? JSON.parse(storedInvoices) : [];
         parsedInvoices.unshift(newInvoice);
         sessionStorage.setItem("invoices", JSON.stringify(parsedInvoices));
         window.dispatchEvent(new Event("invoices_updated"));
@@ -263,12 +387,10 @@ export function RcmProvider({ children }: { children: ReactNode }) {
         console.error("Failed to append invoice", err);
       }
 
-      // Update patient balance record
       balance.statementCount += 1;
       balance.lastStatementDate = new Date().toISOString().split("T")[0];
       saveRcmState(curr);
 
-      // Record Activity
       appendActivity({
         id: `act-stmt-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -282,7 +404,7 @@ export function RcmProvider({ children }: { children: ReactNode }) {
       toast.success(`Patient Statement #${invId} generated and dispatched via payment link`);
       return true;
     },
-    [invoices]
+    []
   );
 
   const value: RcmContextValue = {
@@ -304,13 +426,29 @@ export function RcmProvider({ children }: { children: ReactNode }) {
     submitClaim,
     resubmitClaim,
     voidClaim,
+    assignClaim,
+    deferClaim,
+    cancelDeferClaim,
     acceptScrubIssue,
     rejectScrubIssue,
     updateDenialClusterStatus,
     saveAppealDraft,
     executePostingAction,
+    cancelPatientBalance,
+    writeOffPatientBalance,
+    batchChargeSavedCards,
     recheckEligibility,
+    updateClientInsurance,
     toggleScrubRule,
+    addScrubRule,
+    updateScrubRule,
+    addFeeScheduleItem,
+    updateFeeScheduleItem,
+    addPriorAuth,
+    updatePriorAuth,
+    deletePriorAuth,
+    addCredentialingRecord,
+    updateCredentialingRecord,
     generatePatientStatement,
   };
 
@@ -328,8 +466,28 @@ export function useRcm() {
 }
 
 export function useClaims() {
-  const { claims, submitClaim, resubmitClaim, voidClaim, acceptScrubIssue, rejectScrubIssue } = useRcm();
-  return { claims, submitClaim, resubmitClaim, voidClaim, acceptScrubIssue, rejectScrubIssue };
+  const {
+    claims,
+    submitClaim,
+    resubmitClaim,
+    voidClaim,
+    assignClaim,
+    deferClaim,
+    cancelDeferClaim,
+    acceptScrubIssue,
+    rejectScrubIssue,
+  } = useRcm();
+  return {
+    claims,
+    submitClaim,
+    resubmitClaim,
+    voidClaim,
+    assignClaim,
+    deferClaim,
+    cancelDeferClaim,
+    acceptScrubIssue,
+    rejectScrubIssue,
+  };
 }
 
 export function useEncounters() {
@@ -348,11 +506,23 @@ export function usePosting() {
 }
 
 export function usePatientAr() {
-  const { patientBalances, generatePatientStatement } = useRcm();
-  return { patientBalances, generatePatientStatement };
+  const {
+    patientBalances,
+    generatePatientStatement,
+    cancelPatientBalance,
+    writeOffPatientBalance,
+    batchChargeSavedCards,
+  } = useRcm();
+  return {
+    patientBalances,
+    generatePatientStatement,
+    cancelPatientBalance,
+    writeOffPatientBalance,
+    batchChargeSavedCards,
+  };
 }
 
 export function useEligibility() {
-  const { eligibilityChecks, recheckEligibility } = useRcm();
-  return { eligibilityChecks, recheckEligibility };
+  const { eligibilityChecks, recheckEligibility, updateClientInsurance } = useRcm();
+  return { eligibilityChecks, recheckEligibility, updateClientInsurance };
 }

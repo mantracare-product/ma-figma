@@ -3,12 +3,16 @@ import { useRcm } from "../../context/RcmContext";
 import { Encounter } from "../../types/rcmTypes";
 import EncounterDetailDrawer from "../../components/rcm/EncounterDetailDrawer";
 import PageHeader from "../../components/layout/PageHeader";
-import { Clock, CheckCircle2, Search, AlertCircle, Stethoscope } from "lucide-react";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
+import { Clock, CheckCircle2, Search, AlertCircle, Stethoscope, ExternalLink } from "lucide-react";
+import { useNavigate } from "react-router";
 
 export default function PendingDocsWorklist() {
+  const navigate = useNavigate();
   const { encounters, lockEncounterDocumentation } = useRcm();
   const [selectedEncounter, setSelectedEncounter] = useState<Encounter | null>(null);
   const [search, setSearch] = useState("");
+  const [showHelp, setShowHelp] = useState(false);
 
   const pendingEncounters = encounters
     .filter((e) => e.status === "pending_documentation")
@@ -22,21 +26,15 @@ export default function PendingDocsWorklist() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Pending Documentation Worklist
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Completed visits awaiting clinician signature or manual verification before claim generation
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Pending Documentation Worklist"
+        subtitle="Completed visits awaiting clinician signature or manual verification before claim generation"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Info Callout */}
-      <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+      <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 shadow-2xs">
         <Clock className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
         <div className="text-xs text-amber-950 space-y-1">
           <h4 className="font-bold">Zero Silent Unbilled Encounters</h4>
@@ -77,7 +75,19 @@ export default function PendingDocsWorklist() {
                     className="hover:bg-slate-50/60 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3 font-mono font-bold text-blue-600">{enc.id}</td>
-                    <td className="px-5 py-3 font-bold text-slate-900">{enc.clientName}</td>
+                    <td className="px-5 py-3">
+                      <div className="font-bold text-slate-900">{enc.clientName}</div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/clients/${enc.clientId}`);
+                        }}
+                        className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        {enc.clientId} <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
+                    </td>
                     <td className="px-5 py-3 text-slate-700">{enc.providerName}</td>
                     <td className="px-5 py-3 text-slate-600 font-mono">{enc.serviceDate}</td>
                     <td className="px-5 py-3 text-right font-mono font-bold tabular-nums">
@@ -115,6 +125,18 @@ export default function PendingDocsWorklist() {
         encounter={selectedEncounter}
         isOpen={!!selectedEncounter}
         onClose={() => setSelectedEncounter(null)}
+      />
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How the Documentation Gate Works"
+        summary="Clinical encounters must have locked, signed documentation before claim packages can be generated and submitted to clearinghouses."
+        bullets={[
+          "Zero Silent Drops: Visits are never forgotten; pending encounters remain visible in this queue until signed.",
+          "Aging Alerts: Encounters pending documentation for over 3 days are elevated with amber/red urgency badges.",
+          "Manual Override: Billing supervisors can unlock encounters or mark documentation complete with an audit log record.",
+        ]}
       />
     </div>
   );

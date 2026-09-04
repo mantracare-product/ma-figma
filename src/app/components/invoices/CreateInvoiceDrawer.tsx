@@ -46,6 +46,9 @@ interface CreateInvoiceDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   editingInvoice?: ClientInvoice | null;
+  preSelectedClientId?: string;
+  claimId?: string;
+  encounterId?: string;
 }
 
 interface StagedPayment {
@@ -76,6 +79,9 @@ export default function CreateInvoiceDrawer({
   isOpen,
   onClose,
   editingInvoice,
+  preSelectedClientId,
+  claimId,
+  encounterId,
 }: CreateInvoiceDrawerProps) {
   const {
     invoices,
@@ -166,7 +172,7 @@ export default function CreateInvoiceDrawer({
       setValidationErrors({});
       setActiveTab("general");
     } else {
-      setSelectedClientId(clientsList[0]?.id || "c-1");
+      setSelectedClientId(preSelectedClientId || clientsList[0]?.id || "c-1");
       const d = new Date();
       d.setDate(d.getDate() + 14);
       setDueDate(d.toISOString().split("T")[0]);
@@ -487,8 +493,12 @@ export default function CreateInvoiceDrawer({
         recordPayment(recordsToApply);
       }
 
-      if (calculatedStatus !== "draft") {
-        updateInvoice(created.id, { status: calculatedStatus });
+      if (claimId || encounterId || calculatedStatus !== "draft") {
+        updateInvoice(created.id, {
+          ...(calculatedStatus !== "draft" ? { status: calculatedStatus } : {}),
+          ...(claimId ? { claimId } : {}),
+          ...(encounterId ? { encounterId } : {}),
+        });
       }
       toast.success(`Invoice ${created.id} generated!`);
     }

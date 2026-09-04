@@ -36,9 +36,11 @@ import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { useEncounters } from "../context/RcmContext";
 import { initialClients } from "./ClientProfile";
+import { getClientList } from "../../lib/getClientList";
 
 interface Appointment {
   id: number;
+  clientId: string;
   clientName: string;
   clientEmail: string;
   clientPhone: string;
@@ -100,13 +102,34 @@ export default function Appointments() {
   ];
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = sessionStorage.getItem("appointments_v1");
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
+    const savedV2 = sessionStorage.getItem("appointments_v2");
+    if (savedV2) {
+      try { return JSON.parse(savedV2); } catch {}
+    }
+    // Migration: check legacy v1 and backfill missing clientId
+    const savedV1 = sessionStorage.getItem("appointments_v1");
+    if (savedV1) {
+      try {
+        const parsed = JSON.parse(savedV1);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const clientList = getClientList();
+          const migrated: Appointment[] = parsed.map((apt: any) => {
+            if (apt.clientId) return apt;
+            const match = clientList.find(c => c.name.toLowerCase() === (apt.clientName || "").toLowerCase());
+            return {
+              ...apt,
+              clientId: match?.id || "c-1",
+            };
+          });
+          sessionStorage.setItem("appointments_v2", JSON.stringify(migrated));
+          return migrated;
+        }
+      } catch {}
     }
     return [
       {
         id: 1,
+        clientId: "c-1",
         clientName: "James Wilson",
         clientEmail: "james.w@example.com",
         clientPhone: "+1 (555) 123-4567",
@@ -120,6 +143,7 @@ export default function Appointments() {
       },
       {
         id: 2,
+        clientId: "c-2",
         clientName: "Emma Brown",
         clientEmail: "emma.b@example.com",
         clientPhone: "+1 (555) 234-5678",
@@ -132,6 +156,7 @@ export default function Appointments() {
       },
       {
         id: 3,
+        clientId: "c-3",
         clientName: "Oliver Davis",
         clientEmail: "oliver.d@example.com",
         clientPhone: "+1 (555) 345-6789",
@@ -144,6 +169,7 @@ export default function Appointments() {
       },
       {
         id: 4,
+        clientId: "c-4",
         clientName: "Sophia Martinez",
         clientEmail: "sophia.m@example.com",
         clientPhone: "+1 (555) 456-7890",
@@ -206,7 +232,7 @@ export default function Appointments() {
   });
 
   useEffect(() => {
-    sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    sessionStorage.setItem("appointments_v2", JSON.stringify(appointments));
   }, [appointments]);
 
   const [searchParams] = useSearchParams();
@@ -475,6 +501,7 @@ export default function Appointments() {
           a.id === selectedAppointment.id
             ? {
                 ...a,
+                clientId: String(selectedClient.id),
                 clientName: selectedClient.name,
                 clientEmail: selectedClient.email,
                 clientPhone: selectedClient.phone,
@@ -495,6 +522,7 @@ export default function Appointments() {
     } else {
       const newAppointment: Appointment = {
         id: appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1,
+        clientId: String(selectedClient.id),
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phone,
@@ -584,9 +612,11 @@ export default function Appointments() {
     }
 
     const service = services.find((s) => s.id === appointmentFormData.serviceId);
+    const matchedClient = getClientList().find(c => c.name.toLowerCase() === appointmentFormData.clientName.toLowerCase());
     const newAppointment: Appointment = {
       id: Math.max(...appointments.map((a) => a.id)) + 1,
       ...appointmentFormData,
+      clientId: matchedClient?.id || "c-1",
       employeeId: Number(appointmentFormData.employeeId),
       serviceId: Number(appointmentFormData.serviceId),
       duration: service?.duration || 30,
@@ -640,10 +670,14 @@ export default function Appointments() {
     if (status === "completed") {
       const apt = appointments.find((a) => a.id === appointmentId);
       if (apt) {
+        if (!apt.clientId) {
+          toast.error(`Cannot create billing encounter: Appointment #${apt.id} lacks a valid client ID.`);
+          return;
+        }
         createEncounterFromAppointment(
           apt.id,
           {
-            id: (apt as any).clientId || `CL-${apt.id}`,
+            id: apt.clientId,
             name: apt.clientName,
             email: apt.clientEmail,
             phone: apt.clientPhone,

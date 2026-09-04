@@ -69,25 +69,19 @@ export default function DenialBoard() {
 
   return (
     <div className="space-y-6 flex flex-col h-full" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2
-            className="text-2xl font-bold text-[#1e293b] tracking-tight"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Denial Management Board
-          </h2>
-          <p className="text-sm text-slate-500 font-normal">
-            CARC/RARC clustered worklist with AI root-cause analysis and human-governed appeal packages
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-500 font-mono">
-            Total Active at Risk: <strong className="text-rose-700 font-bold">${totalAtRisk.toFixed(2)}</strong>
-          </span>
-        </div>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Denial Management Board"
+        subtitle="CARC/RARC clustered worklist with AI root-cause analysis and human-governed appeal packages"
+        action={
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-slate-500 font-mono">
+              Total Active at Risk: <strong className="text-rose-700 font-bold">${totalAtRisk.toFixed(2)}</strong>
+            </span>
+            <HowItWorksButton onClick={() => setShowHelp(true)} />
+          </div>
+        }
+      />
 
       {/* Kanban Board with Scroll Navigation (Reusing Invoices.tsx pattern lines 718-760) */}
       <div className="relative group/kanban flex-1 min-h-0">

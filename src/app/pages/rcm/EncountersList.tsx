@@ -3,6 +3,7 @@ import { useRcm } from "../../context/RcmContext";
 import { Encounter } from "../../types/rcmTypes";
 import EncounterDetailDrawer from "../../components/rcm/EncounterDetailDrawer";
 import PageHeader from "../../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
 import {
   FileCheck,
   CheckCircle2,
@@ -11,13 +12,17 @@ import {
   Check,
   Shield,
   Stethoscope,
+  ExternalLink,
 } from "lucide-react";
+import { useNavigate } from "react-router";
 
 export default function EncountersList() {
+  const navigate = useNavigate();
   const { encounters, lockEncounterDocumentation } = useRcm();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedEncounter, setSelectedEncounter] = useState<Encounter | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const filteredEncounters = encounters.filter((enc) => {
     const matchesSearch =
@@ -31,18 +36,12 @@ export default function EncountersList() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Encounters & Charge Capture
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Clinical visits requiring documentation lock to generate billable claim packages
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Encounters & Charge Capture"
+        subtitle="Clinical visits requiring documentation lock to generate billable clearinghouse claim packages"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
@@ -81,7 +80,7 @@ export default function EncountersList() {
         </div>
       </div>
 
-      {/* Encounters Table */}
+      {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
@@ -90,10 +89,10 @@ export default function EncountersList() {
                 <th className="px-5 py-3">Encounter ID</th>
                 <th className="px-5 py-3">Patient</th>
                 <th className="px-5 py-3">Clinician</th>
-                <th className="px-5 py-3">Service Date</th>
-                <th className="px-5 py-3">Procedures</th>
-                <th className="px-5 py-3 text-center">Docs Status</th>
-                <th className="px-5 py-3 text-center">Billing State</th>
+                <th className="px-5 py-3">DOS</th>
+                <th className="px-5 py-3">Procedure CPTs</th>
+                <th className="px-5 py-3 text-center">Docs Locked</th>
+                <th className="px-5 py-3 text-center">Encounter Status</th>
                 <th className="px-5 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -112,7 +111,19 @@ export default function EncountersList() {
                     className="hover:bg-blue-50/30 cursor-pointer transition-colors"
                   >
                     <td className="px-5 py-3 font-mono font-bold text-blue-600">{enc.id}</td>
-                    <td className="px-5 py-3 font-bold text-slate-900">{enc.clientName}</td>
+                    <td className="px-5 py-3">
+                      <div className="font-bold text-slate-900">{enc.clientName}</div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/clients/${enc.clientId}`);
+                        }}
+                        className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                      >
+                        {enc.clientId} <ExternalLink className="w-2.5 h-2.5" />
+                      </button>
+                    </td>
                     <td className="px-5 py-3 text-slate-700">{enc.providerName}</td>
                     <td className="px-5 py-3 text-slate-600 font-mono">{enc.serviceDate}</td>
                     <td className="px-5 py-3">
@@ -129,14 +140,12 @@ export default function EncountersList() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       {enc.documentationLocked ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 font-mono">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          Locked ({enc.documentationSource})
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-[11px]">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Locked ({enc.documentationSource || "scribe"})
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 font-mono">
-                          <Clock className="w-3 h-3 text-amber-600" />
-                          Pending
+                        <span className="inline-flex items-center gap-1 text-amber-700 font-semibold text-[11px]">
+                          <Clock className="w-3.5 h-3.5" /> Pending
                         </span>
                       )}
                     </td>
@@ -178,6 +187,18 @@ export default function EncountersList() {
         encounter={selectedEncounter}
         isOpen={!!selectedEncounter}
         onClose={() => setSelectedEncounter(null)}
+      />
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Encounters & Charge Capture Work"
+        summary="Encounters represent completed clinical visits. Once documentation is signed and locked, charges are automatically generated and queued for claim scrubbing."
+        bullets={[
+          "Documentation Lock Gate: Claims cannot be created until clinical notes are finalized by the provider or AI Scribe.",
+          "Charge Capture: Automatically extracts CPT codes and ICD-10 diagnostic pointers from the clinical record.",
+          "Ready to Bill Transition: Locking documentation moves the encounter status to Ready to Bill and instantiates the EDI claim record.",
+        ]}
       />
     </div>
   );

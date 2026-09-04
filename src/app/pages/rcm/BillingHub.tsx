@@ -42,27 +42,21 @@ export default function BillingHub() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="flex items-center justify-between">
-        <div className="space-y-1">
-          <h2
-            className="text-2xl font-bold text-[#1e293b] tracking-tight"
-            style={{ fontFamily: "Outfit, sans-serif" }}
+      {/* Page Header */}
+      <PageHeader
+        title="Invoicing & Insurance Billing Hub"
+        subtitle="Adjudicated patient statements linked to electronic claims and fee schedules"
+        action={
+          <button
+            type="button"
+            onClick={() => navigate("/invoices")}
+            className="flex items-center gap-1 px-3 py-2 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold shadow-xs"
           >
-            Invoicing & Insurance Billing Hub
-          </h2>
-          <p className="text-sm text-slate-500 font-normal">
-            Adjudicated patient statements linked to electronic claims and fee schedules
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate("/invoices")}
-          className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-full text-xs font-semibold shadow-xs transition-all"
-        >
-          Switch to Fast Self-Pay Invoices <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
+            <span>All Practice Invoices</span>
+            <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+        }
+      />
 
       {/* Cross-Module Integration Banner */}
       <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-center justify-between shadow-2xs">

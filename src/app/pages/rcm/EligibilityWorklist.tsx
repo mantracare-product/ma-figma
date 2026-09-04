@@ -1,6 +1,9 @@
 import React, { useState } from "react";
 import { useRcm } from "../../context/RcmContext";
 import PageHeader from "../../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
+import DrawerShell from "../../components/ui/DrawerShell";
+import { EligibilityCheck } from "../../types/rcmTypes";
 import {
   ShieldCheck,
   ShieldAlert,
@@ -11,6 +14,12 @@ import {
   Calendar,
   AlertTriangle,
   User,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  DollarSign,
+  Clock,
+  ArrowRight,
 } from "lucide-react";
 import { useNavigate } from "react-router";
 
@@ -19,6 +28,8 @@ export default function EligibilityWorklist() {
   const { eligibilityChecks, recheckEligibility } = useRcm();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<string>("all");
+  const [selectedCheck, setSelectedCheck] = useState<EligibilityCheck | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const filtered = eligibilityChecks.filter((c) => {
     const matchesSearch =
@@ -32,18 +43,12 @@ export default function EligibilityWorklist() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Pre-Visit Eligibility & Benefits Verification
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Verify payer coverage, copay requirements, and deductibles before appointment check-in
-        </p>
-      </div>
+      {/* Page Header with Help Button */}
+      <PageHeader
+        title="Pre-Visit Eligibility & Benefits Verification"
+        subtitle="EDI 270/271 real-time coverage checks, copay calculation, and deductible tracking before appointment check-in"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Overview stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -138,15 +143,22 @@ export default function EligibilityWorklist() {
             </thead>
             <tbody className="divide-y divide-slate-100 font-sans">
               {filtered.map((c) => (
-                <tr key={c.id} className="hover:bg-slate-50/60 transition-colors">
+                <tr
+                  key={c.id}
+                  onClick={() => setSelectedCheck(c)}
+                  className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                >
                   <td className="px-5 py-3">
                     <div className="font-bold text-slate-900">{c.clientName}</div>
                     <button
                       type="button"
-                      onClick={() => navigate(`/clients/${c.clientId}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/clients/${c.clientId}`);
+                      }}
                       className="text-[10px] text-blue-600 hover:underline inline-flex items-center gap-0.5"
                     >
-                      View Profile <ExternalLink className="w-2.5 h-2.5" />
+                      {c.clientId} <ExternalLink className="w-2.5 h-2.5" />
                     </button>
                   </td>
                   <td className="px-5 py-3">
@@ -189,7 +201,10 @@ export default function EligibilityWorklist() {
                   <td className="px-5 py-3 text-right">
                     <button
                       type="button"
-                      onClick={() => recheckEligibility(c.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        recheckEligibility(c.id);
+                      }}
                       className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
                       title="Re-run EDI 270/271 Check"
                     >
@@ -202,6 +217,158 @@ export default function EligibilityWorklist() {
           </table>
         </div>
       </div>
+
+      {/* Row-Click Detail Drawer using DrawerShell */}
+      {selectedCheck && (
+        <DrawerShell
+          isOpen={!!selectedCheck}
+          onClose={() => setSelectedCheck(null)}
+          title="Eligibility & Benefits Details"
+          subtitle={`EDI 271 Electronic Verification • ${selectedCheck.clientName}`}
+          footer={
+            <div className="flex items-center justify-between w-full">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(`/clients/${selectedCheck.clientId}?tab=billing&editInsurance=true`);
+                  setSelectedCheck(null);
+                }}
+                className="text-xs font-medium text-blue-600 hover:underline inline-flex items-center gap-1"
+              >
+                Edit Insurance in Profile <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCheck(null)}
+                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-xl text-xs font-semibold"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    recheckEligibility(selectedCheck.id);
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Re-run Verification
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-6 text-slate-800">
+            {/* Patient Header Card */}
+            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/80 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 text-base">{selectedCheck.clientName}</h3>
+                <span className="text-xs text-slate-500 font-mono">ID: {selectedCheck.clientId}</span>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-xs font-bold font-mono ${
+                  selectedCheck.status === "active"
+                    ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                    : selectedCheck.status === "inconclusive"
+                    ? "bg-amber-100 text-amber-800 border border-amber-300"
+                    : selectedCheck.status === "inactive" || selectedCheck.status === "not_covered"
+                    ? "bg-rose-100 text-rose-800 border border-rose-300"
+                    : "bg-indigo-100 text-indigo-800 border border-indigo-300"
+                }`}
+              >
+                {selectedCheck.status.toUpperCase().replace("_", " ")}
+              </span>
+            </div>
+
+            {/* Inconclusive Warning */}
+            {selectedCheck.inconclusiveReason && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
+                <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-900 space-y-1">
+                  <h4 className="font-bold">Verification Note / Mismatch</h4>
+                  <p className="leading-relaxed">{selectedCheck.inconclusiveReason}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Insurance Policy Details */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Policy & Subscriber Information
+              </h4>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-white border border-slate-200 rounded-xl">
+                  <span className="text-slate-400 block text-[10px]">Payer Name</span>
+                  <span className="font-semibold text-slate-900">{selectedCheck.payerName}</span>
+                </div>
+                <div className="p-3 bg-white border border-slate-200 rounded-xl">
+                  <span className="text-slate-400 block text-[10px]">Member / Policy ID</span>
+                  <span className="font-mono font-semibold text-slate-900">
+                    {selectedCheck.memberId || "N/A"}
+                  </span>
+                </div>
+                <div className="p-3 bg-white border border-slate-200 rounded-xl">
+                  <span className="text-slate-400 block text-[10px]">Appointment Date</span>
+                  <span className="font-semibold text-slate-900">{selectedCheck.appointmentDate}</span>
+                </div>
+                <div className="p-3 bg-white border border-slate-200 rounded-xl">
+                  <span className="text-slate-400 block text-[10px]">Last Checked</span>
+                  <span className="font-mono text-slate-700">{selectedCheck.lastCheckedDate}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Benefit Accumulators & Financials */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                Benefits & Cost Sharing
+              </h4>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3.5 bg-emerald-50/50 border border-emerald-100 rounded-xl">
+                  <span className="text-emerald-800/80 block text-[10px] font-medium">Copayment</span>
+                  <span className="text-lg font-bold font-mono text-emerald-900">
+                    ${(selectedCheck.copayAmount || 0).toFixed(2)}
+                  </span>
+                </div>
+                <div className="p-3.5 bg-blue-50/50 border border-blue-100 rounded-xl">
+                  <span className="text-blue-800/80 block text-[10px] font-medium">Deductible Remaining</span>
+                  <span className="text-lg font-bold font-mono text-blue-900">
+                    ${(selectedCheck.deductibleRemaining || 0).toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* EDI 271 Electronic Data Breakdown */}
+            <div className="space-y-3">
+              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                EDI 271 Response Envelope
+              </h4>
+              <div className="bg-slate-900 text-slate-200 p-4 rounded-xl font-mono text-[11px] space-y-1.5 overflow-x-auto">
+                <div className="text-slate-400"># X12 271 Health Care Eligibility Benefit Response</div>
+                <div>ISA*00* *00* *ZZ*MANTRA_RCM *01*PAYER_GATEWAY</div>
+                <div>EB*1*IND*30*PR*{selectedCheck.copayAmount || 0}***{selectedCheck.deductibleRemaining || 0}~</div>
+                <div className="text-emerald-400">REF*EJ*AUTH_VERIFIED_ACTIVE~</div>
+                <div className="text-slate-400">SE*14*0001~</div>
+              </div>
+            </div>
+          </div>
+        </DrawerShell>
+      )}
+
+      {/* How It Works Help Modal */}
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Eligibility & Benefits Verification Works"
+        summary="Automated real-time 270/271 eligibility inquiries verify client health insurance active status, calculate copays, and track deductible balances before visits."
+        bullets={[
+          "EDI 270 Inquiry: Dispatched automatically 48 hours prior to scheduled appointments to confirm coverage.",
+          "EDI 271 Parsing: Direct response decodes individual service copays (Office Visit 98, Health Benefit Plan 30) and deductible accumulators.",
+          "Inconclusive Resolution: Flags demographic mismatches (subscriber DOB, spelling, member ID typo) before the encounter happens.",
+          "Pre-Visit Collection: Empower front-desk staff to collect accurate copays and self-pay fees at check-in with zero guesswork.",
+        ]}
+      />
     </div>
   );
 }

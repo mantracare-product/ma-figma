@@ -48,6 +48,7 @@ import PriorAuthList from "./pages/rcm/PriorAuthList";
 import CredentialingList from "./pages/rcm/CredentialingList";
 import PayerPerformance from "./pages/rcm/PayerPerformance";
 import RevenueAnalysis from "./pages/rcm/RevenueAnalysis";
+import InsuranceIntake from "./pages/rcm/InsuranceIntake";
 
 export const router = createBrowserRouter([
   {
@@ -107,6 +108,7 @@ export const router = createBrowserRouter([
               { path: "overview", Component: RevenueOverview },
               { path: "payer-performance", Component: PayerPerformance },
               { path: "revenue-analysis", Component: RevenueAnalysis },
+              { path: "insurance-intake", Component: InsuranceIntake },
               { path: "eligibility", Component: EligibilityWorklist },
               { path: "encounters", Component: EncountersList },
               { path: "claims", Component: ClaimsList },

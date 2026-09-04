@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams, useNavigate, useLocation } from "react-router";
+import { useParams, useNavigate, useLocation, useSearchParams } from "react-router";
 import {
   Search, Plus, X, FileText, Calendar, ChevronLeft, Mail, MapPin, Clock,
   MessageSquare, MessageCircle, LogIn, ArrowRightCircle, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, CalendarClock,
@@ -30,9 +30,10 @@ import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../compone
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
 import { useInvoices } from "../context/InvoiceContext";
-import { useRcm } from "../context/RcmContext";
+import { useRcm, useEligibility } from "../context/RcmContext";
 import ClaimDetailDrawer from "../components/rcm/ClaimDetailDrawer";
-import { Claim } from "../types/rcmTypes";
+import ClientInsuranceEditor from "../components/rcm/ClientInsuranceEditor";
+import { Claim, ClientInsurance } from "../types/rcmTypes";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
 import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
@@ -557,7 +558,20 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "billing" | "documents" | "products" | "transcripts">("overview");
   const { claims: allRcmClaims, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility } = useRcm();
+  const { updateClientInsurance } = useEligibility();
   const [selectedRcmClaim, setSelectedRcmClaim] = useState<Claim | null>(null);
+  const [isEditingInsurance, setIsEditingInsurance] = useState(false);
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "billing") {
+      setActiveProfileTab("billing");
+    }
+    if (searchParams.get("editInsurance") === "true") {
+      setIsEditingInsurance(true);
+    }
+  }, [searchParams]);
 
   // ── Transcripts Tab State ──
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
@@ -2008,12 +2022,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
           {/* ── Appointments Tab ── */}
           {activeProfileTab === "appointments" && (() => {
-            const stored = sessionStorage.getItem("appointments_v1");
+            const stored = sessionStorage.getItem("appointments_v2") || sessionStorage.getItem("appointments_v1");
             const all: any[] = stored ? JSON.parse(stored) : [];
             const clientAppts = all.filter((a: any) =>
-              (client?.email && a.clientEmail && a.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
-              (client?.phone && a.clientPhone && a.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, "")) ||
-              (client?.name && a.clientName && a.clientName.toLowerCase() === client.name.toLowerCase())
+              String(a.clientId) === String(client?.id)
             );
 
             const getResolvedServiceName = (appt: any) => {
@@ -2528,15 +2540,9 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
           {/* ── Billing & Insurance Tab (RCM) ── */}
           {activeProfileTab === "billing" && (() => {
-            const clientEligibility = allRcmEligibility.find(
-              (e) => e.clientId === client.id || e.clientName.toLowerCase() === client.name.toLowerCase()
-            );
-            const clientBalance = allRcmBalances.find(
-              (b) => b.clientId === client.id || b.clientName.toLowerCase() === client.name.toLowerCase()
-            );
-            const clientClaims = allRcmClaims.filter(
-              (c) => c.clientId === client.id || c.clientName.toLowerCase() === client.name.toLowerCase()
-            );
+            const clientEligibility = allRcmEligibility.find((e) => e.clientId === client.id);
+            const clientBalance = allRcmBalances.find((b) => b.clientId === client.id);
+            const clientClaims = allRcmClaims.filter((c) => c.clientId === client.id);
             const activeDenials = clientClaims.filter((c) => c.status === "denied");
 
             return (
@@ -2558,7 +2564,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                     <button
                       type="button"
                       onClick={() => navigate(`/revenue-cycle/worklist/denials`)}
-                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-2xs"
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-2xs cursor-pointer"
                     >
                       Open Denial Board
                     </button>
@@ -2567,34 +2573,57 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
                 {/* Top Metrics Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {/* Insurance Coverage */}
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Primary Insurance Policy
-                    </span>
+                  {/* Insurance Coverage with Edit Action */}
+                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2 relative">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                        Primary Insurance Policy
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditingInsurance(true)}
+                        className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 hover:underline cursor-pointer"
+                      >
+                        {client.insurance?.payerName || clientEligibility?.payerName ? "Edit Insurance" : "+ Add Insurance"}
+                      </button>
+                    </div>
                     <div className="text-base font-bold text-slate-900">
-                      {clientEligibility?.payerName || clientBalance?.primaryPayer || "No Primary Payer Assigned"}
+                      {client.insurance?.payerName || clientEligibility?.payerName || "Missing Insurance"}
                     </div>
                     <div className="flex items-center gap-2 pt-1">
                       <span className="text-xs font-mono text-slate-500">
-                        ID: {clientEligibility?.memberId || "N/A"}
+                        ID: {client.insurance?.policyNumber || clientEligibility?.memberId || "N/A"}
                       </span>
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${
-                          clientEligibility?.status === "active"
+                          (client.insurance?.payerName === "Self Pay" || clientEligibility?.status === "self_pay")
+                            ? "bg-slate-100 text-slate-700"
+                            : clientEligibility?.status === "active"
                             ? "bg-emerald-100 text-emerald-800"
                             : clientEligibility?.status === "inconclusive"
                             ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-700"
+                            : "bg-rose-100 text-rose-700"
                         }`}
                       >
-                        {clientEligibility?.status || "Unverified"}
+                        {client.insurance?.payerName === "Self Pay"
+                          ? "Self Pay"
+                          : clientEligibility?.status || "Unverified"}
                       </span>
                     </div>
                     {clientEligibility?.copayAmount !== undefined && (
                       <div className="text-xs text-slate-600 pt-1 font-mono">
                         Copay: <strong>${clientEligibility.copayAmount.toFixed(2)}</strong> • Ded: $
                         {(clientEligibility.deductibleRemaining || 0).toFixed(2)}
+                      </div>
+                    )}
+                    {client.insurance?.guarantor && client.insurance.guarantor !== "self" && (
+                      <div className="text-[11px] text-slate-500 pt-1">
+                        Guarantor: <strong className="capitalize">{client.insurance.guarantor}</strong> ({client.insurance.guarantorDetails?.firstName} {client.insurance.guarantorDetails?.lastName})
+                      </div>
+                    )}
+                    {client.insurance?.requiresPriorAuth && (
+                      <div className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded inline-block">
+                        Requires Prior Auth
                       </div>
                     )}
                   </div>
@@ -2608,7 +2637,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       ${(clientBalance?.totalBalance || 0).toFixed(2)}
                     </div>
                     <div className="text-xs text-slate-500 flex justify-between pt-1">
-                      <span>Invoiceable: ${ (clientBalance?.invoiceableBalance || 0).toFixed(2)}</span>
+                      <span>Invoiceable: ${(clientBalance?.invoiceableBalance || 0).toFixed(2)}</span>
                       <span>Aging: {clientBalance?.agingBucket || "0-30"}d</span>
                     </div>
                   </div>
@@ -2724,13 +2753,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               if (!client) return false;
               const cId = String(client.id || "").toLowerCase().trim();
               const sCId = String(s.clientId || "").toLowerCase().trim();
-              const idMatch =
-                (sCId && sCId === cId) ||
-                (sCId && sCId === cId.replace("cl-", "")) ||
-                (parseInt(cId.replace("cl-", ""), 10) > 0 && sCId === String(parseInt(cId.replace("cl-", ""), 10)));
-              const nameMatch =
-                Boolean(s.clientName && client.name && s.clientName.toLowerCase().trim() === client.name.toLowerCase().trim());
-              return idMatch || nameMatch;
+              return (sCId && sCId === cId);
             });
 
             const filteredTranscripts = clientTranscripts.filter((s) => {
@@ -3724,6 +3747,31 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         isOpen={!!selectedRcmClaim}
         onClose={() => setSelectedRcmClaim(null)}
       />
+
+      {client && (
+        <ClientInsuranceEditor
+          isOpen={isEditingInsurance}
+          onClose={() => setIsEditingInsurance(false)}
+          client={client}
+          onSave={(newInsurance) => {
+            client.insurance = newInsurance;
+            setClients((prev) =>
+              prev.map((c) => (c.id === client.id ? { ...c, insurance: newInsurance } : c))
+            );
+            try {
+              const raw = sessionStorage.getItem("clients");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) {
+                  const updated = parsed.map((c: any) => (c.id === client.id ? { ...c, insurance: newInsurance } : c));
+                  sessionStorage.setItem("clients", JSON.stringify(updated));
+                }
+              }
+            } catch {}
+            updateClientInsurance(client.id, client.name, newInsurance);
+          }}
+        />
+      )}
     </>
   );
 }

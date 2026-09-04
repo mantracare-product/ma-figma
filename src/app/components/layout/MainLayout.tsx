@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { Outlet, useLocation } from "react-router";
-import { motion, AnimatePresence } from "motion/react";
+import { Outlet } from "react-router";
 import Sidebar from "./Sidebar";
 import { Menu } from "lucide-react";
 import AIScribeFloatingWidget from "../scribe/AIScribeFloatingWidget";
 
 export default function MainLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const location = useLocation();
 
   return (
     <div className="h-screen flex overflow-hidden bg-[#fafafa] font-sans antialiased text-[#222222] relative">
@@ -26,18 +24,9 @@ export default function MainLayout() {
           <Menu className="w-5 h-5 text-[#222222]" />
         </button>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            className="min-h-full"
-          >
-            <Outlet />
-          </motion.div>
-        </AnimatePresence>
+        <div className="min-h-full">
+          <Outlet />
+        </div>
       </main>
 
       {/* Persistent AI Scribe Floating Widget */}

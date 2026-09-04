@@ -63,8 +63,12 @@ export default function RevenueCycleSubnav() {
   };
 
   const isPathActive = (path: string) => {
-    if ((location.pathname === "/revenue-cycle" || location.pathname === "/revenue-cycle/") && path === "/revenue-cycle/overview") {
-      return true;
+    if (path === "/revenue-cycle" || path === "/revenue-cycle/overview") {
+      return (
+        location.pathname === "/revenue-cycle" ||
+        location.pathname === "/revenue-cycle/" ||
+        location.pathname === "/revenue-cycle/overview"
+      );
     }
     return location.pathname === path;
   };
@@ -83,14 +87,14 @@ export default function RevenueCycleSubnav() {
         {/* Overview Item */}
         <button
           type="button"
-          onClick={() => navigate("/revenue-cycle/overview")}
+          onClick={() => navigate("/revenue-cycle")}
           className={`relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-full text-xs font-semibold transition-all duration-150 cursor-pointer ${
-            isPathActive("/revenue-cycle/overview")
+            isPathActive("/revenue-cycle")
               ? "text-white shadow-sm"
               : "text-[#45515e] hover:text-[#222222] hover:bg-slate-100/60"
           }`}
         >
-          {isPathActive("/revenue-cycle/overview") && (
+          {isPathActive("/revenue-cycle") && (
             <motion.div
               layoutId="rcmNavActivePill"
               className="absolute inset-0 bg-gradient-to-r from-[#181e25] to-[#2c3e50] rounded-full -z-10 shadow-sm"
@@ -100,7 +104,7 @@ export default function RevenueCycleSubnav() {
           <div className="flex items-center gap-3 min-w-0">
             <Landmark
               className={`w-4 h-4 flex-shrink-0 ${
-                isPathActive("/revenue-cycle/overview") ? "text-white" : "text-slate-500"
+                isPathActive("/revenue-cycle") ? "text-white" : "text-slate-500"
               }`}
             />
             <span className="truncate">Revenue Overview</span>
@@ -130,6 +134,7 @@ export default function RevenueCycleSubnav() {
           {expandedGroups["daily_work"] && (
             <div className="ml-7 my-1 pl-2 border-l border-slate-200/60 space-y-1">
               {[
+                { label: "Insurance Intake", path: "/revenue-cycle/insurance-intake", icon: FileSearch },
                 { label: "Pre-Visit & Eligibility", path: "/revenue-cycle/eligibility", icon: ShieldCheck },
                 { label: "Encounters", path: "/revenue-cycle/encounters", icon: FileCheck },
                 { label: "Claims", path: "/revenue-cycle/claims", icon: FileText },

@@ -32,18 +32,12 @@ export default function PaymentPostingWorklist() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Payment Posting & Remittance Queue
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Review 835 ERAs and manual EOB adjustments before committing to the practice ledger
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Payment Posting & Remittance Queue"
+        subtitle="Review 835 ERAs and manual EOB adjustments before committing to the practice ledger"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Toolbar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">

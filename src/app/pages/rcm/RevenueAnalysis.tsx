@@ -26,18 +26,11 @@ const MONTHLY_REVENUE_DATA = [
 export default function RevenueAnalysis() {
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Revenue Analysis & Collections Trend
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Monthly insurance vs patient payment splits, reimbursement velocity, and yield
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Revenue Analysis & Collections Trend"
+        subtitle="Monthly insurance vs patient payment splits, reimbursement velocity, and yield performance"
+      />
 
       {/* Highlights */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">

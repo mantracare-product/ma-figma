@@ -1,25 +1,21 @@
-import React from "react";
+import React, { useState } from "react";
 import { useRcm } from "../../context/RcmContext";
 import PageHeader from "../../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
 import { TrendingUp, CheckCircle2, Clock, AlertTriangle, ArrowUpRight } from "lucide-react";
 
 export default function PayerPerformance() {
   const { payerPerformance } = useRcm();
+  const [showHelp, setShowHelp] = useState(false);
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Payer Performance & Adjudication Analytics
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Benchmark payer approval rates, average adjudication velocity, and root-cause denial drivers
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Payer Performance & Adjudication Analytics"
+        subtitle="Benchmark payer approval rates, average adjudication velocity, clean claim rates, and root-cause denial drivers"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Grid of Payer Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -72,6 +68,18 @@ export default function PayerPerformance() {
           </div>
         ))}
       </div>
+
+      <HowItWorksModal
+        isOpen={showHelp}
+        onClose={() => setShowHelp(false)}
+        title="How Payer Performance Analytics Work"
+        summary="Automated analytics evaluate EDI 835 remittance histories and 277CA transactions across commercial payers and CMS contractors."
+        bullets={[
+          "Adjudication Velocity: Measures elapsed days between 837 claim submission and 835 ERA check or EFT deposit.",
+          "Clean Claim Rate: Tracks the percentage of claims paid on first submission without rejections or denial appeals.",
+          "Contractual Benchmark: Compares reimbursement rates across health plans to support annual fee schedule negotiations.",
+        ]}
+      />
     </div>
   );
 }

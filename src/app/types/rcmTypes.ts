@@ -129,6 +129,9 @@ export interface Claim {
   adjustmentsList?: ContractualAdjustment[];
   scrubIssues?: ClaimScrubIssue[];
   source: "native" | "imported";
+  assignedTo?: string;               // Assigned biller / team member
+  deferredUntil?: string;            // Expiration date for deferred state (ISO string)
+  deferReason?: string;              // Specific reason for deferral
 }
 
 // ─── 4. Denial Clustering ───────────────────────────────────────────────────
@@ -226,6 +229,7 @@ export interface PatientArBalance {
   statementCount: number;
   linkedClaimIds: string[];
   linkedEncounterIds: string[];
+  source?: "manual" | "remittance";  // manual charges can be cancelled; remittance can only be written off
 }
 
 // ─── 7. Billing Rules & Fee Schedule & Prior Auth ───────────────────────────
@@ -300,4 +304,46 @@ export interface PayerPerformanceRow {
   avgDaysToPay: number;
   patientMixPercent: number;
   primaryDenialReason: string;
+}
+
+// ─── 10. Client Insurance Model ──────────────────────────────────────────────
+
+export interface GuarantorDetails {
+  firstName: string;
+  lastName: string;
+  email?: string;
+  phone?: string;
+  dob?: string;
+  gender?: string;
+  address?: string;
+}
+
+export interface WorkersCompDetails {
+  claimNumber: string;
+  accidentDate: string;
+  employer: string;
+  accidentState?: string;
+}
+
+export interface ClientInsurance {
+  payerName: string;                 // e.g. "Blue Cross Blue Shield", "Self Pay", "Missing Insurance", "Workers' Comp"
+  planType?: string;
+  policyNumber?: string;
+  groupNumber?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+  guarantor: "self" | "spouse" | "parent" | "other";
+  guarantorDetails?: GuarantorDetails;
+  requiresPriorAuth?: boolean;
+  workersCompDetails?: WorkersCompDetails;
+  cardDocumentId?: string;
+  cardPhotoUrl?: string;
+  updatedAt?: string;
+}
+
+export interface InsuranceCase {
+  id: string;
+  caseName: string;                  // e.g. "Commercial Coverage", "Auto Accident - Claim #991"
+  isPrimary: boolean;
+  insurance: ClientInsurance;
 }

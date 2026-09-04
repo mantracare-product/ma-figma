@@ -39,18 +39,12 @@ export default function RevenueOverview() {
 
   return (
     <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-      {/* Section Header matching Settings right pane */}
-      <div className="space-y-1">
-        <h2
-          className="text-2xl font-bold text-[#1e293b] tracking-tight"
-          style={{ fontFamily: "Outfit, sans-serif" }}
-        >
-          Revenue Overview
-        </h2>
-        <p className="text-sm text-slate-500 font-normal">
-          Financial performance, active claims velocity, and timely filing risk
-        </p>
-      </div>
+      {/* Page Header */}
+      <PageHeader
+        title="Revenue Overview"
+        subtitle="Financial performance, active claims velocity, and timely filing risk across the practice lifecycle"
+        action={<HowItWorksButton onClick={() => setShowHelp(true)} />}
+      />
 
       {/* Timely Filing Urgent Callout if any */}
       {timelyUrgentClaims.length > 0 && (
