@@ -6,7 +6,7 @@ import {
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
-  ExternalLink,
+  ExternalLink, RefreshCw, ShieldCheck, Building2, Copy,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -28,16 +28,19 @@ import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
+import AppointmentDetailDrawer, { AppointmentDetailData } from "../components/appointments/AppointmentDetailDrawer";
 import { appendActivity } from "../../lib/activityEngine";
+import { recordAppointmentEligibility } from "../../lib/rcmStore";
+import { getEligibilityBadge } from "../components/rcm/EligibilityBadge";
 import { useInvoices } from "../context/InvoiceContext";
 import { useRcm } from "../context/RcmContext";
 import ClaimDetailDrawer from "../components/rcm/ClaimDetailDrawer";
 import { Claim } from "../types/rcmTypes";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
-import RecordPaymentModal from "../components/invoices/RecordPaymentModal";
 import { ClientInvoice } from "../types/invoiceTypes";
 import DocumentsTab from "../components/profile/DocumentsTab";
+import InsuranceProvidersTab from "../components/profile/InsuranceProvidersTab";
 import AIScribeModal from "../components/scribe/AIScribeModal";
 import TranscriptDetailDrawer from "../components/scribe/TranscriptDetailDrawer";
 import {
@@ -544,20 +547,39 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     }
   };
 
-  const { getInvoicesByClient, simulatePayment } = useInvoices();
+  const { getInvoicesByClient } = useInvoices();
   const [selectedInvoiceForDrawer, setSelectedInvoiceForDrawer] = useState<ClientInvoice | null>(null);
   const [isInvoiceDrawerOpen, setIsInvoiceDrawerOpen] = useState(false);
   const [isCreateInvoiceDrawerOpen, setIsCreateInvoiceDrawerOpen] = useState(false);
-  const [isRecordPaymentOpen, setIsRecordPaymentOpen] = useState(false);
-  const [invoiceSearchQuery, setInvoiceSearchQuery] = useState("");
-  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<string>("all");
   const [showScribeModal, setShowScribeModal] = useState(false);
 
 
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "billing" | "documents" | "products" | "transcripts">("overview");
-  const { claims: allRcmClaims, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility } = useRcm();
+  const [billingSubTab, setBillingSubTab] = useState<"provider" | "claims">("provider");
+  const { claims: allRcmClaims, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility, recheckEligibility } = useRcm();
   const [selectedRcmClaim, setSelectedRcmClaim] = useState<Claim | null>(null);
+  const [openMenuClaimId, setOpenMenuClaimId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeProfileTab === "invoices") {
+      setActiveProfileTab("appointments");
+    }
+  }, [activeProfileTab]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get("tab");
+    const subTabParam = params.get("subtab");
+    if (tabParam === "invoices") {
+      setActiveProfileTab("appointments");
+    } else if (tabParam === "billing") {
+      setActiveProfileTab("billing");
+      if (subTabParam === "claims" || subTabParam === "provider") {
+        setBillingSubTab(subTabParam);
+      }
+    }
+  }, [location.search]);
 
   // ── Transcripts Tab State ──
   const [scribeSessions, setScribeSessions] = useState<ScribeSession[]>(getScribeSessions());
@@ -611,31 +633,60 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [hoveredStage, setHoveredStage] = useState<string | null>(null);
   const [showFieldPicker, setShowFieldPicker] = useState(false);
 
-  // ── Sync product assignments when clientId changes ──
+  // ── Appointments Tab State ──
+  const [appointments, setAppointments] = useState<any[]>([]);
+  const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [appointmentSearchQuery, setAppointmentSearchQuery] = useState("");
+  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<string>("all");
+  const [appointmentRefreshKey, setAppointmentRefreshKey] = useState(0);
+  const [selectedAppointmentForDetail, setSelectedAppointmentForDetail] = useState<AppointmentDetailData | null>(null);
+  const [isAppointmentDetailDrawerOpen, setIsAppointmentDetailDrawerOpen] = useState(false);
+  const [selectedProfileApptIds, setSelectedProfileApptIds] = useState<string[]>([]);
+  const [isCheckingProfileEligibility, setIsCheckingProfileEligibility] = useState(false);
+
+  // ── Sync product assignments when clientId changes or appointments update ──
   useEffect(() => {
     if (!client) return;
+
+    // Auto-assign any services from existing client appointments to ensure products are assigned
+    try {
+      const stored = sessionStorage.getItem("appointments_v1");
+      if (stored) {
+        const all: any[] = JSON.parse(stored);
+        const storedSvcs = getStoredServices();
+        all.forEach((appt: any) => {
+          const isClientMatch =
+            (client.email && appt.clientEmail && appt.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
+            (client.phone && appt.clientPhone && appt.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, "")) ||
+            (client.name && appt.clientName && appt.clientName.toLowerCase() === client.name.toLowerCase()) ||
+            (appt.clientId && String(appt.clientId).toLowerCase() === String(client.id).toLowerCase());
+          if (isClientMatch) {
+            let sId: number | undefined = appt.serviceId ? Number(appt.serviceId) : undefined;
+            if (!sId || isNaN(sId)) {
+              const matchedSvc = storedSvcs.find((s) => s.name.toLowerCase() === (appt.service || appt.serviceName || "").toLowerCase());
+              if (matchedSvc) sId = matchedSvc.id;
+            }
+            if (sId && !isNaN(sId)) {
+              assignProductToClient(String(client.id), sId);
+            }
+          }
+        });
+      }
+    } catch {}
+
     setClientProductList(getClientProducts(client.id));
     const unsub = onServicesChanged(() => {
       setGlobalServiceList(getStoredServices());
       setClientProductList(getClientProducts(client.id));
     });
     return unsub;
-  }, [client?.id]);
-
-
+  }, [client?.id, appointmentRefreshKey]);
 
   // Documents initialization & action handlers with clientDocumentsStore sync
 
-
-  // appointments tab
-  const [appointments, setAppointments] = useState<any[]>([]);
-  const [showCallDetailsFromProfile, setShowCallDetailsFromProfile] = useState(false);
-  const [selectedCallId, setSelectedCallId] = useState<string | null>(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  // ── Appointments Tab State ──
-  const [appointmentSearchQuery, setAppointmentSearchQuery] = useState("");
-  const [appointmentStatusFilter, setAppointmentStatusFilter] = useState<string>("all");
-  const [appointmentRefreshKey, setAppointmentRefreshKey] = useState(0);
+  // ── Appointments Handlers ──
 
   const handleUpdateApptStatus = (apptId: any, newStatus: string) => {
     const stored = sessionStorage.getItem("appointments_v1");
@@ -650,9 +701,164 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const stored = sessionStorage.getItem("appointments_v1");
     const all: any[] = stored ? JSON.parse(stored) : [];
     const updated = all.filter((a: any) => String(a.id) !== String(apptId));
-    sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
     setAppointmentRefreshKey((k) => k + 1);
     toast.success("Appointment deleted");
+  };
+
+  const handleToggleSelectAllProfileAppts = (filteredAppts: any[]) => {
+    if (selectedProfileApptIds.length === filteredAppts.length && filteredAppts.length > 0) {
+      setSelectedProfileApptIds([]);
+    } else {
+      setSelectedProfileApptIds(filteredAppts.map((a: any) => String(a.id)));
+    }
+  };
+
+  const handleToggleSelectProfileAppt = (id: string) => {
+    setSelectedProfileApptIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleBatchDeleteProfileAppts = () => {
+    if (selectedProfileApptIds.length === 0) return;
+    if (confirm(`Are you sure you want to cancel ${selectedProfileApptIds.length} appointment(s)?`)) {
+      const stored = sessionStorage.getItem("appointments_v1");
+      const all: any[] = stored ? JSON.parse(stored) : [];
+      const updated = all.map((a: any) =>
+        selectedProfileApptIds.includes(String(a.id)) ? { ...a, status: "cancelled" } : a
+      );
+      sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+      setSelectedProfileApptIds([]);
+      setAppointmentRefreshKey((k) => k + 1);
+      toast.success(`${selectedProfileApptIds.length} appointment(s) cancelled`);
+    }
+  };
+
+  const handleRunBatchEligibilityForProfileAppts = (targetAppts: any[]) => {
+    if (targetAppts.length === 0) {
+      toast.error("No appointments to verify");
+      return;
+    }
+
+    setIsCheckingProfileEligibility(true);
+    toast.info(`Querying 270/271 clearinghouse for ${targetAppts.length} appointment(s)...`);
+
+    setTimeout(() => {
+      const stored = sessionStorage.getItem("appointments_v1");
+      const all: any[] = stored ? JSON.parse(stored) : [];
+
+      targetAppts.forEach((appt: any) => {
+        recordAppointmentEligibility({
+          appointmentId: appt.id,
+          clientId: client.id,
+          clientName: appt.clientName || client.name,
+          appointmentDate: appt.date,
+          status: "active",
+          payerName: appt.insuranceProvider || client.insuranceProvider || "Blue Cross Blue Shield",
+          copayAmount: appt.copayAmount || 25,
+          deductibleRemaining: 150,
+          coinsurance: 20,
+        });
+      });
+
+      const updated = all.map((appt: any) => {
+        if (targetAppts.some((t: any) => String(t.id) === String(appt.id))) {
+          return {
+            ...appt,
+            eligibility: "active",
+            eligibilityStatus: "active",
+            copayAmount: appt.copayAmount || 25,
+          };
+        }
+        return appt;
+      });
+
+      sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+      setIsCheckingProfileEligibility(false);
+      setAppointmentRefreshKey((k) => k + 1);
+      toast.success(`Coverage verified active for ${targetAppts.length} appointment(s) (Copay: $25, Deductible: $150)`);
+    }, 700);
+  };
+
+  const ALL_EMPLOYEES_MAP: Record<string, string> = {
+    "1": "John Smith",
+    "2": "Sarah Johnson",
+    "4": "Emily Davis",
+    "5": "Dr. Robert Martinez",
+    "6": "Lisa Anderson",
+  };
+
+  const getResolvedServiceName = (appt: any) => {
+    if (appt.service && appt.service !== "—") return appt.service;
+    if (appt.serviceName) return appt.serviceName;
+    if (appt.serviceId !== undefined && appt.serviceId !== null) {
+      const fromStore = getStoredServices().find((s) => String(s.id) === String(appt.serviceId));
+      if (fromStore) return fromStore.name;
+      const fromMock = MOCK_SERVICES.find((s) => s.id === String(appt.serviceId) || s.id === `srv-${appt.serviceId}`);
+      if (fromMock) return fromMock.name;
+    }
+    if (appt.title) {
+      for (const s of getStoredServices()) {
+        if (appt.title.toLowerCase().includes(s.name.toLowerCase())) return s.name;
+      }
+      for (const m of MOCK_SERVICES) {
+        if (appt.title.toLowerCase().includes(m.name.toLowerCase())) return m.name;
+      }
+      if (appt.title.toLowerCase().includes("initial consultation")) return "Initial Consultation";
+      if (appt.title.toLowerCase().includes("consultation")) return "Consultation";
+      if (appt.title.toLowerCase().includes("follow-up") || appt.title.toLowerCase().includes("follow up")) return "Follow-up Visit";
+      if (appt.title.toLowerCase().includes("dental")) return "Dental Cleaning";
+      if (appt.title.toLowerCase().includes("x-ray") || appt.title.toLowerCase().includes("xray")) return "X-Ray Imaging";
+    }
+    return "—";
+  };
+
+  const handleOpenApptTranscript = (appt: any, pName: string) => {
+    if (!client) return;
+    const currentSessions = getScribeSessions();
+    const matched = currentSessions.find((s) =>
+      (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}`)) ||
+      (s.clientId === String(client.id) && (s.sessionName?.includes(String(appt.id)) || s.transcript?.fullText?.includes(appt.title)))
+    );
+
+    if (matched) {
+      setSelectedTranscriptSession(matched);
+      setIsTranscriptDrawerOpen(true);
+      return;
+    }
+
+    // Create & link a structured transcript/chart note for this appointment
+    const srvName = getResolvedServiceName(appt);
+    const scenario = PRESET_SCENARIOS[0];
+    const newSession: ScribeSession = {
+      id: `scribe-apt-${appt.id}-${Date.now()}`,
+      clientId: String(client.id),
+      clientName: client.name,
+      patientAge: client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45),
+      patientGender: client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male"),
+      appointmentId: String(appt.id),
+      sessionName: `${appt.title || "Consultation"} (${appt.date || "Scheduled"})`,
+      doctorId: String(appt.employeeId || "doc-1"),
+      doctorName: pName || "Dr. Priya Sharma",
+      sessionDate: appt.date || new Date().toISOString(),
+      durationSeconds: 76,
+      status: "completed",
+      createdAt: Date.now(),
+      transcript: {
+        fullText: scenario.transcriptText,
+        utterances: scenario.utterances,
+      },
+      extractedData: {
+        ...scenario.extractedData,
+        chiefComplaint: appt.notes || `${appt.title || "Patient"} consultation encounter`,
+        diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
+      },
+    };
+
+    saveScribeSession(newSession);
+    setScribeSessions(getScribeSessions());
+    setSelectedTranscriptSession(newSession);
+    setIsTranscriptDrawerOpen(true);
   };
 
   // Schedule appointment from Activity tab
@@ -680,7 +886,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const handleActivityBookingComplete = () => {
     if (!activityBookingValues.client || !activityBookingValues.provider || !activityBookingValues.date || !activityBookingValues.title.trim()) {
       toast.error("Please fill in all required fields");
-      return;
+      return null;
     }
     const hh = String(activityBookingValues.startHour).padStart(2, "0");
     const mm = String(activityBookingValues.startMinute).padStart(2, "0");
@@ -690,31 +896,69 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const stored = sessionStorage.getItem("appointments_v1");
     const existing: any[] = stored ? JSON.parse(stored) : [];
 
+    const storedServices = getStoredServices();
+    const chosenService =
+      (activityBookingValues.serviceId
+        ? storedServices.find((s) => String(s.id) === String(activityBookingValues.serviceId))
+        : null) ||
+      (activityBookingValues.serviceName
+        ? storedServices.find((s) => s.name.toLowerCase() === activityBookingValues.serviceName!.toLowerCase())
+        : null) ||
+      storedServices.find((s) => s.isActive);
+
     const chosenServiceName =
       activityBookingValues.serviceName ||
-      (activityBookingValues.serviceId
-        ? getStoredServices().find((s) => String(s.id) === String(activityBookingValues.serviceId))?.name ||
-          MOCK_SERVICES.find((s) => s.id === activityBookingValues.serviceId)?.name
-        : "") ||
+      chosenService?.name ||
       "Initial Consultation";
+
+    const chosenServiceId = chosenService?.id || (activityBookingValues.serviceId ? Number(activityBookingValues.serviceId) : 1);
+
+    const resolvedElgStatus = "pending";
 
     const newAppt = {
       id: existing.length > 0 ? Math.max(...existing.map((a: any) => a.id ?? 0)) + 1 : Date.now(),
+      clientId: String(client?.id || ""),
       clientName: activityBookingValues.client.name,
       clientEmail: activityBookingValues.client.email,
       clientPhone: activityBookingValues.client.phone,
+      clientStatus: activityBookingValues.client.status,
       employeeId: activityBookingValues.provider.id,
-      serviceId: activityBookingValues.serviceId || 1,
+      providerName: activityBookingValues.provider.name,
+      serviceId: chosenServiceId,
       service: chosenServiceName,
       serviceName: chosenServiceName,
       date: activityBookingValues.date,
       time: timeStr,
-      duration: 60,
+      duration: chosenService?.duration || 60,
       status: "scheduled",
+      eligibility: resolvedElgStatus,
+      eligibilityStatus: resolvedElgStatus,
+      primaryInsurance: activityBookingValues.primaryInsurance,
+      secondaryInsurance: activityBookingValues.hasSecondaryInsurance ? activityBookingValues.secondaryInsurance : undefined,
+      preCertification: activityBookingValues.preCertification,
+      syncToCase: activityBookingValues.syncToCase,
       notes: activityBookingValues.note || activityBookingValues.description || undefined,
       title: activityBookingValues.title.trim(),
     };
     sessionStorage.setItem("appointments_v1", JSON.stringify([...existing, newAppt]));
+
+    // Persist initial eligibility check into RCM store as pending
+    if (client) {
+      recordAppointmentEligibility({
+        appointmentId: newAppt.id,
+        clientId: String(client.id),
+        clientName: activityBookingValues.client.name,
+        appointmentDate: activityBookingValues.date,
+        status: "pending",
+      });
+    }
+
+    // Auto-assign the booked service / product to this client
+    if (client) {
+      assignProductToClient(String(client.id), chosenServiceId);
+      setClientProductList(getClientProducts(client.id));
+    }
+
     setAppointmentRefreshKey((k) => k + 1);
     // Append activity entry
     if (client) {
@@ -737,8 +981,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         },
       });
     }
-    toast.success("Appointment scheduled successfully!");
-    setShowScheduleApptFromActivity(false);
+
+    toast.success("Appointment created successfully!");
+    setActiveProfileTab("appointments");
+    return {
+      ...newAppt,
+      providerName: activityBookingValues.provider.name,
+      serviceName: chosenServiceName,
+    };
   };
   const [selectedProcessIds, setSelectedProcessIds] = useState<string[]>([]);
   const [processSearchQuery, setProcessSearchQuery] = useState("");
@@ -1345,7 +1595,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 { id: "forms" as const, label: "Forms" },
                 { id: "notes" as const, label: "Notes" },
                 { id: "appointments" as const, label: "Appointments" },
-                { id: "invoices" as const, label: "Invoices" },
                 { id: "billing" as const, label: "Billing & Insurance" },
                 { id: "documents" as const, label: "Documents" },
                 { id: "transcripts" as const, label: "Transcripts" },
@@ -2009,37 +2258,175 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           {/* ── Appointments Tab ── */}
           {activeProfileTab === "appointments" && (() => {
             const stored = sessionStorage.getItem("appointments_v1");
-            const all: any[] = stored ? JSON.parse(stored) : [];
-            const clientAppts = all.filter((a: any) =>
+            let all: any[] = stored ? JSON.parse(stored) : [];
+
+            // Seed initial realistic appointments if empty
+            if (all.length === 0) {
+              all = [
+                {
+                  id: 101,
+                  clientId: "CL-001",
+                  clientName: "Sarah Johnson",
+                  clientEmail: "sarah.j@email.com",
+                  clientPhone: "5551234567",
+                  employeeId: 1,
+                  serviceId: 1,
+                  service: "Initial Consultation",
+                  serviceName: "Initial Consultation",
+                  title: "Consultation Appointment",
+                  date: "2026-09-04",
+                  time: "10:00",
+                  duration: 60,
+                  status: "completed",
+                  eligibility: "active",
+                  notes: "Annual physical exam and clinical assessment completed.",
+                },
+                {
+                  id: 102,
+                  clientId: "CL-001",
+                  clientName: "Sarah Johnson",
+                  clientEmail: "sarah.j@email.com",
+                  clientPhone: "5551234567",
+                  employeeId: 2,
+                  serviceId: 2,
+                  service: "Follow-up Visit",
+                  serviceName: "Follow-up Visit",
+                  title: "Cardiology Follow-up Visit",
+                  date: "2026-09-18",
+                  time: "14:30",
+                  duration: 30,
+                  status: "scheduled",
+                  eligibility: "active",
+                  notes: "Review lab results and cardiology monitoring log.",
+                },
+                {
+                  id: 103,
+                  clientId: "CL-002",
+                  clientName: "Michael Chen",
+                  clientEmail: "mchen@email.com",
+                  clientPhone: "5552345678",
+                  employeeId: 1,
+                  serviceId: 1,
+                  service: "Initial Consultation",
+                  serviceName: "Initial Consultation",
+                  title: "Initial Dermatology Consultation",
+                  date: "2026-09-04",
+                  time: "11:15",
+                  duration: 45,
+                  status: "completed",
+                  eligibility: "inconclusive",
+                  notes: "Dermatological assessment and patch testing.",
+                },
+                {
+                  id: 104,
+                  clientId: "CL-003",
+                  clientName: "Emily Davis",
+                  clientEmail: "emily.d@email.com",
+                  clientPhone: "5553456789",
+                  employeeId: 4,
+                  serviceId: 3,
+                  service: "Dental Cleaning",
+                  serviceName: "Dental Cleaning",
+                  title: "Dental Cleaning Intake",
+                  date: "2026-09-04",
+                  time: "09:30",
+                  duration: 45,
+                  status: "scheduled",
+                  eligibility: "active",
+                  notes: "Initial oral hygiene evaluation.",
+                },
+                {
+                  id: 105,
+                  clientId: "CL-006",
+                  clientName: "David Martinez",
+                  clientEmail: "d.martinez@email.com",
+                  clientPhone: "5556789012",
+                  employeeId: 5,
+                  serviceId: 2,
+                  service: "Follow-up Visit",
+                  serviceName: "Follow-up Visit",
+                  title: "Routine Check-up",
+                  date: "2026-09-05",
+                  time: "13:00",
+                  duration: 30,
+                  status: "scheduled",
+                  eligibility: "inactive",
+                  notes: "Annual wellness check.",
+                },
+                {
+                  id: 106,
+                  clientId: "CL-013",
+                  clientName: "Priya Sharma",
+                  clientEmail: "priya.sharma@email.com",
+                  clientPhone: "9820172818",
+                  employeeId: 5,
+                  serviceId: 2,
+                  service: "Follow-up Visit",
+                  serviceName: "Follow-up Visit",
+                  title: "Endocrinology Review",
+                  date: "2026-09-05",
+                  time: "15:00",
+                  duration: 45,
+                  status: "completed",
+                  eligibility: "active",
+                  notes: "Thyroid panel follow-up and clinical prescription renewal.",
+                },
+              ];
+              sessionStorage.setItem("appointments_v1", JSON.stringify(all));
+              assignProductToClient("CL-001", 1);
+              assignProductToClient("CL-002", 1);
+              assignProductToClient("CL-003", 3);
+              assignProductToClient("CL-006", 2);
+              assignProductToClient("CL-013", 2);
+            }
+
+            let clientAppts = all.filter((a: any) =>
               (client?.email && a.clientEmail && a.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
               (client?.phone && a.clientPhone && a.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, "")) ||
               (client?.name && a.clientName && a.clientName.toLowerCase() === client.name.toLowerCase())
             );
 
-            const getResolvedServiceName = (appt: any) => {
-              if (appt.service && appt.service !== "—") return appt.service;
-              if (appt.serviceName) return appt.serviceName;
-              if (appt.serviceId !== undefined && appt.serviceId !== null) {
-                const fromStore = getStoredServices().find((s) => String(s.id) === String(appt.serviceId));
-                if (fromStore) return fromStore.name;
-                const fromMock = MOCK_SERVICES.find((s) => s.id === String(appt.serviceId) || s.id === `srv-${appt.serviceId}`);
-                if (fromMock) return fromMock.name;
-              }
-              if (appt.title) {
-                for (const s of getStoredServices()) {
-                  if (appt.title.toLowerCase().includes(s.name.toLowerCase())) return s.name;
-                }
-                for (const m of MOCK_SERVICES) {
-                  if (appt.title.toLowerCase().includes(m.name.toLowerCase())) return m.name;
-                }
-                if (appt.title.toLowerCase().includes("initial consultation")) return "Initial Consultation";
-                if (appt.title.toLowerCase().includes("consultation")) return "Consultation";
-                if (appt.title.toLowerCase().includes("follow-up") || appt.title.toLowerCase().includes("follow up")) return "Follow-up Visit";
-                if (appt.title.toLowerCase().includes("dental")) return "Dental Cleaning";
-                if (appt.title.toLowerCase().includes("x-ray") || appt.title.toLowerCase().includes("xray")) return "X-Ray Imaging";
-              }
-              return "—";
-            };
+            if (clientAppts.length === 0 && client) {
+              const defaultApptsForClient = [
+                {
+                  id: Date.now(),
+                  clientName: client.name,
+                  clientEmail: client.email || "",
+                  clientPhone: client.phone || "",
+                  employeeId: 1,
+                  serviceId: 1,
+                  service: "Consultation",
+                  serviceName: "Consultation",
+                  title: "Initial Patient Consultation",
+                  date: new Date().toISOString().split("T")[0],
+                  time: "10:00",
+                  duration: 45,
+                  status: "completed",
+                  eligibility: "active",
+                  notes: "Initial consultation and clinical assessment.",
+                },
+                {
+                  id: Date.now() + 1,
+                  clientName: client.name,
+                  clientEmail: client.email || "",
+                  clientPhone: client.phone || "",
+                  employeeId: 2,
+                  serviceId: 2,
+                  service: "Follow-up Visit",
+                  serviceName: "Follow-up Visit",
+                  title: "Follow-up Appointment",
+                  date: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
+                  time: "14:00",
+                  duration: 30,
+                  status: "scheduled",
+                  eligibility: "active",
+                  notes: "Follow-up care review.",
+                },
+              ];
+              all = [...all, ...defaultApptsForClient];
+              sessionStorage.setItem("appointments_v1", JSON.stringify(all));
+              clientAppts = defaultApptsForClient;
+            }
 
             const searchLower = appointmentSearchQuery.toLowerCase().trim();
             const filteredAppts = clientAppts.filter((appt: any) => {
@@ -2056,61 +2443,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                 (appointmentStatusFilter === "pending" && (appt.status === "pending-accept" || appt.status === "pending"));
               return matchesSearch && matchesStatus;
             });
-
-            const handleOpenApptTranscript = (appt: any, pName: string) => {
-              const currentSessions = getScribeSessions();
-              const matched = currentSessions.find((s) =>
-                (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}`)) ||
-                (s.clientId === String(client.id) && (s.sessionName?.includes(String(appt.id)) || s.transcript?.fullText?.includes(appt.title)))
-              );
-
-              if (matched) {
-                setSelectedTranscriptSession(matched);
-                setIsTranscriptDrawerOpen(true);
-                return;
-              }
-
-              // Create & link a structured transcript for this appointment
-              const srvName = getResolvedServiceName(appt);
-              const scenario = PRESET_SCENARIOS[0];
-              const newSession: ScribeSession = {
-                id: `scribe-apt-${appt.id}-${Date.now()}`,
-                clientId: String(client.id),
-                clientName: client.name,
-                patientAge: client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45),
-                patientGender: client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male"),
-                appointmentId: String(appt.id),
-                sessionName: `${appt.title || "Consultation"} (${appt.date || "Scheduled"})`,
-                doctorId: String(appt.employeeId || "doc-1"),
-                doctorName: pName || "Dr. Priya Sharma",
-                sessionDate: appt.date || new Date().toISOString(),
-                durationSeconds: 76,
-                status: "completed",
-                createdAt: Date.now(),
-                transcript: {
-                  fullText: scenario.transcriptText,
-                  utterances: scenario.utterances,
-                },
-                extractedData: {
-                  ...scenario.extractedData,
-                  chiefComplaint: appt.notes || `${appt.title || "Patient"} consultation encounter`,
-                  diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
-                },
-              };
-
-              saveScribeSession(newSession);
-              setScribeSessions(getScribeSessions());
-              setSelectedTranscriptSession(newSession);
-              setIsTranscriptDrawerOpen(true);
-            };
-
-            const ALL_EMPLOYEES_MAP: Record<string, string> = {
-              "1": "John Smith",
-              "2": "Sarah Johnson",
-              "4": "Emily Davis",
-              "5": "Dr. Robert Martinez",
-              "6": "Lisa Anderson",
-            };
 
             const formatDateTime = (dateStr: string, timeStr: string) => {
               let datePart = dateStr || "—";
@@ -2147,386 +2479,364 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               );
             };
 
+            const allApptsSelected = filteredAppts.length > 0 && filteredAppts.every((a: any) => selectedProfileApptIds.includes(String(a.id)));
+            const someApptsSelected = filteredAppts.some((a: any) => selectedProfileApptIds.includes(String(a.id))) && !allApptsSelected;
+
             return (
-              <div className="space-y-4" key={appointmentRefreshKey}>
-                {/* Toolbar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap flex-1 w-full sm:w-auto">
-                    <div className="relative flex-1 min-w-[200px] max-w-xs">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search appointment or service..."
-                        value={appointmentSearchQuery}
-                        onChange={(e) => setAppointmentSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
-                    </div>
-                    <select
-                      value={appointmentStatusFilter}
-                      onChange={(e) => setAppointmentStatusFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="scheduled">Scheduled</option>
-                      <option value="completed">Completed</option>
-                      <option value="pending">Pending</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setActivityBookingValues({
-                        title: "Consultation Appointment",
-                        description: "",
-                        note: "",
-                        tags: "",
-                        processId: client.processes?.[0] || "",
-                        stageId: "",
-                        date: new Date().toISOString().split("T")[0],
-                        startHour: 10,
-                        startMinute: 0,
-                        sessionType: "video",
-                        client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "" },
-                        provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
-                      });
-                      setShowScheduleApptFromActivity(true);
-                    }}
-                    className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  >
-                    <Plus className="w-4 h-4" /> Book Appointment
-                  </button>
+              <div className="space-y-4 w-full" key={appointmentRefreshKey} style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {/* Toolbar Card */}
+                <div className="bg-white rounded-2xl border border-slate-200/90 p-3.5 shadow-2xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 w-full">
+                  {selectedProfileApptIds.length > 0 ? (
+                    <>
+                      {/* Selection Info */}
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-[#181e25]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          {selectedProfileApptIds.length} selected
+                        </span>
+                        <button
+                          onClick={() => setSelectedProfileApptIds([])}
+                          className="text-xs text-slate-500 hover:text-slate-900 underline transition-colors cursor-pointer"
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          Clear selection
+                        </button>
+                      </div>
+
+                      {/* Relevant Action Buttons */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={isCheckingProfileEligibility}
+                          onClick={() => {
+                            const targets = filteredAppts.filter((a: any) => selectedProfileApptIds.includes(String(a.id)));
+                            handleRunBatchEligibilityForProfileAppts(targets);
+                          }}
+                          className="gap-1.5 h-9"
+                        >
+                          {isCheckingProfileEligibility ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                          )}
+                          Re-run Eligibility Check ({selectedProfileApptIds.length})
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={handleBatchDeleteProfileAppts}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 h-9 gap-1.5"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          Cancel Schedule
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Search & Filters */}
+                      <div className="flex items-center gap-2.5 flex-wrap flex-1 w-full sm:w-auto">
+                        <div className="relative flex-1 min-w-[220px] max-w-sm">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search appointment, service, or date..."
+                            value={appointmentSearchQuery}
+                            onChange={(e) => setAppointmentSearchQuery(e.target.value)}
+                            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#1456f0] font-medium placeholder:text-slate-400"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          />
+                        </div>
+
+                        {/* Styled Dropdown Options UI (DESIGN.md) */}
+                        <div className="relative">
+                          <select
+                            value={appointmentStatusFilter}
+                            onChange={(e) => setAppointmentStatusFilter(e.target.value)}
+                            className="appearance-none pl-3 pr-8 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#1456f0] hover:bg-slate-50/80 cursor-pointer shadow-2xs transition-colors"
+                            style={{ fontFamily: "Outfit, sans-serif" }}
+                          >
+                            <option value="all">All Statuses</option>
+                            <option value="scheduled">Scheduled</option>
+                            <option value="completed">Completed</option>
+                            <option value="pending">Pending</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        </div>
+                      </div>
+
+                      {/* Default Actions */}
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={isCheckingProfileEligibility || filteredAppts.length === 0}
+                          onClick={() => handleRunBatchEligibilityForProfileAppts(filteredAppts)}
+                          className="gap-1.5 h-9"
+                          title={`Verify clearinghouse coverage for all (${filteredAppts.length})`}
+                        >
+                          {isCheckingProfileEligibility ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                          )}
+                          Run Eligibility Check (All)
+                        </Button>
+
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => {
+                            const activeSvcs = getStoredServices().filter((s) => s.isActive);
+                            const defaultSvc = activeSvcs[0] || { id: 1, name: "Initial Consultation" };
+                            setActivityBookingValues({
+                              title: `${defaultSvc.name} Appointment`,
+                              description: "",
+                              note: "",
+                              tags: "",
+                              processId: client.processes?.[0] || "",
+                              stageId: "",
+                              date: new Date().toISOString().split("T")[0],
+                              startHour: 10,
+                              startMinute: 0,
+                              sessionType: "video",
+                              serviceId: String(defaultSvc.id),
+                              serviceName: defaultSvc.name,
+                              client: { id: client.id, name: client.name, email: client.email || "", phone: client.phone || "", status: client.status },
+                              provider: { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+                            });
+                            setShowScheduleApptFromActivity(true);
+                          }}
+                          className="gap-1.5 h-9"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> Book Appointment
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
-                {/* Table */}
+                {/* Full-Width Table Card */}
                 {filteredAppts.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
+                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6 shadow-2xs w-full">
                     <Calendar className="w-8 h-8 text-slate-300 mx-auto mb-2" />
                     <p className="text-sm font-semibold text-slate-700" style={{ fontFamily: "Outfit, sans-serif" }}>
                       {clientAppts.length === 0 ? "No appointments yet" : "No appointments match your filter"}
                     </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Click "Book Appointment" to schedule an encounter for {client.name}.
+                    </p>
                   </div>
                 ) : (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden text-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead style={{ backgroundColor: "#1F2937" }}>
-                        <tr>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Title</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Date &amp; Time</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Provider</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Product / Service</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">View Transcript</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Status</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium">
-                        {filteredAppts.map((appt: any, idx: number) => {
-                          const providerName =
-                            ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
-                            appt.provider?.name ||
-                            "John Smith";
-                          const isCompleted = appt.status === "completed";
-                          const isCancelled = appt.status === "cancelled";
+                  <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs overflow-hidden text-xs w-full">
+                    <div className="overflow-x-auto w-full">
+                      <table className="w-full text-left border-collapse table-auto">
+                        <thead className="bg-gradient-to-r from-[#181e25] via-[#243342] to-[#2c3e50] text-white">
+                          <tr>
+                            <th className="py-3.5 px-4 w-10 text-left" onClick={(e) => e.stopPropagation()}>
+                              <input
+                                type="checkbox"
+                                checked={allApptsSelected}
+                                ref={(el) => {
+                                  if (el) el.indeterminate = someApptsSelected;
+                                }}
+                                onChange={() => handleToggleSelectAllProfileAppts(filteredAppts)}
+                                className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                              />
+                            </th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Title</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Service</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Date &amp; Time</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Provider</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Eligibility</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider">Status</th>
+                            <th className="py-3.5 px-4 text-[11px] font-bold text-white uppercase tracking-wider text-right w-16">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 font-medium">
+                          {filteredAppts.map((appt: any, idx: number) => {
+                            const isSelected = selectedProfileApptIds.includes(String(appt.id));
+                            const providerName =
+                              ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
+                              appt.provider?.name ||
+                              "John Smith";
+                            const isCompleted = appt.status === "completed";
+                            const isCancelled = appt.status === "cancelled";
 
-                          return (
-                            <tr key={appt.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4 font-bold text-slate-900 max-w-[180px] truncate">
-                                {appt.title || "Appointment"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
-                                {formatDateTime(appt.date, appt.time)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-slate-700">
-                                {providerName}
-                              </td>
-                              <td className="py-3 px-4 text-slate-600 max-w-[180px] truncate">
-                                {getResolvedServiceName(appt)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenApptTranscript(appt, providerName)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-[#1A73E8] rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                                  style={{ fontFamily: "Outfit, sans-serif" }}
-                                >
-                                  <FileText className="w-3.5 h-3.5 text-[#1A73E8]" />
-                                  View Transcript
-                                </button>
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                {getStatusPill(appt.status)}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      className="p-1.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer inline-flex items-center justify-center"
-                                      title="Actions"
-                                    >
-                                      <MoreVertical className="w-4 h-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end" className="w-40 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
-                                    <DropdownMenuItem
-                                      onClick={() => handleOpenApptTranscript(appt, providerName)}
-                                      className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <FileText className="w-3.5 h-3.5" />
-                                      View Transcript
-                                    </DropdownMenuItem>
-                                    {!isCompleted && (
-                                      <DropdownMenuItem
-                                        onClick={() => handleUpdateApptStatus(appt.id, "completed")}
-                                        className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                        style={{ fontFamily: "Outfit, sans-serif" }}
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                        Complete
-                                      </DropdownMenuItem>
-                                    )}
-                                    {!isCancelled && !isCompleted && (
-                                      <DropdownMenuItem
-                                        onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
-                                        className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
-                                        style={{ fontFamily: "Outfit, sans-serif" }}
-                                      >
-                                        <X className="w-3.5 h-3.5" />
-                                        Cancel
-                                      </DropdownMenuItem>
-                                    )}
-                                    <DropdownMenuItem
-                                      onClick={() => handleDeleteAppt(appt.id)}
-                                      className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
-                                      style={{ fontFamily: "Outfit, sans-serif" }}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+                            const clientCheck = allRcmEligibility.find(
+                              (c) =>
+                                String(c.appointmentId) === String(appt.id) ||
+                                c.appointmentId === `APT-${appt.id}` ||
+                                (c.clientId === client.id && (!c.appointmentId || c.appointmentDate === appt.date)) ||
+                                (c.clientName && c.clientName.toLowerCase() === (appt.clientName || client.name || "").toLowerCase())
+                            );
 
-          {/* ── Invoices Tab ── */}
-          {activeProfileTab === "invoices" && (() => {
-            const allClientInvoices = getInvoicesByClient(client.id);
+                            const elgStatus = (appt.eligibility || appt.eligibilityStatus || clientCheck?.status || (client?.status === "Inactive" ? "inactive" : "active")).toLowerCase();
 
-            // Filter logic
-            const filteredInvoices = allClientInvoices.filter((inv) => {
-              // Search query filter
-              const searchLower = invoiceSearchQuery.toLowerCase().trim();
-              const matchesSearch =
-                !searchLower ||
-                inv.id.toLowerCase().includes(searchLower) ||
-                (inv.appointmentTitle && inv.appointmentTitle.toLowerCase().includes(searchLower)) ||
-                inv.lineItems.some((li) => li.description.toLowerCase().includes(searchLower));
+                            const clientInvoices = getInvoicesByClient(client.id);
+                            const apptInvoice =
+                              (appt.invoiceId ? clientInvoices.find((i) => i.id === appt.invoiceId) : null) ||
+                              clientInvoices.find(
+                                (i) =>
+                                  (i.appointmentId && String(i.appointmentId) === String(appt.id)) ||
+                                  (i.appointmentTitle && appt.title && i.appointmentTitle.toLowerCase() === appt.title.toLowerCase())
+                              );
+                            const invoiceId = appt.invoiceId || apptInvoice?.id || (appt.id ? `INV-${appt.id}` : "-");
 
-              // Status filter
-              let matchesStatus = true;
-              if (invoiceStatusFilter === "in_progress") {
-                matchesStatus = inv.status === "draft" || inv.status === "sent" || inv.status === "viewed";
-              } else if (invoiceStatusFilter !== "all") {
-                matchesStatus = inv.status === invoiceStatusFilter;
-              }
+                            const openDetail = () => {
+                              setSelectedAppointmentForDetail({
+                                ...appt,
+                                clientId: client.id,
+                                clientName: appt.clientName || client.name,
+                                clientEmail: appt.clientEmail || client.email,
+                                clientPhone: appt.clientPhone || client.phone,
+                                clientStatus: client.status,
+                                providerName: providerName,
+                                serviceName: getResolvedServiceName(appt),
+                                invoiceId: invoiceId !== "-" ? invoiceId : undefined,
+                                eligibility: elgStatus,
+                                eligibilityStatus: elgStatus,
+                                eligibilityCheck: clientCheck,
+                                primaryInsurance: appt.primaryInsurance,
+                                secondaryInsurance: appt.secondaryInsurance,
+                                preCertification: appt.preCertification,
+                                syncToCase: appt.syncToCase,
+                              });
+                              setIsAppointmentDetailDrawerOpen(true);
+                            };
 
-              return matchesSearch && matchesStatus;
-            });
-
-            const totalInvoiced = allClientInvoices.filter(i => i.status !== "void").reduce((sum, i) => sum + i.total, 0);
-            const totalPaid = allClientInvoices.filter(i => i.status === "paid").reduce((sum, i) => sum + i.total, 0);
-            const totalOutstanding = allClientInvoices.filter(i => i.status === "sent" || i.status === "viewed" || i.status === "overdue").reduce((sum, i) => sum + i.total, 0);
-
-            return (
-              <div className="space-y-4">
-                {/* Header Toolbar */}
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-2 flex-wrap flex-1 w-full sm:w-auto">
-                    {/* Search Input */}
-                    <div className="relative flex-1 min-w-[200px] max-w-xs">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search invoice # or product..."
-                        value={invoiceSearchQuery}
-                        onChange={(e) => setInvoiceSearchQuery(e.target.value)}
-                        className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                      />
+                            return (
+                              <tr
+                                key={appt.id || idx}
+                                onClick={openDetail}
+                                className={`transition-colors cursor-pointer group ${isSelected ? "bg-[#E8F0FE]" : "hover:bg-blue-50/40"}`}
+                              >
+                                <td className="py-3.5 px-4 w-10" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => handleToggleSelectProfileAppt(String(appt.id))}
+                                    className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                                  />
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDetail();
+                                    }}
+                                    className="font-bold text-slate-900 hover:text-blue-600 transition-colors text-left cursor-pointer group/title"
+                                    style={{ fontFamily: "Outfit, sans-serif" }}
+                                  >
+                                    <span className="group-hover/title:underline">{appt.title || "Appointment"}</span>
+                                  </button>
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap text-slate-700 font-medium">
+                                  {getResolvedServiceName(appt)}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap text-slate-700 font-medium">
+                                  {formatDateTime(appt.date, appt.time)}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap text-slate-700 font-medium">
+                                  {providerName}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                  {(() => {
+                                    const s = (elgStatus || "active").toLowerCase().trim();
+                                    let bg = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                                    let label = "Active";
+                                    if (s === "inactive") { bg = "bg-rose-50 text-rose-700 border-rose-200"; label = "Inactive"; }
+                                    else if (s === "not_covered" || s === "not covered") { bg = "bg-rose-50 text-rose-700 border-rose-200"; label = "Not Covered"; }
+                                    else if (s === "inconclusive") { bg = "bg-amber-50 text-amber-800 border-amber-200"; label = "Inconclusive"; }
+                                    else if (s === "self_pay" || s === "self-pay") { bg = "bg-indigo-50 text-indigo-700 border-indigo-200"; label = "Self-Pay"; }
+                                    else if (s === "pending") { bg = "bg-slate-100 text-slate-700 border-slate-200"; label = "Pending"; }
+                                    return (
+                                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${bg}`}>
+                                        {label}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                                  {getStatusPill(appt.status)}
+                                </td>
+                                <td className="py-3.5 px-4 whitespace-nowrap text-right" onClick={(e) => e.stopPropagation()}>
+                                  <div className="flex items-center justify-end">
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                                          title="More Options"
+                                        >
+                                          <MoreVertical className="w-4 h-4" />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-44 bg-white border border-slate-200 rounded-xl shadow-lg p-1 z-50">
+                                        <DropdownMenuItem
+                                          onClick={openDetail}
+                                          className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                          style={{ fontFamily: "Outfit, sans-serif" }}
+                                        >
+                                          <Calendar className="w-3.5 h-3.5 text-blue-600" />
+                                          View Details
+                                        </DropdownMenuItem>
+                                        {isCompleted ? (
+                                          <DropdownMenuItem
+                                            onClick={() => handleOpenApptTranscript(appt, providerName)}
+                                            className="px-3 py-2 text-xs font-semibold text-blue-700 hover:bg-blue-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                            style={{ fontFamily: "Outfit, sans-serif" }}
+                                          >
+                                            <FileText className="w-3.5 h-3.5" />
+                                            View Chart Note
+                                          </DropdownMenuItem>
+                                        ) : (
+                                          <DropdownMenuItem
+                                            onClick={() => handleUpdateApptStatus(appt.id, "completed")}
+                                            className="px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                            style={{ fontFamily: "Outfit, sans-serif" }}
+                                          >
+                                            <Check className="w-3.5 h-3.5" />
+                                            Complete
+                                          </DropdownMenuItem>
+                                        )}
+                                        {!isCancelled && !isCompleted && (
+                                          <DropdownMenuItem
+                                            onClick={() => handleUpdateApptStatus(appt.id, "cancelled")}
+                                            className="px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer flex items-center gap-2"
+                                            style={{ fontFamily: "Outfit, sans-serif" }}
+                                          >
+                                            <X className="w-3.5 h-3.5" />
+                                            Cancel
+                                          </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuItem
+                                          onClick={() => handleDeleteAppt(appt.id)}
+                                          className="px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer flex items-center gap-2"
+                                          style={{ fontFamily: "Outfit, sans-serif" }}
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" />
+                                          Delete
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
-
-                    {/* Quick Filter Chip: Invoices in progress */}
-                    <button
-                      onClick={() =>
-                        setInvoiceStatusFilter(
-                          invoiceStatusFilter === "in_progress" ? "all" : "in_progress"
-                        )
-                      }
-                      className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border ${
-                        invoiceStatusFilter === "in_progress"
-                          ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                          : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                      }`}
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      Invoices in progress
-                    </button>
-
-                    {/* Status Dropdown Filter */}
-                    <select
-                      value={invoiceStatusFilter}
-                      onChange={(e) => setInvoiceStatusFilter(e.target.value)}
-                      className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <option value="all">All Statuses</option>
-                      <option value="draft">Draft</option>
-                      <option value="sent">Sent</option>
-                      <option value="viewed">Viewed</option>
-                      <option value="paid">Paid</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="void">Void</option>
-                    </select>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setIsRecordPaymentOpen(true)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <DollarSign className="w-4 h-4" /> Collect Payment
-                    </button>
-                    {/* + Create Invoice Button */}
-                    <button
-                      onClick={() => setIsCreateInvoiceDrawerOpen(true)}
-                      className="px-4 py-2 bg-[#1F2937] hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                      style={{ fontFamily: "Outfit, sans-serif" }}
-                    >
-                      <Plus className="w-4 h-4" /> + Create Invoice
-                    </button>
-                  </div>
-
-                </div>
-
-                {/* Summary stat strip */}
-                <div className="grid grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-xs">
-                  <div>
-                    <span className="text-slate-400 font-medium block">Total Invoiced</span>
-                    <span className="text-sm font-bold text-slate-900">${totalInvoiced.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium block">Paid</span>
-                    <span className="text-sm font-bold text-emerald-600">${totalPaid.toFixed(2)}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium block">Outstanding</span>
-                    <span className="text-sm font-bold text-amber-600">${totalOutstanding.toFixed(2)}</span>
-                  </div>
-                </div>
-
-                {/* Invoices Table matching Image 4 pattern */}
-                {filteredInvoices.length === 0 ? (
-                  <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-slate-200 p-6">
-                    <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-700">No invoices match your filter</p>
-                    <p className="text-xs text-slate-400 mt-1">Create a new invoice or change search criteria.</p>
-                  </div>
-                ) : (
-                  <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden text-xs">
-                    <table className="w-full text-left border-collapse">
-                      <thead style={{ backgroundColor: "#1F2937" }}>
-                        <tr>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">ID</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Name / Title</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Amount</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Products</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider">Status</th>
-                          <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-medium">
-                        {filteredInvoices.map((inv) => {
-                          const productNames = inv.lineItems.map((li) => li.description);
-                          const productSummary =
-                            productNames.length <= 2
-                              ? productNames.join(", ")
-                              : `${productNames.slice(0, 2).join(", ")} +${productNames.length - 2} more`;
-
-                          return (
-                            <tr key={inv.id} className="hover:bg-slate-50/80 transition-colors">
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <button
-                                  onClick={() => {
-                                    setSelectedInvoiceForDrawer(inv);
-                                    setIsInvoiceDrawerOpen(true);
-                                  }}
-                                  className="font-bold text-blue-600 hover:underline"
-                                >
-                                  {inv.id}
-                                </button>
-                              </td>
-                              <td className="py-3 px-4 font-bold text-slate-900 max-w-[180px] truncate">
-                                {inv.appointmentTitle || "Standalone Invoice"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap font-bold text-slate-900">
-                                ${inv.total.toFixed(2)}
-                              </td>
-                              <td className="py-3 px-4 text-slate-600 max-w-[220px] truncate" title={productNames.join(", ")}>
-                                {productSummary || "N/A"}
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap">
-                                <span
-                                  className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                    inv.status === "paid"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : inv.status === "sent"
-                                      ? "bg-blue-100 text-blue-800"
-                                      : inv.status === "overdue"
-                                      ? "bg-rose-100 text-rose-800"
-                                      : inv.status === "viewed"
-                                      ? "bg-purple-100 text-purple-800"
-                                      : "bg-amber-100 text-amber-800"
-                                  }`}
-                                >
-                                  {inv.status}
-                                </span>
-                              </td>
-                              <td className="py-3 px-4 whitespace-nowrap text-right space-x-1.5">
-                                <button
-                                  onClick={() => {
-                                    setSelectedInvoiceForDrawer(inv);
-                                    setIsInvoiceDrawerOpen(true);
-                                  }}
-                                  className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold"
-                                >
-                                  View
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
                   </div>
                 )}
               </div>
             );
           })()}
 
-          {/* ── Billing & Insurance Tab (RCM) ── */}
+          {/* ── Billing & Insurance Tab (Provider | Claims) ── */}
           {activeProfileTab === "billing" && (() => {
             const clientEligibility = allRcmEligibility.find(
               (e) => e.clientId === client.id || e.clientName.toLowerCase() === client.name.toLowerCase()
@@ -2539,176 +2849,188 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             );
             const activeDenials = clientClaims.filter((c) => c.status === "denied");
 
+            // Healthcare rendering provider for this client
+            const renderingProviderName =
+              clientClaims.find((c) => c.providerName)?.providerName ||
+              "Dr. Amanda Clark, MD";
+
             return (
-              <div className="p-8 space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {/* Active Denial Alert Banner if applicable */}
-                {activeDenials.length > 0 && (
-                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-3 text-rose-950">
-                      <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold">
-                        !
+              <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                {/* ── Sub-Tab Navigation: Provider | Claims ── */}
+                <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-lg border border-slate-200/60">
+                    {(
+                      [
+                        { id: "provider" as const, label: "Provider" },
+                        { id: "claims" as const, label: "Claims" },
+                      ] as const
+                    ).map((sub) => {
+                      const isActive = billingSubTab === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => setBillingSubTab(sub.id)}
+                          className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#181e25] text-white shadow-xs"
+                              : "text-slate-600 hover:text-slate-900 hover:bg-white/60"
+                          }`}
+                          style={{ fontFamily: "Outfit, sans-serif" }}
+                        >
+                          {sub.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* ── Sub-Tab 1: PROVIDER ── */}
+                {billingSubTab === "provider" && (
+                  <InsuranceProvidersTab />
+                )}
+
+                {/* ── Sub-Tab 2: CLAIMS ── */}
+                {billingSubTab === "claims" && (
+                  <div className="space-y-6">
+                    {/* Active Denial Alert Banner */}
+                    {activeDenials.length > 0 && (
+                      <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-3 text-rose-950">
+                          <div className="w-8 h-8 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold">
+                            !
+                          </div>
+                          <div>
+                            <h4 className="font-bold">Active Payer Denials Pending Resolution ({activeDenials.length})</h4>
+                            <p className="text-rose-800/80">
+                              {activeDenials.map((d) => `${d.id} (${d.denialCarc || "Denied"})`).join(", ")}. Patient statements are gated until settled.
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/revenue-cycle/worklist/denials`)}
+                          className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-2xs cursor-pointer"
+                        >
+                          Open Denial Board
+                        </button>
                       </div>
-                      <div>
-                        <h4 className="font-bold">Active Payer Denials Pending Resolution ({activeDenials.length})</h4>
-                        <p className="text-rose-800/80">
-                          {activeDenials.map((d) => `${d.id} (${d.denialCarc || "Denied"})`).join(", ")}. Patient statements are gated until settled.
-                        </p>
+                    )}
+
+                    {/* Claims Table */}
+                    <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+                            <tr>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider">Claim ID</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider">Service Date</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider">Payer</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Billed</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Insurance Paid</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Patient Due</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-center">Status</th>
+                              <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-sans">
+                            {clientClaims.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="text-center py-8 text-slate-400">
+                                  No claims filed for this patient record yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              clientClaims.map((cl) => (
+                                <tr
+                                  key={cl.id}
+                                  onClick={() => setSelectedRcmClaim(cl)}
+                                  className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                                >
+                                  <td className="px-5 py-3 font-mono font-bold text-blue-600">{cl.id}</td>
+                                  <td className="px-5 py-3 font-mono text-slate-600">{cl.serviceDate}</td>
+                                  <td className="px-5 py-3 text-slate-900 font-medium">{cl.payerName}</td>
+                                  <td className="px-5 py-3 text-right font-mono font-bold text-slate-900 tabular-nums">
+                                    ${cl.billedAmount.toFixed(2)}
+                                  </td>
+                                  <td className="px-5 py-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
+                                    {cl.paidAmount !== undefined ? `$${cl.paidAmount.toFixed(2)}` : "$0.00"}
+                                  </td>
+                                  <td className="px-5 py-3 text-right font-mono font-bold text-blue-700 tabular-nums">
+                                    {cl.patientResponsibility !== undefined
+                                      ? `$${cl.patientResponsibility.toFixed(2)}`
+                                      : "-"}
+                                  </td>
+                                  <td className="px-5 py-3 text-center">
+                                    <span
+                                      className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono ${
+                                        cl.status === "paid"
+                                          ? "bg-emerald-100 text-emerald-800"
+                                          : cl.status === "denied"
+                                          ? "bg-rose-100 text-rose-800"
+                                          : cl.status === "rejected"
+                                          ? "bg-red-100 text-red-900"
+                                          : "bg-slate-100 text-slate-700"
+                                      }`}
+                                    >
+                                      {cl.status.replace("_", " ")}
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-3 text-right relative" onClick={(e) => e.stopPropagation()}>
+                                    <div className="relative inline-block text-left">
+                                      <button
+                                        type="button"
+                                        onClick={() => setOpenMenuClaimId(openMenuClaimId === cl.id ? null : cl.id)}
+                                        className="p-1.5 hover:bg-slate-100 rounded-md transition-colors text-slate-500 hover:text-slate-800 cursor-pointer"
+                                        title="Actions"
+                                      >
+                                        <MoreVertical className="w-4 h-4" />
+                                      </button>
+                                      {openMenuClaimId === cl.id && (
+                                        <>
+                                          <div
+                                            className="fixed inset-0 z-20"
+                                            onClick={() => setOpenMenuClaimId(null)}
+                                          />
+                                          <div className="absolute right-0 mt-1 w-36 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-30 text-left">
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenMenuClaimId(null);
+                                                setSelectedRcmClaim(cl);
+                                              }}
+                                              className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                                            >
+                                              <Eye className="w-3.5 h-3.5 text-slate-400" />
+                                              View Detail
+                                            </button>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setOpenMenuClaimId(null);
+                                                navigator.clipboard?.writeText(cl.id);
+                                                toast.success(`Copied Claim ID ${cl.id}`);
+                                              }}
+                                              className="w-full px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 flex items-center gap-2 cursor-pointer font-medium"
+                                            >
+                                              <Copy className="w-3.5 h-3.5 text-slate-400" />
+                                              Copy Claim ID
+                                            </button>
+                                          </div>
+                                        </>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/revenue-cycle/worklist/denials`)}
-                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-semibold shadow-2xs"
-                    >
-                      Open Denial Board
-                    </button>
                   </div>
                 )}
 
-                {/* Top Metrics Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  {/* Insurance Coverage */}
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Primary Insurance Policy
-                    </span>
-                    <div className="text-base font-bold text-slate-900">
-                      {clientEligibility?.payerName || clientBalance?.primaryPayer || "No Primary Payer Assigned"}
-                    </div>
-                    <div className="flex items-center gap-2 pt-1">
-                      <span className="text-xs font-mono text-slate-500">
-                        ID: {clientEligibility?.memberId || "N/A"}
-                      </span>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-semibold font-mono ${
-                          clientEligibility?.status === "active"
-                            ? "bg-emerald-100 text-emerald-800"
-                            : clientEligibility?.status === "inconclusive"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {clientEligibility?.status || "Unverified"}
-                      </span>
-                    </div>
-                    {clientEligibility?.copayAmount !== undefined && (
-                      <div className="text-xs text-slate-600 pt-1 font-mono">
-                        Copay: <strong>${clientEligibility.copayAmount.toFixed(2)}</strong> • Ded: $
-                        {(clientEligibility.deductibleRemaining || 0).toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Balance Breakdown */}
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Patient Responsibility Ledger
-                    </span>
-                    <div className="text-2xl font-bold font-mono text-slate-900 tabular-nums">
-                      ${(clientBalance?.totalBalance || 0).toFixed(2)}
-                    </div>
-                    <div className="text-xs text-slate-500 flex justify-between pt-1">
-                      <span>Invoiceable: ${ (clientBalance?.invoiceableBalance || 0).toFixed(2)}</span>
-                      <span>Aging: {clientBalance?.agingBucket || "0-30"}d</span>
-                    </div>
-                  </div>
-
-                  {/* Active Claims Velocity */}
-                  <div className="p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-2">
-                    <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
-                      Claims in Lifecycle
-                    </span>
-                    <div className="text-2xl font-bold font-mono text-blue-700 tabular-nums">
-                      {clientClaims.length} Claims
-                    </div>
-                    <div className="text-xs text-slate-500 pt-1">
-                      {clientClaims.filter((c) => c.status === "paid").length} Settled •{" "}
-                      {clientClaims.filter((c) => c.status === "in_adjudication").length} In Adjudication
-                    </div>
-                  </div>
-                </div>
-
-                {/* Claims Table */}
-                <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
-                  <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                    <div>
-                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                        Patient Claims & Encounter Packages
-                      </h4>
-                      <p className="text-xs text-slate-500">Click any claim to open full adjudication detail</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/revenue-cycle/claims?search=${encodeURIComponent(client.name)}`)}
-                      className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1"
-                    >
-                      View in RCM Claims Module <ExternalLink className="w-3 h-3" />
-                    </button>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-100 bg-slate-50/50 text-slate-400 font-bold uppercase text-[10px]">
-                          <th className="px-5 py-3">Claim ID</th>
-                          <th className="px-5 py-3">Service Date</th>
-                          <th className="px-5 py-3">Payer</th>
-                          <th className="px-5 py-3 text-right">Billed</th>
-                          <th className="px-5 py-3 text-right">Insurance Paid</th>
-                          <th className="px-5 py-3 text-right">Patient Due</th>
-                          <th className="px-5 py-3 text-center">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 font-sans">
-                        {clientClaims.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="text-center py-8 text-slate-400">
-                              No claims filed for this patient record yet.
-                            </td>
-                          </tr>
-                        ) : (
-                          clientClaims.map((cl) => (
-                            <tr
-                              key={cl.id}
-                              onClick={() => setSelectedRcmClaim(cl)}
-                              className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                            >
-                              <td className="px-5 py-3 font-mono font-bold text-blue-600">{cl.id}</td>
-                              <td className="px-5 py-3 font-mono text-slate-600">{cl.serviceDate}</td>
-                              <td className="px-5 py-3 text-slate-900 font-medium">{cl.payerName}</td>
-                              <td className="px-5 py-3 text-right font-mono font-bold text-slate-900 tabular-nums">
-                                ${cl.billedAmount.toFixed(2)}
-                              </td>
-                              <td className="px-5 py-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
-                                {cl.paidAmount !== undefined ? `$${cl.paidAmount.toFixed(2)}` : "$0.00"}
-                              </td>
-                              <td className="px-5 py-3 text-right font-mono font-bold text-blue-700 tabular-nums">
-                                {cl.patientResponsibility !== undefined
-                                  ? `$${cl.patientResponsibility.toFixed(2)}`
-                                  : "-"}
-                              </td>
-                              <td className="px-5 py-3 text-center">
-                                <span
-                                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold font-mono ${
-                                    cl.status === "paid"
-                                      ? "bg-emerald-100 text-emerald-800"
-                                      : cl.status === "denied"
-                                      ? "bg-rose-100 text-rose-800"
-                                      : cl.status === "rejected"
-                                      ? "bg-red-100 text-red-900"
-                                      : "bg-slate-100 text-slate-700"
-                                  }`}
-                                >
-                                  {cl.status.replace("_", " ")}
-                                </span>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
               </div>
             );
           })()}
@@ -3476,15 +3798,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             isOpen={isCreateInvoiceDrawerOpen}
             onClose={() => setIsCreateInvoiceDrawerOpen(false)}
           />
-          {/* Record Payment Modal */}
-          {isRecordPaymentOpen && (
-            <RecordPaymentModal
-              isOpen={isRecordPaymentOpen}
-              onClose={() => setIsRecordPaymentOpen(false)}
-              clientId={client.id}
-              clientName={client.name}
-            />
-          )}
+
 
 
           {/* Schedule Appointment from Activity tab */}
@@ -3496,6 +3810,11 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               values={activityBookingValues}
               onChange={(patch) => setActivityBookingValues((prev) => ({ ...prev, ...patch }))}
               onSave={handleActivityBookingComplete}
+              onBookingSuccess={(booked) => {
+                setShowScheduleApptFromActivity(false);
+                setSelectedAppointmentForDetail(booked);
+                setIsAppointmentDetailDrawerOpen(true);
+              }}
               employees={[
                 { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
                 { id: 2, name: "Sarah Johnson", email: "sarah.j@healthcare.com" },
@@ -3515,6 +3834,39 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               onCustomFieldChange={() => {}}
               onOpenSelectFields={() => {}}
               onOpenCreateField={() => {}}
+            />
+          )}
+
+          {/* Appointment Detail Drawer */}
+          {selectedAppointmentForDetail && (
+            <AppointmentDetailDrawer
+              isOpen={isAppointmentDetailDrawerOpen}
+              onClose={() => setIsAppointmentDetailDrawerOpen(false)}
+              appointment={selectedAppointmentForDetail}
+              onReschedule={(appt) => {
+                setIsAppointmentDetailDrawerOpen(false);
+                setActivityBookingValues((prev) => ({
+                  ...prev,
+                  title: appt.title || prev.title,
+                  date: appt.date || prev.date,
+                }));
+                setShowScheduleApptFromActivity(true);
+              }}
+              onMarkComplete={(apptId) => {
+                handleUpdateApptStatus(apptId, "completed");
+                setSelectedAppointmentForDetail((prev) => (prev ? { ...prev, status: "completed" } : null));
+              }}
+              onOpenInvoice={(invId) => {
+                const inv = getInvoicesByClient(client.id).find((i) => i.id === invId);
+                if (inv) {
+                  setSelectedInvoiceForDrawer(inv);
+                  setIsInvoiceDrawerOpen(true);
+                }
+              }}
+              onOpenChartNote={(appt) => {
+                const pName = ALL_EMPLOYEES_MAP[String(appt.employeeId)] || appt.providerName || "Dr. Priya Sharma";
+                handleOpenApptTranscript(appt, pName);
+              }}
             />
           )}
 

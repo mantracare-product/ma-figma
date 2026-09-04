@@ -10,6 +10,7 @@ export type EligibilityStatus =
   | "inactive"
   | "not_covered"
   | "inconclusive"
+  | "unable_to_respond"
   | "pending"
   | "self_pay"
   | "site_responsibility";
@@ -26,6 +27,8 @@ export interface EligibilityCheck {
   checkedAt: string;
   copayAmount?: number;
   deductibleRemaining?: number;
+  coinsurance?: number;             // Coinsurance percent, e.g. 20 for 20%
+  terminationReason?: string;       // Reason for inactive or not covered
   source: "auto" | "manual_rerun";
   inconclusiveReason?: string;
 }
@@ -144,7 +147,7 @@ export interface DenialClaimItem {
   timelyFilingDeadline: string;
   timelyDaysRemaining: number;
   priorityScore: number;
-  status: "denied" | "resubmitted" | "reconciled" | "approved";
+  status: "denied" | "under_review" | "resubmitted" | "reconciled" | "approved";
 }
 
 export interface DenialClusterGroup {

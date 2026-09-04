@@ -88,7 +88,7 @@ export default function PostingActionModal({
       isOpen={isOpen}
       onClose={onClose}
       title={`Confirm Payment Posting — Remittance #${remittance.id}`}
-      maxWidth="max-w-2xl"
+      maxWidth="2xl"
     >
       <div className="space-y-6 pt-2" style={{ fontFamily: "DM Sans, sans-serif" }}>
         {/* Remittance Header Overview */}

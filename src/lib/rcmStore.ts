@@ -6,6 +6,7 @@
 
 import {
   EligibilityCheck,
+  EligibilityStatus,
   Encounter,
   Claim,
   DenialClusterGroup,
@@ -1463,6 +1464,54 @@ export function recheckEligibility(checkId: string): void {
   check.source = "manual_rerun";
   check.copayAmount = check.copayAmount || 25;
   check.inconclusiveReason = undefined;
+
+  saveRcmState(state);
+}
+
+export function recordAppointmentEligibility(params: {
+  appointmentId: string | number;
+  clientId: string;
+  clientName: string;
+  appointmentDate: string;
+  status: EligibilityStatus;
+  payerName?: string;
+  memberId?: string;
+  copayAmount?: number;
+  deductibleRemaining?: number;
+  coinsurance?: number;
+  terminationReason?: string;
+  inconclusiveReason?: string;
+}): void {
+  const state = getStoredRcmState();
+  const existingIdx = state.eligibilityChecks.findIndex(
+    (c) =>
+      String(c.appointmentId) === String(params.appointmentId) ||
+      c.appointmentId === `APT-${params.appointmentId}`
+  );
+
+  const check: EligibilityCheck = {
+    id: existingIdx >= 0 ? state.eligibilityChecks[existingIdx].id : `ELG-${params.appointmentId}`,
+    clientId: params.clientId,
+    clientName: params.clientName,
+    appointmentId: String(params.appointmentId),
+    appointmentDate: params.appointmentDate,
+    payerName: params.payerName || (params.status === "unable_to_respond" ? "Clearinghouse" : "Blue Cross Blue Shield"),
+    memberId: params.memberId || `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`,
+    status: params.status,
+    checkedAt: new Date().toISOString(),
+    copayAmount: params.copayAmount !== undefined ? params.copayAmount : params.status === "active" ? 25 : undefined,
+    deductibleRemaining: params.deductibleRemaining !== undefined ? params.deductibleRemaining : params.status === "active" ? 150 : undefined,
+    coinsurance: params.coinsurance !== undefined ? params.coinsurance : params.status === "active" ? 20 : undefined,
+    terminationReason: params.terminationReason,
+    inconclusiveReason: params.inconclusiveReason,
+    source: params.status === "active" ? "manual_rerun" : "auto",
+  };
+
+  if (existingIdx >= 0) {
+    state.eligibilityChecks[existingIdx] = check;
+  } else {
+    state.eligibilityChecks.unshift(check);
+  }
 
   saveRcmState(state);
 }

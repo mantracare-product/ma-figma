@@ -1215,7 +1215,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
         timelyDays: c.timelyDaysRemaining,
         status: c.status,
         faultAttribution: c.faultAttribution || "none",
-        created: c.createdAt.split("T")[0],
+        created: (c.submittedAt || c.serviceDate || new Date().toISOString()).split("T")[0],
       }));
     }
 

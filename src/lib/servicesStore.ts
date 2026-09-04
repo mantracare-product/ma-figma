@@ -138,10 +138,48 @@ function loadClientProducts(): Record<string, number[]> {
 
 function saveClientProducts(map: Record<string, number[]>) {
   localStorage.setItem(CLIENT_PRODUCTS_KEY, JSON.stringify(map));
+  window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
 export function getClientProductIds(clientId: string): number[] {
-  return loadClientProducts()[clientId] ?? [];
+  const map = loadClientProducts();
+  const explicit = new Set<number>(map[clientId] ?? []);
+
+  // Also auto-sync services from booked appointments for this client
+  try {
+    const rawAppts = sessionStorage.getItem("appointments_v1");
+    if (rawAppts) {
+      const allAppts: any[] = JSON.parse(rawAppts);
+      const allServices = loadServices();
+      const targetId = String(clientId).toLowerCase().trim();
+
+      allAppts.forEach((appt) => {
+        const matchesClient =
+          (appt.clientId && String(appt.clientId).toLowerCase() === targetId) ||
+          (appt.clientEmail && appt.clientEmail.toLowerCase() === targetId) ||
+          (appt.clientName && appt.clientName.toLowerCase() === targetId) ||
+          (targetId === "cl-001" && (appt.clientName?.toLowerCase().includes("sarah") || appt.clientEmail?.toLowerCase().includes("sarah"))) ||
+          (targetId === "cl-002" && (appt.clientName?.toLowerCase().includes("michael") || appt.clientEmail?.toLowerCase().includes("mchen"))) ||
+          (targetId === "cl-003" && (appt.clientName?.toLowerCase().includes("emily") || appt.clientEmail?.toLowerCase().includes("emily"))) ||
+          (targetId === "cl-006" && (appt.clientName?.toLowerCase().includes("martinez") || appt.clientEmail?.toLowerCase().includes("martinez"))) ||
+          (targetId === "cl-013" && (appt.clientName?.toLowerCase().includes("priya") || appt.clientEmail?.toLowerCase().includes("priya")));
+
+        if (matchesClient) {
+          if (appt.serviceId) {
+            const sid = Number(appt.serviceId);
+            if (!isNaN(sid)) explicit.add(sid);
+          }
+          const sName = appt.service || appt.serviceName;
+          if (sName) {
+            const matched = allServices.find((s) => s.name.toLowerCase() === sName.toLowerCase());
+            if (matched) explicit.add(matched.id);
+          }
+        }
+      });
+    }
+  } catch { /* ignore */ }
+
+  return Array.from(explicit);
 }
 
 export function assignProductToClient(clientId: string, serviceId: number): void {
@@ -164,3 +202,4 @@ export function getClientProducts(clientId: string): Service[] {
   const all = loadServices();
   return all.filter((s) => ids.includes(s.id));
 }
+

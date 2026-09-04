@@ -1,0 +1,2139 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Athelas RCM — Claim Lifecycle Reference</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link
+        href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <style>
+        :root {
+            --bg: #F2F3EF;
+            --surface: #FFFFFF;
+            --surface-2: #FAFAF7;
+            --border: #DEDDD2;
+            --border-strong: #C7C5B8;
+            --text: #1C1B17;
+            --text-dim: #66655C;
+            --text-faint: #93917F;
+            --line: #CBC9BC;
+
+            --system: #2E5C8A;
+            --system-bg: #E7EEF6;
+            --human: #3E7A4E;
+            --human-bg: #E6F1E8;
+            --ai: #7A4FA0;
+            --ai-bg: #F0E9F6;
+            --block: #B03E32;
+            --block-bg: #F8E8E5;
+
+            --sans: 'IBM Plex Sans', -apple-system, sans-serif;
+            --mono: 'IBM Plex Mono', monospace;
+
+            --radius: 6px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            font-size: 15px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            color: var(--system);
+        }
+
+        code,
+        .fig,
+        .code {
+            font-family: var(--mono);
+            font-size: 0.85em;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1px 6px;
+            white-space: nowrap;
+        }
+
+        .fig {
+            background: #FFF7E6;
+            border-color: #E7D6A3;
+            color: #6B4E12;
+            font-weight: 600;
+        }
+
+        /* ===== Header / nav ===== */
+        header.top {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: rgba(242, 243, 239, 0.96);
+            backdrop-filter: blur(6px);
+            border-bottom: 1px solid var(--border-strong);
+        }
+
+        .top-inner {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 14px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .brand {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .brand .kicker {
+            font-size: 12px;
+            color: var(--text-dim);
+            letter-spacing: 0.02em;
+        }
+
+        .brand h1 {
+            margin: 0;
+            font-size: 17px;
+            font-weight: 700;
+        }
+
+        nav.jump {
+            display: flex;
+            gap: 2px;
+            flex-wrap: wrap;
+        }
+
+        nav.jump a {
+            text-decoration: none;
+            color: var(--text-dim);
+            font-size: 13px;
+            padding: 7px 10px;
+            border-radius: 5px;
+        }
+
+        nav.jump a:hover {
+            background: var(--surface);
+            color: var(--text);
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        button.ctrl {
+            font-family: var(--sans);
+            font-size: 12.5px;
+            border: 1px solid var(--border-strong);
+            background: var(--surface);
+            color: var(--text);
+            border-radius: 5px;
+            padding: 6px 11px;
+            cursor: pointer;
+        }
+
+        button.ctrl:hover {
+            border-color: var(--text-dim);
+        }
+
+        main {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 0 24px 90px;
+        }
+
+        section {
+            padding-top: 48px;
+            scroll-margin-top: 78px;
+        }
+
+        section h2 {
+            font-size: 22px;
+            margin: 0 0 4px;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+        }
+
+        section .section-index {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--text-faint);
+        }
+
+        section>.lede {
+            color: var(--text-dim);
+            max-width: 70ch;
+            margin: 0 0 24px;
+            font-size: 14.5px;
+        }
+
+        /* ===== Legend ===== */
+        .legend {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-top: 8px;
+        }
+
+        .legend-chip {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--c);
+            border-radius: var(--radius);
+            padding: 12px 14px;
+            cursor: pointer;
+            text-align: left;
+            font-family: var(--sans);
+            transition: transform .12s ease, box-shadow .12s ease;
+        }
+
+        .legend-chip:hover {
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .legend-chip.active {
+            box-shadow: 0 0 0 2px var(--c) inset;
+        }
+
+        .legend-chip .dot {
+            display: inline-block;
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: var(--c);
+            margin-right: 7px;
+        }
+
+        .legend-chip .name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .legend-chip .desc {
+            font-size: 12.5px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .legend-note {
+            font-size: 12.5px;
+            color: var(--text-faint);
+            margin-top: 10px;
+        }
+
+        /* ===== Timeline / flow ===== */
+        .flow {
+            margin-top: 28px;
+        }
+
+        .stage {
+            display: flex;
+            align-items: stretch;
+            transition: opacity .15s ease;
+        }
+
+        .stage.dim {
+            opacity: 0.28;
+        }
+
+        .rail {
+            width: 30px;
+            flex: 0 0 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .rail .num {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: var(--c);
+            color: #fff;
+            font-family: var(--mono);
+            font-size: 11.5px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 26px;
+        }
+
+        .rail .stem {
+            flex: 1;
+            width: 2px;
+            background: var(--line);
+            margin: 2px 0;
+        }
+
+        .stage:last-of-type .rail .stem {
+            background: transparent;
+        }
+
+        .stage-content {
+            flex: 1;
+            padding: 0 0 30px 16px;
+            min-width: 0;
+        }
+
+        details.node {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 4px solid var(--c);
+            border-radius: var(--radius);
+            margin-bottom: 0;
+        }
+
+        details.node>summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 13px 16px;
+            display: flex;
+            align-items: center;
+            gap: 11px;
+        }
+
+        details.node>summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .node-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .node-sub {
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        .chev {
+            margin-left: auto;
+            color: var(--text-faint);
+            font-size: 13px;
+            transition: transform .15s ease;
+            flex: 0 0 auto;
+        }
+
+        details[open]>summary .chev {
+            transform: rotate(90deg);
+        }
+
+        .node-body {
+            padding: 2px 16px 16px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .kv {
+            display: grid;
+            grid-template-columns: 110px 1fr;
+            gap: 6px 14px;
+            margin-top: 12px;
+            font-size: 13.5px;
+        }
+
+        .kv dt {
+            color: var(--text-faint);
+            font-size: 12.5px;
+            padding-top: 2px;
+        }
+
+        .kv dd {
+            margin: 0;
+        }
+
+        .kv dd .fig,
+        .kv dd code {
+            margin: 1px 5px 1px 0;
+            display: inline-block;
+        }
+
+        .jumplink {
+            display: inline-block;
+            margin-top: 12px;
+            font-size: 12.5px;
+            text-decoration: none;
+            border-bottom: 1px dashed var(--system);
+        }
+
+        /* ===== Branches ===== */
+        .branches {
+            margin: 12px 0 4px 14px;
+            padding-left: 18px;
+            border-left: 2px dashed var(--border-strong);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .branches .branch-label {
+            font-size: 11px;
+            text-transform: none;
+            color: var(--text-faint);
+            margin: 2px 0 0 2px;
+            letter-spacing: 0.02em;
+        }
+
+        details.node.branch {
+            border-left-width: 3px;
+        }
+
+        details.node.branch>summary {
+            padding: 10px 13px;
+            gap: 9px;
+        }
+
+        details.node.branch .node-title {
+            font-size: 13.5px;
+        }
+
+        details.node.branch .node-sub {
+            font-size: 12.5px;
+        }
+
+        .branch-nub {
+            position: relative;
+        }
+
+        .branch-nub::before {
+            content: "";
+            position: absolute;
+            left: -19px;
+            top: 22px;
+            width: 14px;
+            height: 2px;
+            background: var(--border-strong);
+        }
+
+        .resolve {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            font-size: 12.5px;
+            margin-top: 11px;
+            padding-top: 11px;
+            border-top: 1px dashed var(--border);
+        }
+
+        .resolve .glyph {
+            font-size: 14px;
+        }
+
+        .resolve.rejoin {
+            color: var(--human);
+        }
+
+        .resolve.terminal {
+            color: var(--text-dim);
+        }
+
+        .resolve.escalate {
+            color: var(--block);
+            font-weight: 600;
+        }
+
+        .fork-note {
+            margin: 10px 0 20px 44px;
+            padding: 12px 15px;
+            border: 1px dashed var(--border-strong);
+            border-radius: var(--radius);
+            background: var(--surface-2);
+            font-size: 13px;
+            color: var(--text-dim);
+            max-width: 640px;
+        }
+
+        .fork-note strong {
+            color: var(--text);
+        }
+
+        /* ===== Integrations ===== */
+        .integ-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 14px;
+            margin-top: 20px;
+        }
+
+        .integ-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px 18px;
+        }
+
+        .integ-card h3 {
+            margin: 0 0 3px;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .integ-card h3 .integ-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--system);
+            flex: 0 0 auto;
+        }
+
+        .integ-card .tag {
+            display: inline-block;
+            font-family: var(--mono);
+            font-size: 11px;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 1px 6px;
+            color: var(--text-dim);
+            margin: 6px 4px 6px 0;
+        }
+
+        .integ-card .row {
+            margin-top: 10px;
+            font-size: 13px;
+        }
+
+        .integ-card .row .label {
+            color: var(--text-faint);
+            font-size: 11.5px;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .integ-card .row.fail .label {
+            color: var(--block);
+        }
+
+        /* ===== AI panel ===== */
+        .ai-banner {
+            background: var(--ai-bg);
+            border: 1px solid #D4C0E8;
+            border-left: 5px solid var(--ai);
+            border-radius: var(--radius);
+            padding: 16px 20px;
+            margin: 20px 0 24px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .ai-banner .mark {
+            font-size: 22px;
+            line-height: 1;
+            color: var(--ai);
+            flex: 0 0 auto;
+        }
+
+        .ai-banner p {
+            margin: 0;
+            font-weight: 600;
+            font-size: 14.5px;
+            color: #3E2A56;
+        }
+
+        .ai-banner span.sub {
+            display: block;
+            font-weight: 400;
+            font-size: 13px;
+            color: #5A4670;
+            margin-top: 4px;
+        }
+
+        table.ai-table,
+        table.ec-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        table.ai-table th,
+        table.ec-table th {
+            text-align: left;
+            font-size: 11.5px;
+            color: var(--text-faint);
+            font-weight: 600;
+            padding: 10px 14px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+
+        table.ai-table td,
+        table.ec-table td {
+            padding: 11px 14px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: top;
+        }
+
+        table.ai-table tr:last-child td,
+        table.ec-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .auto-pill,
+        .human-pill {
+            display: inline-block;
+            font-family: var(--mono);
+            font-size: 11px;
+            border-radius: 4px;
+            padding: 2px 7px;
+            margin-bottom: 4px;
+        }
+
+        .auto-pill {
+            background: var(--system-bg);
+            color: var(--system);
+        }
+
+        .human-pill {
+            background: var(--human-bg);
+            color: var(--human);
+        }
+
+        /* ===== Edge case table ===== */
+        .ec-filters {
+            display: flex;
+            gap: 8px;
+            margin: 16px 0 14px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .ec-filters span {
+            font-size: 12.5px;
+            color: var(--text-faint);
+        }
+
+        table.ec-table tr {
+            transition: opacity .12s ease;
+        }
+
+        table.ec-table tr.dim {
+            opacity: 0.25;
+        }
+
+        .actor-dot {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 7px;
+            position: relative;
+            top: -1px;
+        }
+
+        tr[data-actor="system"] .actor-dot {
+            background: var(--system);
+        }
+
+        tr[data-actor="human"] .actor-dot {
+            background: var(--human);
+        }
+
+        tr[data-actor="ai"] .actor-dot {
+            background: var(--ai);
+        }
+
+        tr[data-actor="block"] .actor-dot {
+            background: var(--block);
+        }
+
+        .ec-table td:first-child {
+            font-weight: 500;
+            min-width: 190px;
+        }
+
+        tr:target,
+        div:target {
+            animation: flash 1.8s ease;
+        }
+
+        @keyframes flash {
+            0% {
+                background: #FFF3C4;
+            }
+
+            100% {
+                background: transparent;
+            }
+        }
+
+        /* ===== Gaps ===== */
+        .gaps {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 18px;
+        }
+
+        .gap-item {
+            display: flex;
+            gap: 12px;
+            background: var(--block-bg);
+            border: 1px solid #E3BEB6;
+            border-left: 4px solid var(--block);
+            border-radius: var(--radius);
+            padding: 12px 16px;
+            font-size: 13.5px;
+        }
+
+        .gap-item .gnum {
+            font-family: var(--mono);
+            color: var(--block);
+            font-weight: 600;
+            flex: 0 0 24px;
+        }
+
+        .gap-item strong {
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .gap-item .gdesc {
+            color: #5A362F;
+        }
+
+        footer {
+            max-width: 1180px;
+            margin: 40px auto 0;
+            padding: 20px 24px 40px;
+            border-top: 1px solid var(--border-strong);
+            color: var(--text-faint);
+            font-size: 12.5px;
+        }
+
+        @media (max-width:820px) {
+            .legend {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .integ-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .kv {
+                grid-template-columns: 90px 1fr;
+            }
+
+            nav.jump {
+                display: none;
+            }
+        }
+
+        @media (max-width:560px) {
+            .legend {
+                grid-template-columns: 1fr;
+            }
+
+            .fork-note {
+                margin-left: 0;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="top">
+        <div class="top-inner">
+            <div class="brand">
+                <span class="kicker">Internal reference · RCM partnership evaluation</span>
+                <h1>Athelas — Claim Lifecycle</h1>
+            </div>
+            <nav class="jump">
+                <a href="#legend">Legend</a>
+                <a href="#flow">Flow</a>
+                <a href="#integrations">Integrations</a>
+                <a href="#ai">AI touchpoints</a>
+                <a href="#edgecases">Edge cases</a>
+                <a href="#gaps">Open gaps</a>
+            </nav>
+            <div class="controls">
+                <button class="ctrl" id="expandAll">Expand all</button>
+                <button class="ctrl" id="collapseAll">Collapse all</button>
+            </div>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- ================= LEGEND ================= -->
+        <section id="legend">
+            <h2><span class="section-index">01</span> Legend — who acts</h2>
+            <p class="lede">Every node in this document is colored by who or what performs that step. Click a chip to
+                isolate that actor across the whole page — the flow diagram and edge-case table both dim everything
+                else.</p>
+            <div class="legend">
+                <button class="legend-chip" data-actor="system" style="--c:#2E5C8A">
+                    <span class="dot"></span><span class="name">System</span>
+                    <div class="desc">Runs automatically — eligibility checks, auto-posting, auto-matching, scheduled
+                        statements.</div>
+                </button>
+                <button class="legend-chip" data-actor="human" style="--c:#3E7A4E">
+                    <span class="dot"></span><span class="name">Biller / Front desk</span>
+                    <div class="desc">A person performs or confirms the action inside Insights.</div>
+                </button>
+                <button class="legend-chip" data-actor="ai" style="--c:#7A4FA0">
+                    <span class="dot"></span><span class="name">AI — needs approval</span>
+                    <div class="desc">Suggests or drafts a change. Never takes effect without explicit human
+                        confirmation.</div>
+                </button>
+                <button class="legend-chip" data-actor="block" style="--c:#B03E32">
+                    <span class="dot"></span><span class="name">Blocking / escalation</span>
+                    <div class="desc">Work stops here until someone (site staff or Athelas Ops) resolves it.</div>
+                </button>
+            </div>
+            <p class="legend-note" id="filterStatus">No filter active — showing all roles.</p>
+        </section>
+
+        <!-- ================= MASTER FLOW ================= -->
+        <section id="flow">
+            <h2><span class="section-index">02</span> Master flow — claim lifecycle</h2>
+            <p class="lede">The numbered spine is the happy path. Every dashed branch is an edge case documented for
+                that stage — expand any node for the exact status names and timing. Branches resolve three ways: <strong
+                    style="color:var(--human)">↩ rejoin</strong> back into the flow, <strong
+                    style="color:var(--text-dim)">■ terminal</strong>, or <strong style="color:var(--block)">▲
+                    escalate</strong>.</p>
+
+            <div class="flow">
+
+                <!-- STAGE 1 -->
+                <div class="stage" data-actor="system">
+                    <div class="rail" style="--c:#2E5C8A">
+                        <div class="num">1</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="system" style="--c:#2E5C8A">
+                            <summary>
+                                <span class="node-title">Eligibility check</span>
+                                <span class="node-sub">— automated payer verification</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Appointment scheduled</dd>
+                                    <dt>Actor</dt>
+                                    <dd>System (automated) via Waystar / Availity / UHC clearinghouses</dd>
+                                    <dt>Status names</dt>
+                                    <dd><code>Active</code><code>Inactive</code><code>Not Covered</code><code>Inconclusive</code><code>Unable to get a response</code><code>Pending</code><code>None</code><code>Self Pay</code><code>Site Responsibility</code>
+                                    </dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd><span class="fig">7 days before appointment</span> (automated run) + nightly
+                                        re-check of all upcoming appointments</dd>
+                                    <dt>Rules chain</dt>
+                                    <dd>Appointment Rules → Eligibility Parser Rules → Suggested PR Rules, evaluated in
+                                        that order; suggestion amounts stored in cents</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Inactive / Not Covered</span><span
+                                            class="node-sub">— coverage confirmed absent</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Actor</dt>
+                                            <dd>Front desk</dd>
+                                            <dt>Action</dt>
+                                            <dd>Contact patient, correct insurance in the <strong>EHR</strong> (Insights
+                                                cannot write back), then Re-Run</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Eligibility
+                                            check (Re-Run)</div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Inconclusive</span><span class="node-sub">—
+                                            usually a data-mismatch</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Common causes</dt>
+                                            <dd>Patient data mismatch · Member ID format rejected · Appointment added
+                                                recently · Coverage / subscriber not found · Provider or payer
+                                                enrollment message (→ flag for Athelas eligibility review)</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Eligibility
+                                            check (Re-Run) after EHR correction</div>
+                                    </div>
+                                </details>
+                            </div>
+
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Self-pay / missing insurance</span><span
+                                            class="node-sub">— always returns Inconclusive</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Handling</dt>
+                                            <dd>Front desk proceeds with self-pay fee schedule or manual collection</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Check-in /
+                                            upfront collection</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 2 -->
+                <div class="stage" data-actor="human">
+                    <div class="rail" style="--c:#3E7A4E">
+                        <div class="num">2</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="human" style="--c:#3E7A4E">
+                            <summary>
+                                <span class="node-title">Check-in / upfront collection</span>
+                                <span class="node-sub">— front desk collects estimated PR</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Patient arrives — scheduled or walk-in</dd>
+                                    <dt>Actor</dt>
+                                    <dd>Front desk</dd>
+                                    <dt>Status names</dt>
+                                    <dd><code>Estimated PR</code> (placeholder, matches payment type/amount exactly)
+                                    </dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd><span class="fig">PR can take 10–15 minutes to generate</span> — avoid stacking
+                                        adjustments until it settles</dd>
+                                    <dt>Mechanism</dt>
+                                    <dd>Collected payment creates a matching Estimated PR entry so the visible balance
+                                        zeroes out until adjudication</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="system" style="--c:#2E5C8A">
+                                    <summary><span class="node-title">Block PR rule active</span><span
+                                            class="node-sub">— PR suppressed for CPT/condition</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Behavior</dt>
+                                            <dd>Priority-ordered rule prevents any PR from being generated for the
+                                                matching charge type; unprioritized rule = global, non-editable</dd>
+                                        </dl>
+                                        <div class="resolve terminal"><span class="glyph">■</span> terminal for that
+                                            charge type — by design</div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Charge override</span><span class="node-sub">—
+                                            manual amount entered in cents</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Actor</dt>
+                                            <dd>Front desk, via the shield icon on the appointment</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> overrides suggestion;
+                                            continues in flow normally</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 3 -->
+                <div class="stage" data-actor="system">
+                    <div class="rail" style="--c:#2E5C8A">
+                        <div class="num">3</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="system" style="--c:#2E5C8A">
+                            <summary>
+                                <span class="node-title">Encounter / claim created</span>
+                                <span class="node-sub">— chart note signed → claim forms</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Provider signs the chart note</dd>
+                                    <dt>Actor</dt>
+                                    <dd>Provider (clinical) + System (administrative sync)</dd>
+                                    <dt>Sync flows</dt>
+                                    <dd>
+                                        <strong>Flow 1</strong> AIR → Encounter: admin changes (provider, insurance,
+                                        prior auth) after note submission auto-update the linked claim — never
+                                        overwrites clinical data.<br>
+                                        <strong>Flow 3</strong> Encounter → AIR: billing-team edits to "significant"
+                                        fields queue back to AIR as the source of truth.
+                                    </dd>
+                                </dl>
+                                <a class="jumplink" href="#ec-import-missing">See related edge-case entries →</a>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Import error</span><span class="node-sub">— claim
+                                            never forms</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Sub-types</dt>
+                                            <dd>Missing insurance ID · Unrecognized custom CPT code · Unregistered
+                                                provider/facility · Possible duplicate patient</dd>
+                                            <dt>Resolution</dt>
+                                            <dd>Fix in EHR (flows in next overnight import) or use the Import button
+                                                directly in Insights</dd>
+                                        </dl>
+                                        <div class="resolve escalate"><span class="glyph">▲</span> escalate → site staff
+                                            / Athelas Ops depending on type</div>
+                                        <a class="jumplink" href="#ec-import-missing">Full edge-case entry →</a>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Billing addendum</span><span class="node-sub">—
+                                            post-submission chart note correction</span><span class="chev">›</span>
+                                    </summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Rule</dt>
+                                            <dd>Only one active addendum per chart note at a time; unlimited addendums
+                                                total</dd>
+                                            <dt>Compliance gate</dt>
+                                            <dd>Only the <em>provider</em> can finalize — validates documentation,
+                                                updates the encounter, re-locks the note</dd>
+                                            <dt>Known gap</dt>
+                                            <dd>No "cancel" action exists once an addendum is created</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> finalized addendum →
+                                            resubmit per standard protocol</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 4 -->
+                <div class="stage" data-actor="human">
+                    <div class="rail" style="--c:#3E7A4E">
+                        <div class="num">4</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="human" style="--c:#3E7A4E">
+                            <summary>
+                                <span class="node-title">Claim review & billing rules</span>
+                                <span class="node-sub">— biller + AI validation before submission</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Biller opens the claim / clicks Preview</dd>
+                                    <dt>Actor</dt>
+                                    <dd>Biller + AI (Athelas Assistant validation)</dd>
+                                    <dt>Rule engines</dt>
+                                    <dd>Billing · Submission Blocking · Encounter Modifying · Adjustments · Appointments
+                                        — run in ascending Priority order</dd>
+                                    <dt>Dry-run outcomes</dt>
+                                    <dd><code>Billing Rules (star)</code> auto field change ·
+                                        <code>Skippable Rule</code> soft suggestion · <code>Hard Block</code> cannot
+                                        submit</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Hard block</span><span class="node-sub">—
+                                            submission physically prevented</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Causes</dt>
+                                            <dd>Missing DOB / insurance ID / NPI · CHC compliance violation (FQHC) ·
+                                                known payer rejection pattern</dd>
+                                        </dl>
+                                        <div class="resolve escalate"><span class="glyph">▲</span> escalate → biller
+                                            must resolve before proceeding</div>
+                                        <a class="jumplink" href="#ec-hardblock">Full edge-case entry →</a>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="ai" style="--c:#7A4FA0">
+                                    <summary><span class="node-title">AI validation suggestion (✨)</span><span
+                                            class="node-sub">— zip / modifier / POS / diagnosis fixes</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Human step</dt>
+                                            <dd>Biller must Accept or Reject each suggestion; rejecting requires a
+                                                documented reason</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> accepted → applied to
+                                            claim; rejected → claim unchanged</div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Direct submission edit (pencil icon)</span><span
+                                            class="node-sub">— bypasses the rules engine</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Risk</dt>
+                                            <dd>Documented as a workaround, not a routine path — none of the automated
+                                                validation runs</dd>
+                                        </dl>
+                                        <div class="resolve escalate"><span class="glyph">▲</span> use with caution — no
+                                            safety net</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 5 -->
+                <div class="stage" data-actor="human">
+                    <div class="rail" style="--c:#3E7A4E">
+                        <div class="num">5</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="human" style="--c:#3E7A4E">
+                            <summary>
+                                <span class="node-title">Submission</span>
+                                <span class="node-sub">— claim sent to payer</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Biller clicks Submit, or system auto-submits Athelas-Responsibility claims</dd>
+                                    <dt>Form logic</dt>
+                                    <dd>CMS-1500 / UB-04 / ADA generated automatically by payer type; MSP Type Code
+                                        required when Medicare is secondary/tertiary (Working Aged, ESRD, No-Fault,
+                                        Workers' Comp, Black Lung, Disability, Liability)</dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd>
+                                        <span class="fig">Ack. 1–3 days</span>
+                                        <span class="fig">Processing 14–30 days</span>
+                                        <span class="fig">Payment/denial 30–45 days</span>
+                                        <span class="fig">Timely filing typically 60–90 days</span> (payer-specific)
+                                    </dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="fork-note">
+                            <strong>Payer response forks three ways</strong> from here: a clean acceptance goes straight
+                            to Remittance / posting; a technical rejection routes to the Rejection stage; an
+                            adjudicated-but-unpaid claim routes to the Denial stage. Both Rejection and Denial resolve
+                            either by resubmitting (rejoins Submission) or writing off (terminal, or logged as a posting
+                            adjustment).
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 6 -->
+                <div class="stage" data-actor="block">
+                    <div class="rail" style="--c:#B03E32">
+                        <div class="num">6</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="block" style="--c:#B03E32">
+                            <summary>
+                                <span class="node-title">Rejection branch</span>
+                                <span class="node-sub">— clearinghouse / payer gateway refuses the claim</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Definition</dt>
+                                    <dd><strong>Rejection ≠ Denial</strong> — the claim was never accepted into the
+                                        payer's system, so it's invisible to insurance and carries real timely-filing
+                                        risk</dd>
+                                    <dt>Status names</dt>
+                                    <dd><code>More Info Required</code><code>Athelas Responsibility</code><code>Not Workable</code><code>Written Off</code>
+                                    </dd>
+                                    <dt>Sub-chain</dt>
+                                    <dd><code>Not Started</code> → <code>Awaiting EHR Updates</code> → staff marks
+                                        <code>Updated in EHR</code> → Athelas resubmits</dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd><span class="fig">Athelas Responsibility: ~15 days</span> to resolve
+                                        &nbsp;·&nbsp; <span class="fig">resubmit within ~24 hours</span> of "Updated in
+                                        EHR"</dd>
+                                    <dt>Bulk tool</dt>
+                                    <dd>Resubmit up to <span class="fig">50 claims</span> at once</dd>
+                                </dl>
+                                <a class="jumplink" href="#ec-rejection">Full edge-case entry →</a>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Blocked sub-state</span><span class="node-sub">—
+                                            staff cannot self-resolve</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <div class="resolve escalate"><span class="glyph">▲</span> escalate → Athelas
+                                            Ops</div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Fixed and resubmitted</span><span
+                                            class="node-sub">— single or bulk</span><span class="chev">›</span>
+                                    </summary>
+                                    <div class="node-body">
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Submission
+                                        </div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Not Workable / Written Off</span><span
+                                            class="node-sub">— abandoned</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <div class="resolve terminal"><span class="glyph">■</span> terminal — no further
+                                            pursuit</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 7 -->
+                <div class="stage" data-actor="block">
+                    <div class="rail" style="--c:#B03E32">
+                        <div class="num">7</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="block" style="--c:#B03E32">
+                            <summary>
+                                <span class="node-title">Denial branch</span>
+                                <span class="node-sub">— payer adjudicated and declined payment</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Status names</dt>
+                                    <dd><code>Site Action Required</code><code>Athelas Responsibility</code><code>Not Workable</code>
+                                        (split into <code>Unavoidable</code> / <code>Regrettable</code>)</dd>
+                                    <dt>Sub-chain</dt>
+                                    <dd>Same as rejection: <code>Not Started</code> → <code>Awaiting EHR Updates</code>
+                                        → <code>Updated in EHR</code> → resubmit within <span class="fig">~24
+                                            hours</span></dd>
+                                    <dt>Benchmark</dt>
+                                    <dd><span class="fig">Industry denial rate ~11%</span> (Denials Analysis page)</dd>
+                                    <dt>Auto-resolution</dt>
+                                    <dd>Target Allowed Amounts (TAA) — optional, Athelas-managed, no self-serve config —
+                                        auto-writes off the long tail once payout is deemed acceptable</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Partial denial</span><span class="node-sub">— some
+                                            lines paid, others fully denied</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Definition</dt>
+                                            <dd>≥1 procedure has allowed amount &gt; $0 <strong>and</strong> ≥1
+                                                procedure is denied entirely</dd>
+                                            <dt>Flags shown</dt>
+                                            <dd>Red outstanding balance · <code>PR Status: Provisional</code> ·
+                                                <code>Status: Not Balanced</code></dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> resubmit (fix) — or —
+                                        </div>
+                                        <div class="resolve terminal"><span class="glyph">■</span> adjust / write off
+                                            remainder</div>
+                                        <a class="jumplink" href="#ec-partialdenial">Full edge-case entry →</a>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Unresolved balance</span><span class="node-sub">—
+                                            all lines have allowed amount, some still short</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Definition</dt>
+                                            <dd>Every procedure has allowed amount &gt; $0, but some charged amount is
+                                                still denied on ≥1 line — e.g. a <code>PI-59</code> concurrent-procedure
+                                                adjustment</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> resubmit (fix) — or —
+                                        </div>
+                                        <div class="resolve terminal"><span class="glyph">■</span> adjust / write off
+                                            remainder</div>
+                                        <a class="jumplink" href="#ec-unresolvedbal">Full edge-case entry →</a>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 8 -->
+                <div class="stage" data-actor="system">
+                    <div class="rail" style="--c:#2E5C8A">
+                        <div class="num">8</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="system" style="--c:#2E5C8A">
+                            <summary>
+                                <span class="node-title">Remittance / posting</span>
+                                <span class="node-sub">— ERA (835) or manual EOB applied to the ledger</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>ERA (835) arrives, or biller enters an EOB / payer portal check / payer call
+                                    </dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd><span class="fig">Default: auto-posts within 6 hours</span> &nbsp;·&nbsp;
+                                        manually entered EOB data appears on claims within <span class="fig">24
+                                            hours</span></dd>
+                                    <dt>Posting actions</dt>
+                                    <dd>
+                                        <code style="border-left:4px solid #C23B3B">Negate</code>
+                                        <code style="border-left:4px solid #C7A83D">Write Off</code>
+                                        <code style="border-left:4px solid #C7A83D">Write Off PR</code>
+                                        <code style="border-left:4px solid #3E9A5E">Push to PR</code>
+                                        <code style="border-left:4px solid #7A4FA0">Custom Adjustment</code>
+                                        — all net-zero ledger moves, all shown in Preview Mode before <strong>Confirm
+                                            Posting</strong>. (Colors here are Insights' own product UI colors for these
+                                        actions — a separate scheme from the actor legend above.)
+                                    </dd>
+                                    <dt>EOB pipeline</dt>
+                                    <dd><code>Backlog</code> → <code>In Progress</code> →
+                                        <code>Partially Completed</code> → <code>Submitting</code> → <code>Posted</code>
+                                        → <code>Blocked</code></dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="block" style="--c:#B03E32">
+                                    <summary><span class="node-title">Manual review</span><span class="node-sub">—
+                                            auto-posting declined</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Triggers</dt>
+                                            <dd>Would create a negative balance · conflicting PR across resubmissions ·
+                                                remit doesn't balance to ERA charges · future check date · primary payer
+                                                remit contains <code>OA23</code></dd>
+                                        </dl>
+                                        <div class="resolve escalate"><span class="glyph">▲</span> escalate → biller /
+                                            Athelas review in the Posting Tool</div>
+                                        <a class="jumplink" href="#ec-negbal">Full edge-case entries →</a>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="system" style="--c:#2E5C8A">
+                                    <summary><span class="node-title">Archived</span><span class="node-sub">— duplicate
+                                            / bad data</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <div class="resolve terminal"><span class="glyph">■</span> excluded from posting
+                                            entirely (reversible via Unarchive)</div>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="ai" style="--c:#7A4FA0">
+                                    <summary><span class="node-title">EOB Copilot</span><span class="node-sub">— AI
+                                            transcribes uploaded EOB</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Human step</dt>
+                                            <dd>Lands in a review state; biller QAs before finalizing (missing check
+                                                number/date is the most common issue)</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Remittance /
+                                            posting once confirmed</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 9 -->
+                <div class="stage" data-actor="system">
+                    <div class="rail" style="--c:#2E5C8A">
+                        <div class="num">9</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="system" style="--c:#2E5C8A">
+                            <summary>
+                                <span class="node-title">Bank reconciliation</span>
+                                <span class="node-sub">— deposits matched to posted remits</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>Bank account connected via Plaid; matching runs continuously</dd>
+                                    <dt>Status names</dt>
+                                    <dd><code>Matched</code><code>Partially Matched</code><code>Unmatched</code> — plus
+                                        the Deposits tab / Checks tab split</dd>
+                                    <dt>SLA / timing</dt>
+                                    <dd><span class="fig">98%+ ACH deposits matched to a check</span> &nbsp;·&nbsp;
+                                        reduces manual matching burden by <span class="fig">as much as 80%</span></dd>
+                                    <dt>Known limits</dt>
+                                    <dd>Paper-check bulk deposits are not auto-matched by default; local regional banks
+                                        not on Plaid are unsupported; lockbox integration is in development</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="ai" style="--c:#7A4FA0">
+                                    <summary><span class="node-title">Deposit slip ingestion</span><span
+                                            class="node-sub">— LLM-extracted PDF/CSV</span><span class="chev">›</span>
+                                    </summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Limits</dt>
+                                            <dd>10MB / 3,000 rows / 800 line items max</dd>
+                                            <dt>Human step</dt>
+                                            <dd>PDF extraction lands in a pending-review state before finalizing</dd>
+                                        </dl>
+                                        <div class="resolve escalate"><span class="glyph">▲</span> errors: duplicate
+                                            check number, total mismatch, or content-hash duplicate — all block the
+                                            upload</div>
+                                        <a class="jumplink" href="#ec-dupcheck">Full edge-case entries →</a>
+                                    </div>
+                                </details>
+                            </div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Virtual card processing</span><span
+                                            class="node-sub">— payer sends a virtual credit card</span><span
+                                            class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Actor</dt>
+                                            <dd>Biller manually runs the "Process a Virtual Card" tool via Stripe to
+                                                extract 100% of funds</dd>
+                                            <dt>Warning</dt>
+                                            <dd>Never use this tool for patient card-reader-down scenarios — payer
+                                                virtual cards only</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> rejoins → Bank
+                                            reconciliation once drained</div>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 10 -->
+                <div class="stage" data-actor="system">
+                    <div class="rail" style="--c:#2E5C8A">
+                        <div class="num">10</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="system" style="--c:#2E5C8A">
+                            <summary>
+                                <span class="node-title">Patient responsibility reconciliation</span>
+                                <span class="node-sub">— estimated PR trued up against remittance</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Status names</dt>
+                                    <dd><code>Estimated PR</code> → <code>Post-Remittance PR</code></dd>
+                                    <dt>Three-way comparison</dt>
+                                    <dd>Payment = PR → no action &nbsp;·&nbsp; Payment &lt; PR → balance added to next
+                                        statement &nbsp;·&nbsp; Payment &gt; PR → overpayment becomes a credit, locked
+                                        to date of service by default</dd>
+                                    <dt>Automation</dt>
+                                    <dd><strong>Auto-Refund</strong> — overnight process converts an overpayment into an
+                                        account credit automatically</dd>
+                                    <dt>Sequencing rule</dt>
+                                    <dd>PR only reaches the patient once <code>PR amount = total balance amount</code> —
+                                        a denied portion sitting alongside PR blocks the statement until written off or
+                                        pushed</dd>
+                                </dl>
+                            </div>
+                        </details>
+
+                        <div class="branches">
+                            <div class="branch-label">branches</div>
+                            <div class="branch-nub">
+                                <details class="node branch" data-actor="human" style="--c:#3E7A4E">
+                                    <summary><span class="node-title">Deferred claim</span><span class="node-sub">— PR
+                                            generation paused entirely</span><span class="chev">›</span></summary>
+                                    <div class="node-body">
+                                        <dl class="kv">
+                                            <dt>Guardrail</dt>
+                                            <dd>"Updated in EHR" deferral with no scheduled resync is disabled —
+                                                prevents permanent limbo (flagged for claims older than ~120 days)</dd>
+                                        </dl>
+                                        <div class="resolve rejoin"><span class="glyph">↩</span> reappears on worklist
+                                            if queue unchanged at expiration</div>
+                                        <a class="jumplink" href="#ec-deferred">Full edge-case entry →</a>
+                                    </div>
+                                </details>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- STAGE 11 -->
+                <div class="stage" data-actor="human">
+                    <div class="rail" style="--c:#3E7A4E">
+                        <div class="num">11</div>
+                        <div class="stem"></div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="human" style="--c:#3E7A4E">
+                            <summary>
+                                <span class="node-title">Patient billing / collection</span>
+                                <span class="node-sub">— statements, plans, and escalation tools</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Trigger</dt>
+                                    <dd>PR finalized and balance &gt; $0</dd>
+                                    <dt>Automation</dt>
+                                    <dd>Batch frequency configurable (weekly recommended); $0 balances never billed;
+                                        batches spread across weekdays — <span class="fig">~50% of patients</span> per
+                                        batch, no more than every <span class="fig">14 days</span></dd>
+                                    <dt>Cost</dt>
+                                    <dd><span class="fig">Paper statements: $1 each</span>, mailed within 24 hours,
+                                        arrives in <span class="fig">3–5 business days</span></dd>
+                                    <dt>Escalation tools</dt>
+                                    <dd>Charge saved cards in bulk (min <span class="fig">$20</span> / max <span
+                                            class="fig">$500</span> recommended) · payment plans · family combined
+                                        payment · write-off · cancel PR (non-remittance-derived only)</dd>
+                                </dl>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+                <!-- STAGE 12 -->
+                <div class="stage" data-actor="human">
+                    <div class="rail" style="--c:#3E7A4E">
+                        <div class="num">12</div>
+                    </div>
+                    <div class="stage-content">
+                        <details class="node" data-actor="human" style="--c:#3E7A4E">
+                            <summary>
+                                <span class="node-title">Month-end close</span>
+                                <span class="node-sub">— bank tie-out and A/R roll-forward</span>
+                                <span class="chev">›</span>
+                            </summary>
+                            <div class="node-body">
+                                <dl class="kv">
+                                    <dt>Runbook</dt>
+                                    <dd>1) Bank tie-out via Bank Deposit Reconciliation Report → 2) GL entries via
+                                        Revenue Activity Report → 3) Exception handling (Manual Review / unmatched
+                                        deposits) → 4) A/R roll-forward</dd>
+                                    <dt>Formulas</dt>
+                                    <dd>
+                                        <code>total_cash_usd = matched_posted + matched_unposted + unmatched + others + provider_level_adjustments</code><br>
+                                        <code>Closing A/R = Opening A/R + Billed − Payments − Adjustments − Transfer Out</code>
+                                    </dd>
+                                    <dt>Aging buckets</dt>
+                                    <dd><code>0–30</code> <code>31–60</code> <code>61–90</code> <code>91–120</code>
+                                        <code>121–180</code> <code>181–365</code> <code>366+</code> — <span
+                                            class="fig">121–180 flagged as approaching timely filing</span></dd>
+                                    <dt>Exception handling</dt>
+                                    <dd>Deposit in bank but not yet in Insights → record to a clearing account, resolve
+                                        next cycle (don't hold the close open)</dd>
+                                </dl>
+                            </div>
+                        </details>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= INTEGRATIONS ================= -->
+        <section id="integrations">
+            <h2><span class="section-index">03</span> Integration map</h2>
+            <p class="lede">Every external system the claim lifecycle depends on end-to-end, what triggers each call,
+                and what happens when it fails or returns bad data.</p>
+
+            <div class="integ-grid">
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>Eligibility clearinghouses</h3>
+                    <span class="tag">Waystar</span><span class="tag">Availity</span><span class="tag">UHC Payer
+                        Portal</span>
+                    <div class="row"><span class="label">Triggers on</span>Automated check 7 days pre-visit + nightly
+                        re-check + on-demand Live Eligibility Check / Re-Run</div>
+                    <div class="row fail"><span class="label">Failure mode</span>Returns <code>Inconclusive</code> or
+                        <code>Unable to get a response</code> — requires manual correction in the EHR and a re-run;
+                        never blocks scheduling itself</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>Claim submission clearinghouse</h3>
+                    <div class="row"><span class="label">Triggers on</span>Biller clicks Submit, or system auto-submits
+                        Athelas-Responsibility claims</div>
+                    <div class="row fail"><span class="label">Failure mode</span>Technical/format rejection → Rejection
+                        branch; claim is invisible to the payer until fixed and resubmitted</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>ERA / 835 ingestion</h3>
+                    <div class="row"><span class="label">Triggers on</span>Payer sends an 835 remittance file</div>
+                    <div class="row fail"><span class="label">Failure mode</span>Ambiguous/conflicting data routes to
+                        Manual Review; duplicate or malformed data routes to Archived</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>Bank connection — Plaid</h3>
+                    <div class="row"><span class="label">Triggers on</span>Practice connects a bank account (read-only
+                        access); matching runs continuously against posted remits</div>
+                    <div class="row fail"><span class="label">Failure mode</span>Falls into Missing ERAs / Missing
+                        Payment / Inconsistencies views; local regional banks not on Plaid are unsupported; alternate
+                        import handled by <code>support@getathelas.com</code> case-by-case</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>Virtual card processing — Stripe</h3>
+                    <div class="row"><span class="label">Triggers on</span>Payer issues a virtual credit card as
+                        remittance; biller manually runs "Process a Virtual Card"</div>
+                    <div class="row fail"><span class="label">Failure mode</span>Misuse warning: never use for patient
+                        card-reader-down scenarios — pollutes revenue analytics if used for patient payments</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>EHR sync — bidirectional</h3>
+                    <div class="row"><span class="label">Direction</span><strong>Flow 1</strong> AIR → Encounter (admin
+                        data); <strong>Flow 3</strong> Encounter → AIR (billing corrections, "significant" fields only)
+                    </div>
+                    <div class="row fail"><span class="label">Never overwrites</span>Clinical documentation entered by a
+                        provider (notes, diagnoses) is never touched by administrative sync. General
+                        demographic/insurance edits made in Insights do <em>not</em> flow back to the EHR — only
+                        encounter-linked billing corrections do (Flow 3)</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>Deposit slip ingestion</h3>
+                    <div class="row"><span class="label">Triggers on</span>Manual upload of a CSV or PDF bank deposit
+                        slip</div>
+                    <div class="row fail"><span class="label">Failure mode</span><code>DUPLICATE_CHECK_NUMBER</code> ·
+                        total-mismatch rejection · content-hash duplicate block. Limits: 10MB / 3,000 rows / 800 line
+                        items</div>
+                </div>
+
+                <div class="integ-card">
+                    <h3><span class="integ-dot"></span>EOB Copilot</h3>
+                    <div class="row"><span class="label">Triggers on</span>Biller uploads an EOB PDF or screenshot for
+                        manual posting</div>
+                    <div class="row fail"><span class="label">Failure mode</span>AI transcription lands in a review
+                        state; missing check number/date is the most common QA catch. New data visible on claims within
+                        24 hours</div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- ================= AI TOUCHPOINTS ================= -->
+        <section id="ai">
+            <h2><span class="section-index">04</span> AI / automation touchpoints</h2>
+            <p class="lede">Every place AI acts on a claim, and the exact boundary between what it does on its own and
+                what a human must confirm.</p>
+
+            <div class="ai-banner">
+                <span class="mark">✦</span>
+                <p>Athelas Assistant never performs a financial action without explicit approval.
+                    <span class="sub">Stated in the documentation as a governing product rule — every submit, resubmit,
+                        credit move, refund, or write-off the Assistant proposes shows a preview and requires
+                        confirmation before it executes.</span>
+                </p>
+            </div>
+
+            <table class="ai-table">
+                <tr>
+                    <th>Touchpoint</th>
+                    <th>Automatic</th>
+                    <th>Requires human approval</th>
+                </tr>
+                <tr>
+                    <td>Claim-level AI validation (✨)</td>
+                    <td><span class="auto-pill">detects</span> zip codes, missing modifiers, POS codes, diagnosis
+                        suggestions</td>
+                    <td><span class="human-pill">accept / reject</span> per suggestion, with a documented reason if
+                        rejected</td>
+                </tr>
+                <tr>
+                    <td>Billing Rules Engine</td>
+                    <td><span class="auto-pill">applies</span> field changes flagged with a star during
+                        dry-run/submission</td>
+                    <td><span class="human-pill">reviewable</span> via "View Rules"; can be bypassed by direct
+                        submission edit (discouraged)</td>
+                </tr>
+                <tr>
+                    <td>Athelas Assistant (chat)</td>
+                    <td><span class="auto-pill">answers</span> coding questions, explains denial/CARC codes, fetches
+                        summaries, checks CCI edits</td>
+                    <td><span class="human-pill">confirms</span> before any financial action (submit, resubmit, credit
+                        move, refund, write-off) — shows a preview first</td>
+                </tr>
+                <tr>
+                    <td>Rule creation ("Build a rule that does…")</td>
+                    <td><span class="auto-pill">drafts</span> Conditions/Actions from a plain-language prompt</td>
+                    <td><span class="human-pill">reviews & saves</span> — same approval step as a manually built rule;
+                        AI states outright if a request isn't supported rather than guessing</td>
+                </tr>
+                <tr>
+                    <td>Charge Master "Smart Edit"</td>
+                    <td><span class="auto-pill">bulk-updates</span> selected fee-schedule rows (pricing, effective
+                        dates)</td>
+                    <td><span class="human-pill">reviews</span> rows before saving</td>
+                </tr>
+                <tr>
+                    <td>EOB Copilot</td>
+                    <td><span class="auto-pill">transcribes</span> uploaded EOB PDFs/screenshots into structured
+                        remittance data</td>
+                    <td><span class="human-pill">QAs</span> in a pending-review state before finalizing</td>
+                </tr>
+                <tr>
+                    <td>Deposit slip PDF extraction</td>
+                    <td><span class="auto-pill">converts</span> PDF deposit slip → editable CSV</td>
+                    <td><span class="human-pill">QAs</span> the same pending-review gate</td>
+                </tr>
+                <tr>
+                    <td>Patient balance explainer</td>
+                    <td><span class="auto-pill">generates</span> a plain-English summary of how a balance was calculated
+                    </td>
+                    <td><span class="human-pill">informational only</span> — biller can drill into cited
+                        charges/transactions to verify</td>
+                </tr>
+                <tr>
+                    <td>Eligibility Rule UI (plain-language)</td>
+                    <td><span class="auto-pill">converts</span> a description into Appointment / Parser / Suggested-PR
+                        rule logic</td>
+                    <td><span class="human-pill">reviews</span> the Draft screen, can inspect raw JSON, must click Save
+                    </td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ================= EDGE CASES ================= -->
+        <section id="edgecases">
+            <h2><span class="section-index">05</span> Edge case reference table</h2>
+            <p class="lede">Every documented scenario where a claim gets stopped, flagged, or requires escalation — the
+                fallback for anything too granular for the diagram above.</p>
+
+            <div class="ec-filters">
+                <span>Filter by role:</span>
+            </div>
+
+            <table class="ec-table">
+                <tr>
+                    <th>Scenario</th>
+                    <th>Where caught</th>
+                    <th>What stops / flags it</th>
+                    <th>Resolution path</th>
+                </tr>
+                <tr id="ec-import-missing" data-actor="block">
+                    <td><span class="actor-dot"></span>Missing patient/encounter data from EHR</td>
+                    <td>Import Errors</td>
+                    <td>Claim never created; flagged by type</td>
+                    <td>Resolve in EHR (next overnight import) or Import button in Insights</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>New provider/facility not yet in Athelas</td>
+                    <td>Import Errors</td>
+                    <td>Flagged, blocks import</td>
+                    <td>Contact Athelas rep to register</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Unrecognized custom CPT code</td>
+                    <td>Import Errors</td>
+                    <td>Flagged, blocks import</td>
+                    <td>Requires Athelas CPT mapping</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Suspected duplicate patient</td>
+                    <td>Import Errors</td>
+                    <td>Import paused for investigation</td>
+                    <td>Investigate and confirm or merge records</td>
+                </tr>
+                <tr id="ec-hardblock" data-actor="block">
+                    <td><span class="actor-dot"></span>Missing required field (DOB, insurance ID, NPI)</td>
+                    <td>Submission Errors</td>
+                    <td><code>Hard Block</code> — cannot submit</td>
+                    <td>Biller corrects the field</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>CHC compliance violation (FQHC)</td>
+                    <td>Submission Errors</td>
+                    <td><code>Hard Block</code></td>
+                    <td>Biller corrects per FQHC rule</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Known payer rejection pattern (historical data)</td>
+                    <td>Submission Errors</td>
+                    <td><code>Hard Block</code></td>
+                    <td>Biller corrects proactively before submit</td>
+                </tr>
+                <tr id="ec-rejection" data-actor="block">
+                    <td><span class="actor-dot"></span>Claim rejected by clearinghouse/payer gateway</td>
+                    <td>Rejections</td>
+                    <td>Invisible to payer; timely-filing risk flagged explicitly</td>
+                    <td>Resubmit after fix — single claim or bulk (≤50)</td>
+                </tr>
+                <tr data-actor="system">
+                    <td><span class="actor-dot"></span>Claim voided due to unfixable error</td>
+                    <td>Claim activity log</td>
+                    <td>Logged as an event</td>
+                    <td>New claim created and sent in its place</td>
+                </tr>
+                <tr id="ec-negbal" data-actor="block">
+                    <td><span class="actor-dot"></span>Remittance would create a negative balance</td>
+                    <td>Manual Review (posting)</td>
+                    <td>Held for biller/Athelas review</td>
+                    <td>Investigate duplicate/overpayment; negate or archive</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Conflicting PR decisions across resubmissions</td>
+                    <td>Manual Review (posting)</td>
+                    <td>Held</td>
+                    <td>Biller reconciles via the Posting Tool</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Remittance doesn't balance to ERA charges</td>
+                    <td>Manual Review (posting)</td>
+                    <td>Held</td>
+                    <td>Biller reconciles manually</td>
+                </tr>
+                <tr data-actor="system">
+                    <td><span class="actor-dot"></span>Future check date on remit</td>
+                    <td>Manual Review (posting)</td>
+                    <td>Held until date passes + deposit confirms</td>
+                    <td>Auto-releases once conditions met</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Primary payer remit contains <code>OA23</code></td>
+                    <td>Manual Review (posting)</td>
+                    <td>Held</td>
+                    <td>Biller reviews prior payer's adjudication impact</td>
+                </tr>
+                <tr data-actor="system">
+                    <td><span class="actor-dot"></span>Duplicate / bad-data remittance</td>
+                    <td>Archived</td>
+                    <td>Excluded from posting</td>
+                    <td>No action, or Unarchive if flagged in error</td>
+                </tr>
+                <tr id="ec-partialdenial" data-actor="human">
+                    <td><span class="actor-dot"></span>Partial denial (some procedures denied, others paid)</td>
+                    <td>Claim Details / Posting</td>
+                    <td><code>PR Status: Provisional</code>, <code>Status: Not Balanced</code></td>
+                    <td>Resubmit (fix) or write off</td>
+                </tr>
+                <tr id="ec-unresolvedbal" data-actor="human">
+                    <td><span class="actor-dot"></span>Unresolved balance (all lines allowed &gt;$0, some still denied)
+                    </td>
+                    <td>Claim Details / Posting</td>
+                    <td>Same flags as partial denial</td>
+                    <td>Resubmit (fix) or write off</td>
+                </tr>
+                <tr id="ec-timely" data-actor="block">
+                    <td><span class="actor-dot"></span>Claim approaching timely filing deadline</td>
+                    <td>Aging AR / Revenue Activity</td>
+                    <td>121–180 day bucket flagged explicitly</td>
+                    <td>Prioritize resolution immediately</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Not Workable — Unavoidable</td>
+                    <td>Errors / Rejections / Denials</td>
+                    <td>Technical, no path to approval</td>
+                    <td>Write off</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Not Workable — Regrettable</td>
+                    <td>Denials only</td>
+                    <td>Could have been salvaged but wasn't</td>
+                    <td>Write off; process gap logged for review</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Written Off claim</td>
+                    <td>All 4 error stages</td>
+                    <td>Practice decision to abandon collection</td>
+                    <td>Terminal — no further action</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Claim Working Status = Open</td>
+                    <td>Claims Page (pre-submission)</td>
+                    <td>Stopped for site review</td>
+                    <td>Tag shows why; resolve and resubmit</td>
+                </tr>
+                <tr data-actor="system">
+                    <td><span class="actor-dot"></span>PR generation blocked entirely</td>
+                    <td>Block PR Rules</td>
+                    <td>Configurable by CPT code/condition</td>
+                    <td>By design — no action needed</td>
+                </tr>
+                <tr id="ec-deferred" data-actor="human">
+                    <td><span class="actor-dot"></span>Deferred claim reappearing</td>
+                    <td>Deferring</td>
+                    <td>Reappears if queue unchanged at expiration</td>
+                    <td>Biller re-evaluates</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>"Updated in EHR" deferral with no resync scheduled</td>
+                    <td>Deferring</td>
+                    <td>Disabled — guardrail vs. permanent limbo (flagged &gt;120 days)</td>
+                    <td>Must schedule a resync date</td>
+                </tr>
+                <tr id="ec-dupcheck" data-actor="block">
+                    <td><span class="actor-dot"></span>Duplicate check numbers in deposit slip</td>
+                    <td>Deposit Slip Ingestion</td>
+                    <td><code>DUPLICATE_CHECK_NUMBER</code> error</td>
+                    <td>Correct and re-upload</td>
+                </tr>
+                <tr data-actor="block">
+                    <td><span class="actor-dot"></span>Deposit slip total ≠ bank deposit total</td>
+                    <td>Deposit Slip Ingestion</td>
+                    <td>Upload rejected outright</td>
+                    <td>Correct totals and re-upload</td>
+                </tr>
+                <tr data-actor="system">
+                    <td><span class="actor-dot"></span>Same deposit slip uploaded twice</td>
+                    <td>Deposit Slip Ingestion</td>
+                    <td>Blocked via content-hash match</td>
+                    <td>No action needed</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Subscription payment fails twice within 24h</td>
+                    <td>Patient Subscriptions</td>
+                    <td>Status → <code>Expired</code></td>
+                    <td>Update payment information</td>
+                </tr>
+                <tr data-actor="human">
+                    <td><span class="actor-dot"></span>Deposit in bank but not yet in Insights</td>
+                    <td>Month-End Close</td>
+                    <td>Not yet reconciled</td>
+                    <td>Record to clearing account; resolve next cycle</td>
+                </tr>
+            </table>
+        </section>
+
+        <!-- ================= GAPS ================= -->
+        <section id="gaps">
+            <h2><span class="section-index">06</span> Open gaps — what the documentation didn't cover</h2>
+            <p class="lede">These matter for partnership risk assessment. Nothing here is filled in with a plausible
+                guess — if the docs didn't say it, it's listed as unknown.</p>
+
+            <div class="gaps">
+                <div class="gap-item"><span class="gnum">01</span>
+                    <div><strong>No per-payer timely filing table</strong>
+                        <div class="gdesc">Docs state "typically 60–90 days" and flag the 121–180 day A/R bucket as
+                            "approaching" the limit — no payer-specific table is published.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">02</span>
+                    <div><strong>SLA figures are softly worded</strong>
+                        <div class="gdesc">"Athelas Responsibility ~15 days" and "~24 hours" resubmission both use
+                            qualifying language ("about") — not contractually precise. Confirm exact terms in any
+                            partnership agreement rather than the docs.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">03</span>
+                    <div><strong>Target Allowed Amounts (TAA) logic is opaque</strong>
+                        <div class="gdesc">Entirely Athelas-managed, "no self-serve settings screen" — actual write-off
+                            thresholds aren't documented.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">04</span>
+                    <div><strong>No comprehensive CARC/RARC reference</strong>
+                        <div class="gdesc"><code>OA23</code>, <code>PI-59</code> etc. appear as examples only — no
+                            published denial-reason-code taxonomy or the internal Unavoidable-vs-Regrettable mapping
+                            logic.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">05</span>
+                    <div><strong>Rules Tab rollout status is inconsistent</strong>
+                        <div class="gdesc">Explicitly noted as "still rolling out" — not universally available across
+                            customers; gated by account manager contact.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">06</span>
+                    <div><strong>"Create a Rule" is labeled Beta</strong>
+                        <div class="gdesc">Not yet live for every practice per the documentation.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">07</span>
+                    <div><strong>Clearinghouse mechanics unspecified</strong>
+                        <div class="gdesc">Waystar, Availity, UHC (eligibility) and Waystar/CHC/Carisk/Availity (claims
+                            export) are named partners, but API connectivity, response-time guarantees, and failure-mode
+                            handling aren't documented.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">08</span>
+                    <div><strong>Pricing model rate not disclosed</strong>
+                        <div class="gdesc">"Your Athelas Invoice" confirms billing is based on posted insurance
+                            remittances + SmartPay (text/email patient collection) transactions — the actual
+                            percentage/rate is negotiated per-practice, not public.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">09</span>
+                    <div><strong>No provider enrollment / credentialing workflow found</strong>
+                        <div class="gdesc">"Provider Credentials" pages cover EHR scheduling safeguards (license/NPI
+                            tracking), not payer enrollment or credentialing as an RCM function — a notable gap since
+                            credentialing is typically core to full-service RCM.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">10</span>
+                    <div><strong>Faxing / Messaging / Tasking clusters not fully fetched</strong>
+                        <div class="gdesc">These intersect with denial-appeal follow-up workflows (e.g., attaching a fax
+                            to a claim task) but weren't deeply researched — largely EHR-operational rather than
+                            billing-specific.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">11</span>
+                    <div><strong>Calendar cluster out of scope</strong>
+                        <div class="gdesc">Pure scheduling mechanics — not fetched, deemed outside RCM scope.</div>
+                    </div>
+                </div>
+                <div class="gap-item"><span class="gnum">12</span>
+                    <div><strong>"Features In Development" flags appear repeatedly</strong>
+                        <div class="gdesc">Lockbox integration, provider/claim adjustments on EOBs, interest payments on
+                            claims, cohort analysis — roadmap items, not current capability. Confirm current status
+                            directly with Athelas.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        Compiled from Athelas's public documentation site (docs.athelas.com). Every status name, code, and figure above
+        is transcribed verbatim from the source pages researched — nothing here is inferred or estimated. For anything
+        marked as a gap, treat it as unconfirmed until validated directly with Athelas.
+    </footer>
+
+    <script>
+        // Expand / collapse all
+        document.getElementById('expandAll').addEventListener('click', () => {
+            document.querySelectorAll('details.node').forEach(d => d.open = true);
+        });
+        document.getElementById('collapseAll').addEventListener('click', () => {
+            document.querySelectorAll('details.node').forEach(d => d.open = false);
+        });
+
+        // Legend isolate-by-actor filter, applied to both the flow diagram and the edge-case table
+        const chips = document.querySelectorAll('.legend-chip');
+        const stages = document.querySelectorAll('.stage');
+        const branchNodes = document.querySelectorAll('details.node.branch');
+        const ecRows = document.querySelectorAll('.ec-table tr[data-actor]');
+        const filterStatus = document.getElementById('filterStatus');
+        let activeActor = null;
+
+        function applyFilter() {
+            if (!activeActor) {
+                stages.forEach(s => s.classList.remove('dim'));
+                branchNodes.forEach(b => b.classList.remove('dim'));
+                ecRows.forEach(r => r.classList.remove('dim'));
+                filterStatus.textContent = 'No filter active — showing all roles.';
+                chips.forEach(c => c.classList.remove('active'));
+                return;
+            }
+            stages.forEach(s => {
+                s.classList.toggle('dim', s.dataset.actor !== activeActor);
+            });
+            branchNodes.forEach(b => {
+                b.classList.toggle('dim', b.dataset.actor !== activeActor);
+            });
+            ecRows.forEach(r => {
+                r.classList.toggle('dim', r.dataset.actor !== activeActor);
+            });
+            chips.forEach(c => c.classList.toggle('active', c.dataset.actor === activeActor));
+            const label = document.querySelector('.legend-chip[data-actor="' + activeActor + '"] .name').textContent;
+            filterStatus.textContent = 'Isolating: ' + label + ' — click the chip again to clear.';
+        }
+
+        chips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                const actor = chip.dataset.actor;
+                activeActor = (activeActor === actor) ? null : actor;
+                applyFilter();
+            });
+        });
+    </script>
+
+</body>
+
+</html>

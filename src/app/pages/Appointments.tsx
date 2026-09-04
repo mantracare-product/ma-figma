@@ -22,20 +22,29 @@ import {
   ChevronDown,
   Filter,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   AlertCircle,
   LayoutGrid,
   List,
+  ShieldCheck,
+  RefreshCw,
+  Eye,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
+import AppointmentDetailDrawer, { AppointmentDetailData } from "../components/appointments/AppointmentDetailDrawer";
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { useEncounters } from "../context/RcmContext";
 import { initialClients } from "./ClientProfile";
+import { assignProductToClient, getStoredServices, onServicesChanged } from "../../lib/servicesStore";
+import { recordAppointmentEligibility } from "../../lib/rcmStore";
+import { getEligibilityBadge } from "../components/rcm/EligibilityBadge";
+import { EligibilityStatus } from "../types/rcmTypes";
 
 interface Appointment {
   id: number;
@@ -56,12 +65,16 @@ interface Appointment {
   tags?: string[];
   processId?: string;
   stageId?: string;
+  eligibilityStatus?: EligibilityStatus | string;
+  copayAmount?: number;
+  insuranceProvider?: string;
 }
 
 interface Employee {
   id: number;
   name: string;
   email: string;
+  role?: string;
 }
 
 interface Service {
@@ -92,12 +105,12 @@ export default function Appointments() {
     { id: 6, name: "Lisa Anderson", email: "lisa.a@dentalcare.com" },
   ];
 
-  const services: Service[] = [
-    { id: 1, name: "Initial Consultation", duration: 60, price: 150 },
-    { id: 2, name: "Follow-up Visit", duration: 30, price: 75 },
-    { id: 3, name: "Dental Cleaning", duration: 45, price: 120 },
-    { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
-  ];
+  const [servicesVersion, setServicesVersion] = useState(0);
+  useEffect(() => {
+    return onServicesChanged(() => setServicesVersion((v) => v + 1));
+  }, []);
+
+  const services = getStoredServices().filter((s) => s.isActive);
 
   const [appointments, setAppointments] = useState<Appointment[]>(() => {
     const saved = sessionStorage.getItem("appointments_v1");
@@ -117,6 +130,9 @@ export default function Appointments() {
         duration: 60,
         status: "pending-accept",
         notes: "First-time patient",
+        eligibilityStatus: "active",
+        copayAmount: 25,
+        insuranceProvider: "Blue Cross Blue Shield",
       },
       {
         id: 2,
@@ -129,6 +145,9 @@ export default function Appointments() {
         time: "10:30",
         duration: 30,
         status: "scheduled",
+        eligibilityStatus: "active",
+        copayAmount: 20,
+        insuranceProvider: "UnitedHealthcare",
       },
       {
         id: 3,
@@ -141,6 +160,8 @@ export default function Appointments() {
         time: "14:00",
         duration: 20,
         status: "scheduled",
+        eligibilityStatus: "pending",
+        insuranceProvider: "Aetna",
       },
       {
         id: 4,
@@ -153,6 +174,9 @@ export default function Appointments() {
         time: "11:00",
         duration: 45,
         status: "scheduled",
+        eligibilityStatus: "active",
+        copayAmount: 30,
+        insuranceProvider: "Cigna Healthcare",
       },
     ];
   });
@@ -165,6 +189,8 @@ export default function Appointments() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
+  const [selectedApptForDetail, setSelectedApptForDetail] = useState<AppointmentDetailData | null>(null);
+  const [isApptDetailDrawerOpen, setIsApptDetailDrawerOpen] = useState(false);
   const [listViewTab, setListViewTab] = useState<"upcoming" | "done" | "pending" | "all">("all");
   const [selectedRows, setSelectedRows] = useState<number[]>([]);
   const [editingRows, setEditingRows] = useState<{ [key: number]: Appointment }>({});
@@ -493,16 +519,26 @@ export default function Appointments() {
       );
       toast.success("Appointment rescheduled successfully!");
     } else {
+      const storedServices = getStoredServices();
+      const chosenService =
+        (bookingServiceId
+          ? storedServices.find((s) => String(s.id) === String(bookingServiceId))
+          : null) ||
+        storedServices.find((s) => s.isActive) ||
+        storedServices[0];
+
+      const chosenServiceId = chosenService?.id || 1;
+
       const newAppointment: Appointment = {
         id: appointments.length > 0 ? Math.max(...appointments.map((a) => a.id)) + 1 : 1,
         clientName: selectedClient.name,
         clientEmail: selectedClient.email,
         clientPhone: selectedClient.phone,
         employeeId: selectedProvider.id,
-        serviceId: 1,
+        serviceId: chosenServiceId,
         date: selectedDate,
         time: timeStr,
-        duration: 60,
+        duration: chosenService?.duration || 60,
         status: "scheduled",
         notes: bookingNote || `Session Type: ${sessionType === "video" ? "Video Call" : "In-Person"}`,
         title: bookingTitle.trim(),
@@ -513,6 +549,10 @@ export default function Appointments() {
       };
 
       setAppointments([...appointments, newAppointment]);
+
+      if (selectedClient?.id) {
+        assignProductToClient(String(selectedClient.id), chosenServiceId);
+      }
 
       if (bookingGenerateInvoice && bookingLineItems && bookingLineItems.length > 0) {
         const inv = createInvoiceFromAppointment(
@@ -584,16 +624,27 @@ export default function Appointments() {
     }
 
     const service = services.find((s) => s.id === appointmentFormData.serviceId);
+    const chosenServiceId = Number(appointmentFormData.serviceId);
     const newAppointment: Appointment = {
       id: Math.max(...appointments.map((a) => a.id)) + 1,
       ...appointmentFormData,
       employeeId: Number(appointmentFormData.employeeId),
-      serviceId: Number(appointmentFormData.serviceId),
+      serviceId: chosenServiceId,
       duration: service?.duration || 30,
       status: "scheduled",
     };
 
     setAppointments([...appointments, newAppointment]);
+
+    const matchedClient = (storedClients || initialClients).find(
+      (c: any) =>
+        (appointmentFormData.clientEmail && c.email?.toLowerCase() === appointmentFormData.clientEmail.toLowerCase()) ||
+        (appointmentFormData.clientName && c.name?.toLowerCase() === appointmentFormData.clientName.toLowerCase())
+    );
+    if (matchedClient?.id) {
+      assignProductToClient(String(matchedClient.id), chosenServiceId);
+    }
+
     toast.success("Appointment booked successfully");
     setShowAddModal(false);
     resetForm();
@@ -662,6 +713,19 @@ export default function Appointments() {
       }
     }
     toast.success(`Appointment marked as ${status}`);
+  };
+
+  const openApptDetail = (apt: Appointment) => {
+    const employee = employees.find((e) => e.id === apt.employeeId);
+    const service = services.find((s) => s.id === apt.serviceId);
+    setSelectedApptForDetail({
+      ...apt,
+      providerName: employee?.name,
+      serviceName: service?.name,
+      eligibility: (apt as any).eligibility || "active",
+      eligibilityStatus: (apt as any).eligibilityStatus || "active",
+    });
+    setIsApptDetailDrawerOpen(true);
   };
 
   const openEditModal = (appointment: Appointment) => {
@@ -755,6 +819,82 @@ export default function Appointments() {
 
     return matchesSearch && matchesEmployee && matchesTab;
   });
+
+  const [isCheckingEligibility, setIsCheckingEligibility] = useState(false);
+
+  const allSelected = filteredAppointments.length > 0 && filteredAppointments.every(a => selectedRows.includes(a.id));
+  const someSelected = filteredAppointments.some(a => selectedRows.includes(a.id)) && !allSelected;
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.checked) {
+      setSelectedRows(filteredAppointments.map(a => a.id));
+    } else {
+      setSelectedRows([]);
+    }
+  };
+
+  const handleSelectRow = (id: number) => {
+    setSelectedRows(prev =>
+      prev.includes(id) ? prev.filter(rId => rId !== id) : [...prev, id]
+    );
+  };
+
+  const handleRunBatchEligibility = () => {
+    const targetApts = selectedRows.length > 0
+      ? filteredAppointments.filter(a => selectedRows.includes(a.id))
+      : filteredAppointments;
+
+    if (targetApts.length === 0) {
+      toast.error("No appointments to verify");
+      return;
+    }
+
+    setIsCheckingEligibility(true);
+    toast.info(`Querying 270/271 clearinghouse for ${targetApts.length} appointment(s)...`);
+
+    setTimeout(() => {
+      targetApts.forEach(apt => {
+        recordAppointmentEligibility({
+          appointmentId: apt.id,
+          clientId: apt.clientEmail || String(apt.id),
+          clientName: apt.clientName,
+          appointmentDate: apt.date,
+          status: "active",
+          payerName: apt.insuranceProvider || "Blue Cross Blue Shield",
+          copayAmount: apt.copayAmount || 25,
+          deductibleRemaining: 150,
+          coinsurance: 20,
+        });
+      });
+
+      setAppointments(prev =>
+        prev.map(apt => {
+          if (targetApts.some(t => t.id === apt.id)) {
+            return {
+              ...apt,
+              eligibilityStatus: "active",
+              copayAmount: apt.copayAmount || 25,
+            };
+          }
+          return apt;
+        })
+      );
+
+      setIsCheckingEligibility(false);
+      toast.success(`Coverage verified active for ${targetApts.length} appointment(s) (Copay: $25, Deductible: $150)`);
+    }, 700);
+  };
+
+  const handleBatchCancel = () => {
+    if (selectedRows.length === 0) return;
+    if (confirm(`Are you sure you want to cancel ${selectedRows.length} appointment(s)?`)) {
+      setAppointments(prev =>
+        prev.map(apt => (selectedRows.includes(apt.id) ? { ...apt, status: "cancelled" } : apt))
+      );
+      setSelectedRows([]);
+      toast.success("Selected appointments cancelled");
+    }
+  };
 
   const { daysInMonth, startingDayOfWeek, year, month } = getDaysInMonth(currentDate);
   const monthNames = [
@@ -864,235 +1004,240 @@ export default function Appointments() {
           </div>
         </PageHeader>
 
-        {/* Stats Capsules */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <CalendarIcon className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.total}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Total Appointments</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <Clock className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.scheduled}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Scheduled</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              borderColor: 'rgba(16, 185, 129, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <CheckCircle className="w-4 h-4" style={{ color: '#10B981' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.completed}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Completed</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              borderColor: 'rgba(239, 68, 68, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <XCircle className="w-4 h-4" style={{ color: '#EF4444' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.cancelled}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Cancelled</span>
-          </div>
-        </div>
-
         {/* Controls */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search appointments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          {devUserRole === "admin" && (
-            <div className="relative">
-              <button
-                onClick={() => setShowProviderDropdown(!showProviderDropdown)}
-                className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
-                style={{ height: '36px' }}
-              >
-                <User className="w-4 h-4 text-muted-foreground" />
-                <span>{selectedEmployee === "all" ? "All Providers" : employees.find(e => e.id === selectedEmployee)?.name}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-              </button>
-              {showProviderDropdown && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowProviderDropdown(false)} />
-                  <div
-                    className="absolute left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1"
-                    style={{ width: '220px', top: '100%' }}
-                  >
-                    <button
-                      onClick={() => { setSelectedEmployee("all"); setShowProviderDropdown(false); }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === "all" ? "text-blue-600 font-semibold" : "text-slate-700"}`}
-                    >
-                      All Providers
-                    </button>
-                    {employees.map((emp) => (
-                      <button
-                        key={emp.id}
-                        onClick={() => { setSelectedEmployee(emp.id); setShowProviderDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === emp.id ? "text-blue-600 font-semibold" : "text-slate-700"}`}
-                      >
-                        {emp.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          <div className="relative">
-            <button
-              onClick={() => setShowFilterModal(!showFilterModal)}
-              className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
-              style={{ height: '36px' }}
-            >
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <span>Filters</span>
-            </button>
-            {showFilterModal && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowFilterModal(false)} />
-                <div
-                  className="absolute right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-4"
-                  style={{ width: '320px', top: '100%' }}
+        <div className="flex items-center justify-between gap-3">
+          {selectedRows.length > 0 ? (
+            <>
+              {/* Selection Info */}
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold text-[#181e25]" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {selectedRows.length} selected
+                </span>
+                <button
+                  onClick={() => setSelectedRows([])}
+                  className="text-xs text-slate-500 hover:text-slate-900 underline transition-colors cursor-pointer"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
                 >
-                  <div>
-                    <div className="flex items-center gap-1 mb-2">
-                      <label className="block text-xs font-semibold text-slate-700">Date Range</label>
-                      <InfoTooltip text="Only show appointments that fall in this date range." />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {["Today", "This Week", "This Month", "Custom"].map((opt) => (
-                        <button
-                          key={opt}
-                          onClick={() => setFilterDate(opt)}
-                          className={`px-3 py-2 rounded-lg text-xs font-medium border ${filterDate === opt ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
-                        >
-                          {opt}
-                        </button>
-                      ))}
-                    </div>
-                    {filterDate === "Custom" && (
-                      <div className="flex gap-2 mt-2">
-                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2">Status</label>
-                    <div className="flex flex-wrap gap-2">
-                      {["All", "Scheduled", "Completed", "Cancelled", "No-show", "Pending"].map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => setFilterStatus(status)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border ${filterStatus === status ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  Clear selection
+                </button>
+              </div>
+
+              {/* Relevant Action Buttons */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isCheckingEligibility}
+                  onClick={handleRunBatchEligibility}
+                  className="gap-1.5 h-9"
+                >
+                  {isCheckingEligibility ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                  )}
+                  Re-run Eligibility Check ({selectedRows.length})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBatchCancel}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200 h-9 gap-1.5"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Cancel Schedule
+                </Button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search appointments..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              {devUserRole === "admin" && (
+                <div className="relative">
                   <button
-                    onClick={() => {
-                      setShowFilterModal(false);
-                      toast.success("Filters applied");
-                    }}
-                    className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
-                    style={{ background: 'linear-gradient(to right, #06B6D4, #1A73E8)' }}
+                    onClick={() => setShowProviderDropdown(!showProviderDropdown)}
+                    className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
+                    style={{ height: '36px' }}
                   >
-                    Apply Filters
+                    <User className="w-4 h-4 text-muted-foreground" />
+                    <span>{selectedEmployee === "all" ? "All Providers" : employees.find(e => e.id === selectedEmployee)?.name}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
                   </button>
+                  {showProviderDropdown && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowProviderDropdown(false)} />
+                      <div
+                        className="absolute left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1"
+                        style={{ width: '220px', top: '100%' }}
+                      >
+                        <button
+                          onClick={() => { setSelectedEmployee("all"); setShowProviderDropdown(false); }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === "all" ? "text-blue-600 font-semibold" : "text-slate-700"}`}
+                        >
+                          All Providers
+                        </button>
+                        {employees.map((emp) => (
+                          <button
+                            key={emp.id}
+                            onClick={() => { setSelectedEmployee(emp.id); setShowProviderDropdown(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === emp.id ? "text-blue-600 font-semibold" : "text-slate-700"}`}
+                          >
+                            {emp.name}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
-              </>
-            )}
-          </div>
+              )}
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setView("list")}
-              className="transition-all"
-              style={{
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: view === "list" ? "#1A73E8" : "#FFFFFF",
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-              }}
-              title="List View"
-            >
-              <List className="w-4 h-4" style={{ color: view === "list" ? "#FFFFFF" : "#6B7280" }} />
-            </button>
-            <button
-              onClick={() => setView("calendar")}
-              className="transition-all"
-              style={{
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: view === "calendar" ? "#1A73E8" : "#FFFFFF",
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-              }}
-              title="Calendar View"
-            >
-              <CalendarIcon className="w-4 h-4" style={{ color: view === "calendar" ? "#FFFFFF" : "#6B7280" }} />
-            </button>
-          </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowFilterModal(!showFilterModal)}
+                  className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
+                  style={{ height: '36px' }}
+                >
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <span>Filters</span>
+                </button>
+                {showFilterModal && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowFilterModal(false)} />
+                    <div
+                      className="absolute right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-4"
+                      style={{ width: '320px', top: '100%' }}
+                    >
+                      <div>
+                        <div className="flex items-center gap-1 mb-2">
+                          <label className="block text-xs font-semibold text-slate-700">Date Range</label>
+                          <InfoTooltip text="Only show appointments that fall in this date range." />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {["Today", "This Week", "This Month", "Custom"].map((opt) => (
+                            <button
+                              key={opt}
+                              onClick={() => setFilterDate(opt)}
+                              className={`px-3 py-2 rounded-lg text-xs font-medium border ${filterDate === opt ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                        {filterDate === "Custom" && (
+                          <div className="flex gap-2 mt-2">
+                            <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                            <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-2">Status</label>
+                        <div className="flex flex-wrap gap-2">
+                          {["All", "Scheduled", "Completed", "Cancelled", "No-show", "Pending"].map((status) => (
+                            <button
+                              key={status}
+                              onClick={() => setFilterStatus(status)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border ${filterStatus === status ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                                }`}
+                            >
+                              {status}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => {
+                          setShowFilterModal(false);
+                          toast.success("Filters applied");
+                        }}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
+                        style={{ background: 'linear-gradient(to right, #06B6D4, #1A73E8)' }}
+                      >
+                        Apply Filters
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
 
-          <Button
-            variant="primary"
-            onClick={() => {
-              resetBookingWorkflow();
-              setShowAddModal(true);
-            }}
-            style={{ width: '160px', height: '36px' }}
-          >
-            <Plus className="w-4 h-4" />
-            Book Appointment
-          </Button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setView("list")}
+                  className="transition-all"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: view === "list" ? "#1A73E8" : "#FFFFFF",
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                  }}
+                  title="List View"
+                >
+                  <List className="w-4 h-4" style={{ color: view === "list" ? "#FFFFFF" : "#6B7280" }} />
+                </button>
+                <button
+                  onClick={() => setView("calendar")}
+                  className="transition-all"
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: view === "calendar" ? "#1A73E8" : "#FFFFFF",
+                    border: '1px solid #E5E7EB',
+                    borderRadius: '6px',
+                  }}
+                  title="Calendar View"
+                >
+                  <CalendarIcon className="w-4 h-4" style={{ color: view === "calendar" ? "#FFFFFF" : "#6B7280" }} />
+                </button>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isCheckingEligibility || filteredAppointments.length === 0}
+                onClick={handleRunBatchEligibility}
+                className="gap-1.5 h-9"
+                title={`Verify clearinghouse coverage for all (${filteredAppointments.length}) appointments`}
+              >
+                {isCheckingEligibility ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                )}
+                Run Eligibility Check (All)
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => {
+                  resetBookingWorkflow();
+                  setShowAddModal(true);
+                }}
+                className="gap-1.5 h-9"
+              >
+                <Plus className="w-4 h-4" />
+                Book Appointment
+              </Button>
+            </>
+          )}
         </div>
 
         {/* Calendar View */}
@@ -1475,7 +1620,7 @@ export default function Appointments() {
                               return (
                                 <div
                                   key={apt.id}
-                                  onClick={() => openEditModal(apt)}
+                                  onClick={() => openApptDetail(apt)}
                                   className="cursor-pointer hover:opacity-90"
                                   style={{
                                     position: 'absolute',
@@ -1668,7 +1813,7 @@ export default function Appointments() {
                                     return (
                                       <div
                                         key={apt.id}
-                                        onClick={() => openEditModal(apt)}
+                                        onClick={() => openApptDetail(apt)}
                                         className="cursor-pointer hover:bg-muted/30 transition-colors"
                                         style={{
                                           height: '56px',
@@ -1952,7 +2097,7 @@ export default function Appointments() {
                             return (
                               <div
                                 key={apt.id}
-                                onClick={() => openBookingDrawerForReschedule(apt)}
+                                onClick={() => openApptDetail(apt)}
                                 className="cursor-pointer hover:opacity-80"
                                 style={{
                                   display: 'flex',
@@ -2078,352 +2223,140 @@ export default function Appointments() {
               </span>
             </div>
 
-            {/* Card Container */}
-            <div
-              style={{
-                backgroundColor: "#FFFFFF",
-                border: "1px solid #E5E7EB",
-                borderRadius: "12px",
-                padding: "20px",
-                width: "100%",
-              }}
-            >
-              {filteredAppointments.length === 0 ? (
-                <div className="text-center py-16">
-                  <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <CalendarIcon className="w-10 h-10 text-muted-foreground" />
-                  </div>
-                  <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                    No {listViewTab === "all" ? "" : listViewTab + " "}appointments found
-                  </h3>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    {searchQuery ? "Try adjusting your search" : listViewTab === "done" ? "No completed appointments yet" : "Get started by booking your first appointment"}
-                  </p>
-                </div>
-              ) : (
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(2, 1fr)",
-                    gap: "16px",
-                  }}
-                >
-                  {filteredAppointments.map((apt) => {
-                    const employee = employees.find((e) => e.id === apt.employeeId);
-                    const service = services.find((s) => s.id === apt.serviceId);
-
-                    return (
-                      <AppointmentCard
-                        key={apt.id}
-                        appointment={apt}
-                        employee={employee}
-                        service={service}
-                        onCancel={(id) => {
-                          setAppointments(appointments.map(a =>
-                            a.id === id ? { ...a, status: "cancelled" } : a
-                          ));
-                          toast.success("Appointment cancelled");
-                        }}
-                        onReschedule={(id) => {
-                          const apt = appointments.find(a => a.id === id);
-                          if (apt) {
-                            openBookingDrawerForReschedule(apt);
-                          }
-                        }}
-                        onMarkComplete={(id) => {
-                          handleStatusChange(id, "completed");
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* Old Table Code - Keep for reference but hidden */}
-            <div className="hidden bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead>
-                  <tr style={{ backgroundColor: '#1C2B4A', height: '48px' }}>
-                    <th style={{ width: '40px', padding: '0 12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedRows.length === filteredAppointments.length && filteredAppointments.length > 0}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedRows(filteredAppointments.map(a => a.id));
-                            const editing: { [key: number]: Appointment } = {};
-                            filteredAppointments.forEach(apt => {
-                              editing[apt.id] = { ...apt };
-                            });
-                            setEditingRows(editing);
-                          } else {
-                            setSelectedRows([]);
-                            setEditingRows({});
-                          }
-                        }}
-                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                      />
-                    </th>
-                    <th style={{ width: '160px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Client</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Email</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Phone</th>
-                    <th style={{ width: '150px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>
-                    <th style={{ width: '130px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Provider</th>
-                    <th style={{ width: '180px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Service</th>
-                    <th style={{ width: '80px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Duration</th>
-                    <th style={{ width: '110px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Status</th>
-                    <th style={{ width: '120px', padding: '0 12px', textAlign: 'left', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', fontFamily: 'Outfit, sans-serif' }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredAppointments.length === 0 ? (
-                    <tr>
-                      <td colSpan={10} className="text-center py-16">
-                        <div className="w-20 h-20 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                          <CalendarIcon className="w-10 h-10 text-muted-foreground" />
-                        </div>
-                        <h3 className="text-lg font-semibold mb-2" style={{ color: "#020817" }}>
-                          No appointments found
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          {searchQuery ? "Try adjusting your search" : "Get started by booking your first appointment"}
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredAppointments.map((apt) => {
-                      const employee = employees.find((e) => e.id === apt.employeeId);
-                      const service = services.find((s) => s.id === apt.serviceId);
-                      const isSelected = selectedRows.includes(apt.id);
-                      const isEditing = isSelected && editingRows[apt.id];
-                      const editData = isEditing ? editingRows[apt.id] : apt;
-                      const isDeleting = confirmDelete === apt.id;
-
-                      const getStatusBadgeStyle = (status: Appointment["status"]) => {
-                        switch (status) {
-                          case "scheduled":
-                            return { bg: '#DBEAFE', color: '#1D4ED8' };
-                          case "completed":
-                            return { bg: '#DCFCE7', color: '#15803D' };
-                          case "pending-accept":
-                            return { bg: '#FEF3C7', color: '#B45309' };
-                          case "cancelled":
-                            return { bg: '#FEE2E2', color: '#B91C1C' };
-                          case "no-show":
-                            return { bg: '#F3F4F6', color: '#6B7280' };
-                          default:
-                            return { bg: '#F3F4F6', color: '#6B7280' };
-                        }
-                      };
-
-                      const statusStyle = getStatusBadgeStyle(apt.status);
-
-                      return (
-                        <tr
-                          key={apt.id}
-                          style={{
-                            height: '52px',
-                            borderBottom: '1px solid #F3F4F6',
-                            backgroundColor: isDeleting ? '#FEF2F2' : '#FFFFFF',
+            {/* Appointments Table */}
+            <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr style={{ backgroundColor: '#1C2B4A', height: '48px' }}>
+                      <th style={{ width: '44px', padding: '0 16px' }}>
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          ref={(el) => {
+                            if (el) el.indeterminate = someSelected;
                           }}
-                        >
-                          <td style={{ padding: '0 12px' }}>
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedRows([...selectedRows, apt.id]);
-                                  setEditingRows({ ...editingRows, [apt.id]: { ...apt } });
-                                } else {
-                                  setSelectedRows(selectedRows.filter(id => id !== apt.id));
-                                  const newEditing = { ...editingRows };
-                                  delete newEditing[apt.id];
-                                  setEditingRows(newEditing);
-                                }
-                              }}
-                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                            />
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
+                          onChange={handleSelectAll}
+                          className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
+                        />
+                      </th>
+                      <th style={{ minWidth: '180px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Client</th>
+                      <th style={{ minWidth: '150px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Provider</th>
+                      <th style={{ minWidth: '160px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Service</th>
+                      <th style={{ minWidth: '150px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Date & Time</th>
+                      <th style={{ minWidth: '160px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Eligibility</th>
+                      <th style={{ minWidth: '120px', padding: '0 16px', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Status</th>
+                      <th style={{ width: '130px', padding: '0 16px', textAlign: 'right', color: '#FFFFFF', fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: 'Outfit, sans-serif' }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredAppointments.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="text-center py-16">
+                          <div className="w-16 h-16 bg-muted/50 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <CalendarIcon className="w-8 h-8 text-muted-foreground" />
+                          </div>
+                          <h3 className="text-base font-semibold mb-1" style={{ color: "#020817" }}>
+                            No {listViewTab === "all" ? "" : listViewTab + " "}appointments found
+                          </h3>
+                          <p className="text-xs text-muted-foreground mb-4">
+                            {searchQuery ? "Try adjusting your search query" : listViewTab === "done" ? "No completed appointments yet" : "Get started by booking your first appointment"}
+                          </p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAppointments.map((apt) => {
+                        const employee = employees.find((e) => e.id === apt.employeeId);
+                        const service = services.find((s) => s.id === apt.serviceId);
+                        const isSelected = selectedRows.includes(apt.id);
+
+                        const getStatusBadgeStyle = (status: Appointment["status"]) => {
+                          switch (status) {
+                            case "scheduled":
+                              return { bg: '#DBEAFE', color: '#1D4ED8' };
+                            case "completed":
+                              return { bg: '#DCFCE7', color: '#15803D' };
+                            case "pending-accept":
+                              return { bg: '#FEF3C7', color: '#B45309' };
+                            case "cancelled":
+                              return { bg: '#FEE2E2', color: '#B91C1C' };
+                            case "no-show":
+                              return { bg: '#F3F4F6', color: '#6B7280' };
+                            default:
+                              return { bg: '#F3F4F6', color: '#6B7280' };
+                          }
+                        };
+
+                        const statusStyle = getStatusBadgeStyle(apt.status);
+                        const eligStatus = (apt as any).eligibilityStatus || "active";
+                        const copay = apt.copayAmount !== undefined ? apt.copayAmount : 25;
+
+                        return (
+                          <tr
+                            key={apt.id}
+                            className={`transition-colors ${isSelected ? "bg-[#E8F0FE]" : "hover:bg-[#F8FAFC]"}`}
+                            style={{ height: '56px' }}
+                          >
+                            <td style={{ width: '44px', padding: '0 16px' }}>
                               <input
-                                type="text"
-                                value={editData.clientName}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientName: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => handleSelectRow(apt.id)}
+                                className="w-3.5 h-3.5 cursor-pointer rounded border-[1.5px] border-[#E5E7EB] checked:bg-[#4F8EF7] checked:border-[#4F8EF7]"
                               />
-                            ) : (
-                              <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#374151', fontFamily: 'DM Sans, sans-serif' }}>
-                                {apt.clientName}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="email"
-                                value={editData.clientEmail}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientEmail: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientEmail}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <input
-                                type="tel"
-                                value={editData.clientPhone}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, clientPhone: e.target.value }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded"
-                                style={{ fontSize: '13px', borderColor: '#1A73E8' }}
-                              />
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                {apt.clientPhone}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <div className="flex gap-1">
-                                <input
-                                  type="date"
-                                  value={editData.date}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, date: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '90px' }}
-                                />
-                                <input
-                                  type="time"
-                                  value={editData.time}
-                                  onChange={(e) => {
-                                    setEditingRows({
-                                      ...editingRows,
-                                      [apt.id]: { ...editData, time: e.target.value }
-                                    });
-                                  }}
-                                  className="px-2 py-1 border rounded text-xs"
-                                  style={{ borderColor: '#1A73E8', width: '60px' }}
-                                />
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
+                              <button
+                                type="button"
+                                onClick={() => openApptDetail(apt)}
+                                className="text-left group cursor-pointer"
+                              >
+                                <div className="font-bold text-sm text-foreground group-hover:text-blue-600 transition-colors flex items-center gap-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  {apt.clientName}
+                                </div>
+                                {apt.clientEmail && (
+                                  <div className="text-xs text-muted-foreground truncate max-w-[200px]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                    {apt.clientEmail}
+                                  </div>
+                                )}
+                              </button>
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
+                              <div className="text-xs font-semibold text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {employee?.name || "Unassigned"}
                               </div>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
+                              {(employee?.role || employee?.email) && (
+                                <div className="text-[11px] text-muted-foreground truncate max-w-[150px]" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                  {employee?.role || employee?.email}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
+                              <div className="text-xs font-medium text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {service?.name || "Standard Consultation"}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {apt.duration} min {service?.price ? `• $${service.price}` : ""}
+                              </div>
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
+                              <div className="text-xs font-medium text-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
                                 {new Date(apt.date + "T00:00:00").toLocaleDateString("en-US", {
                                   month: "short",
                                   day: "numeric",
                                   year: "numeric"
-                                })} · {apt.time}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.employeeId}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, employeeId: Number(e.target.value) }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {employees.map((emp) => (
-                                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {employee?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.serviceId}
-                                onChange={(e) => {
-                                  const selectedService = services.find(s => s.id === Number(e.target.value));
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: {
-                                      ...editData,
-                                      serviceId: Number(e.target.value),
-                                      duration: selectedService?.duration || editData.duration
-                                    }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                {services.map((svc) => (
-                                  <option key={svc.id} value={svc.id}>
-                                    {svc.name} - {svc.duration} min (${svc.price})
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              <span style={{ fontSize: '13px', color: '#374151', fontFamily: 'Outfit, sans-serif' }}>
-                                {service?.name}
-                              </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            <span style={{ fontSize: '13px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                              {isEditing ? editData.duration : apt.duration} min
-                            </span>
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isEditing ? (
-                              <select
-                                value={editData.status}
-                                onChange={(e) => {
-                                  setEditingRows({
-                                    ...editingRows,
-                                    [apt.id]: { ...editData, status: e.target.value as Appointment["status"] }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 border rounded text-xs capitalize"
-                                style={{ borderColor: '#1A73E8' }}
-                              >
-                                <option value="scheduled">Scheduled</option>
-                                <option value="completed">Completed</option>
-                                <option value="pending-accept">Pending Accept</option>
-                                <option value="cancelled">Cancelled</option>
-                                <option value="no-show">No Show</option>
-                              </select>
-                            ) : (
+                                })}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                {apt.time}
+                              </div>
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
+                              {getEligibilityBadge(eligStatus, copay)}
+                            </td>
+                            <td style={{ padding: '0 16px' }}>
                               <span
-                                className="px-2 py-1 rounded-full text-xs font-semibold capitalize"
+                                className="px-2.5 py-1 rounded-full text-xs font-medium capitalize inline-block"
                                 style={{
                                   backgroundColor: statusStyle.bg,
                                   color: statusStyle.color,
@@ -2432,82 +2365,51 @@ export default function Appointments() {
                               >
                                 {apt.status}
                               </span>
-                            )}
-                          </td>
-                          <td style={{ padding: '0 12px' }}>
-                            {isDeleting ? (
-                              <div className="flex gap-2">
+                            </td>
+                            <td style={{ padding: '0 16px', textAlign: 'right' }}>
+                              <div className="flex items-center justify-end gap-1">
                                 <button
-                                  onClick={() => {
-                                    handleDeleteAppointment(apt.id);
-                                    setConfirmDelete(null);
-                                  }}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#EF4444', color: '#FFFFFF' }}
+                                  onClick={() => openApptDetail(apt)}
+                                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-blue-600 transition-colors"
+                                  title="View Appointment Details"
                                 >
-                                  Confirm
+                                  <Eye className="w-4 h-4" />
                                 </button>
-                                <button
-                                  onClick={() => setConfirmDelete(null)}
-                                  className="px-2 py-1 rounded text-xs font-semibold"
-                                  style={{ backgroundColor: '#F3F4F6', color: '#6B7280' }}
-                                >
-                                  Undo
-                                </button>
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-1.5">
                                 <button
                                   onClick={() => handleStatusChange(apt.id, "completed")}
-                                  className="hover:opacity-80"
+                                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-emerald-600 transition-colors"
                                   title="Mark Complete"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#22C55E')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
                                 >
                                   <CheckCircle className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => handleStatusChange(apt.id, "no-show")}
-                                  className="hover:opacity-80"
-                                  title="Mark No Show"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#F97316')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
-                                >
-                                  <AlertCircle className="w-4 h-4" />
-                                </button>
-                                <button
                                   onClick={() => openBookingDrawerForReschedule(apt)}
-                                  className="hover:opacity-80"
-                                  title="Edit"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#1A73E8')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
+                                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-blue-600 transition-colors"
+                                  title="Reschedule / Edit"
                                 >
                                   <Edit className="w-4 h-4" />
                                 </button>
                                 <button
-                                  onClick={() => setConfirmDelete(apt.id)}
-                                  className="hover:opacity-80"
-                                  title="Cancel"
-                                  style={{ color: '#6B7280' }}
-                                  onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-                                  onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
+                                  onClick={() => {
+                                    if (confirm(`Cancel appointment for ${apt.clientName}?`)) {
+                                      handleDeleteAppointment(apt.id);
+                                    }
+                                  }}
+                                  className="p-1.5 hover:bg-muted rounded-md text-muted-foreground hover:text-destructive transition-colors"
+                                  title="Cancel Appointment"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            {/* End of old table code */}
           </div>
         )}
       </div>
@@ -2567,7 +2469,34 @@ export default function Appointments() {
         onCustomFieldChange={(key, val) => setCustomFieldValues((prev) => ({ ...prev, [key]: val }))}
         onOpenSelectFields={() => setApptSelectFieldsOpen(true)}
         onOpenCreateField={() => setApptCreateFieldOpen(true)}
+        onBookingSuccess={(booked) => {
+          setShowAddModal(false);
+          resetBookingWorkflow();
+          setSelectedApptForDetail(booked);
+          setIsApptDetailDrawerOpen(true);
+        }}
       />
+
+      {/* Appointment Detail Drawer */}
+      {selectedApptForDetail && (
+        <AppointmentDetailDrawer
+          isOpen={isApptDetailDrawerOpen}
+          onClose={() => setIsApptDetailDrawerOpen(false)}
+          appointment={selectedApptForDetail}
+          onReschedule={(appt) => {
+            setIsApptDetailDrawerOpen(false);
+            const found = appointments.find((a) => String(a.id) === String(appt.id));
+            if (found) openBookingDrawerForReschedule(found);
+          }}
+          onMarkComplete={(id) => {
+            handleStatusChange(Number(id), "completed");
+            setSelectedApptForDetail((prev) => (prev ? { ...prev, status: "completed" } : null));
+          }}
+          onOpenInvoice={(invId) => {
+            toast.info(`Linked Invoice: ${invId}`);
+          }}
+        />
+      )}
 
       {/* Appointment Select Fields Modal */}
       {apptSelectFieldsOpen && (

@@ -712,11 +712,12 @@ export default function CreateInvoiceDrawer({
                           ...prev,
                           {
                             id: `li-pr-${Date.now()}`,
+                            source: "manual",
                             description: `Patient Responsibility (Adjudicated - ${prRecord.primaryPayer})`,
                             quantity: 1,
                             unitPrice: prRecord.invoiceableBalance,
                             total: prRecord.invoiceableBalance,
-                          },
+                          } as any,
                         ]);
                         toast.success("Imported patient responsibility into invoice line items");
                       }}
