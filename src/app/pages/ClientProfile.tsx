@@ -557,7 +557,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "billing" | "documents" | "products" | "transcripts">("overview");
   const [billingSubTab, setBillingSubTab] = useState<"provider" | "charge_capture" | "claims">("provider");
-  const { claims: allRcmClaims, encounters: allRcmEncounters, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility, recheckEligibility, createClaimFromChargeCapture } = useRcm();
+  const { claims: allRcmClaims, encounters: allRcmEncounters, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility, recheckEligibility, createClaimFromChargeCapture, createEncounterFromAppointment } = useRcm();
   const [selectedRcmClaim, setSelectedRcmClaim] = useState<Claim | null>(null);
   const [openMenuClaimId, setOpenMenuClaimId] = useState<string | null>(null);
 
@@ -697,12 +697,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     if (newStatus === "completed" && client) {
       const currentSessions = getScribeSessions();
       const existing = currentSessions.find((s) =>
-        (s.appointmentId && (s.appointmentId === String(apptId) || s.appointmentId === `apt-${apptId}`)) ||
-        (s.clientId === String(client.id) && s.sessionName?.includes(String(apptId)))
+        s.clientId === String(client.id) && (
+          (s.appointmentId && (s.appointmentId === String(apptId) || s.appointmentId === `apt-${apptId}` || s.appointmentId === `APT-${apptId}`)) ||
+          (s.sessionName?.includes(String(apptId)))
+        )
       );
+      const targetAppt = all.find((a: any) => String(a.id) === String(apptId));
+      const srvName = targetAppt ? getResolvedServiceName(targetAppt) : "Clinical Consultation";
+      const docProvider = targetAppt?.providerName || ALL_EMPLOYEES_MAP[String(targetAppt?.employeeId)] || "Dr. Amanda Clark, MD";
+
       if (!existing) {
-        const targetAppt = all.find((a: any) => String(a.id) === String(apptId));
-        const srvName = targetAppt ? getResolvedServiceName(targetAppt) : "Clinical Consultation";
         const scenario = PRESET_SCENARIOS[0];
         const newSession: ScribeSession = {
           id: `scribe-apt-${apptId}-${Date.now()}`,
@@ -713,7 +717,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           appointmentId: String(apptId),
           sessionName: `${targetAppt?.title || srvName} (${targetAppt?.date || "Completed"})`,
           doctorId: String(targetAppt?.employeeId || "doc-1"),
-          doctorName: targetAppt?.providerName || ALL_EMPLOYEES_MAP[String(targetAppt?.employeeId)] || "Dr. Amanda Clark, MD",
+          doctorName: docProvider,
           sessionDate: targetAppt?.date || new Date().toISOString(),
           durationSeconds: 76,
           status: "completed",
@@ -731,6 +735,25 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         };
         saveScribeSession(newSession);
         setScribeSessions(getScribeSessions());
+      } else if (!existing.extractedData?.icd10Code) {
+        existing.extractedData = {
+          ...existing.extractedData,
+          icd10Code: getIcd10Code(srvName),
+        };
+        saveScribeSession(existing);
+        setScribeSessions(getScribeSessions());
+      }
+
+      // Sync billable encounter into RCM store
+      try {
+        createEncounterFromAppointment(
+          String(apptId),
+          { id: client.id, name: client.name, email: client.email, phone: client.phone },
+          true,
+          docProvider
+        );
+      } catch (err) {
+        console.warn("Could not sync encounter to RCM store:", err);
       }
     }
 
@@ -907,18 +930,29 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     if (!client) return;
     const currentSessions = getScribeSessions();
     const matched = currentSessions.find((s) =>
-      (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}`)) ||
-      (s.clientId === String(client.id) && (s.sessionName?.includes(String(appt.id)) || s.transcript?.fullText?.includes(appt.title)))
+      s.clientId === String(client.id) && (
+        (s.appointmentId && (s.appointmentId === String(appt.id) || s.appointmentId === `apt-${appt.id}` || s.appointmentId === `APT-${appt.id}`)) ||
+        (s.sessionName?.includes(String(appt.id)) || (appt.title && s.transcript?.fullText?.includes(appt.title)))
+      )
     );
 
+    const srvName = getResolvedServiceName(appt);
+
     if (matched) {
+      if (!matched.extractedData?.icd10Code) {
+        matched.extractedData = {
+          ...matched.extractedData,
+          icd10Code: getIcd10Code(srvName),
+        };
+        saveScribeSession(matched);
+        setScribeSessions(getScribeSessions());
+      }
       setSelectedTranscriptSession(matched);
       setIsTranscriptDrawerOpen(true);
       return;
     }
 
     // Create & link a structured transcript/chart note for this appointment
-    const srvName = getResolvedServiceName(appt);
     const scenario = PRESET_SCENARIOS[0];
     const newSession: ScribeSession = {
       id: `scribe-apt-${appt.id}-${Date.now()}`,
@@ -942,6 +976,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         ...scenario.extractedData,
         chiefComplaint: appt.notes || `${appt.title || "Patient"} consultation encounter`,
         diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
+        icd10Code: getIcd10Code(srvName),
       },
     };
 
@@ -2756,13 +2791,40 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
                             const clientCheck = allRcmEligibility.find(
                               (c) =>
-                                String(c.appointmentId) === String(appt.id) ||
-                                c.appointmentId === `APT-${appt.id}` ||
-                                (c.clientId === client.id && (!c.appointmentId || c.appointmentDate === appt.date)) ||
-                                (c.clientName && c.clientName.toLowerCase() === (appt.clientName || client.name || "").toLowerCase())
+                                (c.appointmentId && (String(c.appointmentId) === String(appt.id) || c.appointmentId === `APT-${appt.id}`)) ||
+                                (c.clientId === client.id && !c.appointmentId && c.appointmentDate === appt.date)
                             );
 
                             const elgStatus = (appt.eligibility || appt.eligibilityStatus || clientCheck?.status || (client?.status === "Inactive" ? "inactive" : "active")).toLowerCase();
+
+                            const srvName = getResolvedServiceName(appt);
+                            let srvPrice = Number(appt.price || appt.servicePrice || 0);
+                            if (srvPrice <= 0) {
+                              const matched = globalServiceList.find(
+                                (s) =>
+                                  (appt.serviceId && String(s.id) === String(appt.serviceId)) ||
+                                  (srvName && s.name.toLowerCase() === srvName.toLowerCase())
+                              );
+                              srvPrice = matched && matched.price > 0 ? matched.price : (srvName.toLowerCase().includes("follow-up") ? 75 : 150);
+                            }
+
+                            const effectivePayer = appt.primaryInsurance || clientCheck?.payerName || client.insuranceProvider || "Blue Cross Blue Shield";
+                            const dynamicTerms = getEligibilityTermsForService(srvName, srvPrice, effectivePayer);
+
+                            const effectiveCheck = clientCheck || {
+                              id: `ELG-APT-${appt.id}`,
+                              clientId: client.id,
+                              clientName: client.name,
+                              appointmentId: String(appt.id),
+                              appointmentDate: appt.date,
+                              status: (elgStatus as any) || "active",
+                              payerName: effectivePayer,
+                              memberId: (appt as any).insuranceMemberId || client.insurancePolicyNumber || client.insuranceMemberId || "BCBS-88392019",
+                              copayAmount: dynamicTerms.copayAmount,
+                              deductibleRemaining: dynamicTerms.deductibleRemaining,
+                              coinsurance: dynamicTerms.coinsurance,
+                              checkedAt: appt.date ? `${appt.date}T09:00:00Z` : new Date().toISOString(),
+                            };
 
                             const clientInvoices = getInvoicesByClient(client.id);
                             const apptInvoice =
@@ -2783,12 +2845,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                 clientPhone: appt.clientPhone || client.phone,
                                 clientStatus: client.status,
                                 providerName: providerName,
-                                serviceName: getResolvedServiceName(appt),
+                                serviceName: srvName,
+                                price: srvPrice,
+                                servicePrice: srvPrice,
                                 invoiceId: invoiceId !== "-" ? invoiceId : undefined,
                                 eligibility: elgStatus,
                                 eligibilityStatus: elgStatus,
-                                eligibilityCheck: clientCheck,
-                                primaryInsurance: appt.primaryInsurance,
+                                eligibilityCheck: effectiveCheck,
+                                primaryInsurance: appt.primaryInsurance || effectivePayer,
                                 secondaryInsurance: appt.secondaryInsurance,
                                 preCertification: appt.preCertification,
                                 syncToCase: appt.syncToCase,
@@ -2967,15 +3031,16 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               .filter((appt: any) => {
                 const hasClaim = clientClaims.some(
                   (c) =>
-                    (c.appointmentId && String(c.appointmentId) === String(appt.id)) ||
-                    (c.encounterId && (c.encounterId === `ENC-${appt.id}` || c.encounterId === String(appt.id)))
+                    (c.appointmentId && (String(c.appointmentId) === String(appt.id) || String(c.appointmentId) === `apt-${appt.id}` || String(c.appointmentId) === `APT-${appt.id}`)) ||
+                    (c.encounterId && (c.encounterId === `ENC-${appt.id}` || c.encounterId === `ENC-APT-${appt.id}` || c.encounterId === String(appt.id) || (appt.encounterId && c.encounterId === appt.encounterId)))
                 );
                 return !hasClaim;
               })
               .map((appt: any) => {
-                // Fix 2: Strict appointmentId matching for chart notes — never fall back across client appointments
+                // Strict appointmentId and clientId matching for chart notes — never fall back across client appointments or other clients
                 const linkedSession = currentSessions.find(
                   (s) =>
+                    s.clientId === String(client.id) &&
                     s.appointmentId &&
                     (String(s.appointmentId) === String(appt.id) ||
                       String(s.appointmentId) === `apt-${appt.id}` ||
@@ -2997,7 +3062,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   if (matched && matched.price > 0) price = matched.price;
                 }
 
-                // Fix 1: Strict ordered cascade for eligibility lookup
+                // Strict ordered cascade for eligibility lookup scoped to this specific appointment
                 // Tier 1: Exact appointmentId match in RCM eligibility checks
                 let elg = allRcmEligibility.find(
                   (e) => String(e.appointmentId) === String(appt.id) || String(e.appointmentId) === `APT-${appt.id}`
@@ -3008,24 +3073,30 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   elg = appt.eligibilityCheck;
                 }
 
-                // Tier 3: Client-level RCM eligibility check
+                // Tier 3: Client-level RCM eligibility check (only if not tied to a different appointment)
                 if (!elg) {
                   elg = allRcmEligibility.find(
-                    (e) => e.clientId === client.id || (client.name && e.clientName.toLowerCase() === client.name.toLowerCase())
+                    (e) =>
+                      (e.clientId === client.id || (client.name && e.clientName?.toLowerCase() === client.name.toLowerCase())) &&
+                      (!e.appointmentId || String(e.appointmentId) === String(appt.id) || String(e.appointmentId) === `APT-${appt.id}`)
                   );
                 }
 
-                // Tier 4: Synthetic client/appointment insurance terms
-                if (!elg && (appt.insuranceProvider || client.insuranceProvider)) {
-                  const resolvedPayer = appt.insuranceProvider || client.insuranceProvider;
+                // Tier 4: Synthetic client/appointment insurance terms (dynamically computed for this specific service & price)
+                if (!elg && (appt.primaryInsurance || appt.insuranceProvider || client.insuranceProvider || client.insurancePlan)) {
+                  const resolvedPayer = appt.primaryInsurance || appt.insuranceProvider || client.insuranceProvider || "Blue Cross Blue Shield";
                   const dynamicTerms = getEligibilityTermsForService(srvName, price, resolvedPayer);
                   elg = {
+                    id: `ELG-APT-${appt.id}`,
+                    appointmentId: String(appt.id),
+                    clientId: client.id,
+                    clientName: client.name,
                     status: (appt.eligibility || "active") as any,
                     copayAmount: appt.copayAmount !== undefined ? appt.copayAmount : dynamicTerms.copayAmount,
                     deductibleRemaining: appt.deductibleRemaining !== undefined ? appt.deductibleRemaining : dynamicTerms.deductibleRemaining,
                     coinsurance: appt.coinsurance !== undefined ? appt.coinsurance : dynamicTerms.coinsurance,
                     payerName: resolvedPayer,
-                    memberId: appt.insuranceMemberId || client.insuranceMemberId,
+                    memberId: appt.insuranceMemberId || client.insurancePolicyNumber || client.insuranceMemberId || "BCBS-88392019",
                   } as any;
                 }
 

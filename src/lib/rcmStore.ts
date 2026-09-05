@@ -1462,12 +1462,10 @@ export function recheckEligibility(checkId: string): void {
   check.status = "active";
   check.checkedAt = new Date().toISOString();
   check.source = "manual_rerun";
-  if (check.copayAmount === undefined && check.deductibleRemaining === undefined && check.coinsurance === undefined) {
-    const terms = getEligibilityTermsForService("", undefined, check.payerName);
-    check.copayAmount = terms.copayAmount;
-    check.deductibleRemaining = terms.deductibleRemaining;
-    check.coinsurance = terms.coinsurance;
-  }
+  const terms = getEligibilityTermsForService(check.serviceName || "", check.servicePrice, check.payerName);
+  check.copayAmount = terms.copayAmount;
+  check.deductibleRemaining = terms.deductibleRemaining;
+  check.coinsurance = terms.coinsurance;
   check.inconclusiveReason = undefined;
 
   saveRcmState(state);
@@ -1646,6 +1644,8 @@ export function recordAppointmentEligibility(params: {
     terminationReason: params.terminationReason,
     inconclusiveReason: params.inconclusiveReason,
     source: params.status === "active" ? "manual_rerun" : "auto",
+    serviceName: params.serviceName,
+    servicePrice: params.servicePrice,
   };
 
   if (existingIdx >= 0) {
@@ -1961,3 +1961,357 @@ export function createClaimFromChargeCapture(params: ChargeCaptureParams): Claim
   saveRcmState(state);
   return newClaim;
 }
+
+// ─── Detailed Eligibility Data Model (270/271 EB-Segment Response) ─────────
+
+export interface BenefitLine {
+  category: string;        // Copay, Coinsurance, Deductible, Out-of-Pocket Max, Limitations, Non-Covered, Prior Authorization, etc.
+  serviceType: string;      // e.g. "Cardiology Follow-up", "Mental Health Outpatient"
+  network: 'in' | 'out' | 'n/a';
+  coverageLevel: 'individual' | 'family' | 'employeeOnly';
+  placeOfService?: string;  // Office, Telehealth-Home, Telehealth-Other, On-Campus Hospital
+  timePeriod?: string;      // Calendar Year, Remaining, YTD, Visit
+  amount?: number;
+  percent?: number;
+  quantity?: { value: number; unit: string; per: string }; // e.g. 2 visits / calendar year
+  authRequired?: boolean;
+  authNote?: string;        // e.g. "Pre-cert required in-network, no penalty"
+  procedures?: string[];    // split from semicolon-delimited description strings
+  contacts?: { role: string; phone?: string }[];
+  isDataMissing?: boolean;  // true when category wasn't returned — render "Not reported", never $0
+}
+
+export interface DetailedEligibilityResponse {
+  appointmentId: string;
+  clientId?: string;
+  clientName?: string;
+  status: EligibilityStatus;
+  planName: string;
+  payerName: string;
+  verifyingEntity: string;
+  memberId: string;
+  groupNumber: string;
+  policyEffectiveDate: string;
+  policyExpirationDate: string;
+  checkedAt: string;
+  benefitLines: BenefitLine[];
+  nonCoveredServices?: string[];
+  priorAuth?: {
+    required: boolean;
+    authNumber?: string;
+    note?: string;
+    effectiveDates?: string;
+  };
+  contacts?: { role: string; phone?: string; email?: string }[];
+  terminationReason?: string;
+  inconclusiveReason?: string;
+}
+
+export function getDetailedEligibilityResponse(params: {
+  appointmentId: string | number;
+  clientId?: string;
+  clientName?: string;
+  serviceName?: string;
+  servicePrice?: number;
+  payerName?: string;
+  memberId?: string;
+  appointmentDate?: string;
+  statusOverride?: EligibilityStatus;
+}): DetailedEligibilityResponse {
+  const aptIdStr = String(params.appointmentId);
+  const srv = params.serviceName || "Clinical Consultation";
+  const srvLower = srv.toLowerCase();
+  const payer = params.payerName || "Blue Cross Blue Shield";
+  const isFollowUp = srvLower.includes("follow-up") || srvLower.includes("follow up");
+  const isPreventive = srvLower.includes("preventive") || srvLower.includes("wellness") || srvLower.includes("annual");
+  const isTherapy = srvLower.includes("therapy") || srvLower.includes("physio") || srvLower.includes("rehab");
+
+  const effectiveTerms = getEligibilityTermsForService(srv, params.servicePrice, payer);
+
+  // Status handling
+  const status: EligibilityStatus = params.statusOverride || "active";
+  const checkedAt = new Date().toISOString();
+  const memberId = params.memberId || `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`;
+  const groupNumber = "GRP-90281-MA";
+
+  if (status === "inactive") {
+    return {
+      appointmentId: aptIdStr,
+      clientId: params.clientId,
+      clientName: params.clientName,
+      status: "inactive",
+      planName: "Choice Plus POS — Inactive",
+      payerName: "UnitedHealthcare",
+      verifyingEntity: "Availity Clearinghouse (EDI 271)",
+      memberId: params.memberId || "UHC-99201941",
+      groupNumber: "GRP-44012-L",
+      policyEffectiveDate: "2025-01-01",
+      policyExpirationDate: "2026-01-31",
+      checkedAt,
+      benefitLines: [],
+      terminationReason: "Policy terminated on 2026-01-31 (Benefit lapse / Non-payment)",
+    };
+  }
+
+  if (status === "inconclusive") {
+    return {
+      appointmentId: aptIdStr,
+      clientId: params.clientId,
+      clientName: params.clientName,
+      status: "inconclusive",
+      planName: "Aetna Commercial PPO",
+      payerName: "Aetna Health",
+      verifyingEntity: "Change Healthcare 270/271 Engine",
+      memberId: params.memberId || "AET-883011",
+      groupNumber: "GRP-33109",
+      policyEffectiveDate: "2026-01-01",
+      policyExpirationDate: "2026-12-31",
+      checkedAt,
+      benefitLines: [],
+      inconclusiveReason: "Subscriber DOB mismatch between clinic records and payer registry",
+    };
+  }
+
+  if (status === "not_covered") {
+    return {
+      appointmentId: aptIdStr,
+      clientId: params.clientId,
+      clientName: params.clientName,
+      status: "not_covered",
+      planName: "Cigna Open Access Plus",
+      payerName: "Cigna Healthcare",
+      verifyingEntity: "WEDI SNIP Level 4 Gateway",
+      memberId: params.memberId || "CIG-44820194",
+      groupNumber: "GRP-77201",
+      policyEffectiveDate: "2026-01-01",
+      policyExpirationDate: "2026-12-31",
+      checkedAt,
+      benefitLines: [],
+      nonCoveredServices: [
+        "CPT " + (isFollowUp ? "99213" : "99214") + " — Specialty service excluded under current benefit plan tier",
+        "Acupuncture & Holistic Modalities",
+        "Cosmetic or Elective Consultations",
+      ],
+      terminationReason: "Service CPT code not covered under current benefit policy",
+    };
+  }
+
+  // Active coverage Benefit Lines normalized from EB segments
+  const copayInOffice = effectiveTerms.copayAmount !== undefined ? effectiveTerms.copayAmount : (isFollowUp ? 15 : 25);
+  const copayInTelehealth = isFollowUp ? 10 : 20;
+  
+  // Deductible depletion over time: Follow-up shows lower unmet deductible ($50) vs initial consultation ($250)
+  const deductibleRemInd = effectiveTerms.deductibleRemaining !== undefined ? effectiveTerms.deductibleRemaining : (isFollowUp ? 50 : 250);
+  const deductibleTotInd = 500;
+  const deductibleRemFam = isFollowUp ? 150 : 750;
+  const deductibleTotFam = 1500;
+
+  const coinsuranceOffice = effectiveTerms.coinsurance !== undefined ? effectiveTerms.coinsurance : (isFollowUp ? 15 : 20);
+  const coinsuranceTelehealth = isFollowUp ? 10 : 15;
+  const coinsuranceOut = 40;
+
+  const oopRemInd = isFollowUp ? 850 : 1450;
+  const oopTotInd = 3000;
+  const oopRemFam = isFollowUp ? 2200 : 3800;
+  const oopTotFam = 6500;
+
+  const lines: BenefitLine[] = [
+    // ── COPAY (EB01: B) ──
+    {
+      category: "Copay",
+      serviceType: srv,
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Visit",
+      amount: copayInOffice,
+      procedures: isFollowUp ? ["99213", "99212"] : ["99214", "99215"],
+    },
+    {
+      category: "Copay",
+      serviceType: srv,
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Telehealth-Home",
+      timePeriod: "Visit",
+      amount: copayInTelehealth,
+      procedures: ["99213-95", "99214-95"],
+    },
+    {
+      category: "Copay",
+      serviceType: srv,
+      network: "out",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Visit",
+      isDataMissing: true, // Not reported
+    },
+
+    // ── DEDUCTIBLE (EB01: C) ──
+    {
+      category: "Deductible",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Remaining",
+      amount: deductibleRemInd,
+    },
+    {
+      category: "Deductible",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Calendar Year",
+      amount: deductibleTotInd,
+    },
+    {
+      category: "Deductible",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "family",
+      placeOfService: "Office",
+      timePeriod: "Remaining",
+      amount: deductibleRemFam,
+    },
+    {
+      category: "Deductible",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "family",
+      placeOfService: "Office",
+      timePeriod: "Calendar Year",
+      amount: deductibleTotFam,
+    },
+
+    // ── COINSURANCE (EB01: A) ──
+    {
+      category: "Coinsurance",
+      serviceType: srv,
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Visit",
+      percent: coinsuranceOffice,
+    },
+    {
+      category: "Coinsurance",
+      serviceType: srv,
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Telehealth-Home",
+      timePeriod: "Visit",
+      percent: coinsuranceTelehealth,
+    },
+    {
+      category: "Coinsurance",
+      serviceType: srv,
+      network: "out",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Visit",
+      percent: coinsuranceOut,
+    },
+
+    // ── OUT-OF-POCKET MAXIMUM (EB01: G) ──
+    {
+      category: "Out-of-Pocket Max",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Remaining",
+      amount: oopRemInd,
+    },
+    {
+      category: "Out-of-Pocket Max",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      timePeriod: "Calendar Year",
+      amount: oopTotInd,
+    },
+    {
+      category: "Out-of-Pocket Max",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "family",
+      placeOfService: "Office",
+      timePeriod: "Remaining",
+      amount: oopRemFam,
+    },
+    {
+      category: "Out-of-Pocket Max",
+      serviceType: "General Medical",
+      network: "in",
+      coverageLevel: "family",
+      placeOfService: "Office",
+      timePeriod: "Calendar Year",
+      amount: oopTotFam,
+    },
+
+    // ── ANNUAL / LIFETIME LIMITATIONS (EB01: F / H) ──
+    {
+      category: "Limitations",
+      serviceType: srv,
+      network: "in",
+      coverageLevel: "individual",
+      placeOfService: "Office",
+      quantity: {
+        value: isFollowUp ? 24 : 12,
+        unit: "visits",
+        per: "calendar year",
+      },
+      procedures: isFollowUp ? ["99213;99214;99212"] : ["99214;99215"],
+    },
+    {
+      category: "Limitations",
+      serviceType: "Preventive Care",
+      network: "in",
+      coverageLevel: "individual",
+      quantity: {
+        value: 1,
+        unit: "exam",
+        per: "365 days",
+      },
+      procedures: ["99395;99396;G0438"],
+    },
+  ];
+
+  return {
+    appointmentId: aptIdStr,
+    clientId: params.clientId,
+    clientName: params.clientName,
+    status: "active",
+    planName: "Blue Preferred Commercial PPO — Platinum Advantage",
+    payerName: payer,
+    verifyingEntity: "Availity Real-Time 270/271 Gateway (Payer ID: 00590)",
+    memberId,
+    groupNumber,
+    policyEffectiveDate: "2026-01-01",
+    policyExpirationDate: "2026-12-31",
+    checkedAt,
+    benefitLines: lines,
+    nonCoveredServices: [
+      "Cosmetic dermatology and elective aesthetic procedures",
+      "Off-formulary holistic & nutritional supplements",
+      "Experimental / Investigational clinical trials without pre-clearance",
+    ],
+    priorAuth: {
+      required: isTherapy || isFollowUp,
+      authNumber: isFollowUp ? "AUTH-2026-99213-C" : undefined,
+      note: isFollowUp
+        ? "Pre-certification verified active in-network. No penalty applies."
+        : "Prior authorization not required for initial diagnostic consultation.",
+      effectiveDates: "2026-01-01 to 2026-12-31",
+    },
+    contacts: [
+      { role: "Utilization Management / Pre-Cert", phone: "1-800-555-0199" },
+      { role: "Provider Services & Appeals", phone: "1-800-555-0144" },
+      { role: "Patient Benefits Hotline", phone: "1-888-228-7000" },
+    ],
+  };
+}
+

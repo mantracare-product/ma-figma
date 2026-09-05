@@ -28,10 +28,14 @@ import {
   RotateCcw,
   GripVertical,
   Code2,
+  HelpCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { recordAppointmentEligibility, getEligibilityTermsForService } from "../../../lib/rcmStore";
 import { EligibilityStatus } from "../../types/rcmTypes";
+import { Tooltip } from "../ui/Tooltip";
+import { getStoredServices } from "../../../lib/servicesStore";
+import EligibilityDetailDrawer from "./EligibilityDetailDrawer";
 
 export interface AppointmentDetailData {
   id: number | string;
@@ -108,6 +112,7 @@ export default function AppointmentDetailDrawer({
   const [isVerifying, setIsVerifying] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string>("auto");
   const [showDevScenarios, setShowDevScenarios] = useState(false);
+  const [isDetailedDrawerOpen, setIsDetailedDrawerOpen] = useState(false);
   const [localEligibility, setLocalEligibility] = useState<{
     status: EligibilityStatus;
     payerName: string;
@@ -156,7 +161,19 @@ export default function AppointmentDetailDrawer({
 
     setTimeout(() => {
       const srvName = appointment.serviceName || appointment.service || appointment.title || "Clinical Consultation";
-      const srvPrice = Number((appointment as any).price || (appointment as any).servicePrice || 150);
+      let srvPrice = Number((appointment as any).price || (appointment as any).servicePrice || 0);
+      if (srvPrice <= 0) {
+        const matched = getStoredServices().find(
+          (s) =>
+            (appointment.serviceId && String(s.id) === String(appointment.serviceId)) ||
+            (srvName && s.name.toLowerCase() === srvName.toLowerCase())
+        );
+        if (matched && matched.price > 0) {
+          srvPrice = matched.price;
+        } else {
+          srvPrice = srvName.toLowerCase().includes("follow-up") ? 75 : 150;
+        }
+      }
 
       let resolvedStatus: EligibilityStatus = "active";
       let resolvedPayer = appointment.primaryInsurance || appointment.eligibilityPayer || "Blue Cross Blue Shield";
@@ -311,9 +328,10 @@ export default function AppointmentDetailDrawer({
     "Initial Consultation";
 
   return (
-    <CustomSideDrawer
-      isOpen={isOpen}
-      onClose={onClose}
+    <>
+      <CustomSideDrawer
+        isOpen={isOpen}
+        onClose={onClose}
       maxWidth="w-full sm:w-[32vw] sm:max-w-[480px] min-w-[350px]"
       title={
         <div className="flex items-center gap-3">
@@ -651,6 +669,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Coverage Status</span>
+                  <Tooltip text="The patient's current insurance active standing determining if claims will be accepted or rejected by the payer.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -677,6 +698,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Primary Insurance Provider</span>
+                  <Tooltip text="The main insurance payer billed first for services before secondary coverage or patient balance.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -692,6 +716,9 @@ export default function AppointmentDetailDrawer({
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <GripVertical className="w-3 h-3 text-slate-300" />
                     <span>Secondary Insurance Provider</span>
+                    <Tooltip text="Supplemental insurance billed for remaining balances after the primary payer processes the claim.">
+                      <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                    </Tooltip>
                   </div>
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                     <span className="font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
@@ -708,6 +735,9 @@ export default function AppointmentDetailDrawer({
                   <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                     <GripVertical className="w-3 h-3 text-slate-300" />
                     <span>Pre-Certification / Auth</span>
+                    <Tooltip text="Confirms the payer has pre-approved this specific service as medically necessary before the visit.">
+                      <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                    </Tooltip>
                   </div>
                   <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                     <span className="font-mono font-semibold text-slate-800">
@@ -723,6 +753,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Member Policy ID</span>
+                  <Tooltip text="Unique subscriber identification number required on claims to route benefits to this patient.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-mono text-slate-900 font-semibold">
@@ -737,6 +770,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Copay</span>
+                  <Tooltip text="A fixed amount the patient pays per visit, regardless of the total service cost.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-bold text-slate-900 font-mono">
@@ -751,6 +787,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Deductible Remaining</span>
+                  <Tooltip text="How much of the patient's annual deductible is still unmet — this amount is owed by the patient before insurance starts contributing, unless a copay applies instead.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-bold text-slate-900 font-mono">
@@ -765,6 +804,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Coinsurance</span>
+                  <Tooltip text="The percentage of the remaining cost the patient owes after the deductible has been met.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-bold text-slate-900 font-mono">
@@ -779,6 +821,9 @@ export default function AppointmentDetailDrawer({
                 <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                   <GripVertical className="w-3 h-3 text-slate-300" />
                   <span>Verified At</span>
+                  <Tooltip text="Timestamp of the most recent 270/271 electronic eligibility check confirming active benefits.">
+                    <HelpCircle className="w-3 h-3 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                  </Tooltip>
                 </div>
                 <div className="bg-slate-50/70 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 w-full flex items-center justify-between">
                   <span className="font-mono text-slate-700">
@@ -808,11 +853,54 @@ export default function AppointmentDetailDrawer({
                   </div>
                 </div>
               )}
+
+              {/* CTA: View Detailed Eligibility Response (270/271) */}
+              <div className="pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsDetailedDrawerOpen(true)}
+                  className="w-full py-2.5 px-3.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-semibold flex items-center justify-center gap-2 transition-colors border border-blue-200/80 cursor-pointer shadow-2xs"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-blue-600" />
+                  <span>View Detailed Eligibility</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
 
       </div>
     </CustomSideDrawer>
+
+    {/* Detailed Eligibility Response Drawer */}
+    <EligibilityDetailDrawer
+      isOpen={isDetailedDrawerOpen}
+      onClose={() => setIsDetailedDrawerOpen(false)}
+      appointmentId={appointment.id}
+      clientId={appointment.clientId}
+      clientName={appointment.clientName}
+      serviceType={appointment.serviceName || appointment.service || appointment.title}
+      dateOfService={appointment.date}
+      servicePrice={Number((appointment as any).price || (appointment as any).servicePrice || 0)}
+      payerName={appointment.primaryInsurance || localEligibility?.payerName}
+      memberId={localEligibility?.memberId}
+      onEligibilityUpdated={(res) => {
+        const copay = res.benefitLines.find((b) => b.category === "Copay")?.amount;
+        const deductible = res.benefitLines.find((b) => b.category === "Deductible" && b.timePeriod === "Remaining")?.amount;
+        const coinsurance = res.benefitLines.find((b) => b.category === "Coinsurance")?.percent;
+
+        setLocalEligibility({
+          status: res.status,
+          payerName: res.payerName,
+          memberId: res.memberId,
+          copayAmount: copay,
+          deductibleRemaining: deductible,
+          coinsurance: coinsurance,
+          checkedAt: res.checkedAt,
+        });
+      }}
+    />
+    </>
   );
 }

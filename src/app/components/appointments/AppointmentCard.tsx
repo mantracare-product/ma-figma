@@ -59,11 +59,17 @@ export default function AppointmentCard({
   const [showEligibilityPopover, setShowEligibilityPopover] = useState(false);
   const { eligibilityChecks, recheckEligibility } = useEligibility();
 
-  const clientCheck = eligibilityChecks.find(
-    (c) =>
-      c.clientName.toLowerCase() === appointment.clientName.toLowerCase() ||
-      String(c.appointmentId) === String(appointment.id)
-  );
+  const clientCheck =
+    eligibilityChecks.find(
+      (c) =>
+        (c.appointmentId && (String(c.appointmentId) === String(appointment.id) || c.appointmentId === `APT-${appointment.id}`)) ||
+        (c.clientId === (appointment as any).clientId && !c.appointmentId && c.appointmentDate === appointment.date)
+    ) ||
+    eligibilityChecks.find(
+      (c) =>
+        !c.appointmentId &&
+        c.clientName.toLowerCase() === appointment.clientName.toLowerCase()
+    );
   const elgStatus = clientCheck?.status || "pending";
 
   const formatDate = (date: string, time: string) => {

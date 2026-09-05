@@ -411,7 +411,10 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
       fullText: PRESET_SCENARIOS[0].transcriptText,
       utterances: PRESET_SCENARIOS[0].utterances,
     },
-    extractedData: PRESET_SCENARIOS[0].extractedData,
+    extractedData: {
+      ...PRESET_SCENARIOS[0].extractedData,
+      icd10Code: "H25.12",
+    },
   },
   {
     id: "scribe-102",
@@ -431,7 +434,10 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
       fullText: PRESET_SCENARIOS[1].transcriptText,
       utterances: PRESET_SCENARIOS[1].utterances,
     },
-    extractedData: PRESET_SCENARIOS[1].extractedData,
+    extractedData: {
+      ...PRESET_SCENARIOS[1].extractedData,
+      icd10Code: "J20.9",
+    },
   },
   {
     id: "scribe-103",
@@ -451,7 +457,10 @@ export const INITIAL_SCRIBE_SESSIONS: ScribeSession[] = [
       fullText: PRESET_SCENARIOS[2].transcriptText,
       utterances: PRESET_SCENARIOS[2].utterances,
     },
-    extractedData: PRESET_SCENARIOS[2].extractedData,
+    extractedData: {
+      ...PRESET_SCENARIOS[2].extractedData,
+      icd10Code: "M17.11",
+    },
   },
   {
     id: "scribe-104",

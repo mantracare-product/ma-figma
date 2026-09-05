@@ -31,6 +31,8 @@ export interface EligibilityCheck {
   terminationReason?: string;       // Reason for inactive or not covered
   source: "auto" | "manual_rerun";
   inconclusiveReason?: string;
+  serviceName?: string;
+  servicePrice?: number;
 }
 
 // ─── 2. Encounter ────────────────────────────────────────────────────────────
