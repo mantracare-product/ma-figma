@@ -106,6 +106,7 @@ export interface ClaimScrubIssue {
 export interface Claim {
   id: string;                       // e.g. "CLM-2026-8812"
   encounterId: string;
+  appointmentId?: string;
   clientId: string;                 // FK to unified client record
   clientName: string;
   payerName: string;

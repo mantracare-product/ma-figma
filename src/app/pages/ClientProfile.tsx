@@ -30,7 +30,7 @@ import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../compone
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import AppointmentDetailDrawer, { AppointmentDetailData } from "../components/appointments/AppointmentDetailDrawer";
 import { appendActivity } from "../../lib/activityEngine";
-import { recordAppointmentEligibility } from "../../lib/rcmStore";
+import { recordAppointmentEligibility, calculateEstimatedSplit, getEligibilityTermsForService } from "../../lib/rcmStore";
 import { getEligibilityBadge } from "../components/rcm/EligibilityBadge";
 import { useInvoices } from "../context/InvoiceContext";
 import { useRcm } from "../context/RcmContext";
@@ -556,8 +556,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // All state variables verbatim from Clients.tsx drawer
   const [activeProfileTab, setActiveProfileTab] = useState<"overview" | "processes" | "activity" | "forms" | "notes" | "appointments" | "invoices" | "billing" | "documents" | "products" | "transcripts">("overview");
-  const [billingSubTab, setBillingSubTab] = useState<"provider" | "claims">("provider");
-  const { claims: allRcmClaims, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility, recheckEligibility } = useRcm();
+  const [billingSubTab, setBillingSubTab] = useState<"provider" | "charge_capture" | "claims">("provider");
+  const { claims: allRcmClaims, encounters: allRcmEncounters, patientBalances: allRcmBalances, eligibilityChecks: allRcmEligibility, recheckEligibility, createClaimFromChargeCapture } = useRcm();
   const [selectedRcmClaim, setSelectedRcmClaim] = useState<Claim | null>(null);
   const [openMenuClaimId, setOpenMenuClaimId] = useState<string | null>(null);
 
@@ -693,6 +693,47 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     const all: any[] = stored ? JSON.parse(stored) : [];
     const updated = all.map((a: any) => (String(a.id) === String(apptId) ? { ...a, status: newStatus } : a));
     sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+
+    if (newStatus === "completed" && client) {
+      const currentSessions = getScribeSessions();
+      const existing = currentSessions.find((s) =>
+        (s.appointmentId && (s.appointmentId === String(apptId) || s.appointmentId === `apt-${apptId}`)) ||
+        (s.clientId === String(client.id) && s.sessionName?.includes(String(apptId)))
+      );
+      if (!existing) {
+        const targetAppt = all.find((a: any) => String(a.id) === String(apptId));
+        const srvName = targetAppt ? getResolvedServiceName(targetAppt) : "Clinical Consultation";
+        const scenario = PRESET_SCENARIOS[0];
+        const newSession: ScribeSession = {
+          id: `scribe-apt-${apptId}-${Date.now()}`,
+          clientId: String(client.id),
+          clientName: client.name,
+          patientAge: client.age || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? 34 : 45),
+          patientGender: client.gender || (/sarah|emily|jessica|lisa|amanda|priya|ananya|sneha|kavya|deepika|fatima|layla|charlotte|jennifer/i.test(client.name) ? "Female" : "Male"),
+          appointmentId: String(apptId),
+          sessionName: `${targetAppt?.title || srvName} (${targetAppt?.date || "Completed"})`,
+          doctorId: String(targetAppt?.employeeId || "doc-1"),
+          doctorName: targetAppt?.providerName || ALL_EMPLOYEES_MAP[String(targetAppt?.employeeId)] || "Dr. Amanda Clark, MD",
+          sessionDate: targetAppt?.date || new Date().toISOString(),
+          durationSeconds: 76,
+          status: "completed",
+          createdAt: Date.now(),
+          transcript: {
+            fullText: scenario.transcriptText,
+            utterances: scenario.utterances,
+          },
+          extractedData: {
+            ...scenario.extractedData,
+            chiefComplaint: targetAppt?.notes || `${srvName} clinical consultation`,
+            diagnosis: srvName !== "—" ? `${srvName} Assessment` : "Clinical Consultation Assessment",
+            icd10Code: getIcd10Code(srvName),
+          },
+        };
+        saveScribeSession(newSession);
+        setScribeSessions(getScribeSessions());
+      }
+    }
+
     setAppointmentRefreshKey((k) => k + 1);
     toast.success(`Appointment marked as ${newStatus}`);
   };
@@ -748,26 +789,47 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       const all: any[] = stored ? JSON.parse(stored) : [];
 
       targetAppts.forEach((appt: any) => {
+        const srvName = getResolvedServiceName(appt);
+        const price = Number(appt.price || appt.servicePrice || 150);
+        const payer = appt.insuranceProvider || client.insuranceProvider || "Blue Cross Blue Shield";
+        const terms = getEligibilityTermsForService(srvName, price, payer);
+
         recordAppointmentEligibility({
           appointmentId: appt.id,
           clientId: client.id,
           clientName: appt.clientName || client.name,
           appointmentDate: appt.date,
           status: "active",
-          payerName: appt.insuranceProvider || client.insuranceProvider || "Blue Cross Blue Shield",
-          copayAmount: appt.copayAmount || 25,
-          deductibleRemaining: 150,
-          coinsurance: 20,
+          payerName: payer,
+          serviceName: srvName,
+          servicePrice: price,
+          copayAmount: terms.copayAmount,
+          deductibleRemaining: terms.deductibleRemaining,
+          coinsurance: terms.coinsurance,
         });
       });
 
       const updated = all.map((appt: any) => {
         if (targetAppts.some((t: any) => String(t.id) === String(appt.id))) {
+          const srvName = getResolvedServiceName(appt);
+          const price = Number(appt.price || appt.servicePrice || 150);
+          const payer = appt.insuranceProvider || client.insuranceProvider || "Blue Cross Blue Shield";
+          const terms = getEligibilityTermsForService(srvName, price, payer);
           return {
             ...appt,
             eligibility: "active",
             eligibilityStatus: "active",
-            copayAmount: appt.copayAmount || 25,
+            copayAmount: terms.copayAmount,
+            deductibleRemaining: terms.deductibleRemaining,
+            coinsurance: terms.coinsurance,
+            eligibilityCheck: {
+              status: "active",
+              payerName: payer,
+              copayAmount: terms.copayAmount,
+              deductibleRemaining: terms.deductibleRemaining,
+              coinsurance: terms.coinsurance,
+              checkedAt: new Date().toISOString(),
+            },
           };
         }
         return appt;
@@ -776,7 +838,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
       setIsCheckingProfileEligibility(false);
       setAppointmentRefreshKey((k) => k + 1);
-      toast.success(`Coverage verified active for ${targetAppts.length} appointment(s) (Copay: $25, Deductible: $150)`);
+      toast.success(`Coverage verified active for ${targetAppts.length} appointment(s) based on selected service & fee schedule`);
     }, 700);
   };
 
@@ -811,6 +873,34 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       if (appt.title.toLowerCase().includes("x-ray") || appt.title.toLowerCase().includes("xray")) return "X-Ray Imaging";
     }
     return "—";
+  };
+
+  const getIcd10Code = (diagnosis?: string, explicitCode?: string) => {
+    if (explicitCode && explicitCode.trim()) return explicitCode;
+    if (!diagnosis) return "Z00.00";
+    const d = diagnosis.toLowerCase();
+    if (d.includes("cataract")) return "H25.11";
+    if (d.includes("bronchitis")) return "J20.9";
+    if (d.includes("osteoarthritis") || d.includes("knee")) return "M17.0";
+    if (d.includes("anxiety")) return "F41.1";
+    if (d.includes("burnout") || d.includes("stress")) return "Z73.0";
+    if (d.includes("hypertension") || d.includes("bp")) return "I10";
+    if (d.includes("diabetes")) return "E11.9";
+    if (d.includes("dental") || d.includes("cleaning")) return "K02.9";
+    if (d.includes("x-ray") || d.includes("imaging")) return "Z01.89";
+    if (d.includes("preventive") || d.includes("annual")) return "Z00.00";
+    return "Z00.00";
+  };
+
+  const getServiceCptCode = (serviceName?: string) => {
+    const s = (serviceName || "").toLowerCase();
+    if (s.includes("preventive") || s.includes("annual")) return "99395";
+    if (s.includes("consultation") || s.includes("initial")) return "99214";
+    if (s.includes("follow-up") || s.includes("follow up")) return "99213";
+    if (s.includes("therapy") || s.includes("physical")) return "97110";
+    if (s.includes("dental")) return "D0120";
+    if (s.includes("x-ray") || s.includes("imaging")) return "71046";
+    return "99214";
   };
 
   const handleOpenApptTranscript = (appt: any, pName: string) => {
@@ -2854,14 +2944,281 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               clientClaims.find((c) => c.providerName)?.providerName ||
               "Dr. Amanda Clark, MD";
 
+            // ── Charge Capture: derive ready-to-bill encounters from completed appointments with signed chart notes ──
+            const storedApptsRaw = sessionStorage.getItem("appointments_v1");
+            const allApptsList: any[] = storedApptsRaw ? JSON.parse(storedApptsRaw) : [];
+            const clientApptsList = allApptsList.filter((appt: any) => {
+              if (!client) return false;
+              return (
+                (appt.clientId && String(appt.clientId).toLowerCase() === String(client.id).toLowerCase()) ||
+                (appt.clientName && client.name && appt.clientName.toLowerCase() === client.name.toLowerCase()) ||
+                (appt.clientEmail && client.email && appt.clientEmail.toLowerCase() === client.email.toLowerCase()) ||
+                (appt.clientPhone && client.phone && appt.clientPhone.replace(/\D/g, "") === client.phone.replace(/\D/g, ""))
+              );
+            });
+
+            const completedAppts = clientApptsList.filter(
+              (a: any) => (a.status || "").toLowerCase() === "completed"
+            );
+            const currentSessions = getScribeSessions();
+            const storedCatalogueSvcs = getStoredServices();
+
+            const readyToBillEncounters = completedAppts
+              .filter((appt: any) => {
+                const hasClaim = clientClaims.some(
+                  (c) =>
+                    (c.appointmentId && String(c.appointmentId) === String(appt.id)) ||
+                    (c.encounterId && (c.encounterId === `ENC-${appt.id}` || c.encounterId === String(appt.id)))
+                );
+                return !hasClaim;
+              })
+              .map((appt: any) => {
+                // Fix 2: Strict appointmentId matching for chart notes — never fall back across client appointments
+                const linkedSession = currentSessions.find(
+                  (s) =>
+                    s.appointmentId &&
+                    (String(s.appointmentId) === String(appt.id) ||
+                      String(s.appointmentId) === `apt-${appt.id}` ||
+                      String(s.appointmentId) === `APT-${appt.id}`)
+                );
+
+                const srvName = getResolvedServiceName(appt) || "Clinical Consultation";
+                const diagnosis = linkedSession?.extractedData?.diagnosis || null;
+                const icd10Code = linkedSession?.extractedData?.icd10Code || null;
+                const hasDocumentation = Boolean(diagnosis && icd10Code);
+
+                let price = 220;
+                if (appt.price !== undefined && Number(appt.price) > 0) {
+                  price = Number(appt.price);
+                } else if (appt.servicePrice !== undefined && Number(appt.servicePrice) > 0) {
+                  price = Number(appt.servicePrice);
+                } else {
+                  const matched = storedCatalogueSvcs.find((s) => s.name.toLowerCase() === srvName.toLowerCase());
+                  if (matched && matched.price > 0) price = matched.price;
+                }
+
+                // Fix 1: Strict ordered cascade for eligibility lookup
+                // Tier 1: Exact appointmentId match in RCM eligibility checks
+                let elg = allRcmEligibility.find(
+                  (e) => String(e.appointmentId) === String(appt.id) || String(e.appointmentId) === `APT-${appt.id}`
+                );
+
+                // Tier 2: Embedded appointment eligibility check
+                if (!elg && appt.eligibilityCheck) {
+                  elg = appt.eligibilityCheck;
+                }
+
+                // Tier 3: Client-level RCM eligibility check
+                if (!elg) {
+                  elg = allRcmEligibility.find(
+                    (e) => e.clientId === client.id || (client.name && e.clientName.toLowerCase() === client.name.toLowerCase())
+                  );
+                }
+
+                // Tier 4: Synthetic client/appointment insurance terms
+                if (!elg && (appt.insuranceProvider || client.insuranceProvider)) {
+                  const resolvedPayer = appt.insuranceProvider || client.insuranceProvider;
+                  const dynamicTerms = getEligibilityTermsForService(srvName, price, resolvedPayer);
+                  elg = {
+                    status: (appt.eligibility || "active") as any,
+                    copayAmount: appt.copayAmount !== undefined ? appt.copayAmount : dynamicTerms.copayAmount,
+                    deductibleRemaining: appt.deductibleRemaining !== undefined ? appt.deductibleRemaining : dynamicTerms.deductibleRemaining,
+                    coinsurance: appt.coinsurance !== undefined ? appt.coinsurance : dynamicTerms.coinsurance,
+                    payerName: resolvedPayer,
+                    memberId: appt.insuranceMemberId || client.insuranceMemberId,
+                  } as any;
+                }
+
+                const split = calculateEstimatedSplit(price, elg);
+                const estimatedPatient = split.patientResponsibility;
+                const estimatedInsurance = split.insuranceResponsibility;
+                const splitExplanation = split.explanation;
+                const isEstimated = split.patientResponsibility !== null && split.insuranceResponsibility !== null;
+
+                const provider =
+                  appt.providerName ||
+                  ALL_EMPLOYEES_MAP[String(appt.employeeId)] ||
+                  renderingProviderName ||
+                  "Dr. Amanda Clark, MD";
+
+                const payer =
+                  elg?.payerName ||
+                  appt.insuranceProvider ||
+                  client.insuranceProvider ||
+                  "Blue Cross Blue Shield";
+
+                const member =
+                  elg?.memberId ||
+                  client.insuranceMemberId ||
+                  "BCBS-99218274";
+                // Fix 3: Gate Ready-to-Bill on documentation lock
+                const linkedEncounter = allRcmEncounters.find(
+                  (e) => String(e.appointmentId) === String(appt.id) || e.id === `ENC-${appt.id}`
+                );
+
+                const isDocumentationLocked = Boolean(
+                  linkedEncounter?.documentationLocked ||
+                  (linkedSession && linkedSession.status === "completed" && diagnosis && icd10Code)
+                );
+
+                const isReadyToBill = isDocumentationLocked && Boolean(diagnosis && icd10Code);
+
+                return {
+                  appointment: appt,
+                  serviceName: srvName,
+                  servicePrice: price,
+                  diagnosis,
+                  icd10Code,
+                  cptCode: getServiceCptCode(srvName),
+                  estimatedInsurance,
+                  estimatedPatient,
+                  splitExplanation,
+                  isEstimated,
+                  hasDocumentation,
+                  isDocumentationLocked,
+                  isReadyToBill,
+                  providerName: provider,
+                  payerName: payer,
+                  memberId: member,
+                };
+              });
+
+            const billableEncounters = readyToBillEncounters.filter((e) => e.isReadyToBill);
+
+            const handleCreateClaimFromEncounter = (enc: any) => {
+              if (!enc.isReadyToBill) return;
+              createClaimFromChargeCapture({
+                appointmentId: enc.appointment.id,
+                clientId: client.id,
+                clientName: client.name,
+                providerName: enc.providerName,
+                serviceName: enc.serviceName,
+                serviceDate: enc.appointment.date || new Date().toISOString().split("T")[0],
+                billedAmount: enc.servicePrice,
+                diagnosisCodes: enc.icd10Code ? [enc.icd10Code] : ["Z00.00"],
+                cptCodes: [enc.cptCode],
+                payerName: enc.payerName,
+                memberId: enc.memberId,
+                patientResponsibility: enc.estimatedPatient !== null && enc.estimatedPatient !== undefined ? enc.estimatedPatient : undefined,
+              });
+              setAppointmentRefreshKey((k) => k + 1);
+            };
+
+            const renderReadyToBillTable = () => (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-gradient-to-r from-[#181e25] to-[#2c3e50] text-white">
+                      <tr>
+                        <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider">Diagnosis (ICD-10)</th>
+                        <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider">Service &amp; Price</th>
+                        <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Estimated Split</th>
+                        <th className="px-5 py-3 text-xs font-semibold text-white uppercase tracking-wider text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-sans">
+                      {readyToBillEncounters.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="text-center py-8 text-slate-400">
+                            No encounters pending charge capture. Completed appointments with signed chart notes will appear here.
+                          </td>
+                        </tr>
+                      ) : (
+                        readyToBillEncounters.map((enc) => (
+                          <tr key={enc.appointment.id} className="hover:bg-blue-50/30 transition-colors">
+                            <td className="px-5 py-3">
+                              {enc.hasDocumentation && enc.icd10Code ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 shrink-0">
+                                    {enc.icd10Code}
+                                  </span>
+                                  <span className="text-slate-800 font-medium truncate max-w-xs" title={enc.diagnosis || ""}>
+                                    {enc.diagnosis}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80 text-[11px] font-medium w-fit">
+                                  <Clock className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                  <span>Documentation Pending</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-5 py-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-slate-900 font-medium">{enc.serviceName}</span>
+                                <span className="text-slate-400">·</span>
+                                <span className="font-mono font-bold text-slate-900 tabular-nums">
+                                  ${enc.servicePrice.toFixed(2)}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-5 py-3 text-right font-mono">
+                              {enc.isEstimated && enc.estimatedInsurance !== null && enc.estimatedPatient !== null ? (
+                                <div className="flex items-center justify-end gap-3 text-xs" title={enc.splitExplanation}>
+                                  <div>
+                                    <span className="text-slate-500 mr-1 text-[11px]">Insurance:</span>
+                                    <span className="font-bold text-emerald-700 tabular-nums">
+                                      ${enc.estimatedInsurance.toFixed(2)}
+                                    </span>
+                                  </div>
+                                  <span className="text-slate-300">/</span>
+                                  <div>
+                                    <span className="text-slate-500 mr-1 text-[11px]">Patient Est:</span>
+                                    <span className="font-bold text-blue-700 tabular-nums">
+                                      ${enc.estimatedPatient.toFixed(2)}
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center text-amber-700 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded text-[11px] font-sans font-medium"
+                                  title={enc.splitExplanation || "Unable to estimate: No copay, deductible, or coinsurance terms on file"}
+                                >
+                                  Unable to estimate
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-3 text-right">
+                              {enc.isReadyToBill ? (
+                                <Button
+                                  variant="primary"
+                                  size="sm"
+                                  onClick={() => handleCreateClaimFromEncounter(enc)}
+                                  className="h-8 text-xs cursor-pointer"
+                                >
+                                  Create Claim
+                                </Button>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-400 bg-slate-100 px-2.5 py-1.5 rounded-lg border border-slate-200/80 cursor-not-allowed select-none"
+                                  title="Cannot create claim: Clinical documentation must be completed and locked first."
+                                >
+                                  <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+                                  Pending Lock
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+
             return (
               <div className="space-y-6" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                {/* ── Sub-Tab Navigation: Provider | Claims ── */}
+                {/* ── Sub-Tab Navigation: Provider | Charge Capture | Claims ── */}
                 <div className="flex items-center justify-between bg-white p-2 rounded-xl border border-slate-200 shadow-2xs">
                   <div className="flex items-center gap-1 bg-slate-100/80 p-1 rounded-lg border border-slate-200/60">
                     {(
                       [
                         { id: "provider" as const, label: "Provider" },
+                        {
+                          id: "charge_capture" as const,
+                          label: billableEncounters.length > 0 ? `Charge Capture (${billableEncounters.length})` : "Charge Capture",
+                        },
                         { id: "claims" as const, label: "Claims" },
                       ] as const
                     ).map((sub) => {
@@ -2890,7 +3247,29 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                   <InsuranceProvidersTab />
                 )}
 
-                {/* ── Sub-Tab 2: CLAIMS ── */}
+                {/* ── Sub-Tab 2: CHARGE CAPTURE ── */}
+                {billingSubTab === "charge_capture" && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Charge Capture Queue
+                        </h4>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Encounter bridge converting completed clinical documentation into billable claims.
+                        </p>
+                      </div>
+                      {billableEncounters.length > 0 && (
+                        <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 font-mono">
+                          {billableEncounters.length} Ready to Bill
+                        </span>
+                      )}
+                    </div>
+                    {renderReadyToBillTable()}
+                  </div>
+                )}
+
+                {/* ── Sub-Tab 3: CLAIMS ── */}
                 {billingSubTab === "claims" && (
                   <div className="space-y-6">
                     {/* Active Denial Alert Banner */}
@@ -2917,7 +3296,34 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       </div>
                     )}
 
+                    {/* Ready to Bill Section (Charge Capture) - shown directly above existing claims table */}
+                    {billableEncounters.length > 0 && (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                              Ready to Bill (Charge Capture)
+                            </h4>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 font-mono">
+                              {billableEncounters.length}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            Completed encounters awaiting claim confirmation
+                          </span>
+                        </div>
+                        {renderReadyToBillTable()}
+                      </div>
+                    )}
+
                     {/* Claims Table */}
+                    {readyToBillEncounters.length > 0 && (
+                      <div className="flex items-center justify-between pt-1">
+                        <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          Claims History
+                        </h4>
+                      </div>
+                    )}
                     <div className="bg-white rounded-xl border border-slate-200 shadow-xs overflow-hidden">
                       <div className="overflow-x-auto">
                         <table className="w-full text-left text-xs border-collapse">
@@ -2954,7 +3360,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     ${cl.billedAmount.toFixed(2)}
                                   </td>
                                   <td className="px-5 py-3 text-right font-mono font-bold text-emerald-700 tabular-nums">
-                                    {cl.paidAmount !== undefined ? `$${cl.paidAmount.toFixed(2)}` : "$0.00"}
+                                    {cl.paidAmount !== undefined ? `$${cl.paidAmount.toFixed(2)}` : "-"}
                                   </td>
                                   <td className="px-5 py-3 text-right font-mono font-bold text-blue-700 tabular-nums">
                                     {cl.patientResponsibility !== undefined

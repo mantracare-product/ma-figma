@@ -1462,10 +1462,144 @@ export function recheckEligibility(checkId: string): void {
   check.status = "active";
   check.checkedAt = new Date().toISOString();
   check.source = "manual_rerun";
-  check.copayAmount = check.copayAmount || 25;
+  if (check.copayAmount === undefined && check.deductibleRemaining === undefined && check.coinsurance === undefined) {
+    const terms = getEligibilityTermsForService("", undefined, check.payerName);
+    check.copayAmount = terms.copayAmount;
+    check.deductibleRemaining = terms.deductibleRemaining;
+    check.coinsurance = terms.coinsurance;
+  }
   check.inconclusiveReason = undefined;
 
   saveRcmState(state);
+}
+
+// ─── Dynamic Eligibility Terms Resolution by Service & Price ────────────────
+export function getEligibilityTermsForService(
+  serviceName = "",
+  servicePrice?: number,
+  payerName = "Blue Cross Blue Shield"
+): {
+  copayAmount: number | undefined;
+  deductibleRemaining: number | undefined;
+  coinsurance: number | undefined;
+  benefitType: string;
+} {
+  const nameLower = (serviceName || "").toLowerCase();
+  const payerLower = (payerName || "").toLowerCase();
+
+  // Self-pay plans have no payer-subsidized copay or deductible
+  if (payerLower.includes("self-pay") || payerLower.includes("self pay")) {
+    return {
+      copayAmount: undefined,
+      deductibleRemaining: undefined,
+      coinsurance: undefined,
+      benefitType: "Self-Pay (100% Patient Responsibility)",
+    };
+  }
+
+  // 1. Preventive Care (Annual Wellness, Preventive Exam, Checkup, Screening)
+  // ACA Mandate: 100% covered in-network ($0 Copay, $0 Deductible, 0% Coinsurance)
+  if (
+    nameLower.includes("preventive") ||
+    nameLower.includes("annual") ||
+    nameLower.includes("wellness") ||
+    nameLower.includes("checkup") ||
+    nameLower.includes("routine") ||
+    nameLower.includes("z00")
+  ) {
+    return {
+      copayAmount: 0,
+      deductibleRemaining: 0,
+      coinsurance: 0,
+      benefitType: "Preventive Care (100% In-Network Covered)",
+    };
+  }
+
+  // Determine effective price
+  let price = Number(servicePrice) || 0;
+  if (price <= 0) {
+    if (nameLower.includes("follow-up") || nameLower.includes("follow up")) price = 75;
+    else if (nameLower.includes("dental")) price = 120;
+    else if (nameLower.includes("x-ray") || nameLower.includes("imaging")) price = 80;
+    else if (nameLower.includes("physio") || nameLower.includes("therapy")) price = 110;
+    else if (nameLower.includes("blood") || nameLower.includes("lab")) price = 95;
+    else if (nameLower.includes("comprehensive")) price = 275;
+    else if (nameLower.includes("consultation")) price = 150;
+    else price = 150;
+  }
+
+  // 2. Diagnostic & Labs (X-ray, blood test, imaging, lab panels)
+  // Subject to deductible + 20% coinsurance without fixed office visit copay
+  if (
+    nameLower.includes("x-ray") ||
+    nameLower.includes("imaging") ||
+    nameLower.includes("blood") ||
+    nameLower.includes("lab") ||
+    nameLower.includes("diagnostic")
+  ) {
+    return {
+      copayAmount: undefined,
+      deductibleRemaining: Math.round(Math.min(price, 100)),
+      coinsurance: 20,
+      benefitType: "Diagnostic / Imaging (Subject to Deductible)",
+    };
+  }
+
+  // 3. Behavioral Health / Therapy
+  if (nameLower.includes("psychotherapy") || nameLower.includes("counseling") || nameLower.includes("mental")) {
+    const copay = price > 200 ? 35 : 25;
+    return {
+      copayAmount: copay,
+      deductibleRemaining: Math.round(Math.min(price, 150)),
+      coinsurance: 20,
+      benefitType: "Behavioral Health Benefit",
+    };
+  }
+
+  // 4. Physical Therapy / Rehabilitation
+  if (nameLower.includes("physio") || nameLower.includes("physical therapy") || nameLower.includes("rehab")) {
+    const copay = price > 100 ? 30 : 20;
+    return {
+      copayAmount: copay,
+      deductibleRemaining: Math.round(Math.min(price, 100)),
+      coinsurance: 20,
+      benefitType: "Physical Rehabilitation Benefit",
+    };
+  }
+
+  // 5. Clinical Office Visits / E&M Visits dynamically scaled by service price:
+  // - Minor / Follow-up (< $100): $15 Copay, $50 Deductible, 15% Coinsurance
+  // - Standard Visit ($100 - $199): $25 Copay, $150 Deductible, 20% Coinsurance
+  // - Extended / Specialist ($200 - $299): $35 Copay, $200 Deductible, 20% Coinsurance
+  // - Complex / High-complexity (>= $300): $50 Copay, $250 Deductible, 25% Coinsurance
+  let copay = 25;
+  let deductible = 150;
+  let coinsurance = 20;
+
+  if (price < 100) {
+    copay = 15;
+    deductible = Math.min(price, 50);
+    coinsurance = 15;
+  } else if (price < 200) {
+    copay = 25;
+    deductible = Math.min(price, 150);
+    coinsurance = 20;
+  } else if (price < 300) {
+    copay = 35;
+    deductible = Math.min(price, 200);
+    coinsurance = 20;
+  } else {
+    copay = 50;
+    deductible = Math.min(price, 250);
+    coinsurance = 25;
+  }
+
+  return {
+    copayAmount: copay,
+    deductibleRemaining: deductible,
+    coinsurance,
+    benefitType: `Commercial Office Visit (${serviceName || "Clinical Consultation"})`,
+  };
 }
 
 export function recordAppointmentEligibility(params: {
@@ -1476,6 +1610,8 @@ export function recordAppointmentEligibility(params: {
   status: EligibilityStatus;
   payerName?: string;
   memberId?: string;
+  serviceName?: string;
+  servicePrice?: number;
   copayAmount?: number;
   deductibleRemaining?: number;
   coinsurance?: number;
@@ -1489,6 +1625,11 @@ export function recordAppointmentEligibility(params: {
       c.appointmentId === `APT-${params.appointmentId}`
   );
 
+  const fallbackTerms =
+    params.status === "active"
+      ? getEligibilityTermsForService(params.serviceName, params.servicePrice, params.payerName)
+      : { copayAmount: undefined, deductibleRemaining: undefined, coinsurance: undefined };
+
   const check: EligibilityCheck = {
     id: existingIdx >= 0 ? state.eligibilityChecks[existingIdx].id : `ELG-${params.appointmentId}`,
     clientId: params.clientId,
@@ -1499,9 +1640,9 @@ export function recordAppointmentEligibility(params: {
     memberId: params.memberId || `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`,
     status: params.status,
     checkedAt: new Date().toISOString(),
-    copayAmount: params.copayAmount !== undefined ? params.copayAmount : params.status === "active" ? 25 : undefined,
-    deductibleRemaining: params.deductibleRemaining !== undefined ? params.deductibleRemaining : params.status === "active" ? 150 : undefined,
-    coinsurance: params.coinsurance !== undefined ? params.coinsurance : params.status === "active" ? 20 : undefined,
+    copayAmount: params.copayAmount !== undefined ? params.copayAmount : fallbackTerms.copayAmount,
+    deductibleRemaining: params.deductibleRemaining !== undefined ? params.deductibleRemaining : fallbackTerms.deductibleRemaining,
+    coinsurance: params.coinsurance !== undefined ? params.coinsurance : fallbackTerms.coinsurance,
     terminationReason: params.terminationReason,
     inconclusiveReason: params.inconclusiveReason,
     source: params.status === "active" ? "manual_rerun" : "auto",
@@ -1539,4 +1680,284 @@ export function getStoredDenialClusters(): DenialClusterGroup[] {
 
 export function getStoredPatientBalances(): PatientArBalance[] {
   return getStoredRcmState().patientBalances;
+}
+
+// ─── Estimated Split Calculation (Pure Logic) ────────────────────────────────
+
+export interface EstimatedSplitResult {
+  patientResponsibility: number | null;
+  insuranceResponsibility: number | null;
+  ruleApplied:
+    | "copay"
+    | "deductible"
+    | "deductible_plus_coinsurance"
+    | "coinsurance"
+    | "self_pay"
+    | "unable_to_estimate";
+  explanation: string;
+}
+
+/**
+ * Pure calculation function for determining estimated patient vs insurance split.
+ * Strict priority order:
+ * 1. Copay first: if copayAmount is present, patientResponsibility = min(copay, servicePrice).
+ * 2. Deductible second (only if no copay): patient owes up to unmet deductible.
+ *    Any leftover above deductible falls through to coinsurance.
+ * 3. Coinsurance third: applied if deductible is 0 (fully met) or on leftover from step 2.
+ * 4. Fallback: self_pay / inactive coverage -> 100% patient, or null ("Unable to estimate").
+ *
+ * Guarantees patientResponsibility + insuranceResponsibility === exact servicePrice (no off-by-cent totals).
+ */
+export function calculateEstimatedSplit(
+  servicePrice: number,
+  eligibility?: Partial<EligibilityCheck> | null
+): EstimatedSplitResult {
+  const price = Math.max(0, Math.round(servicePrice * 100) / 100);
+
+  if (price === 0) {
+    return {
+      patientResponsibility: 0,
+      insuranceResponsibility: 0,
+      ruleApplied: "copay",
+      explanation: "Zero charge encounter",
+    };
+  }
+
+  if (!eligibility) {
+    return {
+      patientResponsibility: null,
+      insuranceResponsibility: null,
+      ruleApplied: "unable_to_estimate",
+      explanation: "No eligibility record on file",
+    };
+  }
+
+  // Self-Pay: patient owes full price
+  if (eligibility.status === "self_pay") {
+    return {
+      patientResponsibility: price,
+      insuranceResponsibility: 0,
+      ruleApplied: "self_pay",
+      explanation: "Self-Pay: 100% patient responsibility",
+    };
+  }
+
+  // Inactive or not covered: patient owes full price
+  if (eligibility.status === "inactive" || eligibility.status === "not_covered") {
+    return {
+      patientResponsibility: price,
+      insuranceResponsibility: 0,
+      ruleApplied: "self_pay",
+      explanation: `Coverage ${eligibility.status === "not_covered" ? "not covered" : "inactive"}: 100% patient responsibility`,
+    };
+  }
+
+  // Pending / inconclusive clearinghouse response: unable to estimate
+  if (
+    eligibility.status === "inconclusive" ||
+    eligibility.status === "unable_to_respond" ||
+    eligibility.status === "pending"
+  ) {
+    return {
+      patientResponsibility: null,
+      insuranceResponsibility: null,
+      ruleApplied: "unable_to_estimate",
+      explanation: "Clearinghouse verification inconclusive or pending",
+    };
+  }
+
+  // RULE 1: Copay first. If present, that's the entire patient responsibility. Stop here.
+  const hasCopay =
+    eligibility.copayAmount !== undefined &&
+    eligibility.copayAmount !== null &&
+    !isNaN(eligibility.copayAmount);
+
+  if (hasCopay) {
+    const copay = eligibility.copayAmount!;
+    const patientShare = Math.min(price, Math.round(copay * 100) / 100);
+    const insuranceShare = Math.round((price - patientShare) * 100) / 100;
+
+    return {
+      patientResponsibility: patientShare,
+      insuranceResponsibility: insuranceShare,
+      ruleApplied: "copay",
+      explanation: `Copay governed: Patient owes fixed copay of $${patientShare.toFixed(2)}`,
+    };
+  }
+
+  const hasDeductible =
+    eligibility.deductibleRemaining !== undefined &&
+    eligibility.deductibleRemaining !== null &&
+    !isNaN(eligibility.deductibleRemaining);
+
+  const hasCoinsurance =
+    eligibility.coinsurance !== undefined &&
+    eligibility.coinsurance !== null &&
+    !isNaN(eligibility.coinsurance);
+
+  // RULE 2: Deductible second — only if there's no copay.
+  if (hasDeductible && eligibility.deductibleRemaining! > 0) {
+    const deductibleRem = eligibility.deductibleRemaining!;
+    const deductiblePortion = Math.min(deductibleRem, price);
+    const leftoverAboveDeductible = Math.max(0, price - deductiblePortion); // Raw unrounded
+
+    // Leftover above deductible falls through to coinsurance (Rule 3)
+    if (leftoverAboveDeductible > 0 && hasCoinsurance) {
+      const coinsPct =
+        eligibility.coinsurance! > 1
+          ? eligibility.coinsurance! / 100
+          : eligibility.coinsurance!;
+      const coinsurancePortion = leftoverAboveDeductible * coinsPct; // Raw unrounded
+      const rawPatientShare = Math.min(price, deductiblePortion + coinsurancePortion); // Raw unrounded
+
+      // Single end-of-chain rounding to final patient responsibility
+      const patientShare = Math.round(rawPatientShare * 100) / 100;
+      const insuranceShare = Math.round((price - patientShare) * 100) / 100;
+
+      return {
+        patientResponsibility: patientShare,
+        insuranceResponsibility: insuranceShare,
+        ruleApplied: "deductible_plus_coinsurance",
+        explanation: `Deductible ($${deductiblePortion.toFixed(2)}) + ${Math.round(coinsPct * 100)}% Coinsurance ($${(patientShare - Math.round(deductiblePortion * 100) / 100).toFixed(2)})`,
+      };
+    } else {
+      const patientShare = Math.round(deductiblePortion * 100) / 100;
+      const insuranceShare = Math.round((price - patientShare) * 100) / 100;
+
+      return {
+        patientResponsibility: patientShare,
+        insuranceResponsibility: insuranceShare,
+        ruleApplied: "deductible",
+        explanation: `Deductible remaining: Patient owes up to unmet deductible ($${patientShare.toFixed(2)})`,
+      };
+    }
+  }
+
+  // RULE 3: Coinsurance third — only if deductible is fully met (deductible remaining = 0), or on leftover.
+  if (hasCoinsurance && (!hasDeductible || eligibility.deductibleRemaining === 0)) {
+    const coinsPct =
+      eligibility.coinsurance! > 1
+        ? eligibility.coinsurance! / 100
+        : eligibility.coinsurance!;
+    const rawPatientShare = price * coinsPct;
+    const patientShare = Math.round(rawPatientShare * 100) / 100;
+    const insuranceShare = Math.round((price - patientShare) * 100) / 100;
+
+    return {
+      patientResponsibility: patientShare,
+      insuranceResponsibility: insuranceShare,
+      ruleApplied: "coinsurance",
+      explanation: `Deductible met: Governed by ${Math.round(coinsPct * 100)}% coinsurance`,
+    };
+  }
+
+  // Deductible is present and fully met (0), but no coinsurance specified -> 100% covered by payer
+  if (hasDeductible && eligibility.deductibleRemaining === 0 && !hasCoinsurance) {
+    return {
+      patientResponsibility: 0,
+      insuranceResponsibility: price,
+      ruleApplied: "deductible",
+      explanation: "Deductible fully met ($0 remaining): 100% covered by payer",
+    };
+  }
+
+  // RULE 4: No copay, no deductible, no coinsurance on file
+  return {
+    patientResponsibility: null,
+    insuranceResponsibility: null,
+    ruleApplied: "unable_to_estimate",
+    explanation: "Unable to estimate: No copay, deductible, or coinsurance terms on file",
+  };
+}
+
+// ─── Charge Capture Bridge ──────────────────────────────────────────────────
+
+export interface ChargeCaptureParams {
+  appointmentId: string | number;
+  clientId: string;
+  clientName: string;
+  providerName?: string;
+  serviceName?: string;
+  serviceDate?: string;
+  billedAmount: number;
+  diagnosisCodes: string[];
+  cptCodes?: string[];
+  payerName?: string;
+  memberId?: string;
+  patientResponsibility?: number;
+}
+
+export function createClaimFromChargeCapture(params: ChargeCaptureParams): Claim {
+  const state = getStoredRcmState();
+  const aptIdStr = String(params.appointmentId);
+  const encounterId = `ENC-${aptIdStr}`;
+
+  let claimId = `CLM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  while (state.claims.some((c) => c.id === claimId)) {
+    claimId = `CLM-2026-${Math.floor(1000 + Math.random() * 9000)}`;
+  }
+
+  const deadline = new Date();
+  deadline.setDate(deadline.getDate() + 90);
+
+  const newClaim: Claim = {
+    id: claimId,
+    encounterId,
+    appointmentId: aptIdStr,
+    clientId: params.clientId,
+    clientName: params.clientName,
+    payerName: params.payerName || "Blue Cross Blue Shield",
+    memberId: params.memberId || `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`,
+    providerName: params.providerName || "Dr. Amanda Clark",
+    cptCodes: params.cptCodes && params.cptCodes.length > 0 ? params.cptCodes : ["99214"],
+    diagnosisCodes: params.diagnosisCodes && params.diagnosisCodes.length > 0 ? params.diagnosisCodes : ["Z00.00"],
+    serviceDate: params.serviceDate || new Date().toISOString().split("T")[0],
+    submittedAt: new Date().toISOString(),
+    status: "in_adjudication",
+    billedAmount: params.billedAmount,
+    allowedAmount: Math.round(params.billedAmount * 0.8),
+    paidAmount: undefined,
+    patientResponsibility: params.patientResponsibility !== undefined ? params.patientResponsibility : undefined,
+    timelyFilingDeadline: deadline.toISOString().split("T")[0],
+    timelyDaysRemaining: 90,
+    notes: [
+      {
+        id: `note-${Date.now()}`,
+        createdAt: new Date().toISOString(),
+        author: "Charge Capture Bridge",
+        content: `Claim auto-generated from Charge Capture encounter #${encounterId}. Billed amount: $${params.billedAmount.toFixed(2)}${params.patientResponsibility !== undefined ? ` (Est. Patient: $${params.patientResponsibility.toFixed(2)})` : ""}. Electronic 837P transmitted for adjudication.`,
+      },
+    ],
+    source: "native",
+  };
+
+  state.claims.unshift(newClaim);
+
+  let enc = state.encounters.find((e) => e.id === encounterId || String(e.appointmentId) === aptIdStr);
+  if (enc) {
+    enc.status = "billed";
+    if (!enc.claimIds.includes(claimId)) {
+      enc.claimIds.push(claimId);
+    }
+  } else {
+    state.encounters.unshift({
+      id: encounterId,
+      clientId: params.clientId,
+      clientName: params.clientName,
+      appointmentId: aptIdStr,
+      appointmentTitle: params.serviceName || "Clinical Encounter",
+      providerName: params.providerName || "Dr. Amanda Clark",
+      serviceDate: params.serviceDate || new Date().toISOString().split("T")[0],
+      cptCodes: newClaim.cptCodes,
+      diagnosisCodes: newClaim.diagnosisCodes,
+      documentationLocked: true,
+      documentationSource: "scribe",
+      status: "billed",
+      totalCharges: params.billedAmount,
+      claimIds: [claimId],
+    });
+  }
+
+  saveRcmState(state);
+  return newClaim;
 }

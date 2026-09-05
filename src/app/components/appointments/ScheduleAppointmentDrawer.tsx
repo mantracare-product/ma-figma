@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { initialClients } from "../../pages/ClientProfile";
-import { recordAppointmentEligibility } from "../../../lib/rcmStore";
+import { recordAppointmentEligibility, getEligibilityTermsForService } from "../../../lib/rcmStore";
 import { getEligibilityBadge } from "../rcm/EligibilityBadge";
 import { EligibilityCheck, EligibilityStatus } from "../../types/rcmTypes";
 import AddInsuranceDrawer, { InsuranceFormValues } from "../profile/AddInsuranceDrawer";
@@ -209,11 +209,16 @@ export default function ScheduleAppointmentDrawer({
       const clientName = (bookedAppt.clientName || values.client?.name || "").toLowerCase();
       const scenario = scenarioOverride || selectedScenario || "auto";
 
+      const srvName = values.serviceName || bookedAppt.serviceName || bookedAppt.service || values.title || "Clinical Consultation";
+      const srvPrice = subtotal > 0 ? subtotal : (Number(bookedAppt.price || bookedAppt.servicePrice) || undefined);
+
       let resolvedStatus: EligibilityStatus = "active";
-      let resolvedPayer = "Blue Cross Blue Shield";
-      let copay: number | undefined = 25;
-      let deductible: number | undefined = 150;
-      let coinsurance: number | undefined = 20;
+      let resolvedPayer = values.primaryInsurance || bookedAppt.primaryInsurance || "Blue Cross Blue Shield";
+      const dynamicTerms = getEligibilityTermsForService(srvName, srvPrice, resolvedPayer);
+
+      let copay: number | undefined = dynamicTerms.copayAmount;
+      let deductible: number | undefined = dynamicTerms.deductibleRemaining;
+      let coinsurance: number | undefined = dynamicTerms.coinsurance;
       let terminationReason: string | undefined = undefined;
       let inconclusiveReason: string | undefined = undefined;
       let memberId = `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`;
@@ -251,10 +256,11 @@ export default function ScheduleAppointmentDrawer({
       } else {
         // active
         resolvedStatus = "active";
-        resolvedPayer = "Blue Cross Blue Shield";
-        copay = 25;
-        deductible = 150;
-        coinsurance = 20;
+        resolvedPayer = values.primaryInsurance || bookedAppt.primaryInsurance || "Blue Cross Blue Shield";
+        const terms = getEligibilityTermsForService(srvName, srvPrice, resolvedPayer);
+        copay = terms.copayAmount;
+        deductible = terms.deductibleRemaining;
+        coinsurance = terms.coinsurance;
         memberId = "BCBS-84920194";
       }
 
@@ -279,6 +285,8 @@ export default function ScheduleAppointmentDrawer({
         status: resolvedStatus,
         payerName: resolvedPayer,
         memberId,
+        serviceName: srvName,
+        servicePrice: srvPrice,
         copayAmount: copay,
         deductibleRemaining: deductible,
         coinsurance,
@@ -297,6 +305,9 @@ export default function ScheduleAppointmentDrawer({
                   ...a,
                   eligibility: resolvedStatus,
                   eligibilityStatus: resolvedStatus,
+                  copayAmount: copay,
+                  deductibleRemaining: deductible,
+                  coinsurance,
                   eligibilityCheck: resultPayload,
                 }
               : a
@@ -312,6 +323,9 @@ export default function ScheduleAppointmentDrawer({
               ...prev,
               eligibility: resolvedStatus,
               eligibilityStatus: resolvedStatus,
+              copayAmount: copay,
+              deductibleRemaining: deductible,
+              coinsurance,
               eligibilityCheck: resultPayload,
             }
           : null
@@ -319,7 +333,8 @@ export default function ScheduleAppointmentDrawer({
       setIsVerifyingEligibility(false);
 
       if (resolvedStatus === "active") {
-        toast.success(`Eligibility verified: Active coverage confirmed with ${resolvedPayer} (Copay: $${copay})`);
+        const benefitDetail = copay !== undefined ? ` (Copay: $${copay})` : (deductible !== undefined ? ` (Deductible: $${deductible})` : "");
+        toast.success(`Eligibility verified: Active coverage confirmed with ${resolvedPayer}${benefitDetail}`);
       } else if (resolvedStatus === "inactive") {
         toast.error(`Eligibility check: Inactive coverage (${resolvedPayer})`);
       } else if (resolvedStatus === "not_covered") {
@@ -778,15 +793,21 @@ export default function ScheduleAppointmentDrawer({
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
                       <div className="bg-white/80 rounded-lg p-2.5 border border-emerald-200/80 text-center">
                         <span className="text-[10px] text-slate-500 uppercase font-semibold block">Copay</span>
-                        <span className="text-sm font-bold text-slate-800 font-mono">${eligibilityResult.copayAmount}.00</span>
+                        <span className="text-sm font-bold text-slate-800 font-mono">
+                          {eligibilityResult.copayAmount !== undefined ? `$${eligibilityResult.copayAmount}.00` : "—"}
+                        </span>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2.5 border border-emerald-200/80 text-center">
                         <span className="text-[10px] text-slate-500 uppercase font-semibold block">Deductible Rem.</span>
-                        <span className="text-sm font-bold text-slate-800 font-mono">${eligibilityResult.deductibleRemaining}.00</span>
+                        <span className="text-sm font-bold text-slate-800 font-mono">
+                          {eligibilityResult.deductibleRemaining !== undefined ? `$${eligibilityResult.deductibleRemaining}.00` : "—"}
+                        </span>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2.5 border border-emerald-200/80 text-center">
                         <span className="text-[10px] text-slate-500 uppercase font-semibold block">Coinsurance</span>
-                        <span className="text-sm font-bold text-slate-800 font-mono">{eligibilityResult.coinsurance}%</span>
+                        <span className="text-sm font-bold text-slate-800 font-mono">
+                          {eligibilityResult.coinsurance !== undefined ? `${eligibilityResult.coinsurance}%` : "—"}
+                        </span>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2.5 border border-emerald-200/80 text-center">
                         <span className="text-[10px] text-slate-500 uppercase font-semibold block">Network Status</span>
@@ -795,7 +816,11 @@ export default function ScheduleAppointmentDrawer({
                     </div>
 
                     <p className="text-[11px] text-emerald-800/90 font-medium">
-                      ✓ Service is pre-authorized for outpatient consultation. Patient responsibility will default to ${eligibilityResult.copayAmount}.00 at check-in.
+                      {eligibilityResult.copayAmount !== undefined
+                        ? `✓ Service is pre-authorized for outpatient consultation. Patient responsibility will default to $${eligibilityResult.copayAmount}.00 at check-in.`
+                        : eligibilityResult.deductibleRemaining !== undefined
+                        ? `✓ Service is pre-authorized. Covered subject to $${eligibilityResult.deductibleRemaining}.00 deductible and ${eligibilityResult.coinsurance || 0}% coinsurance.`
+                        : `✓ Service is pre-authorized under active plan benefits.`}
                     </p>
                   </div>
                 )}

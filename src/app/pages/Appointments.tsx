@@ -42,7 +42,7 @@ import { useInvoices } from "../context/InvoiceContext";
 import { useEncounters } from "../context/RcmContext";
 import { initialClients } from "./ClientProfile";
 import { assignProductToClient, getStoredServices, onServicesChanged } from "../../lib/servicesStore";
-import { recordAppointmentEligibility } from "../../lib/rcmStore";
+import { recordAppointmentEligibility, getEligibilityTermsForService } from "../../lib/rcmStore";
 import { getEligibilityBadge } from "../components/rcm/EligibilityBadge";
 import { EligibilityStatus } from "../types/rcmTypes";
 
@@ -67,7 +67,10 @@ interface Appointment {
   stageId?: string;
   eligibilityStatus?: EligibilityStatus | string;
   copayAmount?: number;
+  deductibleRemaining?: number;
+  coinsurance?: number;
   insuranceProvider?: string;
+  eligibilityCheck?: any;
 }
 
 interface Employee {
@@ -854,34 +857,93 @@ export default function Appointments() {
 
     setTimeout(() => {
       targetApts.forEach(apt => {
+        const matchedService = services.find(s => s.id === apt.serviceId);
+        const srvName = (apt as any).serviceName || (apt as any).service || matchedService?.name || apt.title || "Clinical Consultation";
+        const price = Number((apt as any).price || (apt as any).servicePrice || matchedService?.price || 150);
+        const payer = apt.insuranceProvider || "Blue Cross Blue Shield";
+        const terms = getEligibilityTermsForService(srvName, price, payer);
+
         recordAppointmentEligibility({
           appointmentId: apt.id,
           clientId: apt.clientEmail || String(apt.id),
           clientName: apt.clientName,
           appointmentDate: apt.date,
           status: "active",
-          payerName: apt.insuranceProvider || "Blue Cross Blue Shield",
-          copayAmount: apt.copayAmount || 25,
-          deductibleRemaining: 150,
-          coinsurance: 20,
+          payerName: payer,
+          serviceName: srvName,
+          servicePrice: price,
+          copayAmount: terms.copayAmount,
+          deductibleRemaining: terms.deductibleRemaining,
+          coinsurance: terms.coinsurance,
         });
       });
 
       setAppointments(prev =>
         prev.map(apt => {
           if (targetApts.some(t => t.id === apt.id)) {
+            const matchedService = services.find(s => s.id === apt.serviceId);
+            const srvName = (apt as any).serviceName || (apt as any).service || matchedService?.name || apt.title || "Clinical Consultation";
+            const price = Number((apt as any).price || (apt as any).servicePrice || matchedService?.price || 150);
+            const payer = apt.insuranceProvider || "Blue Cross Blue Shield";
+            const terms = getEligibilityTermsForService(srvName, price, payer);
+
             return {
               ...apt,
               eligibilityStatus: "active",
-              copayAmount: apt.copayAmount || 25,
+              copayAmount: terms.copayAmount,
+              deductibleRemaining: terms.deductibleRemaining,
+              coinsurance: terms.coinsurance,
+              eligibilityCheck: {
+                status: "active",
+                payerName: payer,
+                copayAmount: terms.copayAmount,
+                deductibleRemaining: terms.deductibleRemaining,
+                coinsurance: terms.coinsurance,
+                checkedAt: new Date().toISOString(),
+              },
             };
           }
           return apt;
         })
       );
 
+      try {
+        const stored = sessionStorage.getItem("appointments_v1");
+        if (stored) {
+          const all: any[] = JSON.parse(stored);
+          const updated = all.map((a: any) => {
+            const hit = targetApts.find(t => String(t.id) === String(a.id));
+            if (hit) {
+              const matchedService = services.find(s => s.id === a.serviceId);
+              const srvName = a.serviceName || a.service || matchedService?.name || a.title || "Clinical Consultation";
+              const price = Number(a.price || a.servicePrice || matchedService?.price || 150);
+              const payer = a.insuranceProvider || "Blue Cross Blue Shield";
+              const terms = getEligibilityTermsForService(srvName, price, payer);
+              return {
+                ...a,
+                eligibility: "active",
+                eligibilityStatus: "active",
+                copayAmount: terms.copayAmount,
+                deductibleRemaining: terms.deductibleRemaining,
+                coinsurance: terms.coinsurance,
+                eligibilityCheck: {
+                  status: "active",
+                  payerName: payer,
+                  copayAmount: terms.copayAmount,
+                  deductibleRemaining: terms.deductibleRemaining,
+                  coinsurance: terms.coinsurance,
+                  checkedAt: new Date().toISOString(),
+                },
+              };
+            }
+            return a;
+          });
+          sessionStorage.setItem("appointments_v1", JSON.stringify(updated));
+        }
+      } catch { /* noop */ }
+
       setIsCheckingEligibility(false);
-      toast.success(`Coverage verified active for ${targetApts.length} appointment(s) (Copay: $25, Deductible: $150)`);
+      toast.success(`Coverage verified active for ${targetApts.length} appointment(s) based on scheduled services & benefits`);
     }, 700);
   };
 
@@ -2289,7 +2351,13 @@ export default function Appointments() {
 
                         const statusStyle = getStatusBadgeStyle(apt.status);
                         const eligStatus = (apt as any).eligibilityStatus || "active";
-                        const copay = apt.copayAmount !== undefined ? apt.copayAmount : 25;
+                        const apptEligibilityCheck = (apt as any).eligibilityCheck || {
+                          status: eligStatus,
+                          payerName: apt.insuranceProvider || "Blue Cross Blue Shield",
+                          copayAmount: apt.copayAmount,
+                          deductibleRemaining: apt.deductibleRemaining,
+                          coinsurance: apt.coinsurance,
+                        };
 
                         return (
                           <tr
@@ -2352,7 +2420,7 @@ export default function Appointments() {
                               </div>
                             </td>
                             <td style={{ padding: '0 16px' }}>
-                              {getEligibilityBadge(eligStatus, copay)}
+                              {getEligibilityBadge(eligStatus, apptEligibilityCheck)}
                             </td>
                             <td style={{ padding: '0 16px' }}>
                               <span

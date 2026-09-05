@@ -30,7 +30,7 @@ import {
   Code2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { recordAppointmentEligibility } from "../../../lib/rcmStore";
+import { recordAppointmentEligibility, getEligibilityTermsForService } from "../../../lib/rcmStore";
 import { EligibilityStatus } from "../../types/rcmTypes";
 
 export interface AppointmentDetailData {
@@ -155,14 +155,19 @@ export default function AppointmentDetailDrawer({
     const scenario = scenarioOverride || selectedScenario;
 
     setTimeout(() => {
+      const srvName = appointment.serviceName || appointment.service || appointment.title || "Clinical Consultation";
+      const srvPrice = Number((appointment as any).price || (appointment as any).servicePrice || 150);
+
       let resolvedStatus: EligibilityStatus = "active";
-      let resolvedPayer = "Blue Cross Blue Shield";
-      let copay: number | undefined = 25;
-      let deductible: number | undefined = 150;
-      let coinsurance: number | undefined = 20;
+      let resolvedPayer = appointment.primaryInsurance || appointment.eligibilityPayer || "Blue Cross Blue Shield";
+      const dynamicTerms = getEligibilityTermsForService(srvName, srvPrice, resolvedPayer);
+
+      let copay: number | undefined = dynamicTerms.copayAmount;
+      let deductible: number | undefined = dynamicTerms.deductibleRemaining;
+      let coinsurance: number | undefined = dynamicTerms.coinsurance;
       let terminationReason: string | undefined = undefined;
       let inconclusiveReason: string | undefined = undefined;
-      let memberId = `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`;
+      let memberId: string | undefined = `BCBS-${Math.floor(10000000 + Math.random() * 90000000)}`;
 
       if (scenario === "inactive") {
         resolvedStatus = "inactive";
@@ -198,10 +203,11 @@ export default function AppointmentDetailDrawer({
       } else {
         // active default
         resolvedStatus = "active";
-        resolvedPayer = "Blue Cross Blue Shield";
-        copay = 25;
-        deductible = 150;
-        coinsurance = 20;
+        resolvedPayer = appointment.primaryInsurance || appointment.eligibilityPayer || "Blue Cross Blue Shield";
+        const terms = getEligibilityTermsForService(srvName, srvPrice, resolvedPayer);
+        copay = terms.copayAmount;
+        deductible = terms.deductibleRemaining;
+        coinsurance = terms.coinsurance;
       }
 
       const result = {
@@ -225,6 +231,8 @@ export default function AppointmentDetailDrawer({
         status: resolvedStatus,
         payerName: resolvedPayer,
         memberId,
+        serviceName: srvName,
+        servicePrice: srvPrice,
         copayAmount: copay,
         deductibleRemaining: deductible,
         coinsurance,
@@ -529,8 +537,8 @@ export default function AppointmentDetailDrawer({
                       {
                         id: "active",
                         label: "Active Coverage",
-                        desc: "BCBS • $25 Copay",
-                        tooltip: "Simulates active Blue Cross Blue Shield with $25 copay and $150 deductible remaining.",
+                        desc: "BCBS • Active Benefit",
+                        tooltip: "Simulates active Blue Cross Blue Shield with service-specific copay and deductible.",
                       },
                       {
                         id: "inactive",

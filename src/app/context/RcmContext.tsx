@@ -16,6 +16,8 @@ import {
   executePostingAction as storeExecutePosting,
   recheckEligibility as storeRecheckEligibility,
   toggleScrubRule as storeToggleRule,
+  createClaimFromChargeCapture as storeCreateClaimFromChargeCapture,
+  type ChargeCaptureParams,
 } from "../../lib/rcmStore";
 import {
   EligibilityCheck,
@@ -75,6 +77,7 @@ interface RcmContextValue {
   recheckEligibility: (checkId: string) => void;
   toggleScrubRule: (ruleId: string) => void;
   generatePatientStatement: (balanceId: string) => boolean;
+  createClaimFromChargeCapture: (params: ChargeCaptureParams) => Claim;
 }
 
 const RcmContext = createContext<RcmContextValue | null>(null);
@@ -285,6 +288,21 @@ export function RcmProvider({ children }: { children: ReactNode }) {
     [invoices]
   );
 
+  const createClaimFromChargeCapture = useCallback((params: ChargeCaptureParams) => {
+    const claim = storeCreateClaimFromChargeCapture(params);
+    appendActivity({
+      id: `act-clm-${Date.now()}`,
+      timestamp: new Date().toISOString(),
+      clientId: params.clientId,
+      createdBy: "user",
+      type: "field_update",
+      fieldLabel: "Charge Capture",
+      newValue: `Claim #${claim.id} generated ($${params.billedAmount.toFixed(2)}) and submitted for adjudication`,
+    });
+    toast.success(`Claim ${claim.id} created and moved to In Adjudication`);
+    return claim;
+  }, []);
+
   const value: RcmContextValue = {
     state,
     eligibilityChecks: state.eligibilityChecks,
@@ -312,6 +330,7 @@ export function RcmProvider({ children }: { children: ReactNode }) {
     recheckEligibility,
     toggleScrubRule,
     generatePatientStatement,
+    createClaimFromChargeCapture,
   };
 
   return <RcmContext.Provider value={value}>{children}</RcmContext.Provider>;
