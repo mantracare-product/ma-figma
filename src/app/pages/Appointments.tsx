@@ -249,6 +249,7 @@ export default function Appointments() {
   const [bookingGenerateInvoice, setBookingGenerateInvoice] = useState(true);
   const [bookingLineItems, setBookingLineItems] = useState<any[]>([]);
   const [bookingDiscountAmount, setBookingDiscountAmount] = useState(0);
+  const [bookingLocation, setBookingLocation] = useState("Main Clinic — Suite 400");
 
   // Client search and filter state
   const [clientSearchQuery, setClientSearchQuery] = useState("");
@@ -553,6 +554,7 @@ export default function Appointments() {
     setBookingStageId("");
     setBookingStartHour(9);
     setBookingStartMinute(0);
+    setBookingLocation("Main Clinic — Suite 400");
 
     // Reset client filters and search
     setClientSearchQuery("");
@@ -2521,6 +2523,7 @@ export default function Appointments() {
           generateInvoice: bookingGenerateInvoice,
           lineItems: bookingLineItems,
           discountAmount: bookingDiscountAmount,
+          location: bookingLocation,
         }}
         onChange={(patch) => {
           if (patch.title !== undefined) setBookingTitle(patch.title);
@@ -2533,6 +2536,7 @@ export default function Appointments() {
           if (patch.startHour !== undefined) setBookingStartHour(patch.startHour);
           if (patch.startMinute !== undefined) setBookingStartMinute(patch.startMinute);
           if (patch.sessionType !== undefined) setSessionType(patch.sessionType);
+          if (patch.location !== undefined) setBookingLocation(patch.location);
           if (patch.client !== undefined) setSelectedClient(patch.client);
           if (patch.provider !== undefined) setSelectedProvider(patch.provider as any);
           if (patch.serviceId !== undefined) setBookingServiceId(patch.serviceId);
