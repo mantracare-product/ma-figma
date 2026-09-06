@@ -8,6 +8,7 @@ import {
 import PageHeader from "../components/layout/PageHeader";
 import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
 import DrawerShell from "../components/ui/DrawerShell";
+import CPTCodeInput from "../components/ui/CPTCodeInput";
 import { useFieldRegistry, ALL_MODULES, FieldDefinition } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import {
@@ -92,6 +93,9 @@ export default function Services() {
     "duration",
     "currency",
     "category",
+    "cptCode",
+    "cpt_code",
+    "service_code",
     "description",
     "tax",
     "assignedEmployees",
@@ -108,6 +112,7 @@ export default function Services() {
   // Column visibility configuration state (Header Gear menu)
   const [showColumnSettings, setShowColumnSettings] = useState(false);
   const [visibleColumns, setVisibleColumns] = useState({
+    cptCode: true,
     category: true,
     duration: true,
     price: true,
@@ -143,11 +148,12 @@ export default function Services() {
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (s.category && s.category.toLowerCase().includes(searchQuery.toLowerCase()))
+      (s.category && s.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (s.cptCode && s.cptCode.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const resetForm = () => {
-    setForm({ ...INIT_FORM, category: "General", customFields: {} });
+    setForm({ ...INIT_FORM, category: "General", cptCode: "", customFields: {} });
     setEmpSearch("");
     setShowEmpDrop(false);
     setCatSearch("");
@@ -163,6 +169,7 @@ export default function Services() {
       name: form.name.trim(),
       description: form.description,
       category: form.category || "General",
+      cptCode: form.cptCode?.trim() || undefined,
       duration: form.duration,
       price: form.price,
       currency: form.currency,
@@ -186,6 +193,7 @@ export default function Services() {
       name: form.name.trim(),
       description: form.description,
       category: form.category || "General",
+      cptCode: form.cptCode?.trim() || undefined,
       duration: form.duration,
       price: form.price,
       currency: form.currency,
@@ -207,6 +215,7 @@ export default function Services() {
       name: service.name,
       description: service.description,
       category: service.category || "General",
+      cptCode: service.cptCode || "",
       duration: service.duration,
       price: service.price,
       currency: service.currency || "USD",
@@ -256,7 +265,7 @@ export default function Services() {
     );
   };
 
-  const ServiceForm = () => (
+  const renderServiceForm = () => (
     <div className="space-y-5">
       {/* Service Name */}
       <div>
@@ -364,6 +373,26 @@ export default function Services() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* CPT / Service Code (Optional for insurance & claim submission) */}
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <label className="block text-xs font-semibold text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+            CPT / Service Code <span className="text-gray-400 font-normal">(Optional)</span>
+          </label>
+          <span className="text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>For insurance & claims</span>
+        </div>
+        <CPTCodeInput
+          value={form.cptCode || ""}
+          onChange={(code, suggestion) => {
+            setForm((prev) => ({
+              ...prev,
+              cptCode: code,
+              duration: (!prev.duration || prev.duration === 30) && suggestion?.typicalDuration ? suggestion.typicalDuration : prev.duration,
+            }));
+          }}
+        />
       </div>
 
       {/* Description */}
@@ -639,7 +668,7 @@ export default function Services() {
     </div>
   );
 
-  const FooterBtns = ({ onSave, label, icon }: { onSave: () => void; label: string; icon: React.ReactNode }) => (
+  const renderFooterBtns = (onSave: () => void, label: string, icon: React.ReactNode) => (
     <div className="flex items-center gap-2 w-full justify-end">
       <button
         onClick={() => { setShowAddDrawer(false); setShowEditDrawer(false); resetForm(); }}
@@ -737,6 +766,15 @@ export default function Services() {
                                 <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
                                   <input
                                     type="checkbox"
+                                    checked={visibleColumns.cptCode}
+                                    onChange={(e) => setVisibleColumns({ ...visibleColumns, cptCode: e.target.checked })}
+                                    className="rounded border-slate-300 text-blue-600"
+                                  />
+                                  <span>CPT / Service Code</span>
+                                </label>
+                                <label className="flex items-center gap-2 px-2 py-1 hover:bg-slate-50 rounded cursor-pointer">
+                                  <input
+                                    type="checkbox"
                                     checked={visibleColumns.category}
                                     onChange={(e) => setVisibleColumns({ ...visibleColumns, category: e.target.checked })}
                                     className="rounded border-slate-300 text-blue-600"
@@ -808,6 +846,11 @@ export default function Services() {
                     <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                       Product / Service
                     </th>
+                    {visibleColumns.cptCode && (
+                      <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        CPT / Code
+                      </th>
+                    )}
                     {visibleColumns.category && (
                       <th className="py-3 px-4 text-xs font-semibold text-white uppercase tracking-wider" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Category
@@ -922,15 +965,35 @@ export default function Services() {
                               <Briefcase className="w-4 h-4" />
                             </div>
                             <div className="min-w-0">
-                              <h4 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                                {service.name}
-                              </h4>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                                  {service.name}
+                                </h4>
+                                {service.cptCode && !visibleColumns.cptCode && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
+                                    CPT {service.cptCode}
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-xs text-slate-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                                 {service.description || "No description provided"}
                               </p>
                             </div>
                           </div>
                         </td>
+
+                        {/* CPT / Service Code */}
+                        {visibleColumns.cptCode && (
+                          <td className="py-3.5 px-4 whitespace-nowrap">
+                            {service.cptCode ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shadow-2xs">
+                                {service.cptCode}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic font-sans">—</span>
+                            )}
+                          </td>
+                        )}
 
                         {/* Category (Clean text without heavy capsule container) */}
                         {visibleColumns.category && (
@@ -1060,9 +1123,9 @@ export default function Services() {
         icon={<Plus className="w-4 h-4 text-blue-600" />}
         width="max-w-lg"
         zIndex={600}
-        footer={<FooterBtns onSave={handleAdd} label="Add Service" icon={<Plus className="w-4 h-4" />} />}
+        footer={renderFooterBtns(handleAdd, "Add Service", <Plus className="w-4 h-4" />)}
       >
-        <ServiceForm />
+        {renderServiceForm()}
       </DrawerShell>
 
       <DrawerShell
@@ -1073,9 +1136,9 @@ export default function Services() {
         icon={<Edit2 className="w-4 h-4 text-blue-600" />}
         width="max-w-lg"
         zIndex={600}
-        footer={<FooterBtns onSave={handleEdit} label="Save Changes" icon={<Check className="w-4 h-4" />} />}
+        footer={renderFooterBtns(handleEdit, "Save Changes", <Check className="w-4 h-4" />)}
       >
-        <ServiceForm />
+        {renderServiceForm()}
       </DrawerShell>
 
       {/* Select Field Modal — shows all available system fields and custom fields across all modules */}

@@ -13,10 +13,6 @@ import { toast } from "sonner";
 import {
   Search,
   Settings as SettingsIcon,
-  DollarSign,
-  Clock,
-  AlertCircle,
-  CheckCircle2,
   Plus,
   CreditCard,
   List,
@@ -100,13 +96,6 @@ export default function Invoices() {
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
 
-  // Compute stat capsule metrics
-  const totalInvoiced = invoices.filter((i) => i.status !== "void").reduce((sum, i) => sum + i.total, 0);
-  const totalOutstanding = invoices
-    .filter((i) => i.status === "sent" || i.status === "viewed" || i.status === "overdue" || i.status === "partial")
-    .reduce((sum, i) => sum + Math.max(0, i.total - (i.amountPaid || 0)), 0);
-  const totalPaidThisMonth = invoices.reduce((sum, i) => sum + (i.amountPaid || (i.status === "paid" ? i.total : 0)), 0);
-  const overdueCount = invoices.filter((i) => i.status === "overdue").length;
 
   // Filter invoices
   const filteredInvoices = invoices.filter((inv) => {
@@ -257,40 +246,6 @@ export default function Invoices() {
           </div>
         </PageHeader>
 
-        {/* Stats Capsules */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <DollarSign className="w-3.5 h-3.5 text-[#1456f0]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              ${totalInvoiced.toFixed(2)}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">Total Invoiced</span>
-          </div>
-
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <Clock className="w-3.5 h-3.5 text-[#f59e0b]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              ${totalOutstanding.toFixed(2)}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">Outstanding</span>
-          </div>
-
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <CheckCircle2 className="w-3.5 h-3.5 text-[#10b981]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              ${totalPaidThisMonth.toFixed(2)}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">Paid This Month</span>
-          </div>
-
-          <div className="flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-md border border-slate-200/80 rounded-full shadow-2xs">
-            <AlertCircle className="w-3.5 h-3.5 text-[#ef4444]" />
-            <span className="font-bold text-xs text-[#222222]" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {overdueCount}
-            </span>
-            <span className="text-[11px] text-slate-400 font-medium">Overdue Count</span>
-          </div>
-        </div>
 
         {/* View Mode Toggle & Filter Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

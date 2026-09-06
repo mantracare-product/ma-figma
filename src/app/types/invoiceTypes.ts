@@ -81,6 +81,7 @@ export interface MockService {
   duration: number; // minutes
   price: number;
   category: string;
+  cptCode?: string;
   isActive: boolean;
   tax?: number;
 }

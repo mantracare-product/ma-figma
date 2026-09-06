@@ -31,6 +31,7 @@ import ReferAndEarn from "./pages/ReferAndEarn";
 import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import AIScribeConsole from "./pages/AIScribeConsole";
+import Claims from "./pages/Claims";
 
 export const router = createBrowserRouter([
   {
@@ -71,6 +72,7 @@ export const router = createBrowserRouter([
           { path: "users", Component: UserManagement },
           { path: "payments", Component: Payments },
           { path: "invoices", Component: Invoices },
+          { path: "claims", Component: Claims },
           { path: "reports", Component: Reports },
           { path: "transactions", Component: Transactions },
           { path: "settings", Component: Settings },

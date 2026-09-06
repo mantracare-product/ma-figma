@@ -136,6 +136,7 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
         spo2: "99%",
       },
       diagnosis: "Nuclear Cataract Grade II (Right Eye)",
+      icd10Code: "H25.11",
       secondaryDiagnosis: ["Early Senile Cataract Grade I (Left Eye)", "Type 2 Diabetes Mellitus"],
       medications: [
         { id: "m1", drugName: "Moxifloxacin Eye Drops 0.5%", dosage: "1 drop", frequency: "4 times daily (QID)", duration: "7 days", instructions: "Right eye only", confidence: 0.98 },
@@ -183,6 +184,7 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
         spo2: "97%",
       },
       diagnosis: "Acute Bronchitis with Bronchospasm",
+      icd10Code: "J20.9",
       secondaryDiagnosis: ["Essential Hypertension - Stage 1"],
       medications: [
         { id: "m1", drugName: "Tab Azithromycin 500 mg", dosage: "1 tablet", frequency: "Once daily (OD)", duration: "5 days", instructions: "1 hour before meals", confidence: 0.99 },
@@ -231,6 +233,7 @@ export const PRESET_SCENARIOS: PresetScenario[] = [
         weight: "78 kg",
       },
       diagnosis: "Bilateral Osteoarthritis Knee — Grade III (Kellgren-Lawrence)",
+      icd10Code: "M17.0",
       secondaryDiagnosis: ["Patellofemoral Joint Arthritis"],
       medications: [
         { id: "m1", drugName: "Tab Aceclofenac 100mg + Paracetamol 325mg (Zerodol-P)", dosage: "1 tablet", frequency: "Twice daily (BD)", duration: "5 days", instructions: "Strictly after meals", confidence: 0.98 },

@@ -6,6 +6,7 @@ import {
   Play, ChevronDown, Download, ArrowLeft, Check, Globe, FileSpreadsheet, FileImage, UploadCloud, CheckCircle2, XCircle, Trash2, Eye, CheckCircle,
   Briefcase, ToggleLeft, ToggleRight, DollarSign, User, Workflow, Layers, Mic,
   GripVertical, MoreVertical, Settings as SettingsIcon, Share2, Send, Stethoscope, Video,
+  Tag, ShieldCheck,
 } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Tooltip } from "../components/ui/Tooltip";
@@ -47,6 +48,7 @@ import {
 } from "../../lib/scribeSessionStore";
 
 import DrawerShell from "../components/ui/DrawerShell";
+import CPTCodeInput from "../components/ui/CPTCodeInput";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
 import {
   Service, EMPLOYEES as SVC_EMPLOYEES, CURRENCIES as SVC_CURRENCIES, INIT_FORM as SVC_INIT_FORM,
@@ -2934,12 +2936,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             const unassignedServices = globalServiceList.filter(
               (s) => !assignedIds.has(s.id) &&
                 (s.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
-                  s.description.toLowerCase().includes(assignSearch.toLowerCase()))
+                  s.description.toLowerCase().includes(assignSearch.toLowerCase()) ||
+                  (s.cptCode && s.cptCode.toLowerCase().includes(assignSearch.toLowerCase())))
             );
             const filteredClientProducts = clientProductList.filter(
               (p) =>
                 p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
-                p.description.toLowerCase().includes(productSearchQuery.toLowerCase())
+                p.description.toLowerCase().includes(productSearchQuery.toLowerCase()) ||
+                (p.cptCode && p.cptCode.toLowerCase().includes(productSearchQuery.toLowerCase()))
             );
             const filteredEmpsProduct = SVC_EMPLOYEES.filter((e) =>
               e.name.toLowerCase().includes(empSearchProduct.toLowerCase())
@@ -3024,7 +3028,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     <Briefcase className="w-4 h-4 text-blue-600" />
                                   </div>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{svc.name}</p>
+                                    <div className="flex items-center gap-1.5">
+                                      <p className="text-sm font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{svc.name}</p>
+                                      {svc.cptCode && (
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0">
+                                          CPT {svc.cptCode}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-xs text-gray-500 truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
                                       {getCurrencySymbol(svc.currency)}{svc.price} · {svc.duration} min
                                     </p>
@@ -3079,7 +3090,14 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                     <Briefcase className="w-4 h-4 text-blue-600" />
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.name}</p>
+                                    <div className="flex items-center gap-2">
+                                      <p className="text-sm font-bold text-gray-900 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>{product.name}</p>
+                                      {product.cptCode && (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-mono font-semibold bg-cyan-50 text-cyan-800 border border-cyan-200/80 shrink-0" title="CPT / Claim Service Code">
+                                          CPT: {product.cptCode}
+                                        </span>
+                                      )}
+                                    </div>
                                     <p className="text-xs text-gray-500 line-clamp-1 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>{product.description || "No description"}</p>
                                   </div>
                                 </div>
@@ -3172,6 +3190,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                           const created = addService({
                             name: newProductForm.name.trim(),
                             description: newProductForm.description,
+                            cptCode: newProductForm.cptCode?.trim() || undefined,
                             duration: newProductForm.duration,
                             price: newProductForm.price,
                             currency: newProductForm.currency,
@@ -3201,6 +3220,27 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                       <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Product Name *</label>
                       <input type="text" placeholder="e.g. Initial Consultation" value={newProductForm.name} onChange={(e) => setNewProductForm({ ...newProductForm, name: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all" style={{ fontFamily: "DM Sans, sans-serif" }} />
                     </div>
+
+                    {/* CPT / Service Code (Optional for claim submission) */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-xs font-semibold text-gray-700" style={{ fontFamily: "Outfit, sans-serif" }}>
+                          CPT / Service Code <span className="text-gray-400 font-normal">(Optional)</span>
+                        </label>
+                        <span className="text-[11px] text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>For insurance & claims</span>
+                      </div>
+                      <CPTCodeInput
+                        value={newProductForm.cptCode || ""}
+                        onChange={(code, suggestion) => {
+                          setNewProductForm((prev) => ({
+                            ...prev,
+                            cptCode: code,
+                            duration: (!prev.duration || prev.duration === 30) && suggestion?.typicalDuration ? suggestion.typicalDuration : prev.duration,
+                          }));
+                        }}
+                      />
+                    </div>
+
                     <div>
                       <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>Description</label>
                       <textarea rows={3} placeholder="Brief description..." value={newProductForm.description} onChange={(e) => setNewProductForm({ ...newProductForm, description: e.target.value })} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none" style={{ fontFamily: "DM Sans, sans-serif" }} />

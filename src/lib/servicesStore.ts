@@ -13,6 +13,7 @@ export interface Service {
   name: string;
   description: string;
   category?: string;
+  cptCode?: string;
   duration: number;
   price: number;
   currency: string;
@@ -60,6 +61,7 @@ export const INIT_FORM = {
   name: "",
   description: "",
   category: "General",
+  cptCode: "",
   duration: 30,
   price: 0,
   currency: "",
@@ -72,10 +74,10 @@ export const INIT_FORM = {
 // ─── Default seed data ────────────────────────────────────────────────────────
 
 const DEFAULT_SERVICES: Service[] = [
-  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", duration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
-  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", duration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
-  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       duration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
-  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  duration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
+  { id: 1, name: "Initial Consultation",  description: "Comprehensive first-time patient consultation and assessment", category: "Consultation", cptCode: "99204", duration: 60, price: 150, currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2], createdAt: "2024-04-13 14:30", activity: "Last updated Apr 13" },
+  { id: 2, name: "Follow-up Visit",       description: "Regular follow-up appointment for existing patients",          category: "Consultation", cptCode: "99213", duration: 30, price: 75,  currency: "USD", tax: 5, isActive: true,  assignedEmployees: [1, 2, 4], createdAt: "2024-04-12 11:15", activity: "Last updated Apr 12" },
+  { id: 3, name: "Dental Cleaning",       description: "Professional teeth cleaning and oral hygiene maintenance",     category: "Dental",       cptCode: "D1110", duration: 45, price: 120, currency: "USD", tax: 10, isActive: true,  assignedEmployees: [5, 6], createdAt: "2024-04-10 09:45", activity: "Last updated Apr 10" },
+  { id: 4, name: "X-Ray Imaging",         description: "Digital radiographic imaging for diagnostic purposes",         category: "Diagnostics",  cptCode: "70450", duration: 20, price: 80,  currency: "USD", tax: 0, isActive: false, assignedEmployees: [1], createdAt: "2024-04-08 16:20", activity: "Deactivated Apr 08" },
 ];
 
 // ─── Store helpers ────────────────────────────────────────────────────────────
@@ -83,7 +85,27 @@ const DEFAULT_SERVICES: Service[] = [
 function loadServices(): Service[] {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return JSON.parse(raw) as Service[];
+    if (raw) {
+      const parsed = JSON.parse(raw) as Service[];
+      const defaultCptMap: Record<number, string> = {
+        1: "99204",
+        2: "99213",
+        3: "D1110",
+        4: "70450",
+      };
+      let changed = false;
+      const enriched = parsed.map((s) => {
+        if (!s.cptCode && defaultCptMap[s.id]) {
+          changed = true;
+          return { ...s, cptCode: defaultCptMap[s.id] };
+        }
+        return s;
+      });
+      if (changed) {
+        localStorage.setItem(STORE_KEY, JSON.stringify(enriched));
+      }
+      return enriched;
+    }
   } catch { /* ignore */ }
   return DEFAULT_SERVICES;
 }
@@ -93,6 +115,7 @@ function saveServices(services: Service[]) {
   window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 
+export { loadServices };
 export function getStoredServices(): Service[] {
   return loadServices();
 }

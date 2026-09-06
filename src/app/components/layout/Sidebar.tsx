@@ -25,6 +25,7 @@ import {
   Check,
   Plus,
   Stethoscope,
+  Shield,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -79,6 +80,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const secondaryLinks = [
     { path: "/chats", label: "Chats", icon: MessageCircle },
     { path: "/invoices", label: "Invoices", icon: Receipt },
+    { path: "/claims", label: "Insurance & Claims", icon: Shield },
     { path: "/reports", label: "Reports", icon: BarChart3 },
     { path: "/knowledge-base", label: "Knowledge Base", icon: Database },
     { path: "/process", label: "Process Settings", icon: Sliders },
