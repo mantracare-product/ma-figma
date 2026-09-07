@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 
 export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe";
 
@@ -58,6 +58,13 @@ export interface TableColumnConfig {
 
 export interface FieldOption { id: number; label: string; value: string; }
 
+export interface ScopingRule {
+  id?: string;
+  industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty or "All" = global
+  industries?: string[];      // Multiple industries e.g. ["Cardiologist", "Dentist"], empty = all in category
+  locations?: string[];       // Multiple locations e.g. ["California", "New York"], empty = all
+}
+
 export interface FieldDefinition {
   id: number;               // stable numeric/uuid id
   key: string;               // stable machine key, used in {{key}} variables
@@ -75,6 +82,12 @@ export interface FieldDefinition {
   /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
   visibleToRecordIds?: string[];
   sourceFormId?: number;      // if created via a WebForm field, provenance
+  industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
+  industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
+  locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
+  scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  isReusable?: boolean;        // Reusable across other modules (global field)
+  reusableModules?: FieldModule[]; // Modules this field is shared with (empty/undefined = all modules)
   createdAt: number;
 }
 
@@ -86,10 +99,217 @@ export interface SectionDefinition {
   source: "system" | "custom";
   iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   fieldKeys: string[];
+  industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
+  industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
+  locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
+  scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  isReusable?: boolean;        // Reusable across other modules (global section)
+  reusableModules?: FieldModule[]; // Modules this section is shared with (empty/undefined = all modules)
   createdAt: number;
 }
 
-export const SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
+export interface OrgScopeFilter {
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+  location?: string;
+}
+
+export const FIELD_REGISTRY_STORAGE_KEY = "mantra_field_registry_v1";
+export const SECTION_REGISTRY_STORAGE_KEY = "mantra_section_registry_v1";
+
+export const FIELD_REGISTRY_EVENT = "mantra_field_registry_updated";
+export const SECTION_REGISTRY_EVENT = "mantra_section_registry_updated";
+export const LEGACY_SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
+
+/**
+ * Check whether a field definition matches an organization's scoping attributes.
+ * System fields are always global and match all organizations.
+ */
+export function isFieldMatchingOrg(
+  field: FieldDefinition,
+  org?: OrgScopeFilter | null
+): boolean {
+  if (field.source === "system" || field.id < 0) return true;
+
+  // If multi-rule scoping is present, check against rules
+  if (field.scopingRules && field.scopingRules.length > 0) {
+    return field.scopingRules.some((rule) => {
+      const rCat = rule.industryCategory?.trim();
+      const rInds = (rule.industries || []).map((i) => i.trim()).filter((i) => i && i !== "All" && i !== "*");
+      const rLocs = (rule.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+
+      const hasCat = Boolean(rCat && rCat !== "All" && rCat !== "*");
+      const hasInd = rInds.length > 0;
+      const hasLoc = rLocs.length > 0;
+
+      // If this rule is completely unconstrained, it matches everything
+      if (!hasCat && !hasInd && !hasLoc) return true;
+      if (!org) return false;
+
+      if (hasCat) {
+        if (!org.industryCategory) return false;
+        if (org.industryCategory.trim().toLowerCase() !== rCat!.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (hasInd) {
+        if (!org.industry) return false;
+        const match = rInds.some((i) => i.toLowerCase() === org.industry!.trim().toLowerCase());
+        if (!match) return false;
+      }
+
+      if (hasLoc) {
+        const orgLocs = [
+          ...(org.locations || []),
+          ...(org.location ? [org.location] : []),
+        ].map((l) => l.trim().toLowerCase());
+
+        if (orgLocs.length === 0) return false;
+        const match = rLocs.some((fl) => orgLocs.includes(fl.toLowerCase()));
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }
+
+  const fCat = field.industryCategory?.trim();
+  const fInd = field.industry?.trim();
+  const fLocs = (field.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+
+  const hasCat = Boolean(fCat && fCat !== "All" && fCat !== "*");
+  const hasInd = Boolean(fInd && fInd !== "All" && fInd !== "*");
+  const hasLoc = fLocs.length > 0;
+
+  // If no scoping rules set on field, it is universally visible
+  if (!hasCat && !hasInd && !hasLoc) return true;
+
+  // If scoped but no org context provided, do not show
+  if (!org) return false;
+
+  // Check Category
+  if (hasCat) {
+    if (!org.industryCategory) return false;
+    if (org.industryCategory.trim().toLowerCase() !== fCat!.toLowerCase()) {
+      return false;
+    }
+  }
+
+  // Check Industry
+  if (hasInd) {
+    if (!org.industry) return false;
+    if (org.industry.trim().toLowerCase() !== fInd!.toLowerCase()) {
+      return false;
+    }
+  }
+
+  // Check Locations
+  if (hasLoc) {
+    const orgLocs = [
+      ...(org.locations || []),
+      ...(org.location ? [org.location] : []),
+    ].map((l) => l.trim().toLowerCase());
+
+    if (orgLocs.length === 0) return false;
+    const match = fLocs.some((fl) => orgLocs.includes(fl.toLowerCase()));
+    if (!match) return false;
+  }
+
+  return true;
+}
+
+/**
+ * Check whether a section definition matches an organization's scoping attributes.
+ * System sections are always global and match all organizations.
+ */
+export function isSectionMatchingOrg(
+  section: SectionDefinition,
+  org?: OrgScopeFilter | null
+): boolean {
+  if (section.source === "system") return true;
+
+  // If multi-rule scoping is present, check against rules
+  if (section.scopingRules && section.scopingRules.length > 0) {
+    return section.scopingRules.some((rule) => {
+      const rCat = rule.industryCategory?.trim();
+      const rInds = (rule.industries || []).map((i) => i.trim()).filter((i) => i && i !== "All" && i !== "*");
+      const rLocs = (rule.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+
+      const hasCat = Boolean(rCat && rCat !== "All" && rCat !== "*");
+      const hasInd = rInds.length > 0;
+      const hasLoc = rLocs.length > 0;
+
+      if (!hasCat && !hasInd && !hasLoc) return true;
+      if (!org) return false;
+
+      if (hasCat) {
+        if (!org.industryCategory) return false;
+        if (org.industryCategory.trim().toLowerCase() !== rCat!.toLowerCase()) {
+          return false;
+        }
+      }
+
+      if (hasInd) {
+        if (!org.industry) return false;
+        const match = rInds.some((i) => i.toLowerCase() === org.industry!.trim().toLowerCase());
+        if (!match) return false;
+      }
+
+      if (hasLoc) {
+        const orgLocs = [
+          ...(org.locations || []),
+          ...(org.location ? [org.location] : []),
+        ].map((l) => l.trim().toLowerCase());
+
+        if (orgLocs.length === 0) return false;
+        const match = rLocs.some((sl) => orgLocs.includes(sl.toLowerCase()));
+        if (!match) return false;
+      }
+
+      return true;
+    });
+  }
+
+  const sCat = section.industryCategory?.trim();
+  const sInd = section.industry?.trim();
+  const sLocs = (section.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+
+  const hasCat = Boolean(sCat && sCat !== "All" && sCat !== "*");
+  const hasInd = Boolean(sInd && sInd !== "All" && sInd !== "*");
+  const hasLoc = sLocs.length > 0;
+
+  if (!hasCat && !hasInd && !hasLoc) return true;
+  if (!org) return false;
+
+  if (hasCat) {
+    if (!org.industryCategory) return false;
+    if (org.industryCategory.trim().toLowerCase() !== sCat!.toLowerCase()) {
+      return false;
+    }
+  }
+
+  if (hasInd) {
+    if (!org.industry) return false;
+    if (org.industry.trim().toLowerCase() !== sInd!.toLowerCase()) {
+      return false;
+    }
+  }
+
+  if (hasLoc) {
+    const orgLocs = [
+      ...(org.locations || []),
+      ...(org.location ? [org.location] : []),
+    ].map((l) => l.trim().toLowerCase());
+
+    if (orgLocs.length === 0) return false;
+    const match = sLocs.some((sl) => orgLocs.includes(sl.toLowerCase()));
+    if (!match) return false;
+  }
+
+  return true;
+}
 
 /**
  * Resolve the effective auto-display visibility of a field.
@@ -102,6 +322,7 @@ export function resolveVisibility(f: FieldDefinition): "none" | "all" | "specifi
   }
   return "all";
 }
+
 
 export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
   // ── 1. Patient Information ────────────────────────────────
@@ -954,6 +1175,7 @@ interface FieldRegistryContextValue {
   getSystemFields: (module: FieldModule) => FieldDefinition[];
   getCustomFields: (module: FieldModule) => FieldDefinition[];
   getAllFields: (module: FieldModule) => FieldDefinition[];
+  getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => FieldDefinition[];
   addCustomField: (module: FieldModule, field: Omit<FieldDefinition, "id" | "source" | "createdAt">) => FieldDefinition;
   updateCustomField: (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => void;
   deleteCustomField: (module: FieldModule, id: number) => void;
@@ -962,6 +1184,7 @@ interface FieldRegistryContextValue {
   getSystemSections: (module: FieldModule) => SectionDefinition[];
   getCustomSections: (module: FieldModule) => SectionDefinition[];
   getAllSections: (module: FieldModule) => SectionDefinition[];
+  getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => SectionDefinition[];
   addCustomSection: (module: FieldModule, section: Omit<SectionDefinition, "id" | "source" | "createdAt">) => SectionDefinition;
   updateCustomSection: (module: FieldModule, id: string, patch: Partial<SectionDefinition>) => void;
   deleteCustomSection: (module: FieldModule, id: string) => void;
@@ -971,108 +1194,396 @@ interface FieldRegistryContextValue {
 
 const FieldRegistryContext = createContext<FieldRegistryContextValue | null>(null);
 
-export function FieldRegistryProvider({ children }: { children: ReactNode }) {
-  const [customFields, setCustomFields] = useState<Record<Exclude<FieldModule, "deal">, FieldDefinition[]>>(() => {
-    const saved = sessionStorage.getItem("fieldRegistry_v3") || sessionStorage.getItem("fieldRegistry_v2") || sessionStorage.getItem("fieldRegistry_v1");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // Normalize any old "deal" custom fields to "process" if present
-        if (parsed.deal && !parsed.process) {
-          parsed.process = parsed.deal;
-          delete parsed.deal;
-        }
+function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
+  if (!raw || typeof raw !== "string") return "client";
+  const lower = raw.toLowerCase().trim();
+  if (lower === "client" || lower === "clients") return "client";
+  if (lower === "process" || lower === "processes" || lower === "deal" || lower === "deals") return "process";
+  if (lower === "appointment" || lower === "appointments") return "appointment";
+  if (lower === "call" || lower === "calls" || lower === "call logs" || lower === "call_logs") return "call";
+  if (lower === "service" || lower === "services" || lower === "products / services" || lower === "product") return "service";
+  if (lower === "organization" || lower === "organizations" || lower === "organisation") return "organization";
+  if (lower === "teammember" || lower === "team_member" || lower === "team member" || lower === "team members") return "teamMember";
+  if (lower === "scribe" || lower === "ai scribe" || lower === "ai_scribe") return "scribe";
+  return "client";
+}
 
-        // Clean misassigned scribe medication fields from non-scribe modules
-        const scribeMedKeys = new Set(["med_form", "med_dosage", "med_frequency", "med_duration", "med_route", "med_name", "med_strength", "symptoms", "complaint_duration", "primary_diagnosis", "icd_code", "diagnosis_type"]);
-        (["client", "process", "appointment", "call", "service", "organization", "teamMember"] as const).forEach((mod) => {
+function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "deal">): FieldDefinition {
+  const targetModule = f.module ? normalizeModuleKey(f.module) : fallbackModule;
+  return {
+    id:
+      typeof f.id === "number"
+        ? f.id
+        : typeof f.id === "string" && !isNaN(Number(f.id))
+        ? Number(f.id)
+        : Date.now() + Math.floor(Math.random() * 1000),
+    key: f.key || (f.label || f.name || "field").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+    label: f.label || f.name || "Untitled Field",
+    module: targetModule,
+    source: f.source === "system" ? "system" : "custom",
+    inputType: (f.inputType ? f.inputType.toLowerCase() : f.type ? f.type.toLowerCase() : "text") as FieldInputType,
+    placeholder: f.placeholder || "",
+    validation: f.validation || "",
+    options: Array.isArray(f.options)
+      ? f.options.map((opt: any, idx: number) =>
+          typeof opt === "string" ? { id: idx + 1, label: opt, value: opt } : opt
+        )
+      : undefined,
+    tableColumns: f.tableColumns,
+    sectionId: f.sectionId,
+    required: f.required ?? f.isRequired ?? false,
+    showAlways: f.showAlways !== false,
+    visibleToRecordIds: f.visibleToRecordIds,
+    sourceFormId: f.sourceFormId,
+    industryCategory: f.industryCategory,
+    industry: f.industry,
+    locations: Array.isArray(f.locations) ? f.locations : undefined,
+    scopingRules: Array.isArray(f.scopingRules) ? f.scopingRules : undefined,
+    isReusable: Boolean(f.isReusable),
+    reusableModules: Array.isArray(f.reusableModules) ? f.reusableModules : undefined,
+    createdAt: typeof f.createdAt === "number" ? f.createdAt : Date.now(),
+  };
+}
+
+function ensureScribeSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]>) {
+  if (!Array.isArray(registry.scribe)) {
+    registry.scribe = [...INITIAL_SCRIBE_CUSTOM_FIELDS];
+    return;
+  }
+  const existingScribeKeys = new Set(registry.scribe.map((f) => f.key));
+  INITIAL_SCRIBE_CUSTOM_FIELDS.forEach((seed) => {
+    if (!existingScribeKeys.has(seed.key)) {
+      registry.scribe.push(seed);
+      existingScribeKeys.add(seed.key);
+    }
+  });
+}
+
+function loadCustomFieldsFromStorage(): Record<Exclude<FieldModule, "deal">, FieldDefinition[]> {
+  const defaultRegistry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
+    client: [],
+    process: [],
+    appointment: [],
+    call: [],
+    service: [],
+    organization: [],
+    teamMember: [],
+    scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+  };
+
+  if (typeof window === "undefined") {
+    return defaultRegistry;
+  }
+
+  // 1. PRIMARY SOURCE OF TRUTH: If localStorage exists, it is authoritative.
+  const localRaw = localStorage.getItem(FIELD_REGISTRY_STORAGE_KEY);
+  if (localRaw) {
+    try {
+      const parsed = JSON.parse(localRaw);
+      const registry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
+        client: [],
+        process: [],
+        appointment: [],
+        call: [],
+        service: [],
+        organization: [],
+        teamMember: [],
+        scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+      };
+
+      if (Array.isArray(parsed)) {
+        // Self-heal: If corrupted into a flat array, distribute each field to its proper module
+        parsed.forEach((f: any) => {
+          const mod = normalizeModuleKey(f.module);
+          registry[mod].push(sanitizeFieldDefinition(f, mod));
+        });
+      } else if (parsed && typeof parsed === "object") {
+        // Canonical module-keyed object
+        (Object.keys(defaultRegistry) as (keyof typeof defaultRegistry)[]).forEach((mod) => {
           if (Array.isArray(parsed[mod])) {
-            parsed[mod] = parsed[mod].filter((f: FieldDefinition) => !scribeMedKeys.has(f.key));
-            // Deduplicate by key
-            const seenKeys = new Set<string>();
-            parsed[mod] = parsed[mod].filter((f: FieldDefinition) => {
-              if (seenKeys.has(f.key)) return false;
-              seenKeys.add(f.key);
-              return true;
-            });
+            registry[mod] = parsed[mod].map((f: any) => sanitizeFieldDefinition(f, mod));
           }
         });
-
-        // Always load latest comprehensive scribe fields
-        parsed.scribe = INITIAL_SCRIBE_CUSTOM_FIELDS;
-        return parsed;
-      } catch (e) {
-        console.error("Error parsing fieldRegistry", e);
+        if (Array.isArray((parsed as any).deal)) {
+          registry.process = [
+            ...registry.process,
+            ...(parsed as any).deal.map((f: any) => sanitizeFieldDefinition(f, "process")),
+          ];
+        }
       }
-    }
-    
-    // Migration from clientCustomFields
-    const oldClientFieldsRaw = sessionStorage.getItem("clientCustomFields");
-    let initialClientCustom: FieldDefinition[] = [];
-    if (oldClientFieldsRaw) {
+
+      ensureScribeSeeds(registry);
+
+      // Save the sanitized canonical object to localStorage
       try {
-        const parsed = JSON.parse(oldClientFieldsRaw);
-        initialClientCustom = parsed.map((f: any) => ({
-          id: f.id || Date.now(),
-          key: f.key || f.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''),
-          label: f.label,
-          module: "client",
-          source: "custom",
-          inputType: (f.type ? f.type.toLowerCase() : "text") as FieldInputType,
-          required: f.required || false,
-          showAlways: f.showAlways !== false,
-          sourceFormId: f.sourceFormId,
-          createdAt: f.id || Date.now(),
-        }));
-      } catch {
-        // noop
-      }
+        localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
+      } catch {}
+      return registry;
+    } catch (e) {
+      console.error("Error reading fieldRegistry from localStorage, falling back", e);
     }
-    return {
-      client: initialClientCustom,
-      process: [],
-      appointment: [],
-      call: [],
-      service: [],
-      organization: [],
-      teamMember: [],
-      scribe: INITIAL_SCRIBE_CUSTOM_FIELDS,
-    };
-  });
+  }
 
-  const [customSections, setCustomSections] = useState<Record<Exclude<FieldModule, "deal">, SectionDefinition[]>>(() => {
-    const saved = sessionStorage.getItem("sectionRegistry_v1");
-    if (saved) {
+  // 2. MIGRATION PATH: Runs ONLY when localStorage has NO data at all
+  const registry: Record<Exclude<FieldModule, "deal">, FieldDefinition[]> = {
+    client: [],
+    process: [],
+    appointment: [],
+    call: [],
+    service: [],
+    organization: [],
+    teamMember: [],
+    scribe: [...INITIAL_SCRIBE_CUSTOM_FIELDS],
+  };
+
+  // Check legacy sessionStorage keys
+  const legacyRaw =
+    sessionStorage.getItem("fieldRegistry_v3") ||
+    sessionStorage.getItem("fieldRegistry_v2") ||
+    sessionStorage.getItem("fieldRegistry_v1");
+
+  if (legacyRaw) {
+    try {
+      const parsed = JSON.parse(legacyRaw);
+      if (Array.isArray(parsed)) {
+        // Legacy data was a flat array — distribute each item by its module property
+        parsed.forEach((f: any) => {
+          const mod = normalizeModuleKey(f.module);
+          registry[mod].push(sanitizeFieldDefinition(f, mod));
+        });
+      } else if (parsed && typeof parsed === "object") {
+        // Legacy data was an object
+        (Object.keys(defaultRegistry) as (keyof typeof defaultRegistry)[]).forEach((mod) => {
+          if (Array.isArray(parsed[mod])) {
+            registry[mod] = parsed[mod].map((f: any) => sanitizeFieldDefinition(f, mod));
+          }
+        });
+        if (Array.isArray((parsed as any).deal)) {
+          registry.process = [
+            ...registry.process,
+            ...(parsed as any).deal.map((f: any) => sanitizeFieldDefinition(f, "process")),
+          ];
+        }
+      }
+    } catch (e) {
+      console.error("Error parsing legacy field registry", e);
+    }
+  }
+
+  // Check legacy clientCustomFields
+  const oldClientRaw =
+    sessionStorage.getItem("clientCustomFields") || localStorage.getItem("clientCustomFields");
+  if (oldClientRaw) {
+    try {
+      const parsed = JSON.parse(oldClientRaw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((f: any) => {
+          const fieldDef = sanitizeFieldDefinition(f, "client");
+          if (!registry.client.some((existing) => existing.key === fieldDef.key)) {
+            registry.client.push(fieldDef);
+          }
+        });
+      }
+    } catch {}
+  }
+
+  ensureScribeSeeds(registry);
+
+  // Write the canonical module-keyed object to localStorage
+  try {
+    localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(registry));
+  } catch {}
+
+  return registry;
+}
+
+function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, "deal">): SectionDefinition {
+  const targetModule = s.module ? normalizeModuleKey(s.module) : fallbackModule;
+  return {
+    id: s.id || `sec-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    title: s.title || s.name || "Untitled Section",
+    description: s.description || "",
+    module: targetModule,
+    source: s.source === "system" ? "system" : "custom",
+    iconName: s.iconName || "layers",
+    fieldKeys: Array.isArray(s.fieldKeys)
+      ? s.fieldKeys
+      : Array.isArray(s.fieldIds)
+      ? s.fieldIds
+      : [],
+    industryCategory: s.industryCategory,
+    industry: s.industry,
+    locations: Array.isArray(s.locations) ? s.locations : undefined,
+    scopingRules: Array.isArray(s.scopingRules) ? s.scopingRules : undefined,
+    isReusable: Boolean(s.isReusable),
+    reusableModules: Array.isArray(s.reusableModules) ? s.reusableModules : undefined,
+    createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
+  };
+}
+
+function loadCustomSectionsFromStorage(): Record<Exclude<FieldModule, "deal">, SectionDefinition[]> {
+  const defaultSections: Record<Exclude<FieldModule, "deal">, SectionDefinition[]> = {
+    client: [],
+    process: [],
+    appointment: [],
+    call: [],
+    service: [],
+    organization: [],
+    teamMember: [],
+    scribe: [],
+  };
+
+  if (typeof window === "undefined") {
+    return defaultSections;
+  }
+
+  // 1. PRIMARY SOURCE OF TRUTH: If localStorage exists, it is authoritative
+  const localRaw = localStorage.getItem(SECTION_REGISTRY_STORAGE_KEY);
+  if (localRaw) {
+    try {
+      const parsed = JSON.parse(localRaw);
+      const sections: Record<Exclude<FieldModule, "deal">, SectionDefinition[]> = {
+        client: [],
+        process: [],
+        appointment: [],
+        call: [],
+        service: [],
+        organization: [],
+        teamMember: [],
+        scribe: [],
+      };
+
+      if (Array.isArray(parsed)) {
+        // Self-heal: If corrupted into a flat array, distribute each section to its proper module
+        parsed.forEach((s: any) => {
+          const mod = normalizeModuleKey(s.module);
+          sections[mod].push(sanitizeSectionDefinition(s, mod));
+        });
+      } else if (parsed && typeof parsed === "object") {
+        (Object.keys(defaultSections) as (keyof typeof defaultSections)[]).forEach((mod) => {
+          if (Array.isArray(parsed[mod])) {
+            sections[mod] = parsed[mod].map((s: any) => sanitizeSectionDefinition(s, mod));
+          }
+        });
+      }
+
       try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error("Error parsing sectionRegistry", e);
-      }
+        localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
+      } catch {}
+      return sections;
+    } catch (e) {
+      console.error("Error reading sectionRegistry from localStorage", e);
     }
-    return {
-      client: [],
-      process: [],
-      appointment: [],
-      call: [],
-      service: [],
-      organization: [],
-      teamMember: [],
-      scribe: [],
-    };
-  });
+  }
 
+  // 2. MIGRATION PATH: Runs ONLY when localStorage has NO data at all
+  const sections: Record<Exclude<FieldModule, "deal">, SectionDefinition[]> = {
+    client: [],
+    process: [],
+    appointment: [],
+    call: [],
+    service: [],
+    organization: [],
+    teamMember: [],
+    scribe: [],
+  };
+
+  const legacyRaw = sessionStorage.getItem("sectionRegistry_v1");
+  if (legacyRaw) {
+    try {
+      const parsed = JSON.parse(legacyRaw);
+      if (Array.isArray(parsed)) {
+        parsed.forEach((s: any) => {
+          const mod = normalizeModuleKey(s.module);
+          sections[mod].push(sanitizeSectionDefinition(s, mod));
+        });
+      } else if (parsed && typeof parsed === "object") {
+        (Object.keys(defaultSections) as (keyof typeof defaultSections)[]).forEach((mod) => {
+          if (Array.isArray(parsed[mod])) {
+            sections[mod] = parsed[mod].map((s: any) => sanitizeSectionDefinition(s, mod));
+          }
+        });
+      }
+    } catch (e) {
+      console.error("Error parsing legacy section registry", e);
+    }
+  }
+
+  try {
+    localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(sections));
+  } catch {}
+
+  return sections;
+}
+
+export function FieldRegistryProvider({ children }: { children: ReactNode }) {
+  const instanceId = useRef(`fr_${Date.now()}_${Math.random()}`);
+  const [customFields, setCustomFields] = useState<Record<Exclude<FieldModule, "deal">, FieldDefinition[]>>(
+    loadCustomFieldsFromStorage
+  );
+  const [customSections, setCustomSections] = useState<Record<Exclude<FieldModule, "deal">, SectionDefinition[]>>(
+    loadCustomSectionsFromStorage
+  );
+
+  // Sync customFields to localStorage & mirror to legacy sessionStorage keys
   useEffect(() => {
-    sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(customFields));
-    sessionStorage.setItem("fieldRegistry_v2", JSON.stringify(customFields));
-    sessionStorage.setItem("fieldRegistry_v1", JSON.stringify(customFields));
+    try {
+      localStorage.setItem(FIELD_REGISTRY_STORAGE_KEY, JSON.stringify(customFields));
+      sessionStorage.setItem("fieldRegistry_v3", JSON.stringify(customFields));
+      sessionStorage.setItem("fieldRegistry_v2", JSON.stringify(customFields));
+      sessionStorage.setItem("fieldRegistry_v1", JSON.stringify(customFields));
+      window.dispatchEvent(
+        new CustomEvent(FIELD_REGISTRY_EVENT, { detail: { sender: instanceId.current } })
+      );
+    } catch (e) {
+      console.error("Failed to save customFields to localStorage", e);
+    }
   }, [customFields]);
 
+  // Sync customSections to localStorage & mirror to legacy sessionStorage
   useEffect(() => {
-    sessionStorage.setItem("sectionRegistry_v1", JSON.stringify(customSections));
     try {
-      window.dispatchEvent(new CustomEvent(SECTION_REGISTRY_EVENT));
-    } catch {}
+      localStorage.setItem(SECTION_REGISTRY_STORAGE_KEY, JSON.stringify(customSections));
+      sessionStorage.setItem("sectionRegistry_v1", JSON.stringify(customSections));
+      window.dispatchEvent(
+        new CustomEvent(SECTION_REGISTRY_EVENT, { detail: { sender: instanceId.current } })
+      );
+      window.dispatchEvent(new CustomEvent(LEGACY_SECTION_REGISTRY_EVENT));
+    } catch (e) {
+      console.error("Failed to save customSections to localStorage", e);
+    }
   }, [customSections]);
+
+  // Cross-tab and cross-component live sync
+  useEffect(() => {
+    const handleFieldsSync = (e: any) => {
+      if (e?.detail?.sender === instanceId.current) return;
+      setCustomFields(loadCustomFieldsFromStorage());
+    };
+
+    const handleSectionsSync = (e: any) => {
+      if (e?.detail?.sender === instanceId.current) return;
+      setCustomSections(loadCustomSectionsFromStorage());
+    };
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === FIELD_REGISTRY_STORAGE_KEY) {
+        setCustomFields(loadCustomFieldsFromStorage());
+      } else if (e.key === SECTION_REGISTRY_STORAGE_KEY) {
+        setCustomSections(loadCustomSectionsFromStorage());
+      }
+    };
+
+    window.addEventListener(FIELD_REGISTRY_EVENT, handleFieldsSync);
+    window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsSync);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(FIELD_REGISTRY_EVENT, handleFieldsSync);
+      window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsSync);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   const normalizeModule = (module: FieldModule): Exclude<FieldModule, "deal"> => {
     return module === "deal" ? "process" : module;
@@ -1098,7 +1609,22 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const getCustomFields = (module: FieldModule): FieldDefinition[] => {
     const norm = normalizeModule(module);
-    return customFields[norm] || [];
+    const directFields = customFields[norm] || [];
+    // Also include fields marked as reusable across modules
+    const reusableFields: FieldDefinition[] = [];
+    (Object.keys(customFields) as (keyof typeof customFields)[]).forEach((mod) => {
+      if (mod !== norm) {
+        (customFields[mod] || []).forEach((f) => {
+          if (f.isReusable) {
+            const matchesModule = !f.reusableModules || f.reusableModules.length === 0 || f.reusableModules.includes(norm);
+            if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key)) {
+              reusableFields.push({ ...f, module: norm });
+            }
+          }
+        });
+      }
+    });
+    return [...directFields, ...reusableFields];
   };
 
   const getAllFields = (module: FieldModule): FieldDefinition[] => {
@@ -1171,11 +1697,41 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const getCustomSections = (module: FieldModule): SectionDefinition[] => {
     const norm = normalizeModule(module);
-    return customSections[norm] || [];
+    const directSections = customSections[norm] || [];
+    // Also include sections marked as reusable across modules
+    const reusableSections: SectionDefinition[] = [];
+    (Object.keys(customSections) as (keyof typeof customSections)[]).forEach((mod) => {
+      if (mod !== norm) {
+        (customSections[mod] || []).forEach((s) => {
+          if (s.isReusable) {
+            const matchesModule = !s.reusableModules || s.reusableModules.length === 0 || s.reusableModules.includes(norm);
+            if (matchesModule && !directSections.some((ds) => ds.id === s.id) && !reusableSections.some((rs) => rs.id === s.id)) {
+              reusableSections.push({ ...s, module: norm });
+            }
+          }
+        });
+      }
+    });
+    return [...directSections, ...reusableSections];
   };
 
   const getAllSections = (module: FieldModule): SectionDefinition[] => {
     return [...getSystemSections(module), ...getCustomSections(module)];
+  };
+
+  const getFieldsForOrg = (module: FieldModule, org?: OrgScopeFilter | null): FieldDefinition[] => {
+    return getAllFields(module).filter((f) => isFieldMatchingOrg(f, org));
+  };
+
+  const getSectionsForOrg = (module: FieldModule, org?: OrgScopeFilter | null): SectionDefinition[] => {
+    const all = getAllSections(module);
+    const matchedSections = all.filter((s) => isSectionMatchingOrg(s, org));
+    const allowedFieldKeys = new Set(getFieldsForOrg(module, org).map((f) => f.key));
+
+    return matchedSections.map((s) => ({
+      ...s,
+      fieldKeys: (s.fieldKeys || []).filter((k) => allowedFieldKeys.has(k)),
+    }));
   };
 
   const addCustomSection = (
@@ -1246,12 +1802,14 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
         getSystemFields,
         getCustomFields,
         getAllFields,
+        getFieldsForOrg,
         addCustomField,
         updateCustomField,
         deleteCustomField,
         getSystemSections,
         getCustomSections,
         getAllSections,
+        getSectionsForOrg,
         addCustomSection,
         updateCustomSection,
         deleteCustomSection,

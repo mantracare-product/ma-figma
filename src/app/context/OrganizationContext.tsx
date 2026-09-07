@@ -3,7 +3,10 @@ import { createContext, useContext, useState, ReactNode } from "react";
 export interface Organization {
   id: string;
   name: string;
+  industryCategory?: string;
   industry: string;
+  locations?: string[];
+  location?: string;
   email: string;
   phone: string;
   status: "Active" | "Inactive";
@@ -15,6 +18,8 @@ interface OrganizationContextType {
   setActiveOrganization: (org: Organization) => void;
   addOrganization: (org: Omit<Organization, "id">) => void;
   updateOrganization: (id: string, updates: Partial<Organization>) => void;
+  sessionOverride: Partial<Organization> | null;
+  setSessionOverride: (override: Partial<Organization> | null) => void;
 }
 
 const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
@@ -22,37 +27,95 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 const defaultOrganizations: Organization[] = [
   {
     id: "demo",
-    name: "Demo Mantra",
-    industry: "Healthcare AI",
+    name: "Demo Mantra Care",
+    industryCategory: "Healthcare",
+    industry: "General Physician",
+    locations: ["California", "New York"],
     email: "contact@mantraassist.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
   },
   {
     id: "1",
-    name: "Healthcare Org",
-    industry: "Healthcare",
-    email: "contact@healthcareorg.com",
+    name: "Heart Care Clinic",
+    industryCategory: "Healthcare",
+    industry: "Cardiologist",
+    locations: ["California"],
+    email: "contact@heartcare.com",
     phone: "+1 (555) 123-4567",
     status: "Active",
   },
   {
     id: "2",
-    name: "Dental Care Org",
-    industry: "Dental",
-    email: "contact@dentalcare.com",
+    name: "Smile Dental Center",
+    industryCategory: "Healthcare",
+    industry: "Dentist",
+    locations: ["Texas"],
+    email: "contact@smiledental.com",
     phone: "+1 (555) 987-6543",
+    status: "Active",
+  },
+  {
+    id: "3",
+    name: "Apex Auto Care",
+    industryCategory: "Automobile",
+    industry: "Auto Dealership & Service",
+    locations: ["California", "Nevada"],
+    email: "service@apexauto.com",
+    phone: "+1 (555) 345-6789",
     status: "Active",
   },
 ];
 
 export function OrganizationProvider({ children }: { children: ReactNode }) {
-  const [organizations, setOrganizations] = useState<Organization[]>(defaultOrganizations);
-  const [activeOrganization, setActiveOrganizationState] = useState<Organization>(defaultOrganizations[0]);
+  const [organizations, setOrganizations] = useState<Organization[]>(() => {
+    try {
+      const saved = localStorage.getItem("mantra_organizations_v1");
+      return saved ? JSON.parse(saved) : defaultOrganizations;
+    } catch {
+      return defaultOrganizations;
+    }
+  });
+
+  const [activeOrgId, setActiveOrgId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem("mantra_active_org_id_v1");
+      return saved || defaultOrganizations[0].id;
+    } catch {
+      return defaultOrganizations[0].id;
+    }
+  });
+
+  const [sessionOverride, setSessionOverrideState] = useState<Partial<Organization> | null>(() => {
+    try {
+      const saved = sessionStorage.getItem("mantra_org_session_override_v1");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setSessionOverride = (override: Partial<Organization> | null) => {
+    setSessionOverrideState(override);
+    if (override) {
+      sessionStorage.setItem("mantra_org_session_override_v1", JSON.stringify(override));
+    } else {
+      sessionStorage.removeItem("mantra_org_session_override_v1");
+    }
+    window.dispatchEvent(new CustomEvent("organizationChanged"));
+  };
+
+  const rawActiveOrg = organizations.find((o) => o.id === activeOrgId) || organizations[0] || defaultOrganizations[0];
+
+  // Merge session override if active
+  const activeOrganization: Organization = {
+    ...rawActiveOrg,
+    ...(sessionOverride || {}),
+  };
 
   const setActiveOrganization = (org: Organization) => {
-    setActiveOrganizationState(org);
-    // Trigger a storage event to notify other components
+    setActiveOrgId(org.id);
+    localStorage.setItem("mantra_active_org_id_v1", org.id);
     window.dispatchEvent(new CustomEvent("organizationChanged", { detail: org }));
   };
 
@@ -61,18 +124,22 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       ...orgData,
       id: Date.now().toString(),
     };
-    setOrganizations((prev) => [...prev, newOrg]);
+    setOrganizations((prev) => {
+      const next = [...prev, newOrg];
+      localStorage.setItem("mantra_organizations_v1", JSON.stringify(next));
+      return next;
+    });
     setActiveOrganization(newOrg);
   };
 
   const updateOrganization = (id: string, updates: Partial<Organization>) => {
-    setOrganizations((prev) =>
-      prev.map((org) => (org.id === id ? { ...org, ...updates } : org))
-    );
-    if (activeOrganization.id === id) {
-      setActiveOrganizationState((prev) => ({ ...prev, ...updates }));
-    }
+    setOrganizations((prev) => {
+      const next = prev.map((org) => (org.id === id ? { ...org, ...updates } : org));
+      localStorage.setItem("mantra_organizations_v1", JSON.stringify(next));
+      return next;
+    });
   };
+
 
   return (
     <OrganizationContext.Provider
@@ -82,6 +149,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
         setActiveOrganization,
         addOrganization,
         updateOrganization,
+        sessionOverride,
+        setSessionOverride,
       }}
     >
       {children}

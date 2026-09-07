@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import DrawerShell from "../ui/DrawerShell";
 import { useFieldRegistry, FieldDefinition } from "../../context/FieldRegistryContext";
 import { SelectFieldsModal } from "../help/FieldManager";
+import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -447,74 +448,24 @@ export default function TranscriptFieldMappingDrawer({
         />
       )}
 
-      {/* ─── ADD NEW SECTION MODAL ─── */}
+      {/* ─── ADD NEW SECTION DRAWER (Same as Settings) ─── */}
       {addSectionModalOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[700]"
-            onClick={() => setAddSectionModalOpen(false)}
-          />
-          <div
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 shadow-2xl z-[701] w-[440px] max-w-[92vw] space-y-4"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-slate-100 text-[#181e25] flex items-center justify-center font-bold">
-                  <FolderPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-foreground">Add New Section</h3>
-                  <p className="text-[11px] text-muted-foreground">
-                    Enter section name to organize mapped fields
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddSectionModalOpen(false)}
-                className="p-1 text-muted-foreground hover:text-foreground rounded-lg hover:bg-slate-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Section Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newSectionTitle}
-                  onChange={(e) => setNewSectionTitle(e.target.value)}
-                  placeholder="e.g. Clinical Notes, Medical History, General"
-                  autoFocus
-                  className="w-full px-3 py-2 bg-slate-50 border border-border rounded-lg text-xs font-medium text-foreground focus:outline-none focus:bg-white focus:border-[#181e25]"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 pt-2 border-t border-border">
-              <button
-                type="button"
-                onClick={() => setAddSectionModalOpen(false)}
-                className="flex-1 py-2 text-xs font-semibold text-muted-foreground hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateSection}
-                className="flex-1 py-2 text-xs font-semibold text-white bg-gradient-to-r from-[#181e25] to-[#2c3e50] hover:from-[#11161c] hover:to-[#22303e] rounded-lg shadow-xs transition-colors cursor-pointer"
-              >
-                Create Section
-              </button>
-            </div>
-          </div>
-        </>
+        <AdminSectionDrawer
+          section={null}
+          initialModule="scribe"
+          isAdmin={false}
+          onClose={() => setAddSectionModalOpen(false)}
+          onSaved={(savedSec) => {
+            const newSec: ScribeMappingSection = {
+              id: savedSec.id,
+              title: savedSec.title,
+              fieldKeys: savedSec.fieldKeys || [],
+            };
+            setSections((prev) => [...prev, newSec]);
+            setAddSectionModalOpen(false);
+            toast.success(`Section "${newSec.title}" added!`);
+          }}
+        />
       )}
     </DrawerShell>
   );

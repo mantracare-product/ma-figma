@@ -269,7 +269,9 @@ function getDynamicOptions(moduleKey: string): { id: string; label: string; valu
 
 function getSelectFields(): { key: string; label: string; module: string }[] {
   try {
-    const saved = sessionStorage.getItem("fieldRegistry_v1");
+    const saved =
+      localStorage.getItem("mantra_field_registry_v1") ||
+      sessionStorage.getItem("fieldRegistry_v1");
     if (saved) {
       const parsed = JSON.parse(saved);
       const result: { key: string; label: string; module: string }[] = [];
@@ -326,6 +328,18 @@ export default function ChatbotFlowBuilder({
 
   const [botName, setBotName] = useState(bot.name || "Untitled Bot");
   const [isEditingName, setIsEditingName] = useState(false);
+
+  // Subscribe to live field registry updates so labels update live even if drawer is open
+  const [, setFieldRegistryVersion] = useState(0);
+  useEffect(() => {
+    const onFieldsChange = () => setFieldRegistryVersion((v) => v + 1);
+    window.addEventListener("mantra_field_registry_updated", onFieldsChange);
+    window.addEventListener("storage", onFieldsChange);
+    return () => {
+      window.removeEventListener("mantra_field_registry_updated", onFieldsChange);
+      window.removeEventListener("storage", onFieldsChange);
+    };
+  }, []);
   const [activeChannels, setActiveChannels] = useState<ChannelType[]>(
     (bot.channels || []).filter((c) => c !== "sms")
   );

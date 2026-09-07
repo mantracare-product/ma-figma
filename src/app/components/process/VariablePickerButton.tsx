@@ -18,7 +18,9 @@ const ALL_MODULES: Exclude<FieldModule, "deal">[] = ["client", "process", "appoi
 export function getLiveFieldSources() {
   let customFields: Record<string, any> = {};
   try {
-    const saved = sessionStorage.getItem("fieldRegistry_v1");
+    const saved =
+      localStorage.getItem("mantra_field_registry_v1") ||
+      sessionStorage.getItem("fieldRegistry_v1");
     if (saved) {
       customFields = JSON.parse(saved);
       // Normalize deal to process

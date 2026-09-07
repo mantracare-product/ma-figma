@@ -26,13 +26,21 @@ import { useNavigate } from "react-router";
 import PageHeader from "../components/layout/PageHeader";
 import SettingsSubnav from "../components/settings/SettingsSubnav";
 import { useOrganization } from "../context/OrganizationContext";
+import {
+  INITIAL_CATEGORIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../data/industryReferenceData";
 
 interface OrganizationItem {
   id: string;
   name: string;
   flag?: string;
   email: string;
+  industryCategory?: string;
   industry: string;
+  location?: string;
+  locations?: string[];
   preferredTime: string;
   status: "Active" | "Inactive";
   users: number;
@@ -48,7 +56,10 @@ const initialOrgs: OrganizationItem[] = [
     name: "Demo Mantra",
     flag: "🇮🇳",
     email: "ayemantrauser012@gmail.com",
-    industry: "De Addiction Expert",
+    industryCategory: "Healthcare",
+    industry: "General Physician",
+    location: "California",
+    locations: ["California"],
     preferredTime: "2:00 PM - IST",
     status: "Active",
     users: 1,
@@ -62,7 +73,10 @@ const initialOrgs: OrganizationItem[] = [
     name: "Healthcare Care Org",
     flag: "🇺🇸",
     email: "contact@healthcareorg.com",
-    industry: "Healthcare",
+    industryCategory: "Healthcare",
+    industry: "Cardiologist",
+    location: "New York",
+    locations: ["New York"],
     preferredTime: "10:00 AM - EST",
     status: "Active",
     users: 12,
@@ -76,7 +90,10 @@ const initialOrgs: OrganizationItem[] = [
     name: "Dental Care Center",
     flag: "🇬🇧",
     email: "admin@dentalcare.co.uk",
-    industry: "Dental",
+    industryCategory: "Healthcare",
+    industry: "Dentist",
+    location: "Texas",
+    locations: ["Texas"],
     preferredTime: "3:30 PM - GMT",
     status: "Active",
     users: 5,
@@ -89,7 +106,7 @@ const initialOrgs: OrganizationItem[] = [
 
 export default function Organizations() {
   const navigate = useNavigate();
-  const { setActiveOrganization } = useOrganization();
+  const { setActiveOrganization, addOrganization, updateOrganization } = useOrganization();
 
   const [organizations, setOrganizations] = useState<OrganizationItem[]>(initialOrgs);
   const [searchQuery, setSearchQuery] = useState("");
@@ -108,7 +125,9 @@ export default function Organizations() {
   const [newOrg, setNewOrg] = useState({
     name: "",
     email: "",
-    industry: "Healthcare",
+    industryCategory: "Healthcare",
+    industry: "General Physician",
+    location: "California",
     flag: "🇺🇸",
     preferredTime: "2:00 PM - IST",
   });
@@ -132,7 +151,9 @@ export default function Organizations() {
       const matchSearch =
         org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         org.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        org.industry.toLowerCase().includes(searchQuery.toLowerCase());
+        org.industry.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (org.industryCategory && org.industryCategory.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (org.location && org.location.toLowerCase().includes(searchQuery.toLowerCase()));
       return matchSearch;
     });
   }, [organizations, searchQuery]);
@@ -169,7 +190,10 @@ export default function Organizations() {
       name: newOrg.name,
       flag: newOrg.flag,
       email: newOrg.email,
+      industryCategory: newOrg.industryCategory,
       industry: newOrg.industry,
+      location: newOrg.location,
+      locations: newOrg.location ? [newOrg.location] : [],
       preferredTime: newOrg.preferredTime,
       status: "Active",
       users: 1,
@@ -185,10 +209,22 @@ export default function Organizations() {
     };
 
     setOrganizations([org, ...organizations]);
+    addOrganization({
+      name: org.name,
+      email: org.email,
+      phone: "+1 (555) 000-0000",
+      industryCategory: org.industryCategory,
+      industry: org.industry,
+      location: org.location,
+      locations: org.locations,
+      status: org.status,
+    });
     setNewOrg({
       name: "",
       email: "",
-      industry: "Healthcare",
+      industryCategory: "Healthcare",
+      industry: "General Physician",
+      location: "California",
       flag: "🇺🇸",
       preferredTime: "2:00 PM - IST",
     });
@@ -205,6 +241,15 @@ export default function Organizations() {
     setOrganizations(
       organizations.map((o) => (o.id === editingOrg.id ? editingOrg : o))
     );
+    updateOrganization(editingOrg.id, {
+      name: editingOrg.name,
+      email: editingOrg.email,
+      industryCategory: editingOrg.industryCategory,
+      industry: editingOrg.industry,
+      location: editingOrg.location,
+      locations: editingOrg.location ? [editingOrg.location] : (editingOrg.locations || []),
+      status: editingOrg.status,
+    });
     setShowEditModal(false);
     setEditingOrg(null);
     toast.success("Organization updated successfully");
@@ -224,7 +269,10 @@ export default function Organizations() {
     setActiveOrganization({
       id: org.id,
       name: org.name,
+      industryCategory: org.industryCategory,
       industry: org.industry,
+      location: org.location,
+      locations: org.locations || (org.location ? [org.location] : []),
       email: org.email,
       phone: "+1 (555) 000-0000",
       status: org.status,
@@ -394,6 +442,12 @@ export default function Organizations() {
                       className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ fontFamily: "Outfit, sans-serif" }}
                     >
+                      LOCATION
+                    </th>
+                    <th
+                      className="px-4 py-3.5 text-[11px] font-bold uppercase tracking-wider whitespace-nowrap"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
+                    >
                       PREFERRED TIME
                     </th>
                     <th
@@ -466,8 +520,18 @@ export default function Organizations() {
                           </td>
 
                           {/* Industry */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="font-semibold text-[#222222]">{org.industry}</span>
+                              {org.industryCategory && (
+                                <span className="text-[11px] text-[#64748b]">{org.industryCategory}</span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Location */}
                           <td className="px-4 py-3 text-[#45515e] whitespace-nowrap">
-                            {org.industry}
+                            {org.location || (org.locations && org.locations.length > 0 ? org.locations.join(", ") : "—")}
                           </td>
 
                           {/* Preferred Time */}
@@ -653,6 +717,48 @@ export default function Organizations() {
             placeholder="admin@organization.com"
           />
 
+          {/* Industry Category & Industry */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Industry Category
+              </label>
+              <select
+                value={newOrg.industryCategory}
+                onChange={(e) => {
+                  const cat = e.target.value;
+                  const indList = getIndustriesForCategory(cat);
+                  setNewOrg({
+                    ...newOrg,
+                    industryCategory: cat,
+                    industry: indList[0] || "",
+                  });
+                }}
+                className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+              >
+                {INITIAL_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.name}>{c.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Industry
+              </label>
+              <select
+                value={newOrg.industry}
+                onChange={(e) => setNewOrg({ ...newOrg, industry: e.target.value })}
+                className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+              >
+                {getIndustriesForCategory(newOrg.industryCategory).map((ind) => (
+                  <option key={ind} value={ind}>{ind}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Country Flag & Location */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -674,19 +780,16 @@ export default function Organizations() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1.5">
-                Industry
+                Location
               </label>
               <select
-                value={newOrg.industry}
-                onChange={(e) => setNewOrg({ ...newOrg, industry: e.target.value })}
+                value={newOrg.location}
+                onChange={(e) => setNewOrg({ ...newOrg, location: e.target.value })}
                 className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
               >
-                <option value="De Addiction Expert">De Addiction Expert</option>
-                <option value="Healthcare">Healthcare</option>
-                <option value="Technology">Technology</option>
-                <option value="Dental">Dental</option>
-                <option value="Mental Health">Mental Health</option>
-                <option value="Finance">Finance</option>
+                {STANDARD_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>{loc}</option>
+                ))}
               </select>
             </div>
           </div>
@@ -740,7 +843,31 @@ export default function Organizations() {
               onChange={(e) => setEditingOrg({ ...editingOrg, email: e.target.value })}
             />
 
+            {/* Industry Category & Industry */}
             <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  Industry Category
+                </label>
+                <select
+                  value={editingOrg.industryCategory || "Healthcare"}
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    const indList = getIndustriesForCategory(cat);
+                    setEditingOrg({
+                      ...editingOrg,
+                      industryCategory: cat,
+                      industry: indList[0] || "",
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                >
+                  {INITIAL_CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5">
                   Industry
@@ -750,12 +877,37 @@ export default function Organizations() {
                   onChange={(e) => setEditingOrg({ ...editingOrg, industry: e.target.value })}
                   className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
                 >
-                  <option value="De Addiction Expert">De Addiction Expert</option>
-                  <option value="Healthcare">Healthcare</option>
-                  <option value="Technology">Technology</option>
-                  <option value="Dental">Dental</option>
-                  <option value="Mental Health">Mental Health</option>
-                  <option value="Finance">Finance</option>
+                  {getIndustriesForCategory(editingOrg.industryCategory || "Healthcare").map((ind) => (
+                    <option key={ind} value={ind}>{ind}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Location & Status */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                  Location
+                </label>
+                <select
+                  value={editingOrg.location || editingOrg.locations?.[0] || "California"}
+                  onChange={(e) => {
+                    const loc = e.target.value;
+                    setEditingOrg({
+                      ...editingOrg,
+                      location: loc,
+                      locations: [loc],
+                    });
+                  }}
+                  className="w-full px-3 py-2 bg-white/90 border border-slate-200 rounded-xl text-xs text-[#222222] focus:outline-none focus:ring-2 focus:ring-[#1456f0]/20"
+                >
+                  {STANDARD_LOCATIONS.map((loc) => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                  {editingOrg.location && !STANDARD_LOCATIONS.includes(editingOrg.location) && (
+                    <option value={editingOrg.location}>{editingOrg.location}</option>
+                  )}
                 </select>
               </div>
 

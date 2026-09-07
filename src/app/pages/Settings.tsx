@@ -9,10 +9,12 @@ import { Tooltip } from "../components/ui/Tooltip";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router";
 import { useSidebar } from "../context/SidebarContext";
-import { useFieldRegistry, FieldDefinition, FieldModule } from "../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg } from "../context/FieldRegistryContext";
 import { TelephonyIntegrationPanel } from "../components/telephony/TelephonyIntegrationPanel";
 import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_EVENT, WhatsAppNumberEntry } from "../../lib/useWhatsAppNumbers";
 import { SelectFieldsModal } from "../components/help/FieldManager";
+import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
+import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import {
   Save,
   Plus,
@@ -88,6 +90,11 @@ import {
   Eraser,
 } from "lucide-react";
 import { useOrganization } from "../context/OrganizationContext";
+import {
+  INITIAL_CATEGORIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../data/industryReferenceData";
 import {
   TEXT_STYLES,
   createDefaultAvailability,
@@ -648,7 +655,7 @@ function ProcessCheckboxDropdown({
 }
 
 export default function Settings() {
-  const { activeOrganization, updateOrganization } = useOrganization();
+  const { activeOrganization, updateOrganization, setActiveOrganization } = useOrganization();
   const navigate = useNavigate();
   const location = useLocation();
   const { setCollapsed } = useSidebar();
@@ -902,7 +909,10 @@ export default function Settings() {
   const [isEditingOrganization, setIsEditingOrganization] = useState(false);
   const [editOrgData, setEditOrgData] = useState({
     name: activeOrganization.name,
-    industry: activeOrganization.industry || "Healthcare",
+    industryCategory: activeOrganization.industryCategory || "Healthcare",
+    industry: activeOrganization.industry || "General Physician",
+    location: activeOrganization.location || (activeOrganization.locations && activeOrganization.locations[0]) || "California",
+    locations: activeOrganization.locations || ["California"],
     email: activeOrganization.email,
     phone: activeOrganization.phone || "",
     countryCode: "+1",
@@ -917,6 +927,19 @@ export default function Settings() {
     billingContactEmail: "billing@healthcare.com",
     language: "English",
   });
+
+  useEffect(() => {
+    setEditOrgData((prev) => ({
+      ...prev,
+      name: activeOrganization.name,
+      industryCategory: activeOrganization.industryCategory || "Healthcare",
+      industry: activeOrganization.industry || "General Physician",
+      location: activeOrganization.location || (activeOrganization.locations && activeOrganization.locations[0]) || "California",
+      locations: activeOrganization.locations || ["California"],
+      email: activeOrganization.email,
+      phone: activeOrganization.phone || "",
+    }));
+  }, [activeOrganization]);
 
   // Users State
   const [allUsers, setAllUsers] = useState<User[]>([
@@ -3013,7 +3036,7 @@ export default function Settings() {
     },
     { id: "voice-config", label: "AI Voices / Models", icon: Volume2 },
     { id: "numbers", label: "Numbers", icon: Phone },
-    { id: "custom-fields", label: "Layout", icon: Layers },
+    { id: "custom-fields", label: "Sections/Fields", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
     { id: "security", label: "Security", icon: ShieldCheck },
@@ -3032,15 +3055,25 @@ export default function Settings() {
       return;
     }
 
-    updateOrganization(activeOrganization.id, {
+    const updatedOrg = {
       name: editOrgData.name,
+      industryCategory: editOrgData.industryCategory,
       industry: editOrgData.industry,
+      location: editOrgData.location,
+      locations: editOrgData.location ? [editOrgData.location] : (editOrgData.locations || []),
       email: editOrgData.email,
       phone: `${editOrgData.countryCode} ${editOrgData.phone}`,
+    };
+
+    updateOrganization(activeOrganization.id, updatedOrg);
+    setActiveOrganization({
+      ...activeOrganization,
+      ...updatedOrg,
     });
 
     setSelectedLanguage(editOrgData.language);
     setIsEditingOrganization(false);
+    setShowEditOrgModal(false);
     toast.success("Organization updated successfully");
   };
 
@@ -3301,7 +3334,10 @@ export default function Settings() {
                         setIsEditingOrganization(false);
                         setEditOrgData({
                           name: activeOrganization.name,
-                          industry: activeOrganization.industry || "Healthcare",
+                          industryCategory: activeOrganization.industryCategory || "Healthcare",
+                          industry: activeOrganization.industry || "General Physician",
+                          location: activeOrganization.location || (activeOrganization.locations && activeOrganization.locations[0]) || "California",
+                          locations: activeOrganization.locations || ["California"],
                           email: activeOrganization.email,
                           phone: activeOrganization.phone || "",
                           countryCode: "+1",
@@ -3350,7 +3386,34 @@ export default function Settings() {
                           className="mt-1"
                         />
                       ) : (
-                        <p className="mt-1 text-foreground">{activeOrganization.name}</p>
+                        <p className="mt-1 text-foreground font-medium">{activeOrganization.name}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
+                        Industry Category
+                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
+                      </label>
+                      {isEditingOrganization ? (
+                        <select
+                          value={editOrgData.industryCategory}
+                          onChange={(e) => {
+                            const cat = e.target.value;
+                            const indList = getIndustriesForCategory(cat);
+                            setEditOrgData({
+                              ...editOrgData,
+                              industryCategory: cat,
+                              industry: indList[0] || "",
+                            });
+                          }}
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
+                        >
+                          {INITIAL_CATEGORIES.map((c) => (
+                            <option key={c.id} value={c.name}>{c.name}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <p className="mt-1 text-foreground font-medium">{activeOrganization.industryCategory || "Healthcare"}</p>
                       )}
                     </div>
                     <div>
@@ -3362,17 +3425,42 @@ export default function Settings() {
                         <select
                           value={editOrgData.industry}
                           onChange={(e) => setEditOrgData({ ...editOrgData, industry: e.target.value })}
-                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
                         >
-                          <option value="Healthcare">Healthcare</option>
-                          <option value="Technology">Technology</option>
-                          <option value="Finance">Finance</option>
-                          <option value="Education">Education</option>
-                          <option value="Retail">Retail</option>
-                          <option value="Other">Other</option>
+                          {getIndustriesForCategory(editOrgData.industryCategory).map((ind) => (
+                            <option key={ind} value={ind}>{ind}</option>
+                          ))}
                         </select>
                       ) : (
-                        <p className="mt-1 text-foreground">{activeOrganization.industry || "Healthcare"}</p>
+                        <p className="mt-1 text-foreground font-medium">{activeOrganization.industry || "General Physician"}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
+                        Location
+                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
+                      </label>
+                      {isEditingOrganization ? (
+                        <select
+                          value={editOrgData.location}
+                          onChange={(e) => setEditOrgData({
+                            ...editOrgData,
+                            location: e.target.value,
+                            locations: [e.target.value],
+                          })}
+                          className="mt-1 w-full px-3 py-2 border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-white text-sm"
+                        >
+                          {STANDARD_LOCATIONS.map((loc) => (
+                            <option key={loc} value={loc}>{loc}</option>
+                          ))}
+                          {editOrgData.location && !STANDARD_LOCATIONS.includes(editOrgData.location) && (
+                            <option value={editOrgData.location}>{editOrgData.location}</option>
+                          )}
+                        </select>
+                      ) : (
+                        <p className="mt-1 text-foreground font-medium">
+                          {activeOrganization.location || (activeOrganization.locations && activeOrganization.locations.length > 0 ? activeOrganization.locations.join(", ") : "California")}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -6118,7 +6206,7 @@ export default function Settings() {
             {(activeTab === "custom-fields" || activeTab === "layout") && (
               <div className="space-y-5">
                 <div className="flex items-center justify-between">
-                  <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Layout</h1>
+                  <h1 className="text-[22px] font-bold text-[#111827] leading-tight">Sections/Fields</h1>
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -6256,8 +6344,12 @@ export default function Settings() {
                       </thead>
                       <tbody>
                         {(() => {
-                          const currentFields = getCustomFields(currentModule);
-                          const sections = getAllSections(currentModule);
+                          const currentFields = getCustomFields(currentModule).filter((field) =>
+                            isFieldMatchingOrg(field, activeOrganization)
+                          );
+                          const sections = getAllSections(currentModule).filter((sec) =>
+                            isSectionMatchingOrg(sec, activeOrganization)
+                          );
 
                           const filteredFields = currentFields.filter((field) => {
                             if (!layoutSearchQuery.trim()) return true;
@@ -6372,7 +6464,9 @@ export default function Settings() {
                       </thead>
                       <tbody>
                         {(() => {
-                          const allSecs = getAllSections(currentModule);
+                          const allSecs = getAllSections(currentModule).filter((sec) =>
+                            isSectionMatchingOrg(sec, activeOrganization)
+                          );
 
                           const filteredSections = allSecs.filter((sec) => {
                             if (!layoutSearchQuery.trim()) return true;
@@ -7076,6 +7170,29 @@ export default function Settings() {
 
               <div>
                 <label className="block text-sm font-medium mb-2">
+                  Industry Category <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={editOrgData.industryCategory}
+                  onChange={(e) => {
+                    const cat = e.target.value;
+                    const indList = getIndustriesForCategory(cat);
+                    setEditOrgData({
+                      ...editOrgData,
+                      industryCategory: cat,
+                      industry: indList[0] || "",
+                    });
+                  }}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+                >
+                  {INITIAL_CATEGORIES.map((c) => (
+                    <option key={c.id} value={c.name}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
                   Industry <span className="text-destructive">*</span>
                 </label>
                 <select
@@ -7083,11 +7200,31 @@ export default function Settings() {
                   onChange={(e) => setEditOrgData({ ...editOrgData, industry: e.target.value })}
                   className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
                 >
-                  {industries.map((ind) => (
-                    <option key={ind} value={ind}>
-                      {ind}
-                    </option>
+                  {getIndustriesForCategory(editOrgData.industryCategory).map((ind) => (
+                    <option key={ind} value={ind}>{ind}</option>
                   ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Location <span className="text-destructive">*</span>
+                </label>
+                <select
+                  value={editOrgData.location}
+                  onChange={(e) => setEditOrgData({
+                    ...editOrgData,
+                    location: e.target.value,
+                    locations: [e.target.value],
+                  })}
+                  className="w-full px-4 py-2 bg-input-background border border-input rounded-xl"
+                >
+                  {STANDARD_LOCATIONS.map((loc) => (
+                    <option key={loc} value={loc}>{loc}</option>
+                  ))}
+                  {editOrgData.location && !STANDARD_LOCATIONS.includes(editOrgData.location) && (
+                    <option value={editOrgData.location}>{editOrgData.location}</option>
+                  )}
                 </select>
               </div>
 
@@ -11402,892 +11539,39 @@ export default function Settings() {
           </div>
         </Modal>
 
-        {/* ====== ADD FIELD DRAWER ====== */}
-        {showAddFieldDrawer && (
-          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
-            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setShowAddFieldDrawer(false)} />
-            <div
-              className="flex flex-col bg-white"
-              style={{
-                width: '520px', height: '100vh',
-                boxShadow: '-4px 0 32px rgba(0,0,0,0.12)',
-                animation: 'slideInFromRight 240ms ease-out',
-                pointerEvents: 'auto',
-              }}
-            >
-              <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-              {/* Drawer Header */}
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-                <div>
-                  <h2 className="text-base font-bold text-[#111827]">Add Custom Field</h2>
-                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
-                </div>
-                <button onClick={() => setShowAddFieldDrawer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-
-              {/* Drawer Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                {/* Field Name */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Name <span className="text-red-500">*</span></label>
-                  <input
-                    type="text"
-                    value={newFieldData.label}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      const autoKey = val.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                      setNewFieldData({ ...newFieldData, label: val, key: autoKey });
-                    }}
-                    placeholder="e.g. Policy Coverage"
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                    autoFocus
-                  />
-                  {newFieldData.key && (
-                    <p className="text-[11px] font-mono text-gray-400 mt-1">Key: <span className="text-gray-600">{newFieldData.key}</span></p>
-                  )}
-                </div>
-
-                {/* Field Type - Custom Styled Dropdown */}
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Type</label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setFieldTypePickerOpen(!fieldTypePickerOpen)}
-                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer"
-                    >
-                      <span className="font-medium text-[#111827]">{newFieldData.type}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${fieldTypePickerOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {fieldTypePickerOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                        {([
-                          { group: 'Text', items: ['String / Text', 'Address / Text Area', 'Rich Text', 'Link', 'WhatsApp Link'] },
-                          { group: 'Numbers', items: ['Number', 'Money / Currency', 'Rating / Score'] },
-                          { group: 'Date & Time', items: ['Date', 'Date & Time'] },
-                          { group: 'Options', items: ['List (Dropdown)', 'Multi-Select', 'Yes / No'] },
-                          { group: 'Advanced', items: ['Table', 'Drawing / Signature', 'File / Attachment', 'User / Member'] },
-                        ] as { group: string; items: string[] }[]).map((grp) => (
-                          <div key={grp.group}>
-                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
-                            {grp.items.map((typeName) => (
-                              <button
-                                key={typeName}
-                                type="button"
-                                onClick={() => { setNewFieldData({ ...newFieldData, type: typeName }); setFieldTypePickerOpen(false); }}
-                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between ${
-                                  newFieldData.type === typeName ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-[#111827]'
-                                }`}
-                              >
-                                <span>{typeName}</span>
-                                {newFieldData.type === typeName && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* ===== FIELD TYPE LIVE PREVIEW ===== */}
-                {(() => {
-                  const ft = newFieldData.type;
-                  const cols = newFieldData.tableColumns || [];
-                  const opts = newFieldData.options || [];
-                  return (
-                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2 border-b border-gray-100 bg-white">
-                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Preview — {ft}</span>
-                      </div>
-                      <div className="p-4">
-
-                        {/* TEXT */}
-                        {ft === 'String / Text' && (
-                          <input disabled placeholder={newFieldData.label || 'Enter text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />
-                        )}
-
-                        {/* TEXT AREA */}
-                        {ft === 'Address / Text Area' && (
-                          <textarea disabled rows={3} placeholder={newFieldData.label || 'Enter address or long text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed resize-none" />
-                        )}
-
-                        {/* RICH TEXT */}
-                        {ft === 'Rich Text' && (
-                          <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
-                              {['B','I','U','—'].map(t => <span key={t} className="px-2 py-0.5 text-xs font-bold text-gray-500 hover:bg-gray-200 rounded cursor-not-allowed">{t}</span>)}
-                            </div>
-                            <div className="px-3 py-2 text-sm text-gray-400 min-h-[60px]">Rich text content here...</div>
-                          </div>
-                        )}
-
-                        {/* NUMBER */}
-                        {ft === 'Number' && (
-                          <input type="number" disabled placeholder="0" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />
-                        )}
-
-                        {/* MONEY */}
-                        {ft === 'Money / Currency' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">₹</span>
-                            <input type="number" disabled placeholder="0.00" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
-                          </div>
-                        )}
-
-                        {/* DATE */}
-                        {ft === 'Date' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm text-gray-400">DD / MM / YYYY</span>
-                          </div>
-                        )}
-
-                        {/* DATE TIME */}
-                        {ft === 'Date & Time' && (
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2 flex-1">
-                              <Calendar className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-400">DD / MM / YYYY</span>
-                            </div>
-                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
-                              <Clock className="w-4 h-4 text-gray-400" />
-                              <span className="text-sm text-gray-400">HH : MM</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* LIST DROPDOWN */}
-                        {ft === 'List (Dropdown)' && (
-                          <div className="flex items-center justify-between border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
-                            <span className="text-sm text-gray-400">{opts[0]?.label || 'Select an option'}</span>
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                          </div>
-                        )}
-
-                        {/* MULTI SELECT */}
-                        {ft === 'Multi-Select' && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {(opts.length ? opts : [{label:'Option 1'},{label:'Option 2'}]).map((o,i) => (
-                              <span key={i} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${i===0?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200'}`}>{o.label}</span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* YES NO */}
-                        {ft === 'Yes / No' && (
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-not-allowed">
-                              <div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow" />
-                            </div>
-                            <span className="text-sm font-medium text-blue-700">Yes</span>
-                          </div>
-                        )}
-
-                        {/* RATING */}
-                        {ft === 'Rating / Score' && (
-                          <div className="flex items-center gap-1">
-                            {[1,2,3,4,5].map(s => <Star key={s} className={`w-6 h-6 ${s<=3?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}`} />)}
-                            <span className="text-sm text-gray-500 ml-2">3 / 5</span>
-                          </div>
-                        )}
-
-                        {/* LINK */}
-                        {ft === 'Link' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2">
-                            <LinkIcon className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm text-gray-400">https://example.com</span>
-                          </div>
-                        )}
-
-                        {/* WHATSAPP */}
-                        {ft === 'WhatsApp Link' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">+91</span>
-                            <input disabled placeholder="9876543210" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
-                          </div>
-                        )}
-
-                        {/* FILE */}
-                        {ft === 'File / Attachment' && (
-                          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 bg-white">
-                            <FileIcon className="w-8 h-8 text-gray-300" />
-                            <span className="text-xs text-gray-400">Click to upload or drag & drop</span>
-                            <span className="text-[10px] text-gray-300">PDF, DOCX, JPG, PNG up to 10MB</span>
-                          </div>
-                        )}
-
-                        {/* USER MEMBER */}
-                        {ft === 'User / Member' && (
-                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><User className="w-3.5 h-3.5 text-blue-600" /></div>
-                            <span className="text-sm text-gray-400">Select team member</span>
-                            <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
-                          </div>
-                        )}
-
-                        {/* DRAWING / SIGNATURE */}
-                        {ft === 'Drawing / Signature' && (
-                          <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-                            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
-                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                                <PenTool className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Signature / Drawing Pad</span>
-                              </div>
-                              <button type="button" className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 flex items-center gap-1">
-                                <Eraser className="w-3 h-3" /> Clear
-                              </button>
-                            </div>
-                            <div className="p-4 flex flex-col items-center justify-center min-h-[90px] bg-slate-50/40 relative">
-                              <svg className="w-48 h-10 text-slate-700 opacity-60" viewBox="0 0 200 60" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M 15 40 Q 35 15 55 35 T 95 20 T 135 45 T 175 15 T 190 35" />
-                              </svg>
-                              <div className="w-full border-b border-dashed border-gray-300 mt-2" />
-                              <span className="text-[10px] text-gray-400 mt-1">Sign or draw above the line</span>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* TABLE — fully interactive rows */}
-                        {ft === 'Table' && (
-                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                  <tr>
-                                    {(cols.length ? cols : [{name:'Column 1'},{name:'Column 2'}]).map((col,ci) => (
-                                      <th key={ci} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-r border-gray-100 last:border-r-0">{col.name}</th>
-                                    ))}
-                                    <th className="px-3 py-2 w-8" />
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                  {tablePreviewRows.map((row, ri) => (
-                                    <tr key={ri} className="hover:bg-blue-50/30">
-                                      {(cols.length ? cols : [{name:'Column 1',id:'c1'},{name:'Column 2',id:'c2'}] as any[]).map((col: any, ci: number) => (
-                                        <td key={ci} className="border-r border-gray-100 last:border-r-0">
-                                          <input
-                                            value={row[col.id || col.name] || ''}
-                                            onChange={e => {
-                                              const updated = [...tablePreviewRows];
-                                              updated[ri] = { ...updated[ri], [col.id || col.name]: e.target.value };
-                                              setTablePreviewRows(updated);
-                                            }}
-                                            placeholder={col.name}
-                                            className="w-full px-3 py-2 text-xs bg-transparent focus:outline-none focus:bg-blue-50/40 transition-colors min-w-[100px]"
-                                          />
-                                        </td>
-                                      ))}
-                                      <td className="px-2 py-1 text-center">
-                                        <button type="button" onClick={() => setTablePreviewRows(tablePreviewRows.filter((_,i) => i !== ri))} className="p-1 text-gray-300 hover:text-red-400 cursor-pointer">
-                                          <X className="w-3 h-3" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                            <div className="px-3 py-2 border-t border-gray-100">
-                              <button
-                                type="button"
-                                onClick={() => setTablePreviewRows([...tablePreviewRows, {}])}
-                                className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                              >
-                                <Plus className="w-3.5 h-3.5" /> Add Row
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Options manager for List / Multi-Select */}
-                {(newFieldData.type === "List (Dropdown)" || newFieldData.type === "Multi-Select") && (
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                      <span className="text-xs font-semibold text-gray-700">Options</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextId = (newFieldData.options?.length || 0) + 1;
-                          setNewFieldData({ ...newFieldData, options: [...(newFieldData.options || []), { id: nextId, label: `Option ${nextId}`, value: `option_${nextId}` }] });
-                        }}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add
-                      </button>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                      {(newFieldData.options || []).map((opt, idx) => (
-                        <div key={opt.id} className="flex items-center gap-2 px-3 py-2">
-                          <span className="text-xs text-gray-400 w-5 text-center">{idx + 1}</span>
-                          <input
-                            type="text"
-                            value={opt.label}
-                            onChange={(e) => {
-                              const updated = [...(newFieldData.options || [])];
-                              updated[idx] = { ...updated[idx], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') };
-                              setNewFieldData({ ...newFieldData, options: updated });
-                            }}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400"
-                            placeholder="Option label"
-                          />
-                          <button type="button" onClick={() => setNewFieldData({ ...newFieldData, options: (newFieldData.options || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Columns manager for Table */}
-                {newFieldData.type === "Table" && (
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                      <span className="text-xs font-semibold text-gray-700">Table Columns</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const nextIdx = (newFieldData.tableColumns?.length || 0) + 1;
-                          setNewFieldData({ ...newFieldData, tableColumns: [...(newFieldData.tableColumns || []), { id: `col_${nextIdx}`, name: `Column ${nextIdx}`, type: "Text" }] });
-                        }}
-                        className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" /> Add Column
-                      </button>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                      {(newFieldData.tableColumns || []).map((col, idx) => (
-                        <div key={col.id} className="flex items-center gap-2 px-3 py-2">
-                          <input
-                            type="text" value={col.name}
-                            onChange={(e) => { const u = [...(newFieldData.tableColumns || [])]; u[idx] = { ...u[idx], name: e.target.value }; setNewFieldData({ ...newFieldData, tableColumns: u }); }}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400"
-                            placeholder="Column name"
-                          />
-                          <select
-                            value={col.type}
-                            onChange={(e) => { const u = [...(newFieldData.tableColumns || [])]; u[idx] = { ...u[idx], type: e.target.value }; setNewFieldData({ ...newFieldData, tableColumns: u }); }}
-                            className="px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400 cursor-pointer"
-                          >
-                            <option>Text</option><option>Number</option><option>Money</option><option>Date</option><option>Select</option>
-                          </select>
-                          <button type="button" onClick={() => setNewFieldData({ ...newFieldData, tableColumns: (newFieldData.tableColumns || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Toggles */}
-                <div className="space-y-3 pt-2 border-t border-gray-100">
-                  {[
-                    { key: 'required', label: 'Required field' },
-                    { key: 'showAlways', label: 'Always show in profile view' },
-                    { key: 'visibleToSelected', label: 'Visible to selected users only' },
-                  ].map((toggle) => (
-                    <label key={toggle.key} className="flex items-center gap-2.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={(newFieldData as any)[toggle.key] ?? false}
-                        onChange={(e) => setNewFieldData({ ...newFieldData, [toggle.key]: e.target.checked } as any)}
-                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                      />
-                      <span className="text-sm text-gray-700">{toggle.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Drawer Footer */}
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                <button onClick={() => setShowAddFieldDrawer(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
-                <button
-                  disabled={!newFieldData.label.trim()}
-                  onClick={() => {
-                    if (!newFieldData.label.trim()) { toast.error("Please enter a field name"); return; }
-                    const key = newFieldData.key || newFieldData.label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-                    addCustomField(currentModule, {
-                      label: newFieldData.label.trim(), key, module: currentModule,
-                      inputType: FIELD_TYPE_MAP[newFieldData.type] || 'text',
-                      sectionId: newFieldData.sectionId || undefined,
-                      required: newFieldData.required, options: newFieldData.options, tableColumns: newFieldData.tableColumns,
-                      placeholder: `Enter ${newFieldData.label.toLowerCase()}`,
-                    });
-                    setShowAddFieldDrawer(false);
-                    toast.success(`Field "${newFieldData.label}" created`);
-                  }}
-                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
-                >Create Field</button>
-              </div>
-            </div>
-          </div>
+        {/* ====== ADD / EDIT FIELD DRAWER (SYNCED WITH ADMIN) ====== */}
+        {(showAddFieldDrawer || editingFieldId !== null) && (
+          <AdminFieldDrawer
+            field={editingFieldId !== null ? (getAllFields(currentModule).find((f) => f.id === editingFieldId) || null) : null}
+            initialModule={currentModule as Exclude<FieldModule, "deal">}
+            sections={getAllSections(currentModule)}
+            isAdmin={false}
+            onClose={() => {
+              setShowAddFieldDrawer(false);
+              setEditingFieldId(null);
+            }}
+            onSaved={() => {
+              setShowAddFieldDrawer(false);
+              setEditingFieldId(null);
+            }}
+          />
         )}
 
-        {/* ====== EDIT FIELD DRAWER ====== */}
-        {editingFieldId !== null && (
-          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
-            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setEditingFieldId(null)} />
-            <div
-              className="flex flex-col bg-white"
-              style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}
-            >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-                <div>
-                  <h2 className="text-base font-bold text-[#111827]">Edit Field</h2>
-                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
-                </div>
-                <button onClick={() => setEditingFieldId(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Name</label>
-                  <input
-                    type="text" value={editingFieldData.label}
-                    onChange={(e) => setEditingFieldData({ ...editingFieldData, label: e.target.value })}
-                    className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Type</label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setEditFieldTypePickerOpen(!editFieldTypePickerOpen)}
-                      className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white flex items-center justify-between hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
-                    >
-                      <span className="font-medium text-[#111827]">{editingFieldData.type}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${editFieldTypePickerOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {editFieldTypePickerOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden" style={{ maxHeight: '280px', overflowY: 'auto' }}>
-                        {([
-                          { group: 'Text', items: ['String / Text', 'Address / Text Area', 'Rich Text', 'Link', 'WhatsApp Link'] },
-                          { group: 'Numbers', items: ['Number', 'Money / Currency', 'Rating / Score'] },
-                          { group: 'Date & Time', items: ['Date', 'Date & Time'] },
-                          { group: 'Options', items: ['List (Dropdown)', 'Multi-Select', 'Yes / No'] },
-                          { group: 'Advanced', items: ['Table', 'Drawing / Signature', 'File / Attachment', 'User / Member'] },
-                        ] as { group: string; items: string[] }[]).map((grp) => (
-                          <div key={grp.group}>
-                            <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
-                            {grp.items.map((typeName) => (
-                              <button
-                                key={typeName} type="button"
-                                onClick={() => { setEditingFieldData({ ...editingFieldData, type: typeName }); setEditFieldTypePickerOpen(false); }}
-                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 transition-colors cursor-pointer flex items-center justify-between ${
-                                  editingFieldData.type === typeName ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-[#111827]'
-                                }`}
-                              >
-                                <span>{typeName}</span>
-                                {editingFieldData.type === typeName && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                              </button>
-                            ))}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* ===== FIELD TYPE LIVE PREVIEW (Edit) ===== */}
-                {(() => {
-                  const ft = editingFieldData.type;
-                  const cols = editingFieldData.tableColumns || [];
-                  const opts = editingFieldData.options || [];
-                  return (
-                    <div className="rounded-xl border border-dashed border-gray-200 bg-gray-50/60 overflow-hidden">
-                      <div className="flex items-center px-4 py-2 border-b border-gray-100 bg-white">
-                        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide">Preview — {ft}</span>
-                      </div>
-                      <div className="p-4">
-                        {ft === 'String / Text' && <input disabled placeholder={editingFieldData.label || 'Enter text...'} className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />}
-                        {ft === 'Address / Text Area' && <textarea disabled rows={3} placeholder="Enter address or long text..." className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed resize-none" />}
-                        {ft === 'Rich Text' && (
-                          <div className="border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-gray-100 bg-gray-50">
-                              {['B','I','U','—'].map(t => <span key={t} className="px-2 py-0.5 text-xs font-bold text-gray-500 rounded cursor-not-allowed">{t}</span>)}
-                            </div>
-                            <div className="px-3 py-2 text-sm text-gray-400 min-h-[60px]">Rich text content here...</div>
-                          </div>
-                        )}
-                        {ft === 'Number' && <input type="number" disabled placeholder="0" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-400 cursor-not-allowed" />}
-                        {ft === 'Money / Currency' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">₹</span>
-                            <input type="number" disabled placeholder="0.00" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
-                          </div>
-                        )}
-                        {ft === 'Date' && <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><Calendar className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">DD / MM / YYYY</span></div>}
-                        {ft === 'Date & Time' && (
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2 flex-1"><Calendar className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">DD / MM / YYYY</span></div>
-                            <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><Clock className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">HH : MM</span></div>
-                          </div>
-                        )}
-                        {ft === 'List (Dropdown)' && (
-                          <div className="flex items-center justify-between border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
-                            <span className="text-sm text-gray-400">{opts[0]?.label || 'Select an option'}</span>
-                            <ChevronDown className="w-4 h-4 text-gray-400" />
-                          </div>
-                        )}
-                        {ft === 'Multi-Select' && (
-                          <div className="flex flex-wrap gap-1.5">
-                            {(opts.length ? opts : [{label:'Option 1'},{label:'Option 2'}]).map((o,i) => (
-                              <span key={i} className={`px-2.5 py-1 rounded-full text-xs font-medium border ${i===0?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-600 border-gray-200'}`}>{o.label}</span>
-                            ))}
-                          </div>
-                        )}
-                        {ft === 'Yes / No' && (
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-5 bg-blue-600 rounded-full relative cursor-not-allowed"><div className="absolute right-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow" /></div>
-                            <span className="text-sm font-medium text-blue-700">Yes</span>
-                          </div>
-                        )}
-                        {ft === 'Rating / Score' && (
-                          <div className="flex items-center gap-1">
-                            {[1,2,3,4,5].map(s => <Star key={s} className={`w-6 h-6 ${s<=3?'text-amber-400 fill-amber-400':'text-gray-200 fill-gray-200'}`} />)}
-                            <span className="text-sm text-gray-500 ml-2">3 / 5</span>
-                          </div>
-                        )}
-                        {ft === 'Link' && <div className="flex items-center border border-gray-200 rounded-lg bg-white px-3 py-2 gap-2"><LinkIcon className="w-4 h-4 text-gray-400" /><span className="text-sm text-gray-400">https://example.com</span></div>}
-                        {ft === 'WhatsApp Link' && (
-                          <div className="flex items-center border border-gray-200 rounded-lg bg-white overflow-hidden">
-                            <span className="px-3 py-2 text-sm font-semibold text-gray-500 bg-gray-50 border-r border-gray-200">+91</span>
-                            <input disabled placeholder="9876543210" className="flex-1 px-3 py-2 text-sm text-gray-400 cursor-not-allowed bg-white" />
-                          </div>
-                        )}
-                        {ft === 'File / Attachment' && (
-                          <div className="border-2 border-dashed border-gray-200 rounded-xl p-6 flex flex-col items-center gap-2 bg-white">
-                            <FileIcon className="w-8 h-8 text-gray-300" />
-                            <span className="text-xs text-gray-400">Click to upload or drag & drop</span>
-                            <span className="text-[10px] text-gray-300">PDF, DOCX, JPG, PNG up to 10MB</span>
-                          </div>
-                        )}
-                        {ft === 'User / Member' && (
-                          <div className="flex items-center gap-2 border border-gray-200 rounded-lg bg-white px-3 py-2 cursor-not-allowed">
-                            <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center"><User className="w-3.5 h-3.5 text-blue-600" /></div>
-                            <span className="text-sm text-gray-400">Select team member</span>
-                            <ChevronDown className="w-4 h-4 text-gray-400 ml-auto" />
-                          </div>
-                        )}
-                        {ft === 'Drawing / Signature' && (
-                          <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
-                            <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">
-                              <div className="flex items-center gap-1.5 text-xs text-gray-600 font-medium">
-                                <PenTool className="w-3.5 h-3.5 text-blue-600" />
-                                <span>Signature / Drawing Pad</span>
-                              </div>
-                              <button type="button" className="text-[11px] font-semibold text-gray-400 hover:text-gray-600 flex items-center gap-1">
-                                <Eraser className="w-3 h-3" /> Clear
-                              </button>
-                            </div>
-                            <div className="p-4 flex flex-col items-center justify-center min-h-[90px] bg-slate-50/40 relative">
-                              <svg className="w-48 h-10 text-slate-700 opacity-60" viewBox="0 0 200 60" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M 15 40 Q 35 15 55 35 T 95 20 T 135 45 T 175 15 T 190 35" />
-                              </svg>
-                              <div className="w-full border-b border-dashed border-gray-300 mt-2" />
-                              <span className="text-[10px] text-gray-400 mt-1">Sign or draw above the line</span>
-                            </div>
-                          </div>
-                        )}
-                        {ft === 'Table' && (
-                          <div className="border border-gray-200 rounded-lg overflow-hidden bg-white">
-                            <div className="overflow-x-auto">
-                              <table className="w-full text-xs">
-                                <thead className="bg-gray-50 border-b border-gray-200">
-                                  <tr>
-                                    {(cols.length ? cols : [{name:'Column 1'},{name:'Column 2'}]).map((col,ci) => (
-                                      <th key={ci} className="px-3 py-2 text-left font-semibold text-gray-600 whitespace-nowrap border-r border-gray-100 last:border-r-0">{col.name}</th>
-                                    ))}
-                                    <th className="px-3 py-2 w-8" />
-                                  </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                  {tablePreviewRows.map((row, ri) => (
-                                    <tr key={ri} className="hover:bg-blue-50/30">
-                                      {(cols.length ? cols : [{name:'Column 1',id:'c1'},{name:'Column 2',id:'c2'}] as any[]).map((col: any, ci: number) => (
-                                        <td key={ci} className="border-r border-gray-100 last:border-r-0">
-                                          <input value={row[col.id||col.name]||''} onChange={e => { const u=[...tablePreviewRows]; u[ri]={...u[ri],[col.id||col.name]:e.target.value}; setTablePreviewRows(u); }} placeholder={col.name} className="w-full px-3 py-2 text-xs bg-transparent focus:outline-none focus:bg-blue-50/40 transition-colors min-w-[80px]" />
-                                        </td>
-                                      ))}
-                                      <td className="px-2 py-1 text-center"><button type="button" onClick={() => setTablePreviewRows(tablePreviewRows.filter((_,i)=>i!==ri))} className="p-1 text-gray-300 hover:text-red-400 cursor-pointer"><X className="w-3 h-3" /></button></td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
-                            <div className="px-3 py-2 border-t border-gray-100">
-                              <button type="button" onClick={() => setTablePreviewRows([...tablePreviewRows, {}])} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
-                                <Plus className="w-3.5 h-3.5" /> Add Row
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {/* Options manager for List / Multi-Select */}
-                {(editingFieldData.type === "List (Dropdown)" || editingFieldData.type === "Multi-Select") && (
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                      <span className="text-xs font-semibold text-gray-700">Options</span>
-                      <button type="button" onClick={() => { const nid = (editingFieldData.options?.length || 0) + 1; setEditingFieldData({ ...editingFieldData, options: [...(editingFieldData.options || []), { id: nid, label: `Option ${nid}`, value: `option_${nid}` }] }); }} className="text-xs font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
-                        <Plus className="w-3.5 h-3.5" /> Add
-                      </button>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                      {(editingFieldData.options || []).map((opt, idx) => (
-                        <div key={opt.id} className="flex items-center gap-2 px-3 py-2">
-                          <span className="text-xs text-gray-400 w-5 text-center">{idx + 1}</span>
-                          <input type="text" value={opt.label}
-                            onChange={(e) => { const u = [...(editingFieldData.options || [])]; u[idx] = { ...u[idx], label: e.target.value, value: e.target.value.toLowerCase().replace(/\s+/g, '_') }; setEditingFieldData({ ...editingFieldData, options: u }); }}
-                            className="flex-1 px-2.5 py-1.5 text-xs border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-blue-400" placeholder="Option label"
-                          />
-                          <button type="button" onClick={() => setEditingFieldData({ ...editingFieldData, options: (editingFieldData.options || []).filter((_, i) => i !== idx) })} className="p-1 text-gray-300 hover:text-red-500 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-
-                <div className="pt-2 border-t border-gray-100">
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={editingFieldData.required || false} onChange={(e) => setEditingFieldData({ ...editingFieldData, required: e.target.checked })} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                    <span className="text-sm text-gray-700">Required field</span>
-                  </label>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                <button onClick={() => setEditingFieldId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
-                <button
-                  disabled={!editingFieldData.label.trim()}
-                  onClick={() => {
-                    updateCustomField(currentModule, editingFieldId, {
-                      label: editingFieldData.label.trim(),
-                      inputType: FIELD_TYPE_MAP[editingFieldData.type] || 'text',
-                      sectionId: editingFieldData.sectionId || undefined,
-                      required: editingFieldData.required,
-                      options: editingFieldData.options, tableColumns: editingFieldData.tableColumns,
-                    });
-                    setEditingFieldId(null);
-                    toast.success("Field updated");
-                  }}
-                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
-                >Save Changes</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ====== ADD SECTION DRAWER ====== */}
-        {showAddSectionDrawer && (
-          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
-            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setShowAddSectionDrawer(false)} />
-            <div className="flex flex-col bg-white" style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-                <div>
-                  <h2 className="text-base font-bold text-[#111827]">Add Custom Section</h2>
-                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
-                </div>
-                <button onClick={() => setShowAddSectionDrawer(false)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name <span className="text-red-500">*</span></label>
-                  <input type="text" value={newSectionData.title} onChange={(e) => setNewSectionData({ ...newSectionData, title: e.target.value })} placeholder="e.g. Insurance & Billing" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" autoFocus />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
-                  <input type="text" value={newSectionData.description} onChange={(e) => setNewSectionData({ ...newSectionData, description: e.target.value })} placeholder="Optional subtitle" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
-                </div>
-                <div className="border-t border-gray-100 pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700">Assigned Fields</label>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {newSectionData.fieldKeys.length} {newSectionData.fieldKeys.length === 1 ? 'field' : 'fields'} assigned
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSectionFieldPickerTarget("add")}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Select Fields
-                    </button>
-                  </div>
-
-                  {newSectionData.fieldKeys.length === 0 ? (
-                    <div
-                      onClick={() => setSectionFieldPickerTarget("add")}
-                      className="p-5 border border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50/50 rounded-xl text-center cursor-pointer transition-colors"
-                    >
-                      <p className="text-xs text-gray-600 font-medium">No fields assigned yet</p>
-                      <p className="text-[11px] text-gray-400 mt-1">Click "Select Fields" to pick fields from this module</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50/80 border border-gray-200 rounded-xl max-h-48 overflow-y-auto">
-                      {newSectionData.fieldKeys.map((key) => {
-                        const found = getAllFields(currentModule).find((f) => f.key === key);
-                        const label = found ? found.label : key;
-                        return (
-                          <div
-                            key={key}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 text-[#111827] text-xs font-medium rounded-lg shadow-2xs"
-                          >
-                            <span>{label}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setNewSectionData({
-                                  ...newSectionData,
-                                  fieldKeys: newSectionData.fieldKeys.filter((k) => k !== key),
-                                });
-                              }}
-                              className="w-3.5 h-3.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
-                              title="Remove field"
-                            >
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                <button onClick={() => setShowAddSectionDrawer(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
-                <button
-                  disabled={!newSectionData.title.trim()}
-                  onClick={() => {
-                    if (!newSectionData.title.trim()) { toast.error("Please enter a section name"); return; }
-                    addCustomSection(currentModule, { title: newSectionData.title.trim(), description: newSectionData.description.trim() || undefined, iconName: "layers", module: currentModule, fieldKeys: newSectionData.fieldKeys });
-                    setShowAddSectionDrawer(false);
-                    toast.success(`Section "${newSectionData.title}" created`);
-                  }}
-                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
-                >Create Section</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ====== EDIT SECTION DRAWER ====== */}
-        {editingSectionId !== null && (
-          <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: 'none' }}>
-            <div className="flex-1 bg-black/30" style={{ pointerEvents: 'auto' }} onClick={() => setEditingSectionId(null)} />
-            <div className="flex flex-col bg-white" style={{ width: '520px', height: '100vh', boxShadow: '-4px 0 32px rgba(0,0,0,0.12)', animation: 'slideInFromRight 240ms ease-out', pointerEvents: 'auto' }}>
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-                <div>
-                  <h2 className="text-base font-bold text-[#111827]">Edit Section</h2>
-                  <p className="text-xs text-gray-400 mt-0.5 capitalize">{currentModule} module</p>
-                </div>
-                <button onClick={() => setEditingSectionId(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
-                  <X className="w-4 h-4 text-gray-500" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name</label>
-                  <input type="text" value={editingSectionData.title} onChange={(e) => setEditingSectionData({ ...editingSectionData, title: e.target.value })} className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
-                  <input type="text" value={editingSectionData.description} onChange={(e) => setEditingSectionData({ ...editingSectionData, description: e.target.value })} placeholder="Optional subtitle" className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all" />
-                </div>
-                <div className="border-t border-gray-100 pt-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <label className="block text-xs font-semibold text-gray-700">Assigned Fields</label>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        {editingSectionData.fieldKeys.length} {editingSectionData.fieldKeys.length === 1 ? 'field' : 'fields'} assigned
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setSectionFieldPickerTarget("edit")}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#111827] hover:bg-[#1f2937] text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Select Fields
-                    </button>
-                  </div>
-
-                  {editingSectionData.fieldKeys.length === 0 ? (
-                    <div
-                      onClick={() => setSectionFieldPickerTarget("edit")}
-                      className="p-5 border border-dashed border-gray-200 hover:border-gray-400 hover:bg-gray-50/50 rounded-xl text-center cursor-pointer transition-colors"
-                    >
-                      <p className="text-xs text-gray-600 font-medium">No fields assigned yet</p>
-                      <p className="text-[11px] text-gray-400 mt-1">Click "Select Fields" to pick fields from this module</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5 p-3 bg-gray-50/80 border border-gray-200 rounded-xl max-h-48 overflow-y-auto">
-                      {editingSectionData.fieldKeys.map((key) => {
-                        const found = getAllFields(currentModule).find((f) => f.key === key);
-                        const label = found ? found.label : key;
-                        return (
-                          <div
-                            key={key}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 text-[#111827] text-xs font-medium rounded-lg shadow-2xs"
-                          >
-                            <span>{label}</span>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditingSectionData({
-                                  ...editingSectionData,
-                                  fieldKeys: editingSectionData.fieldKeys.filter((k) => k !== key),
-                                });
-                              }}
-                              className="w-3.5 h-3.5 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-red-600 transition-colors cursor-pointer"
-                              title="Remove field"
-                            >
-                              <X className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-                <button onClick={() => setEditingSectionId(null)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">Cancel</button>
-                <button
-                  disabled={!editingSectionData.title.trim()}
-                  onClick={() => {
-                    updateCustomSection(currentModule, editingSectionId, { title: editingSectionData.title.trim(), description: editingSectionData.description.trim() || undefined, iconName: "layers", fieldKeys: editingSectionData.fieldKeys });
-                    setEditingSectionId(null);
-                    toast.success("Section updated");
-                  }}
-                  className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 cursor-pointer"
-                >Save Changes</button>
-              </div>
-            </div>
-          </div>
+        {/* ====== ADD / EDIT SECTION DRAWER (SYNCED WITH ADMIN, NO ICONS, GLOBAL RULE) ====== */}
+        {(showAddSectionDrawer || editingSectionId !== null) && (
+          <AdminSectionDrawer
+            section={editingSectionId !== null ? (getAllSections(currentModule).find((s) => s.id === editingSectionId) || null) : null}
+            initialModule={currentModule as Exclude<FieldModule, "deal">}
+            isAdmin={false}
+            onClose={() => {
+              setShowAddSectionDrawer(false);
+              setEditingSectionId(null);
+            }}
+            onSaved={() => {
+              setShowAddSectionDrawer(false);
+              setEditingSectionId(null);
+            }}
+          />
         )}
 
         {/* Global Select Fields Modal for Custom Section Assignment */}

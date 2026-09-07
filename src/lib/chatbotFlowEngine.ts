@@ -128,9 +128,11 @@ export function resolveDynamicOptions(moduleOrKey: string): FetchedOption[] {
   }
   if (moduleOrKey.includes(".")) {
     const [moduleName, key] = moduleOrKey.split(".");
-    // Check sessionStorage first (for custom fields)
+    // Check localStorage first, fallback to sessionStorage (for custom fields)
     try {
-      const saved = sessionStorage.getItem("fieldRegistry_v1");
+      const saved =
+        localStorage.getItem("mantra_field_registry_v1") ||
+        sessionStorage.getItem("fieldRegistry_v1");
       if (saved) {
         const parsed = JSON.parse(saved);
         const moduleFields = parsed[moduleName] || [];

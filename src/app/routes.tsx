@@ -1,6 +1,7 @@
 import { createBrowserRouter } from "react-router";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import MainLayout from "./components/layout/MainLayout";
+import AdminLayout from "./components/layout/AdminLayout";
 import Overview from "./pages/Overview";
 import Clients from "./pages/Clients";
 import ClientProfile from "./pages/ClientProfile";
@@ -32,6 +33,8 @@ import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import AIScribeConsole from "./pages/AIScribeConsole";
 import Claims from "./pages/Claims";
+import AdminCustomFields from "./pages/admin/AdminCustomFields";
+import AdminIndustries from "./pages/admin/AdminIndustries";
 
 export const router = createBrowserRouter([
   {
@@ -84,6 +87,22 @@ export const router = createBrowserRouter([
           { path: "guide", Component: GuidePageRoute },
           { path: "guide/:slug", Component: GuidePageRoute },
           { path: "refer-and-earn", Component: ReferAndEarn },
+        ],
+      },
+      {
+        path: "/admin",
+        Component: AdminLayout,
+        children: [
+          { index: true, Component: AdminCustomFields },
+          { path: "custom-fields", Component: AdminCustomFields },
+          { path: "industries", Component: AdminIndustries },
+          { path: "industry", Component: AdminIndustries },
+          { path: "industry-category", Component: AdminIndustries },
+          { path: "users", Component: UserManagement },
+          { path: "organizations", Component: Organizations },
+          { path: "forms", Component: WebForms },
+          { path: "settings", Component: Settings },
+          { path: "reports", Component: Reports },
         ],
       },
     ],

@@ -1,5 +1,6 @@
 import React, { type ReactNode } from "react";
-import { useFieldRegistry } from "./FieldRegistryContext";
+import { useFieldRegistry, isFieldMatchingOrg } from "./FieldRegistryContext";
+import { useOrganization } from "./OrganizationContext";
 
 export interface CustomField {
   id: number;
@@ -55,9 +56,10 @@ export function ClientFieldsProvider({ children }: { children: ReactNode }) {
 
 export function useClientFields() {
   const { getSystemFields, getCustomFields, addCustomField } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
 
   const clientSys = getSystemFields("client");
-  const clientCust = getCustomFields("client");
+  const clientCust = getCustomFields("client").filter((f) => isFieldMatchingOrg(f, activeOrganization));
 
   // Map to shim structure
   const systemFields: SystemField[] = clientSys.map(f => ({

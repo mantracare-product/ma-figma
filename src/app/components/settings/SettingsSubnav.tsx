@@ -79,7 +79,7 @@ export const SettingsSubnav: React.FC<SettingsSubnavProps> = ({
     },
     {
       id: "custom-fields",
-      label: "Layout",
+      label: "Sections/Fields",
       icon: Layers,
       path: "/settings?tab=layout",
     },

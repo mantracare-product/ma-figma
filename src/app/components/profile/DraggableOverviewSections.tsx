@@ -37,8 +37,10 @@ import {
   Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFieldRegistry, FieldDefinition, FieldModule } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg } from "../../context/FieldRegistryContext";
+import { useOrganization } from "../../context/OrganizationContext";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
+import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -254,11 +256,12 @@ export default function DraggableOverviewSections({
   customFieldsModule = "client",
 }: DraggableOverviewSectionsProps) {
   const { getAllFields, addCustomSection, updateCustomSection, deleteCustomSection } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
 
-  // All custom field definitions
+  // All custom field definitions filtered by organization scope
   const allRegistryFields = useMemo(() => {
-    return getAllFields(customFieldsModule);
-  }, [getAllFields, customFieldsModule]);
+    return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization));
+  }, [getAllFields, customFieldsModule, activeOrganization]);
 
   // Section Drag & Drop state
   const [draggedSectionIdx, setDraggedSectionIdx] = useState<number | null>(null);
@@ -1578,89 +1581,27 @@ export default function DraggableOverviewSections({
         />
       )}
 
-      {/* ── Add Section Modal ──────────────────────────────────────────────── */}
+      {/* ── Add Section Drawer (Same as Settings) ──────────────────────────── */}
       {addSectionModalOpen && (
-        <>
-          <div
-            className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-[600]"
-            onClick={() => setAddSectionModalOpen(false)}
-          />
-          <div
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl p-6 shadow-2xl z-[601] w-[460px] max-w-[92vw] space-y-4"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                  <FolderPlus className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-sm text-slate-900">Add New Section</h3>
-                  <p className="text-[11px] text-slate-400">
-                    Create a customized group for organizing fields
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddSectionModalOpen(false)}
-                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-3.5 text-xs">
-              {/* Section Name */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Section Name <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={newSectionTitle}
-                  onChange={(e) => setNewSectionTitle(e.target.value)}
-                  placeholder="e.g. Clinical Records, Billing & Insurance, Emergency Info"
-                  autoFocus
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              </div>
-
-              {/* Section Description */}
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
-                  Description <span className="text-slate-400 font-normal">(Optional)</span>
-                </label>
-                <textarea
-                  value={newSectionDescription}
-                  onChange={(e) => setNewSectionDescription(e.target.value)}
-                  placeholder="Briefly describe what information this section contains..."
-                  rows={3}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setAddSectionModalOpen(false)}
-                className="flex-1 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateSection}
-                className="flex-1 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-xs transition-colors cursor-pointer"
-              >
-                Create Section
-              </button>
-            </div>
-          </div>
-        </>
+        <AdminSectionDrawer
+          section={null}
+          initialModule={customFieldsModule as Exclude<FieldModule, "deal">}
+          isAdmin={false}
+          onClose={() => setAddSectionModalOpen(false)}
+          onSaved={(savedSection) => {
+            const newSection: OverviewSection = {
+              id: savedSection.id,
+              title: savedSection.title,
+              description: savedSection.description,
+              iconName: (savedSection.iconName as any) || "layers",
+              isCustom: true,
+              fieldKeys: savedSection.fieldKeys || [],
+            };
+            onSectionsChange([...sections, newSection]);
+            setAddSectionModalOpen(false);
+            toast.success(`Section "${savedSection.title}" created`);
+          }}
+        />
       )}
     </div>
   );
