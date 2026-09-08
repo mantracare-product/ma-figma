@@ -146,8 +146,6 @@ graph TD
 
 ### 5.4 Client Relationship Management (CRM) (`src/app/pages/Clients.tsx`, `ClientProfile.tsx`)
 - **`Clients.tsx`**: Searchable patient table with advanced filtering (status, tags, assigned practitioner, insurance).
-- **`ClientProfile.tsx`**:
-  - **Draggable Sections**: Re-orderable cards (`Client Details`, `Vitals`, `Insurance`, `Emergency Contacts`, `Active Processes`).
   - **Activity Feed**: Chronicled interaction timeline (calls, SMS, appointments, document uploads) powered by `src/lib/activityEngine.ts`.
   - **Documents Tab**: Storage for uploaded lab results, intake forms, and scanned photo IDs.
 

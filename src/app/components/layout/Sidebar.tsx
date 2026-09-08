@@ -26,6 +26,7 @@ import {
   Plus,
   Stethoscope,
   Shield,
+  ShieldCheck,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -87,6 +88,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
     { path: "/web-forms", label: "Web Forms", icon: FileText },
     { path: "/services", label: "Product/Services", icon: Package },
     { path: "/refer-and-earn", label: "Refer & Earn", icon: Gift },
+    { path: "/abdm", label: "ABDM / ABHA", icon: ShieldCheck },
   ];
 
   return (

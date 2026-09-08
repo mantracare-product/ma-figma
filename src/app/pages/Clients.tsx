@@ -21,6 +21,7 @@ import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
 import { useFieldRegistry } from "../context/FieldRegistryContext";
 import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
+import { VerifyABHAModal } from "../components/abdm/VerifyABHAModal";
 
 interface Client {
   id: string;
@@ -312,6 +313,7 @@ export default function Clients() {
   const [showHelp, setShowHelp] = useState(false);
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
+  const [showAbhaModalInClient, setShowAbhaModalInClient] = useState(false);
   const [newClient, setNewClient] = useState({
     name: "",
     email: "",
@@ -328,6 +330,9 @@ export default function Clients() {
     companyName: "",
     jobPosition: "",
     numberOfEmployees: "",
+    abhaNumber: "",
+    abhaAddress: "",
+    abhaVerified: false,
   });
   const [showAdditionalDetails, setShowAdditionalDetails] = useState(false);
   const [dateRange, setDateRange] = useState("Last 7 days");
@@ -3344,6 +3349,61 @@ export default function Clients() {
                 </div>
               </div>
 
+              {/* Optional Section: ABDM / ABHA Verification */}
+              <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-[#1456f0]" />
+                    <h4 className="text-xs font-bold text-foreground font-display uppercase tracking-wider">
+                      ABDM / ABHA Verification (Optional)
+                    </h4>
+                  </div>
+                  {newClient.abhaVerified ? (
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-100/80 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      ABHA Verified ✓
+                    </span>
+                  ) : (
+                    <span className="text-xs font-medium text-slate-400">
+                      Not verified
+                    </span>
+                  )}
+                </div>
+
+                {newClient.abhaVerified ? (
+                  <div className="bg-white border border-emerald-200/70 rounded-xl p-3 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block">ABHA Number</span>
+                      <span className="font-mono font-bold text-slate-800">{newClient.abhaNumber}</span>
+                      <span className="text-blue-600 font-semibold block mt-0.5">{newClient.abhaAddress}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAbhaModalInClient(true)}
+                    >
+                      Re-verify
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      Verify patient identity and fetch records via Ayushman Bharat (ABDM).
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowAbhaModalInClient(true)}
+                      className="flex-shrink-0"
+                    >
+                      Verify ABHA
+                    </Button>
+                  </div>
+                )}
+              </div>
+
               <div className="border-t border-border/50"></div>
 
               {/* Section 2: Process Details */}
@@ -3611,6 +3671,23 @@ export default function Clients() {
 
             </div>
           </Modal>
+
+          <VerifyABHAModal
+            isOpen={showAbhaModalInClient}
+            onClose={() => setShowAbhaModalInClient(false)}
+            onVerified={(patient) => {
+              setNewClient((prev) => ({
+                ...prev,
+                name: patient.name || prev.name,
+                phone: patient.mobile?.replace(/\D/g, "").slice(-10) || prev.phone,
+                email: `${patient.abhaAddress.split("@")[0]}@email.com` || prev.email,
+                abhaNumber: patient.abhaNumber,
+                abhaAddress: patient.abhaAddress,
+                abhaVerified: true,
+              }));
+              setShowAbhaModalInClient(false);
+            }}
+          />
 
           {/* Import Clients Drawer */}
           {showImportModal && (

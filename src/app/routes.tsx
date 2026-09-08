@@ -33,6 +33,8 @@ import Invoices from "./pages/Invoices";
 import Reports from "./pages/Reports";
 import AIScribeConsole from "./pages/AIScribeConsole";
 import Claims from "./pages/Claims";
+import ABDM from "./pages/ABDM";
+import ApprovedConsentView from "./pages/ApprovedConsentView";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 
@@ -87,6 +89,8 @@ export const router = createBrowserRouter([
           { path: "guide", Component: GuidePageRoute },
           { path: "guide/:slug", Component: GuidePageRoute },
           { path: "refer-and-earn", Component: ReferAndEarn },
+          { path: "abdm", Component: ABDM },
+          { path: "consent-view/:consentId", Component: ApprovedConsentView },
         ],
       },
       {
