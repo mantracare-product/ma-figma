@@ -498,6 +498,15 @@ class ABDMService {
     sessionStorage.setItem(UNLOCKED_KEY, unlocked ? "true" : "false");
   }
 
+  isHprAuthenticated(): boolean {
+    return sessionStorage.getItem(AUTH_KEY) === "true";
+  }
+
+  setHprAuthenticated(authenticated: boolean): void {
+    sessionStorage.setItem(AUTH_KEY, authenticated ? "true" : "false");
+    window.dispatchEvent(new CustomEvent("abdm_auth_updated", { detail: { authenticated } }));
+  }
+
   isAbhaVerified(): boolean {
     return sessionStorage.getItem(ABHA_VERIFIED_KEY) === "true";
   }

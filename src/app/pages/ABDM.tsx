@@ -48,6 +48,7 @@ export default function ABDM() {
   const [activeTab, setActiveTab] = useState<"m1" | "m2" | "m3">("m1");
   const [isUnlocked, setIsUnlocked] = useState(() => abdmService.isUnlocked());
   const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isHprAuthenticated, setIsHprAuthenticated] = useState(() => abdmService.isHprAuthenticated());
   const [isAbhaVerified, setIsAbhaVerified] = useState(() => abdmService.isAbhaVerified());
   const [records, setRecords] = useState<ABHAPatientRecord[]>(() => abdmService.getRecords());
   const [searchQuery, setSearchQuery] = useState("");
@@ -57,7 +58,6 @@ export default function ABDM() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showVerifyModal, setShowVerifyModal] = useState(false);
   const [showCardModal, setShowCardModal] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [selectedPatientForCard, setSelectedPatientForCard] = useState<ABHAPatientRecord | null>(null);
 
   useEffect(() => {
@@ -67,11 +67,16 @@ export default function ABDM() {
     const handleVerificationUpdate = () => {
       setIsAbhaVerified(abdmService.isAbhaVerified());
     };
+    const handleAuthUpdate = () => {
+      setIsHprAuthenticated(abdmService.isHprAuthenticated());
+    };
     window.addEventListener("abdm_records_updated", handleUpdate);
     window.addEventListener("abdm_verification_updated", handleVerificationUpdate);
+    window.addEventListener("abdm_auth_updated", handleAuthUpdate);
     return () => {
       window.removeEventListener("abdm_records_updated", handleUpdate);
       window.removeEventListener("abdm_verification_updated", handleVerificationUpdate);
+      window.removeEventListener("abdm_auth_updated", handleAuthUpdate);
     };
   }, []);
 
@@ -113,19 +118,20 @@ export default function ABDM() {
         )}
       </AnimatePresence>
 
-      {/* ── Second Gate: Mandatory ABHA Verification / Creation ── */}
-      {isUnlocked && !isAbhaVerified && (
-        <MandatoryABHASetup
-          onComplete={(patient) => {
-            setIsAbhaVerified(true);
-            setRecords(abdmService.getRecords());
-          }}
-          onOpenCardModal={(patient) => handleOpenCard(patient)}
-        />
-      )}
+      {/* ── Second Gate: Healthcare Professional ID (HPID) Verification ── */}
+      <AnimatePresence>
+        {isUnlocked && !isHprAuthenticated && (
+          <ABDMAuthCard
+            onSuccess={() => {
+              abdmService.setHprAuthenticated(true);
+              setIsHprAuthenticated(true);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
-      {/* ── Third Stage: ABDM Workspace (Accessible ONLY when Unlocked AND ABHA Verified) ── */}
-      {isUnlocked && isAbhaVerified && (
+      {/* ── Third Stage: ABDM Dashboard (Accessible ONLY when Unlocked AND HPID Verified) ── */}
+      {isUnlocked && isHprAuthenticated && (
         <div>
           {/* Page Top Header */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80">
@@ -153,15 +159,6 @@ export default function ABDM() {
 
           {/* Top Quick CTA Buttons */}
           <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowAuthModal(true)}
-              className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs flex items-center gap-2 shadow-2xs transition-colors cursor-pointer"
-            >
-              <Lock className="w-3.5 h-3.5 text-slate-500" />
-              <span>HPR ID Auth</span>
-            </button>
-
             <button
               type="button"
               onClick={() => setShowVerifyModal(true)}
@@ -603,15 +600,6 @@ export default function ABDM() {
         onClose={() => setShowCardModal(false)}
         patient={selectedPatientForCard}
       />
-
-      {showAuthModal && (
-        <ABDMAuthCard
-          onSuccess={() => {
-            setShowAuthModal(false);
-          }}
-          onCancel={() => setShowAuthModal(false)}
-        />
-      )}
     </div>
   );
 }
