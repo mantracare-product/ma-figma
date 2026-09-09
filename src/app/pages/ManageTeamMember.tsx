@@ -19,6 +19,7 @@ import {
   Package,
   CheckCircle,
 } from "lucide-react";
+import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 
 interface DaySchedule {
   enabled: boolean;
@@ -294,21 +295,8 @@ export default function ManageTeamMember() {
                   : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
               }`}
             >
-              Availability
+              Availability & Days Off
               {activeTab === "availability" && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("days-off")}
-              className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${
-                activeTab === "days-off"
-                  ? "text-[#2563EB] font-semibold"
-                  : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
-              }`}
-            >
-              Days Off
-              {activeTab === "days-off" && (
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
               )}
             </button>
@@ -415,212 +403,12 @@ export default function ManageTeamMember() {
             </div>
             )}
 
-            {/* TAB 2 - Availability Section */}
+            {/* TAB 2 - Availability & Days Off Section (Location-Specific) */}
             {activeTab === "availability" && (
-            <div className="bg-white rounded-2xl border border-border shadow-sm p-8">
-              {/* Day Sections */}
-              <div className="space-y-6">
-                {/* Monday */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Monday</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                      <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                      <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 5:00 PM</span>
-                    </div>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Tuesday */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Tuesday</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                      <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                      <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 5:00 PM</span>
-                    </div>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Wednesday - Multiple slots */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Wednesday</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">3:00 PM - 4:00 PM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 10:00 AM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Thursday */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Thursday</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                      <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                      <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 8:00 PM</span>
-                    </div>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Friday - Multiple slots */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Friday</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">10:15 AM - 11:15 AM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">12:00 PM - 1:00 PM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 10:00 AM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                        <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                        <span className="text-[13px] font-medium text-[#2563EB]">8:15 AM - 9:15 AM</span>
-                      </div>
-                      <button className="text-[#EF4444] hover:opacity-75">
-                        <Trash2 className="w-[14px] h-[14px]" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Saturday */}
-                <div className="border-b border-[#E5E7EB] pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Saturday</h4>
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2 bg-[#EFF6FF] rounded-[20px] px-[14px] py-[6px]">
-                      <Clock className="w-[14px] h-[14px] text-[#2563EB]" />
-                      <span className="text-[13px] font-medium text-[#2563EB]">9:00 AM - 5:00 PM</span>
-                    </div>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Sunday */}
-                <div className="pb-4">
-                  <h4 className="text-[15px] font-semibold text-[#111827] mb-3">Sunday</h4>
-                  <span className="text-sm text-[#9CA3AF] italic">Unavailable</span>
-                </div>
-              </div>
-
-              {/* Add Time Slots Button */}
-              <button className="w-full h-12 bg-[#2563EB] text-white text-sm font-semibold rounded-[10px] mt-5 hover:bg-[#1D4ED8] transition-colors">
-                Add Time Slots
-              </button>
-            </div>
-            )}
-
-            {/* TAB 3 - Days Off Section */}
-            {activeTab === "days-off" && (
-            <div className="bg-white rounded-2xl border border-border shadow-sm p-8">
-              {/* Table */}
-              <div className="border-b border-[#E5E7EB]">
-                {/* Table Header */}
-                <div className="flex items-center h-12 border-b border-[#E5E7EB]">
-                  <div className="w-[40%] text-[13px] font-semibold text-[#2563EB]">Date</div>
-                  <div className="w-[40%] text-[13px] font-semibold text-[#2563EB]">Duration</div>
-                  <div className="w-[20%] text-[13px] font-semibold text-[#2563EB]">Repeat</div>
-                </div>
-
-                {/* Row 1 */}
-                <div className="flex items-center py-4 border-b border-[#E5E7EB]">
-                  <div className="w-[40%] text-[13px] font-medium text-[#2563EB]">Oct 25, 2023</div>
-                  <div className="w-[40%]">
-                    <span className="inline-flex items-center px-3 py-1 border border-[#D1D5DB] rounded-[20px] text-xs text-[#374151]">
-                      Full Day
-                    </span>
-                  </div>
-                  <div className="w-[20%] flex items-center justify-between">
-                    <span></span>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Row 2 */}
-                <div className="flex items-center py-4 border-b border-[#E5E7EB]">
-                  <div className="w-[40%] text-[13px] font-medium text-[#2563EB]">Sep 25, 2023</div>
-                  <div className="w-[40%]">
-                    <div className="text-xs text-[#374151]">02:00 - 04:00</div>
-                    <div className="text-xs text-[#374151]">15:00 - 04:00</div>
-                  </div>
-                  <div className="w-[20%] flex items-center justify-between">
-                    <div className="w-5 h-5 bg-[#10B981] rounded-full flex items-center justify-center">
-                      <CheckCircle className="w-3 h-3 text-white" />
-                    </div>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-
-                {/* Row 3 */}
-                <div className="flex items-center py-4">
-                  <div className="w-[40%] text-[13px] font-medium text-[#2563EB]">Feb 25, 2023</div>
-                  <div className="w-[40%] text-xs text-[#374151]">06:00 - 07:30</div>
-                  <div className="w-[20%] flex items-center justify-between">
-                    <span></span>
-                    <button className="text-[#EF4444] hover:opacity-75">
-                      <Trash2 className="w-[14px] h-[14px]" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Add Day Off Button */}
-              <button className="w-full h-12 bg-[#2563EB] text-white text-sm font-semibold rounded-[10px] mt-5 hover:bg-[#1D4ED8] transition-colors">
-                Add Day Off
-              </button>
-            </div>
+              <MemberLocationScheduleTab
+                memberId={user?.id}
+                memberName={user?.name}
+              />
             )}
 
             {/* TAB 4 - Assigned Services */}

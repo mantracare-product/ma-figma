@@ -17,6 +17,7 @@ import {
 } from "./ui/accordion";
 import { Switch } from "./ui/switch";
 import { toast } from "sonner";
+import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
 import {
   User,
   CheckCircle2,
@@ -505,21 +506,12 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     </button>
                     <button
                       onClick={() => setActiveTab("availability")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "availability"
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "availability" || activeTab === "days-off"
                           ? "border-[#1F2937] text-[#1F2937] font-semibold"
                           : "border-transparent text-gray-600 hover:text-gray-900"
                         }`}
                     >
-                      Availability
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("days-off")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "days-off"
-                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
-                          : "border-transparent text-gray-600 hover:text-gray-900"
-                        }`}
-                    >
-                      Days Off
+                      Availability & Days Off
                     </button>
                     <button
                       onClick={() => setActiveTab("services")}
@@ -1138,85 +1130,12 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                 </div>
               )}
 
-              {/* Availability Tab */}
-              {activeTab === "availability" && (
-                <div className="space-y-6">
-                  <div className="space-y-4">
-                    {WEEKDAY_NAMES.map((day) => {
-                      const info = availability[day];
-                      return (
-                        <div key={day} className="border-b border-gray-200 pb-4">
-                          <h4 className="text-sm font-semibold text-gray-900 mb-3">{day}</h4>
-                          {info.available ? (
-                            <div className="flex items-center gap-3">
-                              <div className="flex items-center gap-2 bg-blue-50 rounded-full px-4 py-2">
-                                <Clock className="w-4 h-4 text-blue-600" />
-                                <span className="text-sm font-medium text-blue-700">{info.start} - {info.end}</span>
-                              </div>
-                              <button onClick={() => handleRemoveAvailability(day)} className="text-red-500 hover:opacity-75">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm text-gray-400 italic">Unavailable</span>
-                              <button
-                                onClick={() => {
-                                  setNewSlot({ day, start: "9:00 AM", end: "5:00 PM" });
-                                  setShowAddSlotModal(true);
-                                }}
-                                className="text-xs font-medium text-primary hover:text-primary/80"
-                              >
-                                + Add hours
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <Button variant="primary" className="w-full bg-[#1F2937] hover:bg-gray-800 text-white" onClick={() => setShowAddSlotModal(true)}>
-                    Add Time Slots
-                  </Button>
-                </div>
-              )}
-
-              {/* Days Off Tab */}
-              {activeTab === "days-off" && (
-                <div className="space-y-6">
-                  <div className="border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="flex items-center bg-gray-50 border-b border-gray-200 px-4 py-3">
-                      <div className="w-2/5 text-xs font-semibold text-gray-700">Date</div>
-                      <div className="w-2/5 text-xs font-semibold text-gray-700">Duration</div>
-                      <div className="w-1/5 text-xs font-semibold text-gray-700">Repeat</div>
-                    </div>
-                    <div className="divide-y divide-gray-200">
-                      {daysOff.length === 0 ? (
-                        <div className="px-4 py-6 text-center text-sm text-gray-400">No days off scheduled</div>
-                      ) : (
-                        daysOff.map((item) => (
-                          <div key={item.id} className="flex items-center px-4 py-3">
-                            <div className="w-2/5 text-sm font-medium text-blue-600">{item.date}</div>
-                            <div className="w-2/5">
-                              <span className="inline-flex items-center px-3 py-1 border border-gray-300 rounded-full text-xs text-gray-700">
-                                {item.duration}
-                              </span>
-                            </div>
-                            <div className="w-1/5 flex items-center justify-between">
-                              <span className="text-xs text-gray-500">{item.repeat}</span>
-                              <button onClick={() => handleRemoveDayOff(item.id)} className="text-red-500 hover:opacity-75">
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                  <Button variant="primary" className="w-full bg-[#1F2937] hover:bg-gray-800 text-white" onClick={() => setShowAddDayOffModal(true)}>
-                    Add Day Off
-                  </Button>
-                </div>
+              {/* Availability & Days Off Tab (Merged & Location-Specific) */}
+              {(activeTab === "availability" || activeTab === "days-off") && (
+                <MemberLocationScheduleTab
+                  memberId={member?.email || "default"}
+                  memberName={member?.name || "Team Member"}
+                />
               )}
 
               {/* Services Tab */}

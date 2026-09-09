@@ -16,8 +16,10 @@ import {
   Video,
   Building2,
   Check,
+  AlertTriangle,
 } from "lucide-react";
 import { initialClients } from "../../pages/ClientProfile";
+import { useOrganization } from "../../context/OrganizationContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -429,6 +431,106 @@ export default function ScheduleAppointmentDrawer({
     return new Date(yr, (mo || 1) - 1, dy || 1).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
+  // ── Organization Locations ──
+  const { activeOrganization } = useOrganization();
+  const orgLocations = useMemo(() => {
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((l: any) => ({
+            id: l.id,
+            name: l.name,
+            address: l.address,
+            phone: l.phone,
+            timezone: l.timezone,
+          }));
+        }
+      }
+    } catch { /* ignore */ }
+    const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
+      ? activeOrganization.locations
+      : [activeOrganization.location || "California"];
+    return locNames.map((name, idx) => ({
+      id: `loc-${idx + 1}`,
+      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
+      address: idx === 0 ? "123 Healthcare Ave, Suite 100" : "450 Lexington Ave, Suite 240",
+    }));
+  }, [activeOrganization]);
+
+  // ── Provider Location Availability & Days Off Notice ──
+  const providerAvailabilityNotice = useMemo(() => {
+    if (!values.provider) return null;
+
+    // 1. Check Common Days Off for this provider
+    if (values.date) {
+      try {
+        const daysOffSaved = localStorage.getItem(
+          `mantra_member_common_days_off_${values.provider.id}_${activeOrganization.id}`
+        );
+        if (daysOffSaved) {
+          const daysOff = JSON.parse(daysOffSaved);
+          const matchDayOff = Array.isArray(daysOff) && daysOff.find((d: any) => d.date === values.date);
+          if (matchDayOff) {
+            return {
+              type: "warning" as const,
+              message: `${values.provider.name} has a scheduled day off (${matchDayOff.duration}${
+                matchDayOff.reason ? `: ${matchDayOff.reason}` : ""
+              }) on this date.`,
+            };
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // 2. Check Location schedule if location is selected
+    const targetLoc = values.sessionType === "inPerson" ? values.location : undefined;
+    if (targetLoc) {
+      try {
+        const schedSaved = localStorage.getItem(
+          `mantra_member_loc_schedules_${values.provider.id}_${activeOrganization.id}`
+        );
+        if (schedSaved) {
+          const schedules = JSON.parse(schedSaved);
+          const matchedLocSched = Object.values(schedules).find(
+            (s: any) => s.locationName === targetLoc || s.locationId === targetLoc
+          ) as any;
+
+          if (matchedLocSched) {
+            if (!matchedLocSched.isAvailableAtLocation) {
+              return {
+                type: "warning" as const,
+                message: `${values.provider.name} is not marked as active at ${targetLoc}.`,
+              };
+            }
+
+            if (values.date) {
+              const dayIndex = new Date(values.date + "T00:00:00").getDay();
+              const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+              const dayKey = dayKeys[dayIndex];
+              const dayHours = matchedLocSched.workingHours?.[dayKey];
+
+              if (dayHours && !dayHours.enabled) {
+                return {
+                  type: "warning" as const,
+                  message: `${values.provider.name} is not scheduled at ${targetLoc} on ${
+                    dayKey.charAt(0).toUpperCase() + dayKey.slice(1)
+                  }s.`,
+                };
+              }
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    return {
+      type: "success" as const,
+      message: `${values.provider.name} is available${targetLoc ? ` at ${targetLoc}` : ""}.`,
+    };
+  }, [values.provider, values.date, values.location, values.sessionType, activeOrganization.id]);
+
   const fmt12 = (h: number, mn: number) => {
     const p = h >= 12 ? "PM" : "AM";
     return `${h % 12 === 0 ? 12 : h % 12}:${pad(mn)} ${p}`;
@@ -541,6 +643,15 @@ export default function ScheduleAppointmentDrawer({
 
   const primaryInsOpts: DropdownOption[] = INSURANCE_PROVIDERS.map((i) => ({ value: i, label: i }));
   const secondaryInsOpts: DropdownOption[] = SECONDARY_PROVIDERS.map((s) => ({ value: s, label: s }));
+
+  const locationOptions: DropdownOption[] = [
+    { value: "", label: "Select a clinic location" },
+    ...orgLocations.map((loc) => ({
+      value: loc.name,
+      label: loc.name,
+      meta: loc.address || undefined,
+    })),
+  ];
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -720,7 +831,7 @@ export default function ScheduleAppointmentDrawer({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onChange({ sessionType: "inPerson", location: values.location || "Main Clinic — Suite 400" })}
+                  onClick={() => onChange({ sessionType: "inPerson", location: values.location || orgLocations[0]?.name || "Main Clinic" })}
                   className={`flex-1 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 border-l border-slate-200 transition-colors ${
                     values.sessionType === "inPerson" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
@@ -735,18 +846,31 @@ export default function ScheduleAppointmentDrawer({
             {/* Location (conditional) */}
             {values.sessionType === "inPerson" && (
               <FieldRow label="Clinic Location" required>
-                <div className="flex items-center gap-1.5 bg-slate-50/70 border border-slate-200 rounded-lg px-2.5 py-1.5 focus-within:bg-white focus-within:border-slate-400 transition-all">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <input
-                    type="text"
-                    placeholder="e.g. Main Clinic — Room 302"
-                    value={values.location ?? "Main Clinic — Suite 400"}
-                    onChange={(e) => onChange({ location: e.target.value })}
-                    className="w-full bg-transparent text-xs font-medium text-slate-800 focus:outline-none placeholder:text-slate-400"
-                    style={{ fontFamily: "Outfit, sans-serif" }}
-                  />
-                </div>
+                <CustomDropdown
+                  value={values.location || ""}
+                  options={locationOptions}
+                  placeholder="Select a clinic location"
+                  onChange={(val) => onChange({ location: val })}
+                />
               </FieldRow>
+            )}
+
+            {/* Real-time Provider Location & Day Off Notice */}
+            {providerAvailabilityNotice && (
+              <div
+                className={`p-2.5 rounded-xl border flex items-center gap-2 text-xs transition-all ${
+                  providerAvailabilityNotice.type === "warning"
+                    ? "bg-amber-50 border-amber-200 text-amber-900"
+                    : "bg-emerald-50/70 border-emerald-200/80 text-emerald-900"
+                }`}
+              >
+                {providerAvailabilityNotice.type === "warning" ? (
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                )}
+                <span>{providerAvailabilityNotice.message}</span>
+              </div>
             )}
           </div>
         </SectionCard>

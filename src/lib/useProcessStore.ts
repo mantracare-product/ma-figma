@@ -15,6 +15,19 @@ export interface StageChannelSource {
   source: string;
 }
 
+export interface CallTriggerSettings {
+  timingType: "immediate" | "wait";
+  waitDuration: number;
+  waitUnit: "minutes" | "hours" | "days" | "weeks" | "months";
+  callingHoursType: "all_day" | "custom";
+  callingHoursStart: string;
+  callingHoursEnd: string;
+  timezoneMode: "lead" | "custom";
+  customTimezone: string;
+  skipDays: string[];
+  blackoutDates: Array<{ id: string; date: string; label?: string }>;
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -26,6 +39,8 @@ export interface Stage {
   selectedInboundNumbers?: string[];
   selectedStageChannels?: string[];
   channelSources?: StageChannelSource[];
+  enableCalling?: boolean;
+  callTriggerSettings?: CallTriggerSettings;
 }
 
 export interface Process {

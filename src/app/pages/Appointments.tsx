@@ -26,12 +26,14 @@ import {
   AlertCircle,
   LayoutGrid,
   List,
+  CalendarClock,
 } from "lucide-react";
 import PageHeader from "../components/layout/PageHeader";
 import AppointmentCard from "../components/appointments/AppointmentCard";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
+import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
@@ -156,7 +158,7 @@ export default function Appointments() {
   });
 
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [view, setView] = useState<"calendar" | "list">("list");
+  const [view, setView] = useState<"calendar" | "list" | "availability">("list");
   const [calendarViewMode, setCalendarViewMode] = useState<"day" | "week" | "month" | "schedule">("month");
   const [selectedEmployee, setSelectedEmployee] = useState<number | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -1027,7 +1029,7 @@ export default function Appointments() {
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setView("list")}
               className="transition-all"
@@ -1061,6 +1063,24 @@ export default function Appointments() {
               title="Calendar View"
             >
               <CalendarIcon className="w-4 h-4" style={{ color: view === "calendar" ? "#FFFFFF" : "#6B7280" }} />
+            </button>
+            <button
+              onClick={() => setView("availability")}
+              className="transition-all flex items-center gap-1.5 px-3 cursor-pointer"
+              style={{
+                height: '36px',
+                backgroundColor: view === "availability" ? "#1A73E8" : "#FFFFFF",
+                color: view === "availability" ? "#FFFFFF" : "#6B7280",
+                border: '1px solid #E5E7EB',
+                borderRadius: '6px',
+                fontSize: '12px',
+                fontWeight: 500,
+                fontFamily: 'Outfit, sans-serif',
+              }}
+              title="Team Availability & Days Off"
+            >
+              <CalendarClock className="w-4 h-4" style={{ color: view === "availability" ? "#FFFFFF" : "#6B7280" }} />
+              <span className="hidden sm:inline">Availability</span>
             </button>
           </div>
 
@@ -2494,6 +2514,13 @@ export default function Appointments() {
             </div>
             {/* End of old table code */}
           </div>
+        )}
+
+        {/* Availability & Days Off View */}
+        {view === "availability" && (
+          <TeamAvailabilityTab
+            employees={employees}
+          />
         )}
       </div>
 

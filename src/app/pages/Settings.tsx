@@ -15,6 +15,8 @@ import { getStoredWhatsAppNumbers, saveStoredWhatsAppNumbers, WHATSAPP_NUMBERS_E
 import { SelectFieldsModal } from "../components/help/FieldManager";
 import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
+import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
+import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import {
   Save,
   Plus,
@@ -3465,6 +3467,9 @@ export default function Settings() {
                     </div>
                   </div>
                 </div>
+
+                {/* Organization Locations */}
+                <OrganizationLocationsSection isEditing={isEditingOrganization} />
 
                 {/* Contact Info */}
                 <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
@@ -7881,20 +7886,8 @@ export default function Settings() {
                 : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
                 }`}
             >
-              Availability
+              Availability & Days Off
               {manageTeamTab === "availability" && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
-              )}
-            </button>
-            <button
-              onClick={() => setManageTeamTab("days-off")}
-              className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${manageTeamTab === "days-off"
-                ? "text-[#2563EB] font-semibold"
-                : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
-                }`}
-            >
-              Days Off
-              {manageTeamTab === "days-off" && (
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
               )}
             </button>
@@ -8014,144 +8007,12 @@ export default function Settings() {
               </div>
             )}
 
-            {/* TAB 2 - Availability Section */}
+            {/* TAB 2 - Availability & Days Off Section (Location-Specific) */}
             {manageTeamTab === "availability" && (
-              <div className="space-y-6">
-                <div className="pb-4 border-b border-border">
-                  <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Weekly Availability</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Set working hours for each day</p>
-                </div>
-
-                <div className="space-y-3">
-                  {Object.entries(availability).map(([day, schedule]) => (
-                    <div key={day} className="flex items-center gap-4 p-4 rounded-xl border border-border">
-                      <label className="flex items-center gap-3 min-w-[120px]">
-                        <input
-                          type="checkbox"
-                          checked={schedule.enabled}
-                          onChange={(e) =>
-                            setAvailability({
-                              ...availability,
-                              [day]: { ...schedule, enabled: e.target.checked },
-                            })
-                          }
-                          className="w-4 h-4 text-primary rounded"
-                        />
-                        <span className="text-sm font-medium capitalize">{day}</span>
-                      </label>
-                      {schedule.enabled ? (
-                        <div className="flex items-center gap-3 flex-1">
-                          <div className="flex items-center gap-2">
-                            <Clock className="w-4 h-4 text-muted-foreground" />
-                            <input
-                              type="time"
-                              value={schedule.start}
-                              onChange={(e) =>
-                                setAvailability({
-                                  ...availability,
-                                  [day]: { ...schedule, start: e.target.value },
-                                })
-                              }
-                              className="px-3 py-1.5 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                          </div>
-                          <span className="text-muted-foreground">to</span>
-                          <input
-                            type="time"
-                            value={schedule.end}
-                            onChange={(e) =>
-                              setAvailability({
-                                ...availability,
-                                [day]: { ...schedule, end: e.target.value },
-                              })
-                            }
-                            className="px-3 py-1.5 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground italic">Unavailable</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3 - Days Off Section */}
-            {manageTeamTab === "days-off" && (
-              <div className="space-y-6">
-                <div className="pb-4 border-b border-border">
-                  <h3 className="text-base font-semibold" style={TEXT_STYLES.heading}>Days Off</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Manage specific dates when unavailable</p>
-                </div>
-
-                <div className="space-y-4">
-                  {/* Add Day Off */}
-                  <div className="flex gap-3">
-                    <input
-                      type="date"
-                      value={newDayOff}
-                      onChange={(e) => setNewDayOff(e.target.value)}
-                      min={new Date().toISOString().split('T')[0]}
-                      className="flex-1 px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        if (newDayOff) {
-                          if (daysOff.includes(newDayOff)) {
-                            toast.error("This date is already added");
-                          } else {
-                            setDaysOff([...daysOff, newDayOff].sort());
-                            setNewDayOff("");
-                            toast.success("Day off added");
-                          }
-                        } else {
-                          toast.error("Please select a date");
-                        }
-                      }}
-                    >
-                      <Plus className="w-4 h-4" />
-                      Add Day Off
-                    </Button>
-                  </div>
-
-                  {/* List of Days Off */}
-                  {daysOff.length > 0 ? (
-                    <div className="space-y-2">
-                      {daysOff.map((date) => (
-                        <div key={date} className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/30">
-                          <div className="flex items-center gap-3">
-                            <Calendar className="w-4 h-4 text-muted-foreground" />
-                            <span className="text-sm font-medium">
-                              {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric',
-                              })}
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => {
-                              setDaysOff(daysOff.filter((d) => d !== date));
-                              toast.success("Day off removed");
-                            }}
-                            className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="text-center py-8 border-2 border-dashed border-border rounded-xl">
-                      <Calendar className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">No days off added</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <MemberLocationScheduleTab
+                memberId={selectedUser?.id}
+                memberName={selectedUser?.name}
+              />
             )}
 
             {/* TAB 4 - Services Section */}
