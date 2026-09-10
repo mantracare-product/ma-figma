@@ -55,6 +55,37 @@ export interface Process {
 export const PROCESS_STORE_EVENT = "processStore_updated";
 const PROCESSES_STORAGE_KEY = "process_store_processes";
 const STEPS_STORAGE_KEY = "process_store_steps";
+export const DEFAULT_CALL_TRIGGER_STORAGE_KEY = "mantra_default_call_trigger_settings";
+
+export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
+  timingType: "immediate",
+  waitDuration: 15,
+  waitUnit: "minutes",
+  callingHoursType: "custom",
+  callingHoursStart: "09:00",
+  callingHoursEnd: "18:00",
+  timezoneMode: "lead",
+  customTimezone: "America/New_York",
+  skipDays: ["Saturday", "Sunday"],
+  blackoutDates: [],
+};
+
+export function getDefaultCallTriggerSettings(): CallTriggerSettings {
+  try {
+    const raw = localStorage.getItem(DEFAULT_CALL_TRIGGER_STORAGE_KEY);
+    if (raw) {
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return DEFAULT_CALL_TRIGGER_SETTINGS;
+}
+
+export function saveDefaultCallTriggerSettings(settings: CallTriggerSettings) {
+  try {
+    localStorage.setItem(DEFAULT_CALL_TRIGGER_STORAGE_KEY, JSON.stringify(settings));
+    window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
+  } catch {}
+}
 
 export const DEFAULT_INITIAL_PROCESSES: Process[] = [
   {

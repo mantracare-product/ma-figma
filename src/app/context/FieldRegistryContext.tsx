@@ -65,6 +65,20 @@ export interface ScopingRule {
   locations?: string[];       // Multiple locations e.g. ["California", "New York"], empty = all
 }
 
+export interface FieldPermissions {
+  canHide?: boolean;       // Allow users to hide this field
+  canEdit?: boolean;       // Allow users to edit this field
+  canAdd?: boolean;        // Allow users to add options on top of admin options
+  canAddOptions?: boolean; // Alias / backwards compat
+}
+
+export interface SectionPermissions {
+  canHide?: boolean;       // Allow users to hide this section
+  canEdit?: boolean;       // Allow users to edit this section
+  canAdd?: boolean;        // Allow users to add more fields to this section
+  canAddFields?: boolean;  // Alias / backwards compat
+}
+
 export interface FieldDefinition {
   id: number;               // stable numeric/uuid id
   key: string;               // stable machine key, used in {{key}} variables
@@ -88,6 +102,7 @@ export interface FieldDefinition {
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
   isReusable?: boolean;        // Reusable across other modules (global field)
   reusableModules?: FieldModule[]; // Modules this field is shared with (empty/undefined = all modules)
+  permissions?: FieldPermissions;  // Tenant admin control & permissions
   createdAt: number;
 }
 
@@ -105,6 +120,7 @@ export interface SectionDefinition {
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
   isReusable?: boolean;        // Reusable across other modules (global section)
   reusableModules?: FieldModule[]; // Modules this section is shared with (empty/undefined = all modules)
+  permissions?: SectionPermissions; // Tenant admin control & permissions
   createdAt: number;
 }
 
@@ -1241,6 +1257,17 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     scopingRules: Array.isArray(f.scopingRules) ? f.scopingRules : undefined,
     isReusable: Boolean(f.isReusable),
     reusableModules: Array.isArray(f.reusableModules) ? f.reusableModules : undefined,
+    permissions: f.permissions ? {
+      canHide: f.permissions.canHide !== false,
+      canEdit: f.permissions.canEdit !== false,
+      canAdd: f.permissions.canAdd !== false && f.permissions.canAddOptions !== false,
+      canAddOptions: f.permissions.canAdd !== false && f.permissions.canAddOptions !== false,
+    } : {
+      canHide: true,
+      canEdit: true,
+      canAdd: true,
+      canAddOptions: true,
+    },
     createdAt: typeof f.createdAt === "number" ? f.createdAt : Date.now(),
   };
 }
@@ -1417,6 +1444,17 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
     scopingRules: Array.isArray(s.scopingRules) ? s.scopingRules : undefined,
     isReusable: Boolean(s.isReusable),
     reusableModules: Array.isArray(s.reusableModules) ? s.reusableModules : undefined,
+    permissions: s.permissions ? {
+      canHide: s.permissions.canHide !== false,
+      canEdit: s.permissions.canEdit !== false,
+      canAdd: s.permissions.canAdd !== false && s.permissions.canAddFields !== false,
+      canAddFields: s.permissions.canAdd !== false && s.permissions.canAddFields !== false,
+    } : {
+      canHide: true,
+      canEdit: true,
+      canAdd: true,
+      canAddFields: true,
+    },
     createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
   };
 }

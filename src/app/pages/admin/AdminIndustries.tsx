@@ -8,7 +8,8 @@
  * 2. Industry Category: Manage macro classifications and attached industries
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
+import { useLocation } from "react-router";
 import {
   Search,
   Plus,
@@ -37,7 +38,19 @@ export type { IndustryCategory, IndustryItem };
 
 
 export function AdminIndustries() {
-  const [activeTab, setActiveTab] = useState<"industries" | "categories">("industries");
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<"categories" | "industries">(() => {
+    if (location.pathname === "/admin/industries") return "industries";
+    return "categories";
+  });
+
+  useEffect(() => {
+    if (location.pathname === "/admin/industries") {
+      setActiveTab("industries");
+    } else if (location.pathname === "/admin/industry-category") {
+      setActiveTab("categories");
+    }
+  }, [location.pathname]);
 
   // Shared Data State
   const [categories, setCategories] = useState<IndustryCategory[]>(INITIAL_CATEGORIES);
@@ -106,11 +119,11 @@ export function AdminIndustries() {
   }, [categories, searchQuery]);
 
   // ── Handlers: Industry ──
-  const handleOpenCreateIndustry = () => {
+  const handleOpenCreateIndustry = (preselectedCategory?: string) => {
     setEditingIndustry(null);
     setIndustryForm({
       name: "",
-      category: categories[0]?.name || "Healthcare",
+      category: preselectedCategory || categories[0]?.name || "Healthcare",
       description: "",
       isActive: true,
     });
@@ -309,18 +322,6 @@ export function AdminIndustries() {
         <div className="inline-flex items-center gap-0 bg-gray-100 p-1 rounded-lg border border-gray-200">
           <button
             type="button"
-            onClick={() => setActiveTab("industries")}
-            className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "industries"
-                ? "bg-white text-[#111827] shadow-xs font-bold"
-                : "text-gray-500 hover:text-gray-800"
-            }`}
-          >
-            <Building className="w-3.5 h-3.5" />
-            Industries ({industries.length})
-          </button>
-          <button
-            type="button"
             onClick={() => setActiveTab("categories")}
             className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
               activeTab === "categories"
@@ -330,6 +331,18 @@ export function AdminIndustries() {
           >
             <FolderTree className="w-3.5 h-3.5" />
             Industry Category ({categories.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("industries")}
+            className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "industries"
+                ? "bg-white text-[#111827] shadow-xs font-bold"
+                : "text-gray-500 hover:text-gray-800"
+            }`}
+          >
+            <Building className="w-3.5 h-3.5" />
+            Industries ({industries.length})
           </button>
         </div>
 
@@ -408,10 +421,10 @@ export function AdminIndustries() {
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#F8FAFC] border-b border-gray-200">
                 <tr>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
                     Industry Name
                   </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
                     Industry Category
                   </th>
                   <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
@@ -423,7 +436,7 @@ export function AdminIndustries() {
                   <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
                     Status
                   </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-right">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center">
                     Actions
                   </th>
                 </tr>
@@ -445,21 +458,18 @@ export function AdminIndustries() {
                       className="hover:bg-gray-50/60 transition-colors last:border-0"
                     >
                       {/* Industry Name */}
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <button
                           type="button"
                           onClick={() => handleOpenEditIndustry(ind)}
-                          className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-left cursor-pointer"
+                          className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-center cursor-pointer"
                         >
                           {ind.name}
                         </button>
-                        <p className="text-[11px] text-gray-400 max-w-sm truncate mt-0.5">
-                          {ind.description}
-                        </p>
                       </td>
 
                       {/* Category */}
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700">
                           {ind.category}
                         </span>
@@ -501,8 +511,8 @@ export function AdminIndustries() {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-5 py-3.5 text-right">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleOpenEditIndustry(ind)}
@@ -553,10 +563,10 @@ export function AdminIndustries() {
             <table className="w-full text-left border-collapse">
               <thead className="bg-[#F8FAFC] border-b border-gray-200">
                 <tr>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[24%]">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[24%]">
                     Category Name
                   </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider w-[42%]">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[42%]">
                     Attached Industries
                   </th>
                   <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[10%]">
@@ -565,7 +575,7 @@ export function AdminIndustries() {
                   <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[12%]">
                     Status
                   </th>
-                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-right w-[12%]">
+                  <th className="px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider text-center w-[12%]">
                     Actions
                   </th>
                 </tr>
@@ -585,66 +595,61 @@ export function AdminIndustries() {
                     const isExpanded = expandedCategories[cat.id];
                     const visibleIndustries = isExpanded
                       ? cat.industries
-                      : cat.industries.slice(0, 3);
-                    const remainingCount = cat.industries.length - 3;
+                      : cat.industries.slice(0, 2);
+                    const remainingCount = cat.industries.length - 2;
 
                     return (
                       <tr
                         key={cat.id}
-                        className="hover:bg-gray-50/60 transition-colors last:border-0 align-top"
+                        className="hover:bg-gray-50/60 transition-colors last:border-0 align-middle"
                       >
-                        {/* Category Name & Description */}
-                        <td className="px-5 py-4">
+                        {/* Category Name */}
+                        <td className="px-5 py-3.5 text-center">
                           <button
                             type="button"
                             onClick={() => handleOpenEditCategory(cat)}
-                            className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-left cursor-pointer"
+                            className="font-semibold text-sm text-[#111827] hover:text-blue-600 transition-colors text-center cursor-pointer"
                           >
                             {cat.name}
                           </button>
-                          <p className="text-[11px] text-gray-400 mt-1 leading-relaxed max-w-xs">
-                            {cat.description}
-                          </p>
                         </td>
 
-                        {/* Attached Industries (Pill tags + Expandable) */}
-                        <td className="px-5 py-4">
-                          {cat.industries && cat.industries.length > 0 ? (
-                            <div className="relative inline-flex flex-col gap-1.5 p-2.5 rounded-xl bg-slate-50/80 border border-slate-200/80 w-full max-w-[420px]">
-                              <div className="flex items-center justify-between pb-1 border-b border-gray-200/50">
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                                  {cat.industries.length} {cat.industries.length === 1 ? "Industry" : "Industries"}
-                                </span>
-                                {cat.industries.length > 3 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => toggleCategoryExpand(cat.id)}
-                                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-800 transition-colors flex items-center gap-0.5 cursor-pointer"
-                                  >
-                                    <span>{isExpanded ? "Show Less" : `+${remainingCount} More`}</span>
-                                    <ChevronDown
-                                      className={`w-3 h-3 transition-transform duration-200 ${
-                                        isExpanded ? "rotate-180" : ""
-                                      }`}
-                                    />
-                                  </button>
-                                )}
-                              </div>
-
-                              <div className="flex flex-wrap gap-1.5 pt-1">
+                        {/* Attached Industries: only show 2 industries and rest X more, plus icon to add more */}
+                        <td className="px-5 py-3.5 text-center">
+                          <div className="flex flex-wrap items-center justify-center gap-1.5">
+                            {cat.industries && cat.industries.length > 0 ? (
+                              <>
                                 {visibleIndustries.map((indName) => (
                                   <span
                                     key={indName}
-                                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[#eaf0f7] text-[#334155] text-[10.5px] font-medium"
+                                    className="inline-flex items-center px-2.5 py-1 rounded-md bg-[#eaf0f7] text-[#334155] text-[11px] font-medium"
                                   >
-                                    <span className="truncate max-w-[200px]">{indName}</span>
+                                    <span className="truncate max-w-[160px]">{indName}</span>
                                   </span>
                                 ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-gray-400 italic">No industries attached</span>
-                          )}
+                                {remainingCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleCategoryExpand(cat.id)}
+                                    className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 hover:bg-blue-100 text-[11px] font-semibold transition-colors cursor-pointer border border-blue-200/60"
+                                    title={isExpanded ? "Collapse" : `View ${remainingCount} more industries`}
+                                  >
+                                    {isExpanded ? "Show less" : `+${remainingCount} more`}
+                                  </button>
+                                )}
+                              </>
+                            ) : (
+                              <span className="text-xs text-gray-400 italic">No industries attached</span>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenCreateIndustry(cat.name)}
+                              className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-gray-100 hover:bg-blue-50 text-gray-500 hover:text-blue-600 border border-gray-200 hover:border-blue-300 transition-all cursor-pointer"
+                              title={`Add industry to ${cat.name}`}
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
 
                         {/* ID */}
@@ -670,8 +675,8 @@ export function AdminIndustries() {
                         </td>
 
                         {/* Actions */}
-                        <td className="px-5 py-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
+                        <td className="px-5 py-4 text-center">
+                          <div className="flex items-center justify-center gap-1">
                             <button
                               type="button"
                               onClick={() => handleOpenEditCategory(cat)}

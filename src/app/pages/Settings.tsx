@@ -17,6 +17,7 @@ import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
+import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import {
   Save,
   Plus,
@@ -166,6 +167,7 @@ interface User {
   availability?: WeeklyAvailability;
   daysOff?: string[]; // Array of ISO date strings (YYYY-MM-DD)
   assignedServices?: number[]; // service IDs
+  canBookAppointments?: boolean;
 }
 
 interface CustomField {
@@ -1037,11 +1039,13 @@ export default function Settings() {
     name: string;
     email: string;
     role: string;
+    canBookAppointments: boolean;
     permissions: ItemPermissions;
   }>({
     name: "",
     email: "",
     role: "Agent",
+    canBookAppointments: false,
     permissions: createDefaultPermissions(),
   });
 
@@ -1204,19 +1208,24 @@ export default function Settings() {
     }
   }, [location.state, navigate]);
 
-  // Restore users from sessionStorage on mount
+  // Restore users from team store on mount & listen to store updates
   useEffect(() => {
-    const saved = sessionStorage.getItem("settings_allUsers");
-    if (saved) {
-      try {
-        setAllUsers(JSON.parse(saved));
-      } catch (e) { }
-    }
+    const loadUsers = () => {
+      const stored = getStoredTeamMembers();
+      if (stored && stored.length > 0) {
+        setAllUsers(stored as any);
+      }
+    };
+    loadUsers();
+    window.addEventListener(TEAM_STORE_EVENT, loadUsers);
+    return () => {
+      window.removeEventListener(TEAM_STORE_EVENT, loadUsers);
+    };
   }, []);
 
-  // Save users to sessionStorage on change
+  // Save users to team store on change
   useEffect(() => {
-    sessionStorage.setItem("settings_allUsers", JSON.stringify(allUsers));
+    saveStoredTeamMembers(allUsers as any);
   }, [allUsers]);
 
   // Custom Fields Context
@@ -3157,13 +3166,14 @@ export default function Settings() {
       toast.success("User settings updated successfully");
     } else {
       const newUser: User = {
-        id: Math.max(...allUsers.map((u) => u.id)) + 1,
+        id: Math.max(...allUsers.map((u) => u.id), 0) + 1,
         name: userFormData.name,
         email: userFormData.email,
         status: true,
         organizationId: activeOrganization.id,
         role: userFormData.role,
         permissions: userFormData.permissions,
+        canBookAppointments: Boolean(userFormData.canBookAppointments),
         calendarConnected,
         connectedCalendar,
         availability,
@@ -3179,6 +3189,7 @@ export default function Settings() {
       name: "",
       email: "",
       role: "Agent",
+      canBookAppointments: false,
       permissions: createDefaultPermissions(),
     });
 
@@ -7664,6 +7675,7 @@ export default function Settings() {
               name: "",
               email: "",
               role: "Agent",
+              canBookAppointments: false,
               permissions: createDefaultPermissions(),
             });
             setCorePermission("");
@@ -7772,6 +7784,31 @@ export default function Settings() {
               )}
             </div>
 
+            {/* Appointment Booking Option */}
+            <div className="pt-1">
+              <label className="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-slate-50/60 hover:bg-slate-50 cursor-pointer transition-all">
+                <input
+                  type="checkbox"
+                  checked={userFormData.canBookAppointments}
+                  onChange={(e) =>
+                    setUserFormData({
+                      ...userFormData,
+                      canBookAppointments: e.target.checked,
+                    })
+                  }
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                />
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-xs font-bold text-slate-900" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    Allow appointment booking for this team member
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    When enabled, this team member will appear in the Appointments schedule and clients can book appointments with them.
+                  </p>
+                </div>
+              </label>
+            </div>
+
             {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
               <button
@@ -7779,7 +7816,7 @@ export default function Settings() {
                 onClick={() => {
                   setShowAddUserModal(false);
                   setAddUserDepartment("");
-                  setUserFormData({ name: "", email: "", role: "Agent", permissions: createDefaultPermissions() });
+                  setUserFormData({ name: "", email: "", role: "Agent", canBookAppointments: false, permissions: createDefaultPermissions() });
                   setCorePermission("");
                   setOperationsPermission("");
                   setSystemPermission("");

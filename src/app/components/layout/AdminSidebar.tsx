@@ -21,6 +21,7 @@ import {
   Coins,
   Activity,
   FolderGit2,
+  FolderTree,
   Briefcase,
   LayoutTemplate,
   CheckSquare,
@@ -99,6 +100,7 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
       id: "setup",
       title: "SETUP",
       items: [
+        { id: "industry-category", label: "Industry Category", icon: FolderTree, path: "/admin/industry-category" },
         { id: "industries", label: "Industries", icon: Briefcase, path: "/admin/industries" },
         { id: "process-templates", label: "Process templates", icon: LayoutTemplate, path: "/admin/process-templates" },
         { id: "forms", label: "Forms", icon: CheckSquare, path: "/admin/forms" },
@@ -132,11 +134,13 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
     if (itemPath === "/admin/custom-fields") {
       return location.pathname === "/admin/custom-fields" || location.pathname === "/admin";
     }
+    if (itemPath === "/admin/industry-category") {
+      return location.pathname === "/admin/industry-category";
+    }
     if (itemPath === "/admin/industries") {
       return (
         location.pathname === "/admin/industries" ||
-        location.pathname === "/admin/industry" ||
-        location.pathname === "/admin/industry-category"
+        location.pathname === "/admin/industry"
       );
     }
     return location.pathname === itemPath;

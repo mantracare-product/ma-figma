@@ -37,6 +37,7 @@ import {
   CheckCircle2,
   Star,
   User,
+  Globe,
 } from "lucide-react";
 
 import type {
@@ -52,6 +53,11 @@ import {
 } from "../../context/FieldRegistryContext";
 import { AdminSectionDrawer } from "./components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "./components/AdminFieldDrawer";
+import {
+  INITIAL_INDUSTRIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../../data/industryReferenceData";
 
 // Scribe seed keys set for O(1) detection of non-deletable seed fields
 const SCRIBE_SEED_KEYS = new Set(INITIAL_SCRIBE_CUSTOM_FIELDS.map((f) => f.key));
@@ -95,6 +101,44 @@ function getScopingTags(item: {
   const loc = item.locations && item.locations.length > 0 && !item.locations.includes("All") ? item.locations : ["All"];
 
   return { categories: cat, industries: ind, locations: loc };
+}
+
+function renderScopeCell(item: {
+  scopingRules?: ScopingRule[];
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+}) {
+  const scoping = getScopingTags(item);
+  const isAllCats = scoping.categories.includes("All") || scoping.categories.length === 0;
+  const isAllInds = scoping.industries.includes("All") || scoping.industries.length === 0;
+  const isAllLocs = scoping.locations.includes("All") || scoping.locations.length === 0;
+
+  // Calculate industry count (pure number)
+  let indCount = scoping.industries.filter((i) => i !== "All").length;
+  if (isAllInds) {
+    if (!isAllCats) {
+      let totalInCats = 0;
+      for (const c of scoping.categories) {
+        totalInCats += getIndustriesForCategory(c).length;
+      }
+      indCount = totalInCats > 0 ? totalInCats : INITIAL_INDUSTRIES.length;
+    } else {
+      indCount = INITIAL_INDUSTRIES.length;
+    }
+  }
+
+  // Calculate location count (pure number)
+  let locCount = scoping.locations.filter((l) => l !== "All").length;
+  if (isAllLocs) {
+    locCount = STANDARD_LOCATIONS.length;
+  }
+
+  return (
+    <span className="text-xs text-gray-600 font-medium">
+      {indCount} {indCount === 1 ? "industry" : "industries"}, {locCount} {locCount === 1 ? "location" : "locations"}
+    </span>
+  );
 }
 
 const MODULE_TABS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
@@ -335,20 +379,18 @@ export function AdminCustomFields() {
           <table className="w-full">
             <thead className="bg-[#F8FAFC] border-b border-gray-200">
               <tr>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Industry Category</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Industry</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredFields.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-14 text-center">
+                  <td colSpan={6} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No fields found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Field" above to define one.</p>
                   </td>
@@ -380,78 +422,31 @@ export function AdminCustomFields() {
                       key={`${field.module}-${field.key}`}
                       className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50/60"
                     >
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className="text-sm font-medium text-[#111827]">{field.label}</span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
                           <TypeIcon className="w-3.5 h-3.5" />
                           <span>{typeName}</span>
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         {field.required ? (
                           <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
                         ) : (
                           <span className="text-xs text-gray-400">Optional</span>
                         )}
                       </td>
-                      {/* Industry Category */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(field);
-                          return scoping.categories.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Categories</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[170px]">
-                              {scoping.categories.map((c) => (
-                                <span key={c} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700">
-                                  {c}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
+                      {/* Scope */}
+                      <td className="px-5 py-3.5 text-center">
+                        {renderScopeCell(field)}
                       </td>
-                      {/* Industry */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(field);
-                          return scoping.industries.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Industries</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {scoping.industries.map((i) => (
-                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-50 text-indigo-700">
-                                  {i}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      {/* Location */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(field);
-                          return scoping.locations.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Locations</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[190px]">
-                              {scoping.locations.map((l) => (
-                                <span key={l} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700">
-                                  {l}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleOpenEditField(field)}
@@ -503,19 +498,17 @@ export function AdminCustomFields() {
           <table className="w-full">
             <thead className="bg-[#F8FAFC] border-b border-gray-200">
               <tr>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Industry Category</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Industry</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
-                <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
+                <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredSections.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-14 text-center">
+                  <td colSpan={5} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No sections found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Section" above to define one.</p>
                   </td>
@@ -530,74 +523,29 @@ export function AdminCustomFields() {
                       key={sec.id}
                       className="border-b border-gray-100 transition-colors last:border-0 hover:bg-gray-50/60"
                     >
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        {isSystem ? (
-                          <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">System</span>
-                        ) : (
-                          <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">Custom</span>
-                        )}
+                      {/* Description */}
+                      <td className="px-5 py-3.5 text-center">
+                        <span
+                          className="text-xs text-gray-500 max-w-[240px] truncate inline-block"
+                          title={sec.description || ""}
+                        >
+                          {sec.description || <span className="text-gray-300 italic">—</span>}
+                        </span>
                       </td>
-                      {/* Industry Category */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(sec);
-                          return scoping.categories.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Categories</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[170px]">
-                              {scoping.categories.map((c) => (
-                                <span key={c} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-blue-50 text-blue-700">
-                                  {c}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
+                      {/* Scope */}
+                      <td className="px-5 py-3.5 text-center">
+                        {renderScopeCell(sec)}
                       </td>
-                      {/* Industry */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(sec);
-                          return scoping.industries.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Industries</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {scoping.industries.map((i) => (
-                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-indigo-50 text-indigo-700">
-                                  {i}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      {/* Location */}
-                      <td className="px-5 py-3.5">
-                        {(() => {
-                          const scoping = getScopingTags(sec);
-                          return scoping.locations.includes("All") ? (
-                            <span className="text-xs text-gray-400">All Locations</span>
-                          ) : (
-                            <div className="flex flex-wrap gap-1 max-w-[190px]">
-                              {scoping.locations.map((l) => (
-                                <span key={l} className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium bg-emerald-50 text-emerald-700">
-                                  {l}
-                                </span>
-                              ))}
-                            </div>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-5 py-3.5">
+                      <td className="px-5 py-3.5 text-center">
                         <span className="text-xs text-gray-500 font-medium">
                           {assignedFieldCount} {assignedFieldCount === 1 ? "field" : "fields"}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-end gap-1">
+                      <td className="px-5 py-3.5 text-center">
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             type="button"
                             onClick={() => {

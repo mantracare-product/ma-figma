@@ -49,7 +49,13 @@ import { toast } from "sonner";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import ActivityTab, { ActivityLogEntry, ActivityType } from "../activity/ActivityTab";
 import DraggableOverviewSections, { OverviewSection } from "../profile/DraggableOverviewSections";
-import { FieldDefinition } from "../../context/FieldRegistryContext";
+import {
+  useFieldRegistry,
+  FieldDefinition,
+  SectionDefinition,
+  SECTION_REGISTRY_EVENT,
+  LEGACY_SECTION_REGISTRY_EVENT,
+} from "../../context/FieldRegistryContext";
 import { getStoredProcesses } from "../../../lib/useProcessStore";
 import DocumentsTab from "../profile/DocumentsTab";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
@@ -271,18 +277,127 @@ export default function ProcessDetailDrawer({
     },
   ];
 
-  const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
-    const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_PROCESS_SECTIONS));
-    if (visibleFieldKeys && Array.isArray(visibleFieldKeys)) {
-      const customKeys = visibleFieldKeys.filter(
+  const { getCustomSections, getAllFields } = useFieldRegistry();
+
+  const computeMergedProcessSections = (
+    existingSections: OverviewSection[] | undefined,
+    registryCustomSections: SectionDefinition[],
+    registryAllFields: FieldDefinition[],
+    visKeys?: string[]
+  ): OverviewSection[] => {
+    const baseSections: OverviewSection[] =
+      existingSections && existingSections.length > 0
+        ? existingSections.map((s) => ({ ...s, fieldKeys: [...s.fieldKeys] }))
+        : JSON.parse(JSON.stringify(DEFAULT_PROCESS_SECTIONS));
+
+    if (visKeys && Array.isArray(visKeys)) {
+      const customKeys = visKeys.filter(
         (k) => !["client_name", "phone", "email", "source", "responsible", "created_at"].includes(k)
       );
       if (customKeys.length > 0) {
-        defaultSecs[1].fieldKeys = [...defaultSecs[1].fieldKeys, ...customKeys];
+        const processInfoSec = baseSections.find((s) => s.id === "sec-process-info");
+        if (processInfoSec) {
+          const keySet = new Set(processInfoSec.fieldKeys);
+          customKeys.forEach((k) => {
+            if (!keySet.has(k)) {
+              processInfoSec.fieldKeys.push(k);
+              keySet.add(k);
+            }
+          });
+        }
       }
     }
-    return defaultSecs;
+
+    const customSecs = registryCustomSections || [];
+    const customSecIds = new Set(customSecs.map((s) => s.id));
+    const SYSTEM_SEC_IDS = new Set(["sec-client-details", "sec-process-info"]);
+
+    let updatedSections = baseSections.filter((s) => {
+      if (SYSTEM_SEC_IDS.has(s.id)) return true;
+      return customSecIds.has(s.id);
+    });
+
+    updatedSections = updatedSections.map((s) => {
+      const regSec = customSecs.find((cs) => cs.id === s.id);
+      if (!regSec) return s;
+
+      const assignedFromFields = registryAllFields
+        .filter((f) => f.sectionId === regSec.id)
+        .map((f) => f.key);
+      const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
+
+      const existingKeySet = new Set(s.fieldKeys);
+      const mergedKeys = [...s.fieldKeys];
+      regKeys.forEach((k) => {
+        if (!existingKeySet.has(k)) {
+          mergedKeys.push(k);
+          existingKeySet.add(k);
+        }
+      });
+
+      return {
+        ...s,
+        title: regSec.title || s.title,
+        description: regSec.description ?? s.description,
+        iconName: (regSec.iconName as any) || s.iconName || "layers",
+        isCustom: true,
+        fieldKeys: mergedKeys,
+      };
+    });
+
+    const existingSecIds = new Set(updatedSections.map((s) => s.id));
+    customSecs.forEach((regSec) => {
+      if (!existingSecIds.has(regSec.id)) {
+        const assignedFromFields = registryAllFields
+          .filter((f) => f.sectionId === regSec.id)
+          .map((f) => f.key);
+        const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
+
+        updatedSections.push({
+          id: regSec.id,
+          title: regSec.title,
+          description: regSec.description,
+          iconName: (regSec.iconName as any) || "layers",
+          isCustom: true,
+          fieldKeys: regKeys,
+        });
+        existingSecIds.add(regSec.id);
+      }
+    });
+
+    return updatedSections;
+  };
+
+  const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
+    return computeMergedProcessSections(
+      undefined,
+      getCustomSections("process"),
+      getAllFields("process"),
+      visibleFieldKeys
+    );
   });
+
+  useEffect(() => {
+    const handleSectionsUpdate = () => {
+      setProcessSections((prev) =>
+        computeMergedProcessSections(
+          prev,
+          getCustomSections("process"),
+          getAllFields("process"),
+          visibleFieldKeys
+        )
+      );
+    };
+
+    window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener("storage", handleSectionsUpdate);
+    return () => {
+      window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener("storage", handleSectionsUpdate);
+    };
+  }, [getCustomSections, getAllFields, visibleFieldKeys]);
 
   const fields = React.useMemo(() => {
     return dealFields

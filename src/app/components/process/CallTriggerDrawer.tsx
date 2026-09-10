@@ -12,17 +12,25 @@ import {
   Check,
   RotateCcw,
   X,
+  Layers,
+  Globe,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
-import { CallTriggerSettings } from "../../../lib/useProcessStore";
+import { CallTriggerSettings, getDefaultCallTriggerSettings } from "../../../lib/useProcessStore";
+
+export interface CallTriggerSaveOptions {
+  setAsDefault?: boolean;
+  applyToCurrentProcess?: boolean;
+}
 
 export interface CallTriggerDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   stageName?: string;
+  processName?: string;
   settings?: CallTriggerSettings;
-  onSave?: (settings: CallTriggerSettings) => void;
+  onSave?: (settings: CallTriggerSettings, options?: CallTriggerSaveOptions) => void;
 }
 
 const DEFAULT_SETTINGS: CallTriggerSettings = {
@@ -52,6 +60,7 @@ export default function CallTriggerDrawer({
   isOpen,
   onClose,
   stageName,
+  processName,
   settings,
   onSave,
 }: CallTriggerDrawerProps) {
@@ -59,6 +68,10 @@ export default function CallTriggerDrawer({
   const [triggerDropdownOpen, setTriggerDropdownOpen] = useState(true);
   const [callingHoursDropdownOpen, setCallingHoursDropdownOpen] = useState(true);
   const [skipDaysDropdownOpen, setSkipDaysDropdownOpen] = useState(true);
+
+  // Scope & Default checkboxes
+  const [setAsDefault, setSetAsDefault] = useState(false);
+  const [applyToCurrentProcess, setApplyToCurrentProcess] = useState(false);
 
   // Form states initialized from props or defaults
   const [timingType, setTimingType] = useState<"immediate" | "wait">("immediate");
@@ -78,7 +91,7 @@ export default function CallTriggerDrawer({
   // Sync state whenever settings or isOpen changes
   useEffect(() => {
     if (isOpen) {
-      const current = settings || DEFAULT_SETTINGS;
+      const current = settings || getDefaultCallTriggerSettings() || DEFAULT_SETTINGS;
       setTimingType(current.timingType ?? "immediate");
       setWaitDuration(current.waitDuration ?? 15);
       setWaitUnit(current.waitUnit ?? "minutes");
@@ -86,6 +99,8 @@ export default function CallTriggerDrawer({
       setCallingHoursEnd(current.callingHoursEnd ?? "18:00");
       setSkipDays(current.skipDays ?? ["Saturday", "Sunday"]);
       setBlackoutDates(current.blackoutDates ?? []);
+      setSetAsDefault(false);
+      setApplyToCurrentProcess(false);
     }
   }, [isOpen, settings]);
 
@@ -140,20 +155,22 @@ export default function CallTriggerDrawer({
     };
 
     if (onSave) {
-      onSave(updated);
+      onSave(updated, { setAsDefault, applyToCurrentProcess });
     }
-    toast.success("Call trigger settings saved successfully");
     onClose();
   };
 
   const handleResetDefaults = () => {
-    setTimingType(DEFAULT_SETTINGS.timingType);
-    setWaitDuration(DEFAULT_SETTINGS.waitDuration);
-    setWaitUnit(DEFAULT_SETTINGS.waitUnit);
-    setCallingHoursStart(DEFAULT_SETTINGS.callingHoursStart);
-    setCallingHoursEnd(DEFAULT_SETTINGS.callingHoursEnd);
-    setSkipDays([...DEFAULT_SETTINGS.skipDays]);
-    setBlackoutDates([...DEFAULT_SETTINGS.blackoutDates]);
+    const defaults = getDefaultCallTriggerSettings() || DEFAULT_SETTINGS;
+    setTimingType(defaults.timingType);
+    setWaitDuration(defaults.waitDuration);
+    setWaitUnit(defaults.waitUnit);
+    setCallingHoursStart(defaults.callingHoursStart);
+    setCallingHoursEnd(defaults.callingHoursEnd);
+    setSkipDays([...defaults.skipDays]);
+    setBlackoutDates([...defaults.blackoutDates]);
+    setSetAsDefault(false);
+    setApplyToCurrentProcess(false);
     toast.info("Reset to default settings");
   };
 
@@ -543,6 +560,101 @@ export default function CallTriggerDrawer({
               </div>
             </div>
           )}
+        </div>
+
+        {/* SCOPE & DEFAULT SETTINGS SECTION */}
+        <div className="border border-slate-200/80 rounded-2xl bg-white p-4 shadow-xs space-y-3">
+          <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
+            <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
+            <div>
+              <h4
+                className="text-xs font-bold text-slate-900 tracking-tight"
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+              >
+                Settings Scope & Defaults
+              </h4>
+              <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                Choose whether these settings apply beyond this individual stage
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5 pt-1">
+            {/* Checkbox 1: Set as default across all processes */}
+            <label
+              className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                setAsDefault
+                  ? "border-primary bg-primary/5 shadow-2xs"
+                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={setAsDefault}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setSetAsDefault(checked);
+                  if (checked) {
+                    setApplyToCurrentProcess(false);
+                  }
+                }}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold text-slate-900"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Set as default settings for all processes & stages
+                  </span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 tracking-wide">
+                    Global Default
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Applicable to all stages of all processes. Whenever a new stage is configured, these settings will be applied automatically. Users can customize settings for any stage individually.
+                </p>
+              </div>
+            </label>
+
+            {/* Checkbox 2: Apply to all stages of this process only */}
+            <label
+              className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                applyToCurrentProcess
+                  ? "border-primary bg-primary/5 shadow-2xs"
+                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
+              } ${setAsDefault ? "opacity-50 pointer-events-none" : ""}`}
+            >
+              <input
+                type="checkbox"
+                checked={applyToCurrentProcess}
+                disabled={setAsDefault}
+                onChange={(e) => setApplyToCurrentProcess(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+              />
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span
+                    className="text-xs font-bold text-slate-900"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    Apply to all stages of this process only
+                  </span>
+                  {processName && (
+                    <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 truncate max-w-[140px]">
+                      {processName}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  Overwrite call trigger timing, calling hours, and skip dates for all stages in this process only.
+                </p>
+              </div>
+            </label>
+          </div>
         </div>
       </div>
     </DrawerShell>

@@ -13,6 +13,8 @@ import {
 import { Button } from "../ui/Button";
 import { toast } from "sonner";
 import { useOrganization } from "../../context/OrganizationContext";
+import TargetUserDropdown from "./TargetUserDropdown";
+import { useTeamMembers } from "../../../lib/teamStore";
 
 export interface DayTimeSlot {
   start: string; // "09:00"
@@ -126,10 +128,29 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
     []
   );
 
-  const teamList = propEmployees && propEmployees.length > 0 ? propEmployees : defaultEmployees;
+  const { bookableMembers } = useTeamMembers();
+
+  const teamList = useMemo(() => {
+    if (bookableMembers && bookableMembers.length > 0) {
+      return bookableMembers.map((m) => ({
+        id: Number(m.id) || m.id,
+        name: m.name,
+        email: m.email,
+        role: m.role || "Team Member",
+      }));
+    }
+    return propEmployees && propEmployees.length > 0 ? propEmployees : defaultEmployees;
+  }, [bookableMembers, propEmployees, defaultEmployees]);
 
   // Selected Target User
   const [selectedUserId, setSelectedUserId] = useState<string | number>(() => teamList[0]?.id || 1);
+
+  useEffect(() => {
+    if (teamList.length > 0 && !teamList.some((u) => String(u.id) === String(selectedUserId))) {
+      setSelectedUserId(teamList[0].id);
+    }
+  }, [teamList, selectedUserId]);
+
   const selectedUser = teamList.find((u) => String(u.id) === String(selectedUserId)) || teamList[0];
 
   // 1. Organization Locations
@@ -471,22 +492,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               {/* User Dropdown */}
-              <div className="relative">
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="w-full sm:w-auto min-w-[240px] appearance-none pl-9 pr-9 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-slate-800 cursor-pointer shadow-2xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {teamList.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
-                    </option>
-                  ))}
-                </select>
-                <User className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              <TargetUserDropdown
+                selectedUserId={selectedUserId}
+                onSelectUser={(userId) => setSelectedUserId(userId)}
+              />
 
               {/* Location Dropdown */}
               <div className="relative">
@@ -636,21 +645,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
               </p>
             </div>
 
-            <div className="relative">
-              <select
-                value={selectedUserId}
-                onChange={(e) => setSelectedUserId(e.target.value)}
-                className="w-full sm:w-auto min-w-[260px] appearance-none pl-4 pr-9 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-slate-800 cursor-pointer shadow-2xs"
-                style={{ fontFamily: "Outfit, sans-serif" }}
-              >
-                {teamList.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} ({u.email})
-                  </option>
-                ))}
-              </select>
-              <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+            <TargetUserDropdown
+              selectedUserId={selectedUserId}
+              onSelectUser={(userId) => setSelectedUserId(userId)}
+            />
           </div>
 
           {/* Scheduled Days Off Section */}

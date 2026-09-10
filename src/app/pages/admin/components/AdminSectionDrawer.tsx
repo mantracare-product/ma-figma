@@ -11,14 +11,95 @@
  * while numeric IDs can collide between environments.
  */
 
-import React, { useEffect, useRef, useState } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Layers, Settings2, GripVertical } from "lucide-react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
+import { X, ChevronDown, Check, Plus, Trash2, Layers, Settings2, GripVertical, Globe, Lock, Shield } from "lucide-react";
 import type {
-  FieldDefinition, FieldModule, SectionDefinition, ScopingRule,
+  FieldDefinition, FieldModule, SectionDefinition, ScopingRule, SectionPermissions,
 } from "../../../context/FieldRegistryContext";
 import { useFieldRegistry } from "../../../context/FieldRegistryContext";
 import { MODULE_OPTIONS } from "./AdminFieldDrawer";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
+import { InfoTooltip } from "../../../components/help/InfoTooltip";
+
+/**
+ * Checks whether a field definition matches the section's scoping rules.
+ * Global fields (no scoping rules or universal "All") match all sections.
+ * Global sections (no scoping rules) accept all fields in the module.
+ */
+export function doesFieldMatchSectionScope(
+  field: FieldDefinition,
+  sectionRules: ScopingRule[]
+): boolean {
+  // If section has no scoping rules, it is global -> accepts all fields
+  if (!sectionRules || sectionRules.length === 0) return true;
+
+  // Determine field's scoping rules (either multi-rule or legacy properties)
+  let fieldRules: ScopingRule[] = field.scopingRules ? [...field.scopingRules] : [];
+  if (
+    fieldRules.length === 0 &&
+    (field.industryCategory || field.industry || (field.locations && field.locations.length > 0))
+  ) {
+    fieldRules = [
+      {
+        industryCategory: field.industryCategory || "All",
+        industries: field.industry && field.industry !== "All" ? [field.industry] : [],
+        locations:
+          field.locations && field.locations.length > 0 && !field.locations.includes("All")
+            ? field.locations
+            : [],
+      },
+    ];
+  }
+
+  // If field has no scoping rules, it is global -> matches all sections
+  if (fieldRules.length === 0) return true;
+
+  const isFieldUniversal = fieldRules.every(
+    (r) =>
+      (!r.industryCategory || r.industryCategory === "All") &&
+      (!r.industries || r.industries.length === 0) &&
+      (!r.locations || r.locations.length === 0)
+  );
+  if (isFieldUniversal) return true;
+
+  // Check if any section rule overlaps with any field rule
+  return sectionRules.some((sRule) => {
+    const sCat = sRule.industryCategory?.trim() || "All";
+    const sInds = (sRule.industries || []).filter((i) => i && i !== "All");
+    const sLocs = (sRule.locations || []).filter((l) => l && l !== "All");
+
+    if (sCat === "All" && sInds.length === 0 && sLocs.length === 0) return true;
+
+    return fieldRules.some((fRule) => {
+      const fCat = fRule.industryCategory?.trim() || "All";
+      const fInds = (fRule.industries || []).filter((i) => i && i !== "All");
+      const fLocs = (fRule.locations || []).filter((l) => l && l !== "All");
+
+      // Category check
+      if (sCat !== "All" && fCat !== "All" && sCat.toLowerCase() !== fCat.toLowerCase()) {
+        return false;
+      }
+
+      // Industries check
+      if (sInds.length > 0 && fInds.length > 0) {
+        const sharedInd = sInds.some((si) =>
+          fInds.some((fi) => fi.toLowerCase() === si.toLowerCase())
+        );
+        if (!sharedInd) return false;
+      }
+
+      // Locations check
+      if (sLocs.length > 0 && fLocs.length > 0) {
+        const sharedLoc = sLocs.some((sl) =>
+          fLocs.some((fl) => fl.toLowerCase() === sl.toLowerCase())
+        );
+        if (!sharedLoc) return false;
+      }
+
+      return true;
+    });
+  });
+}
 
 interface SectionFormState {
   title: string;
@@ -29,6 +110,7 @@ interface SectionFormState {
   scopingRules: ScopingRule[];
   isReusable: boolean;
   reusableModules: Exclude<FieldModule, "deal">[];
+  permissions: SectionPermissions;
 }
 
 function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormState {
@@ -41,6 +123,11 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     scopingRules: [],
     isReusable: false,
     reusableModules: [],
+    permissions: {
+      canHide: true,
+      canEdit: true,
+      canAddFields: true,
+    },
   };
 }
 
@@ -65,6 +152,11 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     scopingRules: rules,
     isReusable: Boolean(s.isReusable),
     reusableModules: (s.reusableModules as Exclude<FieldModule, "deal">[]) || [],
+    permissions: {
+      canHide: s.permissions?.canHide !== false,
+      canEdit: s.permissions?.canEdit !== false,
+      canAddFields: s.permissions?.canAddFields !== false,
+    },
   };
 }
 
@@ -87,6 +179,9 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
   const [sectionSettingsOpen, setSectionSettingsOpen] = useState(false);
+  const [adminControlOpen, setAdminControlOpen] = useState(true);
+  const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
+  const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
   const modulePickerRef = useRef<HTMLDivElement>(null);
   const fieldPickerRef = useRef<HTMLDivElement>(null);
 
@@ -107,6 +202,10 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
 
   const moduleFields: FieldDefinition[] = getAllFields(form.module);
   const modLabel = MODULE_OPTIONS.find(m => m.value === form.module)?.label ?? form.module;
+
+  const eligibleFields = useMemo(() => {
+    return moduleFields.filter((f) => doesFieldMatchSectionScope(f, form.scopingRules));
+  }, [moduleFields, form.scopingRules]);
 
   const toggleFieldKey = (key: string) => {
     setForm(p => ({
@@ -220,6 +319,7 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       isReusable: form.isReusable,
       reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
+      permissions: form.permissions,
       industryCategory: legacyCategory,
       industry: legacyIndustry,
       locations: legacyLocations,
@@ -281,6 +381,148 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
             </div>
             {isEdit && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
           </div>
+
+          {/* Admin Control Dropdown (Scope & Permissions) */}
+          {isAdmin && (
+            <div>
+              <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                {/* Admin Control Main Dropdown Header */}
+                <button
+                  type="button"
+                  onClick={() => setAdminControlOpen((v) => !v)}
+                  className="w-full px-3.5 py-2.5 bg-gray-50/80 hover:bg-gray-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Shield className="w-4 h-4 text-gray-600 shrink-0" />
+                    <span className="text-xs font-semibold text-gray-800 uppercase tracking-wider" title="Configure scope rules and permissions">
+                      Admin Control
+                    </span>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${adminControlOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {adminControlOpen && (
+                  <div className="p-3 space-y-2.5 border-t border-gray-100 bg-gray-50/30">
+                    {/* 1. Scope Option Dropdown */}
+                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setScopeDropdownOpen((v) => !v)}
+                        className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Globe className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                          <span className="text-xs font-semibold text-gray-800">
+                            Scope Rules
+                          </span>
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <InfoTooltip text="Define which tenant organizations have visibility to this section." size="sm" />
+                          </span>
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${scopeDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {scopeDropdownOpen && (
+                        <div className="p-3 border-t border-gray-100 bg-white">
+                          <AdminScopingRulesEditor
+                            rules={form.scopingRules}
+                            onChange={(rules) => setForm((p) => ({ ...p, scopingRules: rules }))}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 2. Permissions Dropdown */}
+                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                      <button
+                        type="button"
+                        onClick={() => setPermissionsDropdownOpen((v) => !v)}
+                        className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <Lock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                          <span className="text-xs font-semibold text-gray-800">
+                            Permissions
+                          </span>
+                          <span onClick={(e) => e.stopPropagation()}>
+                            <InfoTooltip text="Configure what tenant users are permitted to do with this section." size="sm" />
+                          </span>
+                        </div>
+                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${permissionsDropdownOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      {permissionsDropdownOpen && (
+                        <div className="p-3 border-t border-gray-100 bg-white">
+                          <div className="flex items-center gap-6">
+                            {/* 1. Hide permission */}
+                            <div className="flex items-center">
+                              <label
+                                className="flex items-center gap-1.5 select-none cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.canHide !== false}
+                                  onChange={(e) => setForm((p) => ({
+                                    ...p,
+                                    permissions: { ...p.permissions, canHide: e.target.checked }
+                                  }))}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-medium text-gray-800">Hide</span>
+                              </label>
+                              <InfoTooltip text="Tenant users can choose to hide or collapse this section in record overviews." size="sm" />
+                            </div>
+
+                            {/* 2. Edit permission */}
+                            <div className="flex items-center">
+                              <label
+                                className="flex items-center gap-1.5 select-none cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.canEdit !== false}
+                                  onChange={(e) => setForm((p) => ({
+                                    ...p,
+                                    permissions: { ...p.permissions, canEdit: e.target.checked }
+                                  }))}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-medium text-gray-800">Edit</span>
+                              </label>
+                              <InfoTooltip text="Tenant users can rename the section title and edit its description." size="sm" />
+                            </div>
+
+                            {/* 3. Add permission */}
+                            <div className="flex items-center">
+                              <label
+                                className="flex items-center gap-1.5 select-none cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.canAdd !== false && form.permissions.canAddFields !== false}
+                                  onChange={(e) => setForm((p) => ({
+                                    ...p,
+                                    permissions: {
+                                      ...p.permissions,
+                                      canAdd: e.target.checked,
+                                      canAddFields: e.target.checked,
+                                    }
+                                  }))}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-medium text-gray-800">Add</span>
+                              </label>
+                              <InfoTooltip text="Tenant users can add more custom fields to this section in client and record profiles." size="sm" />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Title */}
           <div>
@@ -345,74 +587,14 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                         className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                       <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-sm font-semibold text-gray-800">Make reusable across other modules</span>
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            Global Section
-                          </span>
-                        </div>
+                        <span className="text-sm font-semibold text-gray-800">Make reusable across other modules</span>
                         <p className="text-xs text-gray-500 mt-0.5">
                           Enables this section and its assigned fields to appear across other modules (e.g. Clients, Processes, Appointments, Call Logs, Services, Organizations).
                         </p>
                       </div>
                     </label>
 
-                    {form.isReusable && (
-                      <div className="mt-3 ml-7 p-3 bg-gray-50 rounded-lg border border-gray-200 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-700">Apply to modules:</span>
-                          <button
-                            type="button"
-                            onClick={() => setForm((p) => ({
-                              ...p,
-                              reusableModules: p.reusableModules.length === MODULE_OPTIONS.length ? [] : MODULE_OPTIONS.map((m) => m.value)
-                            }))}
-                            className="text-[11px] text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
-                          >
-                            {form.reusableModules.length === 0 || form.reusableModules.length === MODULE_OPTIONS.length
-                              ? "Select Specific"
-                              : "Select All"}
-                          </button>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                          {MODULE_OPTIONS.map((mod) => {
-                            const isSelected = form.reusableModules.length === 0 || form.reusableModules.includes(mod.value);
-                            return (
-                              <button
-                                key={mod.value}
-                                type="button"
-                                onClick={() => {
-                                  if (form.reusableModules.length === 0) {
-                                    setForm((p) => ({
-                                      ...p,
-                                      reusableModules: MODULE_OPTIONS.filter((m) => m.value !== mod.value).map((m) => m.value),
-                                    }));
-                                  } else {
-                                    const exists = form.reusableModules.includes(mod.value);
-                                    const next = exists
-                                      ? form.reusableModules.filter((v) => v !== mod.value)
-                                      : [...form.reusableModules, mod.value];
-                                    setForm((p) => ({ ...p, reusableModules: next }));
-                                  }
-                                }}
-                                className={`px-2.5 py-1 text-xs rounded-md border font-medium transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? "bg-blue-50 border-blue-300 text-blue-700"
-                                    : "bg-white border-gray-200 text-gray-500 hover:border-gray-300"
-                                }`}
-                              >
-                                {mod.label}
-                              </button>
-                            );
-                          })}
-                        </div>
-                        <p className="text-[11px] text-gray-500">
-                          {form.reusableModules.length === 0
-                            ? "Active in all modules across the application."
-                            : `Active in ${form.reusableModules.length} selected module${form.reusableModules.length > 1 ? "s" : ""}.`}
-                        </p>
-                      </div>
-                    )}
+
                   </div>
                 </div>
               )}
@@ -434,20 +616,33 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                   <Plus className="w-3 h-3" />Add fields
                 </button>
                 {fieldPickerOpen && (
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-y-auto" style={{ width: 280, maxHeight: 280 }}>
-                    {moduleFields.length === 0 ? (
-                      <p className="px-4 py-3 text-sm text-gray-400">No fields in this module yet.</p>
-                    ) : (
-                      moduleFields.map(f => (
-                        <button key={f.key} type="button"
-                          onClick={() => toggleFieldKey(f.key)}
-                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${form.fieldKeys.includes(f.key) ? "bg-blue-50 text-blue-700" : "text-[#111827]"}`}
-                        >
-                          <span>{f.label}</span>
-                          {form.fieldKeys.includes(f.key) && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                        </button>
-                      ))
-                    )}
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col" style={{ width: 300, maxHeight: 300 }}>
+                    <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-gray-700">Available Fields</span>
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        {form.scopingRules.length > 0 ? "Filtered by scope" : "All fields"}
+                      </span>
+                    </div>
+                    <div className="overflow-y-auto p-1 divide-y divide-gray-50">
+                      {eligibleFields.length === 0 ? (
+                        <p className="px-4 py-4 text-xs text-gray-400 italic text-center">
+                          No fields match this section's scope.
+                        </p>
+                      ) : (
+                        eligibleFields.map(f => (
+                          <button key={f.key} type="button"
+                            onClick={() => toggleFieldKey(f.key)}
+                            className={`w-full text-left px-3.5 py-2 text-xs flex items-center justify-between rounded-lg hover:bg-blue-50 cursor-pointer transition-colors ${form.fieldKeys.includes(f.key) ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="truncate block font-medium">{f.label}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">{f.key}</span>
+                            </div>
+                            {form.fieldKeys.includes(f.key) && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -508,16 +703,6 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
               </div>
             )}
           </div>
-
-          {/* Scoping Rules Builder (Admin Only — bottom of form) */}
-          {isAdmin && (
-            <div className="pt-2 border-t border-gray-100">
-              <AdminScopingRulesEditor
-                rules={form.scopingRules}
-                onChange={(rules) => setForm((p) => ({ ...p, scopingRules: rules }))}
-              />
-            </div>
-          )}
         </div>
 
         {/* Footer */}

@@ -28,7 +28,14 @@ import StepDetailDrawer from "../components/process/StepDetailDrawer";
 import { assignNumberToStage } from "../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../components/process/CallTriggerDrawer";
-import { getStoredProcesses, saveStoredProcesses, getWorkflowStepsForStage as getStoreWorkflowSteps, CallTriggerSettings } from "../../lib/useProcessStore";
+import {
+  getStoredProcesses,
+  saveStoredProcesses,
+  getWorkflowStepsForStage as getStoreWorkflowSteps,
+  CallTriggerSettings,
+  getDefaultCallTriggerSettings,
+  saveDefaultCallTriggerSettings,
+} from "../../lib/useProcessStore";
 
 interface AISettings {
   platform: string;
@@ -1968,6 +1975,7 @@ export default function Process() {
         id: `${selectedProcess}-${selectedProc.stages.length + 1}`,
         ...newStage,
         status: "active",
+        callTriggerSettings: getDefaultCallTriggerSettings(),
       };
 
       setProcesses(
@@ -2011,6 +2019,7 @@ export default function Process() {
         description: template.description,
         status: "active",
         color: randomColor,
+        callTriggerSettings: getDefaultCallTriggerSettings(),
       };
 
       setProcesses(
@@ -7398,9 +7407,42 @@ export default function Process() {
           isOpen={showCallTriggerDrawer}
           onClose={() => setShowCallTriggerDrawer(false)}
           stageName={processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.name}
+          processName={processes.find((p) => p.id === selectedProcess)?.name}
           settings={processes.find((p) => p.id === selectedProcess)?.stages.find((s) => s.id === expandedStage)?.callTriggerSettings}
-          onSave={(updatedSettings) => {
-            if (selectedProcess && expandedStage) {
+          onSave={(updatedSettings, options) => {
+            if (options?.setAsDefault) {
+              // 1. Save global default for all future configured stages
+              saveDefaultCallTriggerSettings(updatedSettings);
+              // 2. Update all stages across all processes
+              setProcesses((prev) =>
+                prev.map((p) => ({
+                  ...p,
+                  stages: p.stages.map((s) => ({
+                    ...s,
+                    callTriggerSettings: { ...updatedSettings },
+                  })),
+                }))
+              );
+              toast.success("Saved as default settings for all stages across all processes");
+            } else if (options?.applyToCurrentProcess && selectedProcess) {
+              // Apply to all stages of this process only
+              const procName = processes.find((p) => p.id === selectedProcess)?.name || "this process";
+              setProcesses((prev) =>
+                prev.map((p) =>
+                  p.id !== selectedProcess
+                    ? p
+                    : {
+                        ...p,
+                        stages: p.stages.map((s) => ({
+                          ...s,
+                          callTriggerSettings: { ...updatedSettings },
+                        })),
+                      }
+                )
+              );
+              toast.success(`Applied trigger settings to all stages in "${procName}"`);
+            } else if (selectedProcess && expandedStage) {
+              // Apply to this stage only
               setProcesses((prev) =>
                 prev.map((p) =>
                   p.id !== selectedProcess
@@ -7415,6 +7457,7 @@ export default function Process() {
                       }
                 )
               );
+              toast.success("Call trigger settings saved for this stage");
             }
           }}
         />

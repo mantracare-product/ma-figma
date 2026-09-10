@@ -41,19 +41,6 @@ export default function AdminLayout() {
             />
           </Link>
         </div>
-
-        {/* Right header controls */}
-        <div className="flex items-center gap-3">
-          <Link
-            to="/clients"
-            className="hidden sm:inline-flex items-center gap-1.5 text-xs font-semibold text-gray-600 hover:text-gray-900 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            Clinic App →
-          </Link>
-          <div className="w-8 h-8 rounded-full bg-amber-700 text-white flex items-center justify-center font-bold text-xs shadow-2xs">
-            N
-          </div>
-        </div>
       </header>
 
       {/* ── Drawer Sidebar (fixed overlay — never shifts page content) ── */}

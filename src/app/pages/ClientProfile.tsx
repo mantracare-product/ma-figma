@@ -20,7 +20,14 @@ import { toast } from "sonner";
 import { Form, INITIAL_FORMS } from "../../data/forms";
 import { loadClientSubmissions } from "../../data/submissionsStore";
 import { INITIAL_FLOWS, IntakeFlow, FlowStep } from "../../data/intakeFlows";
-import { useFieldRegistry, FieldDefinition, resolveVisibility } from "../context/FieldRegistryContext";
+import {
+  useFieldRegistry,
+  FieldDefinition,
+  resolveVisibility,
+  SectionDefinition,
+  SECTION_REGISTRY_EVENT,
+  LEGACY_SECTION_REGISTRY_EVENT,
+} from "../context/FieldRegistryContext";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
 import { getActivityForClient, getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
@@ -369,8 +376,8 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     };
   }, []);
 
-  // Custom field definitions from shared context (same ones Settings.tsx manages)
-  const { getAllFields, addCustomField } = useFieldRegistry();
+  // Custom field and section definitions from shared context (same ones Settings.tsx & Admin manage)
+  const { getAllFields, addCustomField, getCustomSections, getAllSections } = useFieldRegistry();
 
   const handleClose = () => {
     if (onCloseOverride) onCloseOverride();
@@ -396,13 +403,94 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       iconName: "workflow",
       fieldKeys: ["status", "processes"],
     },
-    {
-      id: "sec-custom-fields",
-      title: "Custom Fields",
-      iconName: "file-text",
-      fieldKeys: [],
-    },
   ];
+
+  const computeMergedClientSections = (
+    existingSections: OverviewSection[] | undefined,
+    registryCustomSections: SectionDefinition[],
+    registryAllFields: FieldDefinition[],
+    clientVisibleKeys?: string[]
+  ): OverviewSection[] => {
+    // Start with default template if no existing sections
+    const baseSections: OverviewSection[] =
+      existingSections && existingSections.length > 0
+        ? existingSections.map((s) => ({ ...s, fieldKeys: [...s.fieldKeys] }))
+        : JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
+
+    const customSecs = registryCustomSections || [];
+    const customSecIds = new Set(customSecs.map((s) => s.id));
+
+    // System section IDs that should never be deleted
+    const SYSTEM_SEC_IDS = new Set([
+      "sec-client-details",
+      "sec-general-info",
+      "sec-company-details",
+      "sec-company-role",
+      "sec-process-pipeline",
+    ]);
+
+    // Filter out hardcoded sec-custom-fields, and any custom section that was removed from the registry
+    let updatedSections = baseSections.filter((s) => {
+      if (s.id === "sec-custom-fields") return false;
+      if (SYSTEM_SEC_IDS.has(s.id)) return true;
+      return customSecIds.has(s.id);
+    });
+
+    // Update existing custom sections with latest title/description/icon and merge new fields
+    updatedSections = updatedSections.map((s) => {
+      const regSec = customSecs.find((cs) => cs.id === s.id);
+      if (!regSec) return s;
+
+      const assignedFromFields = registryAllFields
+        .filter((f) => f.sectionId === regSec.id)
+        .map((f) => f.key);
+      const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
+
+      const existingKeySet = new Set(s.fieldKeys);
+      const mergedKeys = [...s.fieldKeys];
+      regKeys.forEach((k) => {
+        if (!existingKeySet.has(k)) {
+          mergedKeys.push(k);
+          existingKeySet.add(k);
+        }
+      });
+
+      return {
+        ...s,
+        title: regSec.title || s.title,
+        description: regSec.description ?? s.description,
+        iconName: (regSec.iconName as any) || s.iconName || "layers",
+        isCustom: true,
+        fieldKeys: mergedKeys,
+      };
+    });
+
+    // Insert any registry custom sections that are not yet in updatedSections
+    const existingSecIds = new Set(updatedSections.map((s) => s.id));
+
+    customSecs.forEach((regSec) => {
+      if (!existingSecIds.has(regSec.id)) {
+        const assignedFromFields = registryAllFields
+          .filter((f) => f.sectionId === regSec.id)
+          .map((f) => f.key);
+        const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
+
+        const newSection: OverviewSection = {
+          id: regSec.id,
+          title: regSec.title,
+          description: regSec.description,
+          iconName: (regSec.iconName as any) || "layers",
+          isCustom: true,
+          fieldKeys: regKeys,
+        };
+
+        updatedSections.push(newSection);
+        existingSecIds.add(regSec.id);
+      }
+    });
+
+    return updatedSections;
+  };
 
   const [clientName, setClientName] = useState(client?.name || "");
   const [clientEmail, setClientEmail] = useState(client?.email || "");
@@ -416,18 +504,37 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   const [dynamicFieldValues, setDynamicFieldValues] = useState<Record<string, any>>({});
 
   const [clientSections, setClientSections] = useState<OverviewSection[]>(() => {
-    if ((client as any)?.customSections && Array.isArray((client as any).customSections)) {
-      return (client as any).customSections;
-    }
-    const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
-    if (client?.visibleFieldKeys && Array.isArray(client.visibleFieldKeys)) {
-      const customKeys = client.visibleFieldKeys.filter((k: string) => !HARDCODED_KEYS.has(k));
-      if (customKeys.length > 0) {
-        defaultSecs[3].fieldKeys = customKeys;
-      }
-    }
-    return defaultSecs;
+    const savedSections = (client as any)?.customSections;
+    return computeMergedClientSections(
+      savedSections,
+      getCustomSections("client"),
+      getAllFields("client"),
+      client?.visibleFieldKeys
+    );
   });
+
+  // Live-sync custom sections from FieldRegistry (e.g. created/updated in Admin or another tab)
+  useEffect(() => {
+    const handleSectionsUpdate = () => {
+      setClientSections((prev) =>
+        computeMergedClientSections(
+          prev,
+          getCustomSections("client"),
+          getAllFields("client"),
+          client?.visibleFieldKeys
+        )
+      );
+    };
+
+    window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener("storage", handleSectionsUpdate);
+    return () => {
+      window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener("storage", handleSectionsUpdate);
+    };
+  }, [getCustomSections, getAllFields, client?.visibleFieldKeys]);
 
   useEffect(() => {
     if (client) {
@@ -441,17 +548,21 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setClientCountry(client.country || "");
       setSelectedProcesses(client.processes || []);
 
-      if ((client as any).customSections && Array.isArray((client as any).customSections)) {
-        setClientSections((client as any).customSections);
-      } else {
-        const defaultSecs: OverviewSection[] = JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
-        if (client.visibleFieldKeys && Array.isArray(client.visibleFieldKeys)) {
-          const customKeys = client.visibleFieldKeys.filter((k: string) => !HARDCODED_KEYS.has(k));
-          if (customKeys.length > 0) {
-            defaultSecs[3].fieldKeys = customKeys;
-          }
-        }
-        setClientSections(defaultSecs);
+      const savedSections = (client as any).customSections;
+      const merged = computeMergedClientSections(
+        savedSections,
+        getCustomSections("client"),
+        getAllFields("client"),
+        client.visibleFieldKeys
+      );
+      setClientSections(merged);
+
+      if ((client as any).customSections && (client as any).customSections.some((s: any) => s.id === "sec-custom-fields")) {
+        setClients((prev) =>
+          prev.map((c) =>
+            c.id === client.id ? { ...c, customSections: merged } : c
+          )
+        );
       }
 
       const dyn: Record<string, any> = {};
@@ -462,7 +573,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       });
       setDynamicFieldValues(dyn);
     }
-  }, [client?.id]);
+  }, [client?.id, getCustomSections, getAllFields]);
 
   const fieldValues = useMemo(() => {
     return {

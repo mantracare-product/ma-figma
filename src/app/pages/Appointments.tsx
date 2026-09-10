@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -37,6 +37,7 @@ import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab"
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
+import { useTeamMembers } from "../../lib/teamStore";
 
 interface Appointment {
   id: number;
@@ -83,14 +84,25 @@ const processStages: Record<string, string[]> = {
 
 export default function Appointments() {
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
-  // Mock data
-  const employees: Employee[] = [
-    { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
-    { id: 2, name: "Sarah Johnson", email: "sarah.j@healthcare.com" },
-    { id: 4, name: "Emily Davis", email: "emily.d@healthcare.com" },
-    { id: 5, name: "Dr. Robert Martinez", email: "robert.m@dentalcare.com" },
-    { id: 6, name: "Lisa Anderson", email: "lisa.a@dentalcare.com" },
-  ];
+  const { bookableMembers } = useTeamMembers();
+
+  // Dynamic bookable employees list
+  const employees: Employee[] = useMemo(() => {
+    if (bookableMembers && bookableMembers.length > 0) {
+      return bookableMembers.map((m) => ({
+        id: Number(m.id) || 1,
+        name: m.name,
+        email: m.email,
+      }));
+    }
+    return [
+      { id: 1, name: "John Smith", email: "john.smith@healthcare.com" },
+      { id: 2, name: "Sarah Johnson", email: "sarah.j@healthcare.com" },
+      { id: 4, name: "Emily Davis", email: "emily.d@healthcare.com" },
+      { id: 5, name: "Dr. Robert Martinez", email: "robert.m@dentalcare.com" },
+      { id: 6, name: "Lisa Anderson", email: "lisa.a@dentalcare.com" },
+    ];
+  }, [bookableMembers]);
 
   const services: Service[] = [
     { id: 1, name: "Initial Consultation", duration: 60, price: 150 },
