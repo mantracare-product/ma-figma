@@ -3346,7 +3346,6 @@ export default function Process() {
                       <div className="flex gap-2 mt-4">
                         {[
                           { id: "basic", label: "Basic" },
-                          { id: "advanced", label: "Advance" },
                           { id: "automation", label: "Automation" },
                           { id: "flowbuilder", label: "Flow Builder" },
                         ].map((tab) => (
@@ -4126,71 +4125,73 @@ export default function Process() {
                               </div>
                             )}
 
-                            {/* Call Action */}
-                            <div className="space-y-3 pt-2">
-                              <div>
-                                <h4 className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                  Call Action
-                                </h4>
-                                <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                  What action triggers when a lead enters this stage?
-                                </p>
-                              </div>
+                            {/* Call Action - Hidden when Action is Handle By Human (Transfer to Human) or No Action (No Call Activity) */}
+                            {stageType !== "Transfer to Human" && stageType !== "No Call Activity" && (
+                              <div className="space-y-3 pt-2">
+                                <div>
+                                  <h4 className="text-sm font-semibold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                    Call Action
+                                  </h4>
+                                  <p className="text-xs mt-0.5" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                    What action triggers when a lead enters this stage?
+                                  </p>
+                                </div>
 
-                              <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
-                                <div className="flex items-center gap-3.5">
-                                  <PhoneCall className="w-5 h-5 text-emerald-600 shrink-0" />
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
-                                      Enable Calling
-                                    </span>
-                                    <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                                      Allow the AI agent to initiate or receive calls for leads in this stage.
-                                    </span>
+                                <div className="p-4 sm:p-5 bg-white dark:bg-card border border-border/80 rounded-2xl flex items-center justify-between shadow-xs">
+                                  <div className="flex items-center gap-3.5">
+                                    <PhoneCall className="w-5 h-5 text-emerald-600 shrink-0" />
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="text-sm font-bold" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>
+                                        Enable Calling
+                                      </span>
+                                      <span className="text-xs" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
+                                        Allow the AI agent to initiate or receive calls for leads in this stage.
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-3 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowCallTriggerDrawer(true)}
+                                      className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
+                                      title="Call Trigger Settings"
+                                    >
+                                      <Settings className="w-4 h-4" />
+                                    </button>
+
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                      <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={enableCalling}
+                                        onChange={(e) => {
+                                          const newVal = e.target.checked;
+                                          setEnableCalling(newVal);
+                                          if (selectedProcess && expandedStage) {
+                                            setProcesses((prev) =>
+                                              prev.map((p) =>
+                                                p.id !== selectedProcess
+                                                  ? p
+                                                  : {
+                                                      ...p,
+                                                      stages: p.stages.map((s) =>
+                                                        s.id !== expandedStage
+                                                          ? s
+                                                          : { ...s, enableCalling: newVal }
+                                                      ),
+                                                    }
+                                              )
+                                            );
+                                          }
+                                        }}
+                                      />
+                                      <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                    </label>
                                   </div>
                                 </div>
-
-                                <div className="flex items-center gap-3 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowCallTriggerDrawer(true)}
-                                    className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-lg transition-colors cursor-pointer"
-                                    title="Call Trigger Settings"
-                                  >
-                                    <Settings className="w-4 h-4" />
-                                  </button>
-
-                                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                    <input
-                                      type="checkbox"
-                                      className="sr-only peer"
-                                      checked={enableCalling}
-                                      onChange={(e) => {
-                                        const newVal = e.target.checked;
-                                        setEnableCalling(newVal);
-                                        if (selectedProcess && expandedStage) {
-                                          setProcesses((prev) =>
-                                            prev.map((p) =>
-                                              p.id !== selectedProcess
-                                                ? p
-                                                : {
-                                                    ...p,
-                                                    stages: p.stages.map((s) =>
-                                                      s.id !== expandedStage
-                                                        ? s
-                                                        : { ...s, enableCalling: newVal }
-                                                    ),
-                                                  }
-                                            )
-                                          );
-                                        }
-                                      }}
-                                    />
-                                    <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                                  </label>
-                                </div>
                               </div>
-                            </div>
+                            )}
 
                           </div>
 

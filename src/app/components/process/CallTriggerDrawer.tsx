@@ -14,6 +14,8 @@ import {
   X,
   Layers,
   Globe,
+  Mic,
+  RefreshCw,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
 import { toast } from "sonner";
@@ -68,6 +70,9 @@ export default function CallTriggerDrawer({
   const [triggerDropdownOpen, setTriggerDropdownOpen] = useState(true);
   const [callingHoursDropdownOpen, setCallingHoursDropdownOpen] = useState(true);
   const [skipDaysDropdownOpen, setSkipDaysDropdownOpen] = useState(true);
+  const [callDurationDropdownOpen, setCallDurationDropdownOpen] = useState(false);
+  const [retryRulesDropdownOpen, setRetryRulesDropdownOpen] = useState(false);
+  const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
 
   // Scope & Default checkboxes
   const [setAsDefault, setSetAsDefault] = useState(false);
@@ -84,6 +89,14 @@ export default function CallTriggerDrawer({
   const [skipDays, setSkipDays] = useState<string[]>(["Saturday", "Sunday"]);
   const [blackoutDates, setBlackoutDates] = useState<Array<{ id: string; date: string; label?: string }>>([]);
 
+  // Record Calls, Call Duration & Retries states
+  const [recordCalls, setRecordCalls] = useState<boolean>(true);
+  const [callDurationMinutes, setCallDurationMinutes] = useState<number>(15);
+  const [hangupWindowMinutes, setHangupWindowMinutes] = useState<number>(2);
+  const [retryRulesEnabled, setRetryRulesEnabled] = useState<boolean>(false);
+  const [retryAttempts, setRetryAttempts] = useState<number>(3);
+  const [retryDelay, setRetryDelay] = useState<number>(5);
+
   // Draft fields for custom range
   const [draftStartDate, setDraftStartDate] = useState<string>("");
   const [draftEndDate, setDraftEndDate] = useState<string>("");
@@ -99,6 +112,12 @@ export default function CallTriggerDrawer({
       setCallingHoursEnd(current.callingHoursEnd ?? "18:00");
       setSkipDays(current.skipDays ?? ["Saturday", "Sunday"]);
       setBlackoutDates(current.blackoutDates ?? []);
+      setRecordCalls(current.recordCalls !== undefined ? current.recordCalls : true);
+      setCallDurationMinutes(current.callDurationMinutes ?? 15);
+      setHangupWindowMinutes(current.hangupWindowMinutes ?? 2);
+      setRetryRulesEnabled(current.retryRulesEnabled ?? false);
+      setRetryAttempts(current.retryAttempts ?? 3);
+      setRetryDelay(current.retryDelay ?? 5);
       setSetAsDefault(false);
       setApplyToCurrentProcess(false);
     }
@@ -152,6 +171,12 @@ export default function CallTriggerDrawer({
       customTimezone: settings?.customTimezone ?? "America/New_York",
       skipDays,
       blackoutDates,
+      recordCalls,
+      callDurationMinutes: Number(callDurationMinutes) || 15,
+      hangupWindowMinutes: Number(hangupWindowMinutes) || 2,
+      retryRulesEnabled,
+      retryAttempts: Number(retryAttempts) || 3,
+      retryDelay: Number(retryDelay) || 5,
     };
 
     if (onSave) {
@@ -169,6 +194,12 @@ export default function CallTriggerDrawer({
     setCallingHoursEnd(defaults.callingHoursEnd);
     setSkipDays([...defaults.skipDays]);
     setBlackoutDates([...defaults.blackoutDates]);
+    setRecordCalls(defaults.recordCalls !== undefined ? defaults.recordCalls : true);
+    setCallDurationMinutes(defaults.callDurationMinutes ?? 15);
+    setHangupWindowMinutes(defaults.hangupWindowMinutes ?? 2);
+    setRetryRulesEnabled(defaults.retryRulesEnabled ?? false);
+    setRetryAttempts(defaults.retryAttempts ?? 3);
+    setRetryDelay(defaults.retryDelay ?? 5);
     setSetAsDefault(false);
     setApplyToCurrentProcess(false);
     toast.info("Reset to default settings");
@@ -421,240 +452,212 @@ export default function CallTriggerDrawer({
           )}
         </div>
 
-        {/* DROPDOWN 3: Days Off */}
+        {/* DROPDOWN: Call Retries Settings */}
         <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
           <button
             type="button"
-            onClick={() => setSkipDaysDropdownOpen(!skipDaysDropdownOpen)}
+            onClick={() => setRetryRulesDropdownOpen(!retryRulesDropdownOpen)}
             className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                <CalendarOff className="w-4 h-4" />
+                <RefreshCw className="w-4 h-4" />
               </div>
-              <span
-                className="text-sm font-bold text-[#222222]"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                Days Off
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Call Retries Settings
+                </span>
+                <Tooltip text="Automatically retry calling if the call fails.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help" />
+                </Tooltip>
+              </div>
             </div>
-            <ChevronDown
-              className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
-                skipDaysDropdownOpen ? "rotate-180" : ""
-              }`}
-            />
+            <div className="flex items-center gap-2">
+              <span
+                className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  retryRulesEnabled
+                    ? "bg-emerald-100 text-emerald-700"
+                    : "bg-slate-100 text-slate-500"
+                }`}
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                {retryRulesEnabled ? "On" : "Off"}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  retryRulesDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
           </button>
 
-          {skipDaysDropdownOpen && (
-            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-4">
-              {/* Part A: Days */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-2">
+          {retryRulesDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+              {/* Enable Toggle Row */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-white border border-slate-200/80 shadow-2xs">
+                <div className="flex items-center gap-2">
                   <span
-                    className="text-xs font-semibold text-slate-700"
+                    className="text-xs font-bold text-slate-900"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
-                    Days
+                    Enable Retry Rules
                   </span>
-                  <Tooltip text="Select days of the week when outbound calls should be paused">
-                    <Info className="w-3 h-3 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" />
+                  <Tooltip text="If call fails, automatically retry calling based on rules configured below.">
+                    <Info className="w-3 h-3 text-slate-400 cursor-help" />
                   </Tooltip>
                 </div>
-
-                <div className="grid grid-cols-7 gap-1.5">
-                  {WEEKDAYS.map((day) => {
-                    const isSkipped = skipDays.includes(day.id);
-                    return (
-                      <button
-                        key={day.id}
-                        type="button"
-                        onClick={() => handleToggleSkipDay(day.id)}
-                        className={`h-9 rounded-xl text-xs font-semibold border flex items-center justify-center transition-all cursor-pointer ${
-                          isSkipped
-                            ? "bg-primary text-white border-primary shadow-xs"
-                            : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                        }`}
-                        style={{ fontFamily: "DM Sans, sans-serif" }}
-                      >
-                        {day.short}
-                      </button>
-                    );
-                  })}
-                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    className="sr-only peer"
+                    checked={retryRulesEnabled}
+                    onChange={(e) => setRetryRulesEnabled(e.target.checked)}
+                  />
+                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary cursor-pointer" />
+                </label>
               </div>
 
-              {/* Part B: Custom Range */}
-              <div className="pt-3 border-t border-slate-200/80 space-y-2.5">
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="text-xs font-semibold text-slate-700"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Custom Range
-                  </span>
-                  <Tooltip text="Add specific dates or a date range when outbound calls will be paused">
-                    <Info className="w-3 h-3 text-slate-400 hover:text-slate-600 transition-colors cursor-pointer" />
-                  </Tooltip>
-                </div>
-
-                {/* Add Range Form */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {retryRulesEnabled && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                   <div>
-                    <span className="text-[11px] text-slate-500 block mb-1">Start Date</span>
+                    <label
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Retry Attempts
+                    </label>
                     <input
-                      type="date"
-                      value={draftStartDate}
-                      onChange={(e) => setDraftStartDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={retryAttempts}
+                      onChange={(e) => setRetryAttempts(parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     />
                   </div>
+
                   <div>
-                    <span className="text-[11px] text-slate-500 block mb-1">End Date (Optional)</span>
+                    <label
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      Delay Between Retries (min)
+                    </label>
                     <input
-                      type="date"
-                      value={draftEndDate}
-                      min={draftStartDate || undefined}
-                      onChange={(e) => setDraftEndDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                      type="number"
+                      min={1}
+                      value={retryDelay}
+                      onChange={(e) => setRetryDelay(parseInt(e.target.value) || 1)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                      style={{ fontFamily: "Outfit, sans-serif" }}
                     />
                   </div>
                 </div>
-
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAddCustomRange}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg transition-colors cursor-pointer shadow-xs"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Date Range
-                  </button>
-                </div>
-
-                {/* Custom Dates / Ranges Chips */}
-                {blackoutDates.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {blackoutDates.map((b) => (
-                      <div
-                        key={b.id}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-700 shadow-2xs"
-                      >
-                        <Calendar className="w-3 h-3 text-primary shrink-0" />
-                        <span className="font-semibold text-slate-800" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {b.date}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveBlackoutDate(b.id)}
-                          className="p-0.5 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer ml-0.5"
-                          title="Remove"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* SCOPE & DEFAULT SETTINGS SECTION */}
-        <div className="border border-slate-200/80 rounded-2xl bg-white p-4 shadow-xs space-y-3">
-          <div className="flex items-center gap-2.5 pb-2 border-b border-slate-100">
-            <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-              <Layers className="w-3.5 h-3.5" />
+        {/* DROPDOWN: Settings Scope & Defaults */}
+        <div className="border border-slate-200/80 rounded-2xl overflow-hidden bg-white shadow-xs transition-all">
+          <button
+            type="button"
+            onClick={() => setScopeDropdownOpen(!scopeDropdownOpen)}
+            className="w-full flex items-center justify-between p-4 bg-white hover:bg-slate-50/80 transition-colors text-left cursor-pointer"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
+                <Layers className="w-4 h-4" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="text-sm font-bold text-[#222222]"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Settings Scope & Defaults
+                </span>
+                <Tooltip text="Choose whether these settings apply beyond this individual stage.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 cursor-help hover:text-slate-600 transition-colors" />
+                </Tooltip>
+              </div>
             </div>
-            <div>
-              <h4
-                className="text-xs font-bold text-slate-900 tracking-tight"
-                style={{ fontFamily: "DM Sans, sans-serif" }}
+            <div className="flex items-center gap-2">
+              {(setAsDefault || applyToCurrentProcess) && (
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700"
+                  style={{ fontFamily: "Outfit, sans-serif" }}
+                >
+                  {setAsDefault ? "Global Default" : "Process Only"}
+                </span>
+              )}
+              <ChevronDown
+                className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                  scopeDropdownOpen ? "rotate-180" : ""
+                }`}
+              />
+            </div>
+          </button>
+
+          {scopeDropdownOpen && (
+            <div className="p-4 border-t border-slate-100 bg-[#fbfcfd] space-y-3">
+              {/* Checkbox 1: Set Default */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={setAsDefault}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setSetAsDefault(checked);
+                    if (checked) {
+                      setApplyToCurrentProcess(false);
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                />
+                <span
+                  className="text-xs font-semibold text-slate-800"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Set Default
+                </span>
+                <Tooltip text="Applicable to all stages of all processes. Whenever a new stage is configured, these settings will be applied automatically. Users can customize settings for any stage individually.">
+                  <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                </Tooltip>
+              </label>
+
+              {/* Checkbox 2: Apply to All */}
+              <label
+                className={`flex items-center gap-2.5 cursor-pointer select-none ${
+                  setAsDefault ? "opacity-50 pointer-events-none" : ""
+                }`}
               >
-                Settings Scope & Defaults
-              </h4>
-              <p className="text-[11px] text-slate-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Choose whether these settings apply beyond this individual stage
-              </p>
+                <input
+                  type="checkbox"
+                  checked={applyToCurrentProcess}
+                  disabled={setAsDefault}
+                  onChange={(e) => setApplyToCurrentProcess(e.target.checked)}
+                  className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                />
+                <span
+                  className="text-xs font-semibold text-slate-800"
+                  style={{ fontFamily: "DM Sans, sans-serif" }}
+                >
+                  Apply to All
+                </span>
+                <Tooltip
+                  text={`Apply these call trigger settings to all stages in this process only${
+                    processName ? ` (${processName})` : ""
+                  }.`}
+                >
+                  <Info className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                </Tooltip>
+              </label>
             </div>
-          </div>
-
-          <div className="space-y-2.5 pt-1">
-            {/* Checkbox 1: Set as default across all processes */}
-            <label
-              className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                setAsDefault
-                  ? "border-primary bg-primary/5 shadow-2xs"
-                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={setAsDefault}
-                onChange={(e) => {
-                  const checked = e.target.checked;
-                  setSetAsDefault(checked);
-                  if (checked) {
-                    setApplyToCurrentProcess(false);
-                  }
-                }}
-                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
-              />
-              <div className="min-w-0 space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-xs font-bold text-slate-900"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Set as default settings for all processes & stages
-                  </span>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-blue-100 text-blue-700 tracking-wide">
-                    Global Default
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Applicable to all stages of all processes. Whenever a new stage is configured, these settings will be applied automatically. Users can customize settings for any stage individually.
-                </p>
-              </div>
-            </label>
-
-            {/* Checkbox 2: Apply to all stages of this process only */}
-            <label
-              className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                applyToCurrentProcess
-                  ? "border-primary bg-primary/5 shadow-2xs"
-                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50"
-              } ${setAsDefault ? "opacity-50 pointer-events-none" : ""}`}
-            >
-              <input
-                type="checkbox"
-                checked={applyToCurrentProcess}
-                disabled={setAsDefault}
-                onChange={(e) => setApplyToCurrentProcess(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
-              />
-              <div className="min-w-0 space-y-0.5">
-                <div className="flex items-center gap-2">
-                  <span
-                    className="text-xs font-bold text-slate-900"
-                    style={{ fontFamily: "DM Sans, sans-serif" }}
-                  >
-                    Apply to all stages of this process only
-                  </span>
-                  {processName && (
-                    <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 truncate max-w-[140px]">
-                      {processName}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                  Overwrite call trigger timing, calling hours, and skip dates for all stages in this process only.
-                </p>
-              </div>
-            </label>
-          </div>
+          )}
         </div>
       </div>
     </DrawerShell>

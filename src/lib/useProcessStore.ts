@@ -26,6 +26,12 @@ export interface CallTriggerSettings {
   customTimezone: string;
   skipDays: string[];
   blackoutDates: Array<{ id: string; date: string; label?: string }>;
+  recordCalls?: boolean;
+  callDurationMinutes?: number;
+  hangupWindowMinutes?: number;
+  retryRulesEnabled?: boolean;
+  retryAttempts?: number;
+  retryDelay?: number;
 }
 
 export interface Stage {
@@ -68,6 +74,12 @@ export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
   customTimezone: "America/New_York",
   skipDays: ["Saturday", "Sunday"],
   blackoutDates: [],
+  recordCalls: true,
+  callDurationMinutes: 15,
+  hangupWindowMinutes: 2,
+  retryRulesEnabled: false,
+  retryAttempts: 3,
+  retryDelay: 5,
 };
 
 export function getDefaultCallTriggerSettings(): CallTriggerSettings {
