@@ -15,6 +15,8 @@ export interface TeamMember {
   daysOff?: string[];
   assignedServices?: number[];
   permissions?: any;
+  locations?: string[]; // Location IDs/names where the member is available
+  availableLocations?: string[];
 }
 
 export const TEAM_STORE_EVENT = "mantra_team_members_updated";
@@ -100,7 +102,7 @@ export const INITIAL_TEAM_MEMBERS: TeamMember[] = [
 
 export function getStoredTeamMembers(): TeamMember[] {
   try {
-    const rawLocal = localStorage.getItem(TEAM_STORAGE_KEY);
+    const rawLocal = localStorage.getItem(TEAM_STORAGE_KEY) || localStorage.getItem(SETTINGS_USERS_KEY);
     if (rawLocal) {
       const parsed = JSON.parse(rawLocal);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -126,9 +128,12 @@ export function getStoredTeamMembers(): TeamMember[] {
 
 export function saveStoredTeamMembers(members: TeamMember[]) {
   try {
-    localStorage.setItem(TEAM_STORAGE_KEY, JSON.stringify(members));
-    sessionStorage.setItem(SETTINGS_USERS_KEY, JSON.stringify(members));
+    const serialized = JSON.stringify(members);
+    localStorage.setItem(TEAM_STORAGE_KEY, serialized);
+    localStorage.setItem(SETTINGS_USERS_KEY, serialized);
+    sessionStorage.setItem(SETTINGS_USERS_KEY, serialized);
     window.dispatchEvent(new Event(TEAM_STORE_EVENT));
+    window.dispatchEvent(new Event("storage"));
   } catch {}
 }
 
@@ -136,6 +141,16 @@ export function enableAppointmentBooking(memberId: string | number): TeamMember[
   const members = getStoredTeamMembers();
   const updated = members.map((m) =>
     String(m.id) === String(memberId) ? { ...m, canBookAppointments: true } : m
+  );
+  saveStoredTeamMembers(updated);
+  return updated;
+}
+
+export function enableMultipleAppointmentBooking(memberIds: (string | number)[]): TeamMember[] {
+  const idSet = new Set(memberIds.map(String));
+  const members = getStoredTeamMembers();
+  const updated = members.map((m) =>
+    idSet.has(String(m.id)) ? { ...m, canBookAppointments: true } : m
   );
   saveStoredTeamMembers(updated);
   return updated;
@@ -149,6 +164,7 @@ export function addTeamMemberToStore(newMember: Omit<TeamMember, "id"> & { id?: 
     id: nextId,
     status: newMember.status !== undefined ? newMember.status : true,
     canBookAppointments: newMember.canBookAppointments !== undefined ? newMember.canBookAppointments : false,
+    locations: newMember.locations || (newMember as any).availableLocations || [],
   };
   const updated = [...members, created];
   saveStoredTeamMembers(updated);
@@ -187,6 +203,7 @@ export function useTeamMembers() {
     bookableMembers,
     nonBookableMembers,
     enableBooking: (id: string | number) => enableAppointmentBooking(id),
+    enableMultipleBooking: (ids: (string | number)[]) => enableMultipleAppointmentBooking(ids),
     addMember: (m: Omit<TeamMember, "id"> & { id?: string | number }) => addTeamMemberToStore(m),
   };
 }

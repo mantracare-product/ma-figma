@@ -27,7 +27,11 @@ import {
   SectionDefinition,
   SECTION_REGISTRY_EVENT,
   LEGACY_SECTION_REGISTRY_EVENT,
+  FIELD_REGISTRY_EVENT,
+  isFieldMatchingOrg,
+  isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
+import { useOrganization } from "../context/OrganizationContext";
 import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
 import { getActivityForClient, getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
@@ -378,6 +382,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
   // Custom field and section definitions from shared context (same ones Settings.tsx & Admin manage)
   const { getAllFields, addCustomField, getCustomSections, getAllSections } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
 
   const handleClose = () => {
     if (onCloseOverride) onCloseOverride();
@@ -405,20 +410,32 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     },
   ];
 
+  const SYSTEM_FIELD_KEYS = new Set([
+    "name", "email", "phone", "location", "country",
+    "company", "role", "status", "processes", "stage",
+    "responsible", "lastContact", "companyName", "jobPosition"
+  ]);
+
   const computeMergedClientSections = (
     existingSections: OverviewSection[] | undefined,
     registryCustomSections: SectionDefinition[],
     registryAllFields: FieldDefinition[],
+    org?: any,
     clientVisibleKeys?: string[]
   ): OverviewSection[] => {
+    // 1. Only include registry sections that match the organization's scope
+    const matchingCustomSecs = (registryCustomSections || []).filter((s) => isSectionMatchingOrg(s, org));
+    const matchingCustomSecIds = new Set(matchingCustomSecs.map((s) => s.id));
+
+    // 2. Only include registry fields that match the organization's scope
+    const matchingFields = (registryAllFields || []).filter((f) => isFieldMatchingOrg(f, org));
+    const allowedFieldKeys = new Set(matchingFields.map((f) => f.key));
+
     // Start with default template if no existing sections
     const baseSections: OverviewSection[] =
       existingSections && existingSections.length > 0
         ? existingSections.map((s) => ({ ...s, fieldKeys: [...s.fieldKeys] }))
         : JSON.parse(JSON.stringify(DEFAULT_CLIENT_SECTIONS));
-
-    const customSecs = registryCustomSections || [];
-    const customSecIds = new Set(customSecs.map((s) => s.id));
 
     // System section IDs that should never be deleted
     const SYSTEM_SEC_IDS = new Set([
@@ -429,51 +446,56 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       "sec-process-pipeline",
     ]);
 
-    // Filter out hardcoded sec-custom-fields, and any custom section that was removed from the registry
+    // Filter out hardcoded sec-custom-fields, and any custom section that does NOT match current org scope
     let updatedSections = baseSections.filter((s) => {
       if (s.id === "sec-custom-fields") return false;
-      if (SYSTEM_SEC_IDS.has(s.id)) return true;
-      return customSecIds.has(s.id);
+      if (SYSTEM_SEC_IDS.has(s.id) || !s.isCustom) return true;
+      return matchingCustomSecIds.has(s.id);
     });
 
-    // Update existing custom sections with latest title/description/icon and merge new fields
+    // Update existing custom sections with latest title/description/icon and merge/filter fields
     updatedSections = updatedSections.map((s) => {
-      const regSec = customSecs.find((cs) => cs.id === s.id);
-      if (!regSec) return s;
+      const regSec = matchingCustomSecs.find((cs) => cs.id === s.id);
 
-      const assignedFromFields = registryAllFields
-        .filter((f) => f.sectionId === regSec.id)
-        .map((f) => f.key);
-      const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
-
-      const existingKeySet = new Set(s.fieldKeys);
-      const mergedKeys = [...s.fieldKeys];
-      regKeys.forEach((k) => {
-        if (!existingKeySet.has(k)) {
-          mergedKeys.push(k);
-          existingKeySet.add(k);
-        }
-      });
-
-      return {
-        ...s,
-        title: regSec.title || s.title,
-        description: regSec.description ?? s.description,
-        iconName: (regSec.iconName as any) || s.iconName || "layers",
-        isCustom: true,
-        fieldKeys: mergedKeys,
-      };
-    });
-
-    // Insert any registry custom sections that are not yet in updatedSections
-    const existingSecIds = new Set(updatedSections.map((s) => s.id));
-
-    customSecs.forEach((regSec) => {
-      if (!existingSecIds.has(regSec.id)) {
-        const assignedFromFields = registryAllFields
+      let mergedKeys = [...s.fieldKeys];
+      if (regSec) {
+        const assignedFromFields = matchingFields
           .filter((f) => f.sectionId === regSec.id)
           .map((f) => f.key);
         const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]));
+
+        const existingKeySet = new Set(s.fieldKeys);
+        regKeys.forEach((k) => {
+          if (!existingKeySet.has(k)) {
+            mergedKeys.push(k);
+            existingKeySet.add(k);
+          }
+        });
+      }
+
+      // CRITICAL: Filter fields in this section to only system fields or fields matching current org!
+      const scopedFieldKeys = mergedKeys.filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k));
+
+      return {
+        ...s,
+        title: regSec?.title || s.title,
+        description: regSec ? (regSec.description ?? s.description) : s.description,
+        iconName: (regSec?.iconName as any) || s.iconName || "layers",
+        isCustom: Boolean(s.isCustom || regSec),
+        fieldKeys: scopedFieldKeys,
+      };
+    });
+
+    // Insert any matching registry custom sections that are not yet in updatedSections
+    const existingSecIds = new Set(updatedSections.map((s) => s.id));
+
+    matchingCustomSecs.forEach((regSec) => {
+      if (!existingSecIds.has(regSec.id)) {
+        const assignedFromFields = matchingFields
+          .filter((f) => f.sectionId === regSec.id)
+          .map((f) => f.key);
+        const regKeys = Array.from(new Set([...(regSec.fieldKeys || []), ...assignedFromFields]))
+          .filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k));
 
         const newSection: OverviewSection = {
           id: regSec.id,
@@ -509,11 +531,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       savedSections,
       getCustomSections("client"),
       getAllFields("client"),
+      activeOrganization,
       client?.visibleFieldKeys
     );
   });
 
-  // Live-sync custom sections from FieldRegistry (e.g. created/updated in Admin or another tab)
+  // Live-sync custom sections & fields from FieldRegistry (e.g. created/updated in Admin or Settings)
   useEffect(() => {
     const handleSectionsUpdate = () => {
       setClientSections((prev) =>
@@ -521,6 +544,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
           prev,
           getCustomSections("client"),
           getAllFields("client"),
+          activeOrganization,
           client?.visibleFieldKeys
         )
       );
@@ -528,13 +552,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
 
     window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener("storage", handleSectionsUpdate);
     return () => {
       window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener("storage", handleSectionsUpdate);
     };
-  }, [getCustomSections, getAllFields, client?.visibleFieldKeys]);
+  }, [getCustomSections, getAllFields, activeOrganization, client?.visibleFieldKeys]);
 
   useEffect(() => {
     if (client) {
@@ -553,6 +579,7 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         savedSections,
         getCustomSections("client"),
         getAllFields("client"),
+        activeOrganization,
         client.visibleFieldKeys
       );
       setClientSections(merged);

@@ -37,7 +37,7 @@ import {
   Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, SectionPermissions } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
@@ -259,15 +259,50 @@ export default function DraggableOverviewSections({
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
 
+  const SYSTEM_FIELD_KEYS = useMemo(() => new Set([
+    "name", "email", "phone", "location", "country",
+    "company", "role", "status", "processes", "stage",
+    "responsible", "lastContact", "companyName", "jobPosition"
+  ]), []);
+
+  const SYSTEM_SEC_IDS = useMemo(() => new Set([
+    "sec-client-details",
+    "sec-general-info",
+    "sec-company-details",
+    "sec-company-role",
+    "sec-process-pipeline",
+  ]), []);
+
   // All custom field definitions filtered by organization scope
   const allRegistryFields = useMemo(() => {
     return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization));
   }, [getAllFields, customFieldsModule, activeOrganization]);
 
-  // All custom sections registered in current module
+  // All custom sections registered in current module filtered by organization scope
   const allCustomSections = useMemo(() => {
-    return getAllSections(customFieldsModule);
-  }, [getAllSections, customFieldsModule]);
+    return getAllSections(customFieldsModule).filter((s) => isSectionMatchingOrg(s, activeOrganization));
+  }, [getAllSections, customFieldsModule, activeOrganization]);
+
+  const allowedFieldKeys = useMemo(() => {
+    return new Set(allRegistryFields.map((f) => f.key));
+  }, [allRegistryFields]);
+
+  const matchingCustomSecIds = useMemo(() => {
+    return new Set(allCustomSections.map((s) => s.id));
+  }, [allCustomSections]);
+
+  // Sections and their fields filtered strictly according to activeOrganization scope
+  const visibleSections = useMemo(() => {
+    return sections
+      .filter((sec) => {
+        if (!sec.isCustom || SYSTEM_SEC_IDS.has(sec.id)) return true;
+        return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization);
+      })
+      .map((sec) => ({
+        ...sec,
+        fieldKeys: (sec.fieldKeys || []).filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k)),
+      }));
+  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -355,7 +390,7 @@ export default function DraggableOverviewSections({
       setDragOverSectionIdx(null);
       return;
     }
-    const updated = [...sections];
+    const updated = [...visibleSections];
     const [moved] = updated.splice(draggedSectionIdx, 1);
     updated.splice(dropIndex, 0, moved);
     onSectionsChange(updated);
@@ -534,6 +569,12 @@ export default function DraggableOverviewSections({
 
     // Look up custom field metadata if exists
     const regField = allRegistryFields.find((f) => f.key === key);
+
+    // If not a system field AND not in allRegistryFields (which is filtered by activeOrganization), do NOT render!
+    if (!SYSTEM_FIELD_KEYS.has(key) && !regField) {
+      return null;
+    }
+
     const label = regField?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
     return (
@@ -1455,7 +1496,7 @@ export default function DraggableOverviewSections({
     <div className="space-y-5">
       {/* Sections List */}
       <div className="space-y-4">
-        {sections.map((section, sIdx) => {
+        {visibleSections.map((section, sIdx) => {
           const isSectionDragged = draggedSectionIdx === sIdx;
           const isSectionDragOver = dragOverSectionIdx === sIdx;
           const isEditingThisTitle = editingSectionId === section.id;

@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Drawer } from "./ui/drawer";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
@@ -18,6 +18,7 @@ import {
 import { Switch } from "./ui/switch";
 import { toast } from "sonner";
 import MemberLocationScheduleTab from "./settings/MemberLocationScheduleTab";
+import { getStoredTeamMembers } from "../../lib/teamStore";
 import {
   User,
   CheckCircle2,
@@ -38,17 +39,21 @@ import {
   Info,
 } from "lucide-react";
 
-interface TeamMemberDrawerProps {
+export interface TeamMemberDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   member: {
+    id?: string | number;
     name: string;
     email: string;
     phone?: string;
     role?: string;
     department?: string;
+    canBookAppointments?: boolean;
+    locations?: string[];
   } | null;
   zIndex?: number;
+  initialTab?: "personal-info" | "calendar" | "availability" | "days-off" | "services";
 }
 
 // ---- Date helpers (used by the Calendar tab) ----
@@ -118,9 +123,36 @@ const WEEKDAY_NAMES = [
   "Sunday",
 ];
 
-export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: TeamMemberDrawerProps) {
+export function TeamMemberDrawer({
+  isOpen,
+  onClose,
+  member,
+  zIndex = 9999,
+  initialTab = "personal-info",
+}: TeamMemberDrawerProps) {
   // Tab state
-  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services">("personal-info");
+  const [activeTab, setActiveTab] = useState<"personal-info" | "calendar" | "availability" | "days-off" | "services">(initialTab);
+
+  useEffect(() => {
+    if (isOpen && initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
+
+  // Only team members who are eligible for appointments have availability & days off
+  const isBookable = useMemo(() => {
+    if (member?.canBookAppointments !== undefined) return member.canBookAppointments;
+    try {
+      const allMembers = getStoredTeamMembers();
+      const found = allMembers.find(
+        (m) =>
+          (member?.id && String(m.id) === String(member.id)) ||
+          (member?.email && m.email.toLowerCase() === member.email.toLowerCase())
+      );
+      if (found) return found.canBookAppointments === true;
+    } catch {}
+    return false;
+  }, [member]);
 
   // Personal Information Form State
   const [personalInfo, setPersonalInfo] = useState({
@@ -504,15 +536,17 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
                     >
                       Calendar
                     </button>
-                    <button
-                      onClick={() => setActiveTab("availability")}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "availability" || activeTab === "days-off"
-                          ? "border-[#1F2937] text-[#1F2937] font-semibold"
-                          : "border-transparent text-gray-600 hover:text-gray-900"
-                        }`}
-                    >
-                      Availability & Days Off
-                    </button>
+                    {isBookable && (
+                      <button
+                        onClick={() => setActiveTab("availability")}
+                        className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "availability" || activeTab === "days-off"
+                            ? "border-[#1F2937] text-[#1F2937] font-semibold"
+                            : "border-transparent text-gray-600 hover:text-gray-900"
+                          }`}
+                      >
+                        Availability & Days Off
+                      </button>
+                    )}
                     <button
                       onClick={() => setActiveTab("services")}
                       className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer ${activeTab === "services"
@@ -1131,10 +1165,11 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
               )}
 
               {/* Availability & Days Off Tab (Merged & Location-Specific) */}
-              {(activeTab === "availability" || activeTab === "days-off") && (
+              {isBookable && (activeTab === "availability" || activeTab === "days-off") && (
                 <MemberLocationScheduleTab
-                  memberId={member?.email || "default"}
+                  memberId={member?.id || member?.email || "default"}
                   memberName={member?.name || "Team Member"}
+                  canBookAppointments={isBookable}
                 />
               )}
 
@@ -1820,3 +1855,5 @@ export function TeamMemberDrawer({ isOpen, onClose, member, zIndex = 9999 }: Tea
     </>
   );
 }
+
+export default TeamMemberDrawer;

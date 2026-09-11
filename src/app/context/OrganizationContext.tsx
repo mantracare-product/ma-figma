@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, useMemo, ReactNode } from "react";
 
 export interface Organization {
   id: string;
@@ -108,10 +108,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const rawActiveOrg = organizations.find((o) => o.id === activeOrgId) || organizations[0] || defaultOrganizations[0];
 
   // Merge session override if active
-  const activeOrganization: Organization = {
+  const activeOrganization: Organization = useMemo(() => ({
     ...rawActiveOrg,
     ...(sessionOverride || {}),
-  };
+  }), [rawActiveOrg, sessionOverride]);
 
   const setActiveOrganization = (org: Organization) => {
     setActiveOrgId(org.id);
@@ -140,19 +140,18 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const contextValue = useMemo(() => ({
+    organizations,
+    activeOrganization,
+    setActiveOrganization,
+    addOrganization,
+    updateOrganization,
+    sessionOverride,
+    setSessionOverride,
+  }), [organizations, activeOrganization, sessionOverride]);
 
   return (
-    <OrganizationContext.Provider
-      value={{
-        organizations,
-        activeOrganization,
-        setActiveOrganization,
-        addOrganization,
-        updateOrganization,
-        sessionOverride,
-        setSessionOverride,
-      }}
-    >
+    <OrganizationContext.Provider value={contextValue}>
       {children}
     </OrganizationContext.Provider>
   );

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Search, X, Info, ChevronDown, Plus } from "lucide-react";
-import { useFieldRegistry, FieldDefinition, FieldModule, FieldInputType } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, FieldModule, FieldInputType, isFieldMatchingOrg } from "../../context/FieldRegistryContext";
+import { useOrganization } from "../../context/OrganizationContext";
 import { toast } from "sonner";
 
 const FIELD_TYPE_MAP: Record<string, FieldInputType> = {
@@ -379,6 +380,7 @@ export function SelectFieldsModal({
   onlyModules,
 }: SelectFieldsModalProps) {
   const { getAllFields } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(() => initiallySelected);
   const [createFieldModalOpenFor, setCreateFieldModalOpenFor] = useState<FieldModule | null>(null);
@@ -404,9 +406,10 @@ export function SelectFieldsModal({
     }));
   };
 
-  // Compile all fields grouped by module
+  // Compile all fields grouped by module, strictly obeying activeOrganization scope
   const groupedFieldsList = targetModules.map(module => {
     const fields = getAllFields(module).filter(f =>
+      isFieldMatchingOrg(f, activeOrganization) &&
       f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase())
     );
     return {

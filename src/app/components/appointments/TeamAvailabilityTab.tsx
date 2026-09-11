@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import {
   Clock,
   Calendar,
@@ -9,12 +10,16 @@ import {
   X,
   Building2,
   User,
+  Check,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { toast } from "sonner";
 import { useOrganization } from "../../context/OrganizationContext";
 import TargetUserDropdown from "./TargetUserDropdown";
-import { useTeamMembers } from "../../../lib/teamStore";
+import { useTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
+import ClockTimePicker from "../ui/ClockTimePicker";
+import SlotDurationPicker from "../ui/SlotDurationPicker";
+import TargetUserLocationBar from "./TargetUserLocationBar";
 
 export interface DayTimeSlot {
   start: string; // "09:00"
@@ -106,15 +111,30 @@ function formatDisplayDayOff(dateStr: string): string {
   return `${formatted} - ${formatted}`;
 }
 
-interface TeamAvailabilityTabProps {
+export interface TeamAvailabilityTabProps {
   employees?: TeamMember[];
+  selectedUserId?: string | number;
+  onSelectUser?: (userId: string | number) => void;
+  selectedLocationId?: string;
+  onSelectLocation?: (locationId: string) => void;
+  activeTab?: "slots" | "days-off";
+  onTabChange?: (tab: "slots" | "days-off") => void;
 }
 
-export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAvailabilityTabProps) {
+export default function TeamAvailabilityTab({
+  employees: propEmployees,
+  selectedUserId: propSelectedUserId,
+  onSelectUser: propOnSelectUser,
+  selectedLocationId: propSelectedLocationId,
+  onSelectLocation: propOnSelectLocation,
+  activeTab: propActiveTab,
+  onTabChange,
+}: TeamAvailabilityTabProps) {
   const { activeOrganization } = useOrganization();
 
-  // Subtabs: Manage Slots vs Days Off
-  const [activeTab, setActiveTab] = useState<"slots" | "days-off">("slots");
+  // Internal state when not controlled
+  const [internalActiveTab, setInternalActiveTab] = useState<"slots" | "days-off">("slots");
+  const effectiveActiveTab = propActiveTab !== undefined ? propActiveTab : internalActiveTab;
 
   // Fallback default team members
   const defaultEmployees: TeamMember[] = useMemo(
@@ -143,44 +163,128 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
   }, [bookableMembers, propEmployees, defaultEmployees]);
 
   // Selected Target User
-  const [selectedUserId, setSelectedUserId] = useState<string | number>(() => teamList[0]?.id || 1);
+  const [internalSelectedUserId, setInternalSelectedUserId] = useState<string | number>(
+    () => teamList[0]?.id || 1
+  );
 
-  useEffect(() => {
-    if (teamList.length > 0 && !teamList.some((u) => String(u.id) === String(selectedUserId))) {
-      setSelectedUserId(teamList[0].id);
+  const effectiveUserId =
+    propSelectedUserId !== undefined ? propSelectedUserId : internalSelectedUserId;
+
+  const handleUserSelect = (userId: string | number) => {
+    setInternalSelectedUserId(userId);
+    if (propOnSelectUser) {
+      propOnSelectUser(userId);
     }
-  }, [teamList, selectedUserId]);
+  };
 
-  const selectedUser = teamList.find((u) => String(u.id) === String(selectedUserId)) || teamList[0];
+  const selectedUser =
+    teamList.find((u) => String(u.id) === String(effectiveUserId)) || teamList[0];
 
-  // 1. Organization Locations
-  const [locations, setLocations] = useState<Array<{ id: string; name: string }>>(() => {
+  // 1. Organization Full Locations
+  const orgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any) => ({ id: l.id, name: l.name }));
+          return parsed.map((l: any, idx: number) => ({
+            id: l.id || `loc-${idx + 1}`,
+            name: l.name,
+          }));
         }
       }
     } catch {}
 
-    const orgLocs = activeOrganization.locations && activeOrganization.locations.length > 0
-      ? activeOrganization.locations
-      : [activeOrganization.location || "California"];
+    const orgLocs =
+      activeOrganization.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization.location || "California"];
 
     return orgLocs.map((name, idx) => ({
       id: `loc-${idx + 1}`,
       name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
     }));
-  });
+  }, [activeOrganization]);
+
+  // Track location store updates
+  const [activeLocVersion, setActiveLocVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => setActiveLocVersion((v) => v + 1);
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+    };
+  }, []);
+
+  // Locations available ONLY for this team member
+  const locations = useMemo<Array<{ id: string; name: string }>>(() => {
+    const locActiveKey = `mantra_user_loc_active_map_${effectiveUserId}_${activeOrganization.id}`;
+    let activeMap: Record<string, boolean> | null = null;
+    try {
+      const saved = localStorage.getItem(locActiveKey);
+      if (saved) {
+        activeMap = JSON.parse(saved);
+      }
+    } catch {}
+
+    const currentMember = bookableMembers.find((m) => String(m.id) === String(effectiveUserId));
+    const memberLocsList = currentMember?.locations || (currentMember as any)?.availableLocations;
+
+    if (activeMap && Object.keys(activeMap).length > 0) {
+      const filtered = orgLocations.filter((loc) => activeMap![loc.id] === true);
+      if (filtered.length > 0) return filtered;
+    }
+
+    if (Array.isArray(memberLocsList) && memberLocsList.length > 0) {
+      const filtered = orgLocations.filter(
+        (loc) => memberLocsList.includes(loc.name) || memberLocsList.includes(loc.id)
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Default: if no specific restriction is saved, show the primary/first location
+    return orgLocations.slice(0, 1);
+  }, [effectiveUserId, activeOrganization.id, orgLocations, bookableMembers, activeLocVersion]);
 
   // Selected Location
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => locations[0]?.id || "loc-1");
-  const selectedLocation = locations.find((l) => l.id === selectedLocationId) || locations[0];
+  const [internalSelectedLocationId, setInternalSelectedLocationId] = useState<string>(
+    () => locations[0]?.id || "loc-1"
+  );
+
+  const effectiveLocationId =
+    propSelectedLocationId !== undefined ? propSelectedLocationId : internalSelectedLocationId;
+
+  const handleLocationSelect = (locId: string) => {
+    setInternalSelectedLocationId(locId);
+    if (propOnSelectLocation) {
+      propOnSelectLocation(locId);
+    }
+  };
+
+  const selectedLocation = useMemo(() => {
+    return (
+      locations.find((l) => l.id === effectiveLocationId) ||
+      locations[0] ||
+      orgLocations[0] || { id: "loc-1", name: "Primary Location" }
+    );
+  }, [locations, effectiveLocationId, orgLocations]);
+
+  const selectedTeamMemberObj = useMemo(() => {
+    const fromStore = bookableMembers.find((m) => String(m.id) === String(effectiveUserId));
+    if (fromStore) return fromStore;
+    return {
+      id: selectedUser?.id,
+      name: selectedUser?.name || "Team Member",
+      email: selectedUser?.email || "",
+      role: selectedUser?.role,
+      canBookAppointments: true,
+    };
+  }, [bookableMembers, effectiveUserId, selectedUser]);
 
   // 2. Weekly Availability Slots for [User + Location]
-  const slotsKey = `mantra_user_loc_slots_${selectedUserId}_${selectedLocationId}_${activeOrganization.id}`;
+  const slotsKey = `mantra_user_loc_slots_${effectiveUserId}_${effectiveLocationId}_${activeOrganization.id}`;
   const [weekSlots, setWeekSlots] = useState<WeeklySlots>(() => {
     try {
       const saved = localStorage.getItem(slotsKey);
@@ -193,7 +297,7 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
   useEffect(() => {
     try {
       const saved = localStorage.getItem(
-        `mantra_user_loc_slots_${selectedUserId}_${selectedLocationId}_${activeOrganization.id}`
+        `mantra_user_loc_slots_${effectiveUserId}_${effectiveLocationId}_${activeOrganization.id}`
       );
       if (saved) {
         setWeekSlots(JSON.parse(saved));
@@ -201,10 +305,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
       }
     } catch {}
     setWeekSlots(createDefaultWeekSlots());
-  }, [selectedUserId, selectedLocationId, activeOrganization.id]);
+  }, [effectiveUserId, effectiveLocationId, activeOrganization.id]);
 
   // 3. Common Days Off for selected User (Universal across all locations)
-  const daysOffKey = `mantra_member_common_days_off_${selectedUserId}_${activeOrganization.id}`;
+  const daysOffKey = `mantra_member_common_days_off_${effectiveUserId}_${activeOrganization.id}`;
   const [daysOff, setDaysOff] = useState<TeamMemberDayOff[]>(() => {
     try {
       const saved = localStorage.getItem(daysOffKey);
@@ -217,7 +321,7 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
   useEffect(() => {
     try {
       const saved = localStorage.getItem(
-        `mantra_member_common_days_off_${selectedUserId}_${activeOrganization.id}`
+        `mantra_member_common_days_off_${effectiveUserId}_${activeOrganization.id}`
       );
       if (saved) {
         setDaysOff(JSON.parse(saved));
@@ -225,7 +329,7 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
       }
     } catch {}
     setDaysOff([]);
-  }, [selectedUserId, activeOrganization.id]);
+  }, [effectiveUserId, activeOrganization.id]);
 
   // Day Off Inline Form states (replaces popup)
   const [showAddDayOffInline, setShowAddDayOffInline] = useState(false);
@@ -244,6 +348,29 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
     setDraftEndTime("23:59");
     setDraftReason("");
     setDraftRepeatYearly(false);
+  };
+
+  // Toggle day enabled/disabled
+  const handleToggleDayEnabled = (dayKey: string, enabled: boolean) => {
+    setWeekSlots((prev) => {
+      const day = prev[dayKey] || { enabled: false, slots: [] };
+      if (!enabled) {
+        return {
+          ...prev,
+          [dayKey]: {
+            ...day,
+            enabled: false,
+          },
+        };
+      }
+      return {
+        ...prev,
+        [dayKey]: {
+          enabled: true,
+          slots: day.slots.length > 0 ? day.slots : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+        },
+      };
+    });
   };
 
   // Add slot for a specific day
@@ -304,10 +431,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
     let conflictMessage = "";
 
     for (const otherLoc of locations) {
-      if (otherLoc.id === selectedLocationId) continue;
+      if (otherLoc.id === effectiveLocationId) continue;
       try {
         const otherSaved = localStorage.getItem(
-          `mantra_user_loc_slots_${selectedUserId}_${otherLoc.id}_${activeOrganization.id}`
+          `mantra_user_loc_slots_${effectiveUserId}_${otherLoc.id}_${activeOrganization.id}`
         );
         if (!otherSaved) continue;
         const otherSlots: WeeklySlots = JSON.parse(otherSaved);
@@ -346,12 +473,12 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
     // Save to storage
     try {
       localStorage.setItem(
-        `mantra_user_loc_slots_${selectedUserId}_${selectedLocationId}_${activeOrganization.id}`,
+        `mantra_user_loc_slots_${effectiveUserId}_${effectiveLocationId}_${activeOrganization.id}`,
         JSON.stringify(weekSlots)
       );
 
       // Also keep legacy member location schedule sync so drawer picks it up
-      const schedKey = `mantra_member_loc_schedules_${selectedUserId}_${activeOrganization.id}`;
+      const schedKey = `mantra_member_loc_schedules_${effectiveUserId}_${activeOrganization.id}`;
       let legacyMap: Record<string, any> = {};
       try {
         const existing = localStorage.getItem(schedKey);
@@ -369,8 +496,8 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
         };
       });
 
-      legacyMap[selectedLocationId] = {
-        locationId: selectedLocationId,
+      legacyMap[effectiveLocationId] = {
+        locationId: effectiveLocationId,
         locationName: selectedLocation.name,
         isAvailableAtLocation: Object.values(convertedWorkingHours).some((x: any) => x.enabled),
         workingHours: convertedWorkingHours,
@@ -445,15 +572,23 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
 
   return (
     <div className="space-y-6">
-      {/* Top Subtabs: Manage Slots | Days Off */}
-      <div className="flex items-center gap-2">
+      {/* 1. Target User & Location Bar (Below Availability Tab) */}
+      <TargetUserLocationBar
+        selectedUserId={effectiveUserId}
+        onSelectUser={handleUserSelect}
+        selectedLocationId={effectiveLocationId}
+        onSelectLocation={handleLocationSelect}
+      />
+
+      {/* 2. Subtabs below Target User: Manage Slots | Days Off */}
+      <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-full border border-slate-200/80 shadow-2xs">
         <button
           type="button"
-          onClick={() => setActiveTab("slots")}
+          onClick={() => (onTabChange ? onTabChange("slots") : setInternalActiveTab("slots"))}
           className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
-            activeTab === "slots"
-              ? "bg-[#1A73E8] text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            effectiveActiveTab === "slots"
+              ? "bg-[#181e25] text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
           }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
@@ -462,11 +597,11 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
 
         <button
           type="button"
-          onClick={() => setActiveTab("days-off")}
+          onClick={() => (onTabChange ? onTabChange("days-off") : setInternalActiveTab("days-off"))}
           className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
-            activeTab === "days-off"
-              ? "bg-[#1A73E8] text-white shadow-xs"
-              : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            effectiveActiveTab === "days-off"
+              ? "bg-[#181e25] text-white shadow-xs"
+              : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
           }`}
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
@@ -477,48 +612,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
       {/* ==================================================================== */}
       {/* TAB 1: MANAGE SLOTS                                                  */}
       {/* ==================================================================== */}
-      {activeTab === "slots" && (
+      {effectiveActiveTab === "slots" && (
         <div className="space-y-5">
-          {/* Target User & Location Card */}
-          <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Target User & Location
-              </h4>
-              <p className="text-xs text-slate-400 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Select whose availability you are managing and for which clinic location
-              </p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-              {/* User Dropdown */}
-              <TargetUserDropdown
-                selectedUserId={selectedUserId}
-                onSelectUser={(userId) => setSelectedUserId(userId)}
-              />
-
-              {/* Location Dropdown */}
-              <div className="relative">
-                <select
-                  value={selectedLocationId}
-                  onChange={(e) => setSelectedLocationId(e.target.value)}
-                  className="w-full sm:w-auto min-w-[200px] appearance-none pl-9 pr-9 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-slate-800 cursor-pointer shadow-2xs"
-                  style={{ fontFamily: "Outfit, sans-serif" }}
-                >
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name}
-                    </option>
-                  ))}
-                </select>
-                <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
-            </div>
-          </div>
-
-          {/* 7-Day Availability Cards Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* 7-Day Availability List (Days View) */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs divide-y divide-slate-100 overflow-hidden">
             {WEEKDAYS.map(({ key, label }) => {
               const day = weekSlots[key] || { enabled: false, slots: [] };
               const hasSlots = day.enabled && day.slots.length > 0;
@@ -526,89 +623,86 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
               return (
                 <div
                   key={key}
-                  className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-xs flex flex-col justify-between min-h-[140px] space-y-3"
+                  className={`flex flex-col md:flex-row md:items-center p-3.5 sm:px-4 gap-4 transition-colors ${
+                    hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
+                  }`}
                 >
-                  {/* Card Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="w-4 h-4 text-blue-500" />
-                      <span className="text-xs font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                        {label}
-                      </span>
-                    </div>
+                  {/* Left Column: Day Checkbox & Day Label (NO slot count badge) */}
+                  <div className="w-36 shrink-0 flex items-center gap-2.5">
+                    <input
+                      type="checkbox"
+                      id={`toggle-${key}`}
+                      checked={hasSlots}
+                      onChange={(e) => handleToggleDayEnabled(key, e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer"
+                    />
+                    <label
+                      htmlFor={`toggle-${key}`}
+                      className="text-sm font-bold text-slate-800 cursor-pointer select-none"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      {label}
+                    </label>
+                  </div>
 
+                  {/* Middle Column: In front of the day, show slots */}
+                  <div className="flex-1 min-w-0">
+                    {!hasSlots ? (
+                      <span className="text-xs font-medium text-slate-400 italic">
+                        Unavailable
+                      </span>
+                    ) : (
+                      <div className="space-y-2">
+                        {day.slots.map((slot, slotIdx) => (
+                          <div
+                            key={slotIdx}
+                            className="flex items-center gap-2 flex-wrap sm:flex-nowrap"
+                          >
+                            {/* Start Time Clock Picker (Simple 2-column dropdown) */}
+                            <ClockTimePicker
+                              value={slot.start}
+                              onChange={(newTime) => handleUpdateSlot(key, slotIdx, "start", newTime)}
+                            />
+
+                            <span className="text-xs text-slate-400 font-medium">–</span>
+
+                            {/* End Time Clock Picker (Simple 2-column dropdown) */}
+                            <ClockTimePicker
+                              value={slot.end}
+                              onChange={(newTime) => handleUpdateSlot(key, slotIdx, "end", newTime)}
+                            />
+
+                            {/* Slot Duration with Simple Custom Minute */}
+                            <SlotDurationPicker
+                              value={slot.durationMinutes}
+                              onChange={(newDuration) => handleUpdateSlot(key, slotIdx, "durationMinutes", newDuration)}
+                            />
+
+                            {/* Remove Slot */}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSlot(key, slotIdx)}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                              title="Remove slot"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Right Corner: Add Slot Button */}
+                  <div className="shrink-0 flex items-center justify-end">
                     <button
                       type="button"
                       onClick={() => handleAddSlot(key)}
-                      className="p-1 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                      className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
                       title={`Add slot for ${label}`}
                     >
                       <Plus className="w-4 h-4" />
                     </button>
-                  </div>
-
-                  {/* Card Body */}
-                  <div className="flex-1 flex flex-col justify-center space-y-2">
-                    {!hasSlots ? (
-                      <div className="text-center py-4 text-xs font-medium text-slate-400" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Unavailable
-                      </div>
-                    ) : (
-                      day.slots.map((slot, slotIdx) => (
-                        <div key={slotIdx} className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                          {/* Start Time */}
-                          <select
-                            value={slot.start}
-                            onChange={(e) => handleUpdateSlot(key, slotIdx, "start", e.target.value)}
-                            className="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary bg-white text-slate-800 font-medium cursor-pointer"
-                          >
-                            {TIME_OPTIONS.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-
-                          <span className="text-xs text-slate-400">–</span>
-
-                          {/* End Time */}
-                          <select
-                            value={slot.end}
-                            onChange={(e) => handleUpdateSlot(key, slotIdx, "end", e.target.value)}
-                            className="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary bg-white text-slate-800 font-medium cursor-pointer"
-                          >
-                            {TIME_OPTIONS.map((t) => (
-                              <option key={t} value={t}>
-                                {t}
-                              </option>
-                            ))}
-                          </select>
-
-                          {/* Slot Duration */}
-                          <select
-                            value={slot.durationMinutes}
-                            onChange={(e) => handleUpdateSlot(key, slotIdx, "durationMinutes", Number(e.target.value))}
-                            className="px-2 py-1 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary bg-white text-slate-600 font-medium cursor-pointer"
-                          >
-                            {DURATION_OPTIONS.map((d) => (
-                              <option key={d.value} value={d.value}>
-                                {d.label}
-                              </option>
-                            ))}
-                          </select>
-
-                          {/* Delete Slot */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveSlot(key, slotIdx)}
-                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer ml-auto"
-                            title="Remove slot"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ))
-                    )}
                   </div>
                 </div>
               );
@@ -620,9 +714,10 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
             <button
               type="button"
               onClick={handleSaveAvailability}
-              className="px-6 py-2.5 rounded-xl bg-[#1A73E8] hover:bg-blue-700 text-white font-semibold text-xs transition-all shadow-xs cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#1456f0] hover:bg-[#1044bf] text-white font-semibold text-xs transition-all shadow-xs cursor-pointer active:scale-98"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
+              <Check className="w-4 h-4" />
               Save Availability
             </button>
           </div>
@@ -632,25 +727,8 @@ export default function TeamAvailabilityTab({ employees: propEmployees }: TeamAv
       {/* ==================================================================== */}
       {/* TAB 2: DAYS OFF (Common across all locations)                         */}
       {/* ==================================================================== */}
-      {activeTab === "days-off" && (
+      {effectiveActiveTab === "days-off" && (
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 space-y-6">
-          {/* Target User Box inside the card */}
-          <div className="rounded-2xl p-4 sm:p-5 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white">
-            <div>
-              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                Target User
-              </h4>
-              <p className="text-xs text-slate-400 mt-0.5" style={{ fontFamily: "Outfit, sans-serif" }}>
-                Manage days off for a specific team member
-              </p>
-            </div>
-
-            <TargetUserDropdown
-              selectedUserId={selectedUserId}
-              onSelectUser={(userId) => setSelectedUserId(userId)}
-            />
-          </div>
-
           {/* Scheduled Days Off Section */}
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

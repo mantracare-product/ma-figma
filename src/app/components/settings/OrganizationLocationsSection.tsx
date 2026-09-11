@@ -624,15 +624,24 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
 
                   {/* DROPDOWN 2: Availability */}
                   <div className="border border-slate-200/80 rounded-xl overflow-hidden bg-white shadow-2xs">
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() =>
                         setAvailabilityOpenByLoc((prev) => ({
                           ...prev,
                           [loc.id]: prev[loc.id] !== undefined ? !prev[loc.id] : false,
                         }))
                       }
-                      className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/70 transition-colors text-left cursor-pointer"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          setAvailabilityOpenByLoc((prev) => ({
+                            ...prev,
+                            [loc.id]: prev[loc.id] !== undefined ? !prev[loc.id] : false,
+                          }));
+                        }
+                      }}
+                      className="w-full flex items-center justify-between p-3.5 bg-white hover:bg-slate-50/70 transition-colors text-left cursor-pointer select-none"
                     >
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
@@ -670,7 +679,7 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
                           }`}
                         />
                       </div>
-                    </button>
+                    </div>
 
                     {isAvailOpen && (
                       <div className="p-3.5 border-t border-slate-100 bg-[#fbfcfd] space-y-2">

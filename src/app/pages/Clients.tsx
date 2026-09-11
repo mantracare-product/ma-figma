@@ -19,7 +19,8 @@ import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorks
 import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
-import { useFieldRegistry } from "../context/FieldRegistryContext";
+import { useFieldRegistry, isFieldMatchingOrg } from "../context/FieldRegistryContext";
+import { useOrganization } from "../context/OrganizationContext";
 import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
 
 interface Client {
@@ -139,10 +140,11 @@ const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ columnKey
 export default function Clients() {
   const navigate = useNavigate();
   const { getAllFields } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
 
   const clientInfoFieldsList = Array.from(new Set([
     ...getAllFields("client")
-      .filter(f => !["processes", "responsible"].includes(f.key))
+      .filter(f => isFieldMatchingOrg(f, activeOrganization) && !["processes", "responsible"].includes(f.key))
       .map(f => f.label),
     "Company Size"
   ]));

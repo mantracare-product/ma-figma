@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   MapPin,
   Clock,
@@ -10,20 +10,33 @@ import {
   Building2,
   Info,
   ChevronDown,
-  CalendarClock,
-  Sparkles,
+  Save,
   AlertCircle,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { toast } from "sonner";
 import { useOrganization } from "../../context/OrganizationContext";
-import { WeeklyAvailability } from "../../pages/Settings";
-import { createDefaultAvailability, TEXT_STYLES } from "../../pages/settings-constants";
+import { getStoredTeamMembers } from "../../../lib/teamStore";
+import ClockTimePicker from "../ui/ClockTimePicker";
+import SlotDurationPicker from "../ui/SlotDurationPicker";
+
+export interface DayTimeSlot {
+  start: string;
+  end: string;
+  durationMinutes: number;
+}
+
+export interface DayAvailability {
+  enabled: boolean;
+  slots: DayTimeSlot[];
+}
+
+export type WeeklySlots = Record<string, DayAvailability>;
 
 export interface MemberLocationDayOff {
   id: string | number;
-  date: string; // YYYY-MM-DD or formatted
-  duration: string; // "All Day" | "Morning (Until 1 PM)" | "Afternoon (After 1 PM)"
+  date: string;
+  duration: "All Day" | "Morning (Until 1 PM)" | "Afternoon (After 1 PM)" | string;
   reason?: string;
 }
 
@@ -31,11 +44,11 @@ export interface MemberLocationSchedule {
   locationId: string;
   locationName: string;
   isAvailableAtLocation: boolean;
-  workingHours: WeeklyAvailability;
+  workingHours: any;
   daysOff: MemberLocationDayOff[];
 }
 
-const WEEKDAYS: Array<{ key: keyof WeeklyAvailability; label: string; short: string }> = [
+const WEEKDAYS = [
   { key: "monday", label: "Monday", short: "Mon" },
   { key: "tuesday", label: "Tuesday", short: "Tue" },
   { key: "wednesday", label: "Wednesday", short: "Wed" },
@@ -45,751 +58,838 @@ const WEEKDAYS: Array<{ key: keyof WeeklyAvailability; label: string; short: str
   { key: "sunday", label: "Sunday", short: "Sun" },
 ];
 
-interface MemberLocationScheduleTabProps {
+const TIME_OPTIONS: string[] = [];
+for (let h = 6; h <= 22; h++) {
+  const hh = String(h).padStart(2, "0");
+  TIME_OPTIONS.push(`${hh}:00`);
+  TIME_OPTIONS.push(`${hh}:30`);
+}
+
+const DURATION_OPTIONS = [
+  { value: 15, label: "15m" },
+  { value: 30, label: "30m" },
+  { value: 45, label: "45m" },
+  { value: 60, label: "60m" },
+];
+
+function createDefaultWeekSlots(): WeeklySlots {
+  return {
+    monday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
+    tuesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
+    wednesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
+    thursday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
+    friday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
+    saturday: { enabled: false, slots: [] },
+    sunday: { enabled: false, slots: [] },
+  };
+}
+
+function formatDateText(dStr: string): string {
+  if (!dStr) return "";
+  const parts = dStr.split("-").map(Number);
+  if (parts.length === 3) {
+    const [yr, mo, dy] = parts;
+    const dateObj = new Date(yr, mo - 1, dy);
+    return dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  return dStr;
+}
+
+export interface MemberLocationScheduleTabProps {
   memberId?: string | number;
   memberName?: string;
+  canBookAppointments?: boolean;
   onSave?: (schedules: Record<string, MemberLocationSchedule>) => void;
 }
 
 export default function MemberLocationScheduleTab({
   memberId = "default",
   memberName = "Team Member",
+  canBookAppointments,
   onSave,
 }: MemberLocationScheduleTabProps) {
   const { activeOrganization } = useOrganization();
 
-  // 1. Load organization locations
-  const [orgLocations, setOrgLocations] = useState<Array<{ id: string; name: string; address?: string }>>(() => {
+  // Resolve numeric or canonical user ID to stay 100% in sync with Appointments > TeamAvailabilityTab
+  const resolvedUserId = useMemo(() => {
+    if (!memberId || memberId === "default") return 1;
+    if (typeof memberId === "number") return memberId;
+    if (!isNaN(Number(memberId))) return Number(memberId);
+    try {
+      const all = getStoredTeamMembers();
+      const match = all.find(
+        (m) => m.email.toLowerCase() === String(memberId).toLowerCase()
+      );
+      if (match) return match.id;
+    } catch {}
+    return memberId;
+  }, [memberId]);
+
+  // Check appointment booking eligibility
+  const isEligibleForBooking = useMemo(() => {
+    if (canBookAppointments !== undefined) return canBookAppointments;
+    try {
+      const all = getStoredTeamMembers();
+      const match = all.find(
+        (m) =>
+          String(m.id) === String(resolvedUserId) ||
+          m.email.toLowerCase() === String(memberId).toLowerCase()
+      );
+      if (match) return match.canBookAppointments === true;
+    } catch {}
+    return true;
+  }, [canBookAppointments, resolvedUserId, memberId]);
+
+  // 1. Organization Locations
+  const [locations, setLocations] = useState<Array<{ id: string; name: string }>>(() => {
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any) => ({
-            id: l.id,
-            name: l.name,
-            address: l.address,
-          }));
+          return parsed.map((l: any) => ({ id: l.id, name: l.name }));
         }
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch {}
 
-    // Fallback to active organization locations list
-    const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
-      ? activeOrganization.locations
-      : [activeOrganization.location || "California"];
+    const orgLocs =
+      activeOrganization.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization.location || "California"];
 
-    return locNames.map((name, idx) => ({
+    return orgLocs.map((name, idx) => ({
       id: `loc-${idx + 1}`,
-      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
-      address: idx === 0 ? "San Francisco Main Clinic" : "New York Medical Suite",
+      name:
+        name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+          ? name
+          : `${name} Branch`,
     }));
   });
 
-  // Storage key for this member's location schedules
-  const storageKey = `mantra_member_loc_schedules_${memberId}_${activeOrganization.id}`;
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(
+    () => locations[0]?.id || "loc-1"
+  );
+  const selectedLocation =
+    locations.find((l) => l.id === selectedLocationId) || locations[0];
 
-  // 2. Member schedule map per location
-  const [schedules, setSchedules] = useState<Record<string, MemberLocationSchedule>>(() => {
+  // Sub-tabs: Manage Slots vs Days Off
+  const [activeSubTab, setActiveSubTab] = useState<"slots" | "days-off">("slots");
+
+  // Location Active Availability Map: { [locId]: boolean }
+  const locActiveKey = `mantra_user_loc_active_map_${resolvedUserId}_${activeOrganization.id}`;
+  const [locationActiveMap, setLocationActiveMap] = useState<Record<string, boolean>>(() => {
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        return JSON.parse(saved);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-
-    // Initial default: doctor is available at first location by default, or all locations
-    const initial: Record<string, MemberLocationSchedule> = {};
-    orgLocations.forEach((loc, idx) => {
-      initial[loc.id] = {
-        locationId: loc.id,
-        locationName: loc.name,
-        isAvailableAtLocation: true,
-        workingHours: idx === 0
-          ? createDefaultAvailability()
-          : {
-              monday: { enabled: false, start: "09:00", end: "17:00" },
-              tuesday: { enabled: true, start: "09:00", end: "17:00" },
-              wednesday: { enabled: false, start: "09:00", end: "17:00" },
-              thursday: { enabled: true, start: "09:00", end: "17:00" },
-              friday: { enabled: false, start: "09:00", end: "17:00" },
-              saturday: { enabled: false, start: "10:00", end: "14:00" },
-              sunday: { enabled: false, start: "10:00", end: "14:00" },
-            },
-        daysOff: [
-          { id: `do-1-${idx}`, date: "2026-12-25", duration: "All Day", reason: "Christmas Day" },
-          { id: `do-2-${idx}`, date: "2027-01-01", duration: "All Day", reason: "New Year's Day" },
-        ],
-      };
+      const saved = localStorage.getItem(locActiveKey);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    // By default, available at the first location
+    const init: Record<string, boolean> = {};
+    locations.forEach((loc, idx) => {
+      init[loc.id] = idx === 0;
     });
-    return initial;
+    return init;
   });
 
-  // Selected location ID being viewed/edited
-  const [activeLocId, setActiveLocId] = useState<string>(() => orgLocations[0]?.id || "loc-1");
+  const isAvailableAtLocation = locationActiveMap[selectedLocationId] ?? true;
 
-  // Sub-view within the selected location: "hours" | "days-off"
-  const [activeSubTab, setActiveSubTab] = useState<"hours" | "days-off">("hours");
-
-  // Add day off draft form states for active location
-  const [draftDate, setDraftDate] = useState("");
-  const [draftDuration, setDraftDuration] = useState("All Day");
-  const [draftReason, setDraftReason] = useState("");
-
-  // Show multi-location overview banner
-  const [showOverview, setShowOverview] = useState(true);
-
-  // Sync to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(schedules));
-      if (onSave) {
-        onSave(schedules);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  }, [schedules, storageKey, onSave]);
-
-  // Ensure every org location has an entry in schedules
-  useEffect(() => {
-    setSchedules((prev) => {
-      const updated = { ...prev };
-      let changed = false;
-      orgLocations.forEach((loc) => {
-        if (!updated[loc.id]) {
-          updated[loc.id] = {
-            locationId: loc.id,
-            locationName: loc.name,
-            isAvailableAtLocation: false,
-            workingHours: createDefaultAvailability(),
-            daysOff: [],
-          };
-          changed = true;
-        }
-      });
-      return changed ? updated : prev;
-    });
-  }, [orgLocations]);
-
-  const currentSchedule = schedules[activeLocId] || {
-    locationId: activeLocId,
-    locationName: orgLocations.find((l) => l.id === activeLocId)?.name || "Location",
-    isAvailableAtLocation: true,
-    workingHours: createDefaultAvailability(),
-    daysOff: [],
-  };
-
-  // Toggle availability at location
   const handleToggleLocationActive = (active: boolean) => {
-    setSchedules((prev) => ({
-      ...prev,
-      [activeLocId]: {
-        ...currentSchedule,
-        isAvailableAtLocation: active,
-      },
-    }));
+    setLocationActiveMap((prev) => {
+      const updated = { ...prev, [selectedLocationId]: active };
+      try {
+        localStorage.setItem(locActiveKey, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
     toast.success(
       active
-        ? `${memberName} is now active at ${currentSchedule.locationName}`
-        : `${memberName} set to inactive at ${currentSchedule.locationName}`
+        ? `${memberName} is now available at ${selectedLocation?.name}`
+        : `${memberName} set to unavailable at ${selectedLocation?.name}`
     );
   };
 
-  // Toggle day working hours
-  const handleToggleDay = (dayKey: keyof WeeklyAvailability, enabled: boolean) => {
-    setSchedules((prev) => ({
-      ...prev,
-      [activeLocId]: {
-        ...currentSchedule,
-        workingHours: {
-          ...currentSchedule.workingHours,
-          [dayKey]: {
-            ...currentSchedule.workingHours[dayKey],
-            enabled,
-          },
-        },
-      },
-    }));
+  // 2. Weekly Availability Slots for [User + Location]
+  const slotsKey = `mantra_user_loc_slots_${resolvedUserId}_${selectedLocationId}_${activeOrganization.id}`;
+  const [weekSlots, setWeekSlots] = useState<WeeklySlots>(() => {
+    try {
+      const saved = localStorage.getItem(slotsKey);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return createDefaultWeekSlots();
+  });
+
+  // Reload slots when user or location changes
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(
+        `mantra_user_loc_slots_${resolvedUserId}_${selectedLocationId}_${activeOrganization.id}`
+      );
+      if (saved) {
+        setWeekSlots(JSON.parse(saved));
+        return;
+      }
+    } catch {}
+    setWeekSlots(createDefaultWeekSlots());
+  }, [resolvedUserId, selectedLocationId, activeOrganization.id]);
+
+  // 3. Days Off for selected User
+  const daysOffKey = `mantra_member_common_days_off_${resolvedUserId}_${activeOrganization.id}`;
+  const [daysOff, setDaysOff] = useState<MemberLocationDayOff[]>(() => {
+    try {
+      const saved = localStorage.getItem(daysOffKey);
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(daysOffKey);
+      if (saved) {
+        setDaysOff(JSON.parse(saved));
+        return;
+      }
+    } catch {}
+    setDaysOff([]);
+  }, [resolvedUserId, activeOrganization.id, daysOffKey]);
+
+  // Day Off Inline Form states
+  const [showAddDayOffInline, setShowAddDayOffInline] = useState(false);
+  const [draftStartDate, setDraftStartDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [draftEndDate, setDraftEndDate] = useState(() => new Date().toISOString().split("T")[0]);
+  const [draftDuration, setDraftDuration] = useState<"All Day" | "Morning (Until 1 PM)" | "Afternoon (After 1 PM)">("All Day");
+  const [draftReason, setDraftReason] = useState("");
+
+  const resetDayOffDraft = () => {
+    const today = new Date().toISOString().split("T")[0];
+    setDraftStartDate(today);
+    setDraftEndDate(today);
+    setDraftDuration("All Day");
+    setDraftReason("");
   };
 
-  // Change working hour times
-  const handleTimeChange = (dayKey: keyof WeeklyAvailability, field: "start" | "end", value: string) => {
-    setSchedules((prev) => ({
-      ...prev,
-      [activeLocId]: {
-        ...currentSchedule,
-        workingHours: {
-          ...currentSchedule.workingHours,
+  // Toggle day enabled/disabled
+  const handleToggleDayEnabled = (dayKey: string, enabled: boolean) => {
+    setWeekSlots((prev) => {
+      const day = prev[dayKey] || { enabled: false, slots: [] };
+      if (!enabled) {
+        return {
+          ...prev,
           [dayKey]: {
-            ...currentSchedule.workingHours[dayKey],
-            [field]: value,
+            ...day,
+            enabled: false,
           },
-        },
-      },
-    }));
-  };
-
-  // Apply 9-5 weekday preset for this location
-  const handleApplyWeekdayHours = () => {
-    setSchedules((prev) => {
-      const updatedHours = { ...currentSchedule.workingHours };
-      (["monday", "tuesday", "wednesday", "thursday", "friday"] as Array<keyof WeeklyAvailability>).forEach((d) => {
-        updatedHours[d] = { enabled: true, start: "09:00", end: "17:00" };
-      });
+        };
+      }
       return {
         ...prev,
-        [activeLocId]: {
-          ...currentSchedule,
-          workingHours: updatedHours,
+        [dayKey]: {
+          enabled: true,
+          slots: day.slots.length > 0 ? day.slots : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
         },
       };
     });
-    toast.success(`Applied 9:00 AM – 5:00 PM (Mon–Fri) for ${currentSchedule.locationName}`);
   };
 
-  // Clear all working hours for this location
-  const handleClearHours = () => {
-    setSchedules((prev) => {
-      const updatedHours = { ...currentSchedule.workingHours };
+  // Add slot for a specific day
+  const handleAddSlot = (dayKey: string) => {
+    setWeekSlots((prev) => {
+      const day = prev[dayKey] || { enabled: false, slots: [] };
+      const newSlot: DayTimeSlot = { start: "09:00", end: "17:00", durationMinutes: 30 };
+      return {
+        ...prev,
+        [dayKey]: {
+          enabled: true,
+          slots: [...day.slots, newSlot],
+        },
+      };
+    });
+  };
+
+  // Remove slot
+  const handleRemoveSlot = (dayKey: string, slotIdx: number) => {
+    setWeekSlots((prev) => {
+      const day = prev[dayKey];
+      if (!day) return prev;
+      const updatedSlots = [...day.slots];
+      updatedSlots.splice(slotIdx, 1);
+      return {
+        ...prev,
+        [dayKey]: {
+          enabled: updatedSlots.length > 0,
+          slots: updatedSlots,
+        },
+      };
+    });
+  };
+
+  // Update slot field
+  const handleUpdateSlot = (
+    dayKey: string,
+    slotIdx: number,
+    field: keyof DayTimeSlot,
+    value: any
+  ) => {
+    setWeekSlots((prev) => {
+      const day = prev[dayKey];
+      if (!day) return prev;
+      const updatedSlots = [...day.slots];
+      updatedSlots[slotIdx] = {
+        ...updatedSlots[slotIdx],
+        [field]: value,
+      };
+      return {
+        ...prev,
+        [dayKey]: {
+          ...day,
+          slots: updatedSlots,
+        },
+      };
+    });
+  };
+
+  // Save Slots
+  const handleSaveSlots = () => {
+    try {
+      localStorage.setItem(slotsKey, JSON.stringify(weekSlots));
+
+      // Also keep legacy member location schedule sync
+      const legacyKey = `mantra_member_loc_schedules_${resolvedUserId}_${activeOrganization.id}`;
+      let legacyMap: Record<string, any> = {};
+      try {
+        const existing = localStorage.getItem(legacyKey);
+        if (existing) legacyMap = JSON.parse(existing);
+      } catch {}
+
+      const convertedWorkingHours: any = {};
       WEEKDAYS.forEach(({ key }) => {
-        updatedHours[key] = { ...updatedHours[key], enabled: false };
+        const d = weekSlots[key];
+        const s = d?.slots?.[0];
+        convertedWorkingHours[key] = {
+          enabled: d?.enabled && d.slots.length > 0,
+          start: s?.start || "09:00",
+          end: s?.end || "17:00",
+        };
       });
-      return {
-        ...prev,
-        [activeLocId]: {
-          ...currentSchedule,
-          workingHours: updatedHours,
-        },
+
+      legacyMap[selectedLocationId] = {
+        locationId: selectedLocationId,
+        locationName: selectedLocation.name,
+        isAvailableAtLocation,
+        workingHours: convertedWorkingHours,
+        daysOff,
       };
-    });
-    toast.info(`Cleared working hours for ${currentSchedule.locationName}`);
+      localStorage.setItem(legacyKey, JSON.stringify(legacyMap));
+
+      if (onSave) {
+        onSave(legacyMap);
+      }
+
+      toast.success(`Availability slots saved for ${selectedLocation?.name}`);
+    } catch (e) {
+      console.error(e);
+      toast.error("Failed to save availability");
+    }
   };
 
-  // Add Day Off for this location
-  const handleAddDayOff = () => {
-    if (!draftDate) {
-      toast.error("Please choose a date for the day off");
+  // Add Day Off
+  const handleSaveDayOff = () => {
+    if (!draftStartDate) {
+      toast.error("Please select a date");
       return;
     }
+    const dateLabel =
+      draftStartDate === draftEndDate
+        ? draftStartDate
+        : `${draftStartDate} to ${draftEndDate}`;
 
-    if (currentSchedule.daysOff.some((d) => d.date === draftDate)) {
-      toast.error("This date is already added as a day off for this location");
+    if (daysOff.some((d) => d.date === dateLabel)) {
+      toast.error("This date or range is already marked as a day off");
       return;
     }
 
     const newDay: MemberLocationDayOff = {
       id: `do-${Date.now()}`,
-      date: draftDate,
+      date: dateLabel,
       duration: draftDuration,
       reason: draftReason.trim() || undefined,
     };
 
-    setSchedules((prev) => ({
-      ...prev,
-      [activeLocId]: {
-        ...currentSchedule,
-        daysOff: [...currentSchedule.daysOff, newDay].sort((a, b) => String(a.date).localeCompare(String(b.date))),
-      },
-    }));
+    const updated = [...daysOff, newDay].sort((a, b) =>
+      String(a.date).localeCompare(String(b.date))
+    );
+    setDaysOff(updated);
+    try {
+      localStorage.setItem(daysOffKey, JSON.stringify(updated));
+    } catch {}
 
-    setDraftDate("");
-    setDraftReason("");
-    toast.success(`Added day off for ${currentSchedule.locationName}`);
+    resetDayOffDraft();
+    setShowAddDayOffInline(false);
+    toast.success(`Day off added for ${memberName}`);
   };
 
-  // Remove Day Off from this location
-  const handleRemoveDayOff = (dayId: string | number) => {
-    setSchedules((prev) => ({
-      ...prev,
-      [activeLocId]: {
-        ...currentSchedule,
-        daysOff: currentSchedule.daysOff.filter((d) => d.id !== dayId),
-      },
-    }));
+  // Remove Day Off
+  const handleRemoveDayOff = (id: string | number) => {
+    const updated = daysOff.filter((d) => d.id !== id);
+    setDaysOff(updated);
+    try {
+      localStorage.setItem(daysOffKey, JSON.stringify(updated));
+    } catch {}
     toast.success("Day off removed");
   };
 
-  // Format 24h string to 12h AM/PM
-  const formatTimeStr = (t?: string) => {
-    if (!t) return "";
-    const [h, m] = t.split(":").map(Number);
-    if (isNaN(h)) return t;
-    const period = h >= 12 ? "PM" : "AM";
-    const hour = h % 12 === 0 ? 12 : h % 12;
-    return `${hour}:${String(m || 0).padStart(2, "0")} ${period}`;
-  };
-
-  const activeLocationsCount = Object.values(schedules).filter((s) => s.isAvailableAtLocation).length;
-
-  return (
-    <div className="space-y-6">
-      {/* Header Info */}
-      <div className="pb-4 border-b border-slate-200/80">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold text-slate-900" style={TEXT_STYLES.heading}>
-              Location-Specific Availability & Days Off
-            </h3>
-            <p className="text-xs text-slate-500 mt-0.5" style={TEXT_STYLES.subtext}>
-              {memberName} can be available across multiple organization locations with independent working hours and days off.
-            </p>
-          </div>
-          <span
-            className="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-50 text-blue-700 border border-blue-200 self-start sm:self-auto"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Active at {activeLocationsCount} of {orgLocations.length} Locations
-          </span>
+  // If team member is not eligible for appointments
+  if (!isEligibleForBooking) {
+    return (
+      <div className="p-8 text-center bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+        <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+          <CalendarOff className="w-6 h-6" />
         </div>
-      </div>
-
-      {/* Cross-Location Schedule Overview (At A Glance) */}
-      <div className="border border-slate-200/80 rounded-2xl bg-white shadow-xs overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setShowOverview(!showOverview)}
-          className="w-full flex items-center justify-between p-3.5 px-4 bg-slate-50/70 hover:bg-slate-100/70 transition-colors text-left cursor-pointer"
-        >
-          <div className="flex items-center gap-2">
-            <CalendarClock className="w-4 h-4 text-blue-600" />
-            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider font-display">
-              Weekly Multi-Location Schedule (At a Glance)
-            </span>
-          </div>
-          <ChevronDown
-            className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${
-              showOverview ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-
-        {showOverview && (
-          <div className="p-4 border-t border-slate-100 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
-            {WEEKDAYS.map(({ key, short, label }) => {
-              // Find which locations this member works at on this day
-              const workingAtLocs = Object.values(schedules).filter(
-                (s) => s.isAvailableAtLocation && s.workingHours[key]?.enabled
-              );
-
-              return (
-                <div
-                  key={key}
-                  className={`p-2.5 rounded-xl border text-center transition-all ${
-                    workingAtLocs.length > 0
-                      ? "bg-blue-50/40 border-blue-200/80"
-                      : "bg-slate-50 border-slate-200/60 opacity-60"
-                  }`}
-                >
-                  <span className="text-[11px] font-bold text-slate-800 uppercase block font-display">
-                    {short}
-                  </span>
-                  {workingAtLocs.length > 0 ? (
-                    <div className="mt-1 space-y-1">
-                      {workingAtLocs.map((loc) => (
-                        <div
-                          key={loc.locationId}
-                          className="text-[10px] p-1 rounded bg-white border border-blue-100 text-blue-800 font-medium truncate"
-                          title={`${loc.locationName}: ${formatTimeStr(loc.workingHours[key].start)} - ${formatTimeStr(loc.workingHours[key].end)}`}
-                        >
-                          <div className="font-bold truncate">{loc.locationName.split(" ")[0]}</div>
-                          <div className="text-[9px] text-slate-500">
-                            {formatTimeStr(loc.workingHours[key].start)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-slate-400 italic block mt-2">Off</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Location Selector Tabs */}
-      <div>
-        <label
-          className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2"
+        <h4
+          className="text-sm font-bold text-slate-800"
           style={{ fontFamily: "DM Sans, sans-serif" }}
         >
-          Select Location to Configure Schedule:
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {orgLocations.map((loc) => {
-            const isSelected = activeLocId === loc.id;
-            const sched = schedules[loc.id];
-            const isActive = sched?.isAvailableAtLocation;
-            const openDays = sched ? Object.values(sched.workingHours).filter((d) => d.enabled).length : 0;
-
-            return (
-              <button
-                key={loc.id}
-                type="button"
-                onClick={() => setActiveLocId(loc.id)}
-                className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer ${
-                  isSelected
-                    ? "bg-primary text-white border-primary shadow-xs"
-                    : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-                style={{ fontFamily: "DM Sans, sans-serif" }}
-              >
-                <MapPin className={`w-3.5 h-3.5 ${isSelected ? "text-white" : "text-blue-600"}`} />
-                <span>{loc.name}</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase tracking-wider ${
-                    isSelected
-                      ? "bg-white/20 text-white"
-                      : isActive
-                      ? "bg-emerald-100 text-emerald-800"
-                      : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {isActive ? `${openDays}d Open` : "Inactive"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+          Appointment Booking Not Enabled
+        </h4>
+        <p
+          className="text-xs text-slate-500 max-w-md mx-auto"
+          style={{ fontFamily: "Outfit, sans-serif" }}
+        >
+          {memberName} is not marked as eligible for appointment booking. Enable appointment booking in their profile settings to configure working hours and days off.
+        </p>
       </div>
+    );
+  }
 
-      {/* Main Schedule Container for Selected Location */}
-      <div className="border border-slate-200/80 rounded-2xl bg-white shadow-xs overflow-hidden">
-        {/* Location Header Bar */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center font-bold shrink-0">
-              <MapPin className="w-5 h-5 text-blue-600" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h4 className="text-base font-bold text-slate-900 font-display">
-                  {currentSchedule.locationName}
-                </h4>
-                {currentSchedule.isAvailableAtLocation ? (
-                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    Active at this location
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                    Inactive
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5" style={TEXT_STYLES.subtext}>
-                Set specific working hours and days off when {memberName} is practicing at this facility.
-              </p>
-            </div>
+  return (
+    <div className="space-y-5">
+      {/* Location Selector Bar */}
+      <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h4
+            className="text-sm font-bold text-slate-900"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            Location Availability
+          </h4>
+          <p
+            className="text-xs text-slate-400 mt-0.5"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            Select location to set {memberName}&apos;s schedule and availability
+          </p>
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          {/* Location Dropdown */}
+          <div className="relative">
+            <select
+              value={selectedLocationId}
+              onChange={(e) => setSelectedLocationId(e.target.value)}
+              className="w-full sm:w-auto min-w-[200px] appearance-none pl-9 pr-9 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-slate-800 cursor-pointer shadow-2xs"
+              style={{ fontFamily: "Outfit, sans-serif" }}
+            >
+              {locations.map((loc) => (
+                <option key={loc.id} value={loc.id}>
+                  {loc.name}
+                </option>
+              ))}
+            </select>
+            <Building2 className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
-          {/* Active at Location Toggle */}
-          <div className="flex items-center gap-2.5 self-start sm:self-auto bg-white px-3.5 py-1.5 rounded-xl border border-slate-200">
-            <span className="text-xs font-semibold text-slate-800" style={{ fontFamily: "DM Sans, sans-serif" }}>
+          {/* Available at this location toggle */}
+          <div className="flex items-center gap-2.5 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
+            <span
+              className="text-xs font-semibold text-slate-700 whitespace-nowrap"
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
               Available Here
             </span>
-            <label className="relative inline-flex items-center cursor-pointer">
+            <label className="relative inline-flex items-center cursor-pointer shrink-0">
               <input
                 type="checkbox"
                 className="sr-only peer"
-                checked={currentSchedule.isAvailableAtLocation}
+                checked={isAvailableAtLocation}
                 onChange={(e) => handleToggleLocationActive(e.target.checked)}
               />
               <div className="w-10 h-5 bg-slate-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
         </div>
+      </div>
 
-        {/* If Inactive at Location Notice */}
-        {!currentSchedule.isAvailableAtLocation ? (
-          <div className="p-10 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-              <Building2 className="w-6 h-6" />
-            </div>
-            <h5 className="text-sm font-semibold text-slate-800">
-              {memberName} is not currently practicing at {currentSchedule.locationName}
-            </h5>
-            <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Toggle the switch above to "Available Here" to configure weekly working hours and location-specific days off.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleToggleLocationActive(true)}
-              className="text-xs font-semibold text-primary"
-            >
-              Enable Availability at {currentSchedule.locationName}
-            </Button>
+      {/* If Inactive at Location */}
+      {!isAvailableAtLocation ? (
+        <div className="p-8 text-center bg-slate-50/70 border border-slate-200/80 rounded-2xl space-y-3">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+            <Building2 className="w-6 h-6" />
           </div>
-        ) : (
-          <div className="p-5 space-y-5">
-            {/* Merged Section Sub-tabs */}
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setActiveSubTab("hours")}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    activeSubTab === "hours"
-                      ? "bg-primary text-white shadow-xs"
-                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                  }`}
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <Clock className="w-3.5 h-3.5" />
-                  Working Hours ({Object.values(currentSchedule.workingHours).filter((d) => d.enabled).length}/7)
-                </button>
+          <h5
+            className="text-sm font-semibold text-slate-800"
+            style={{ fontFamily: "DM Sans, sans-serif" }}
+          >
+            {memberName} is not available at {selectedLocation.name}
+          </h5>
+          <p
+            className="text-xs text-slate-500 max-w-md mx-auto"
+            style={{ fontFamily: "Outfit, sans-serif" }}
+          >
+            Toggle the &quot;Available Here&quot; switch above to configure time slots and availability for this facility.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => handleToggleLocationActive(true)}
+            className="text-xs font-semibold text-primary cursor-pointer"
+          >
+            Enable Availability at {selectedLocation.name}
+          </Button>
+        </div>
+      ) : (
+        /* If Available at Location: Slots & Days Off */
+        <div className="space-y-4">
+          {/* Sub-tabs: Manage Slots | Days Off */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveSubTab("slots")}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                activeSubTab === "slots"
+                  ? "bg-[#1A73E8] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              Manage Slots
+            </button>
 
-                <button
-                  type="button"
-                  onClick={() => setActiveSubTab("days-off")}
-                  className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    activeSubTab === "days-off"
-                      ? "bg-primary text-white shadow-xs"
-                      : "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                  }`}
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <CalendarOff className="w-3.5 h-3.5" />
-                  Days Off & Absences ({currentSchedule.daysOff.length})
-                </button>
-              </div>
+            <button
+              type="button"
+              onClick={() => setActiveSubTab("days-off")}
+              className={`px-4 py-1.5 text-xs font-semibold rounded-full transition-all cursor-pointer ${
+                activeSubTab === "days-off"
+                  ? "bg-[#1A73E8] text-white shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              }`}
+              style={{ fontFamily: "DM Sans, sans-serif" }}
+            >
+              Days Off ({daysOff.length})
+            </button>
+          </div>
 
-              {activeSubTab === "hours" && (
-                <div className="hidden sm:flex items-center gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={handleApplyWeekdayHours}
-                    className="text-primary hover:underline font-medium cursor-pointer"
-                  >
-                    Apply 9 AM – 5 PM (Mon–Fri)
-                  </button>
-                  <span className="text-slate-300">|</span>
-                  <button
-                    type="button"
-                    onClick={handleClearHours}
-                    className="text-slate-500 hover:text-slate-800 font-medium cursor-pointer"
-                  >
-                    Clear Hours
-                  </button>
-                </div>
-              )}
-            </div>
+          {/* SUB-TAB 1: MANAGE SLOTS */}
+          {activeSubTab === "slots" && (
+            <div className="space-y-4">
+              {/* 7-Day Availability List (Days View) */}
+              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs divide-y divide-slate-100 overflow-hidden">
+                {WEEKDAYS.map(({ key, label }) => {
+                  const day = weekSlots[key] || { enabled: false, slots: [] };
+                  const hasSlots = day.enabled && day.slots.length > 0;
 
-            {/* SUB-TAB 1: WORKING HOURS */}
-            {activeSubTab === "hours" && (
-              <div className="space-y-2.5">
-                <div className="grid grid-cols-1 gap-2">
-                  {WEEKDAYS.map(({ key, label }) => {
-                    const sched = currentSchedule.workingHours[key];
-                    return (
-                      <div
-                        key={key}
-                        className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
-                          sched.enabled
-                            ? "bg-white border-slate-200 shadow-xs"
-                            : "bg-slate-50/60 border-slate-200/60 opacity-75"
-                        }`}
-                      >
-                        <label className="flex items-center gap-3 min-w-[130px] cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={sched.enabled}
-                            onChange={(e) => handleToggleDay(key, e.target.checked)}
-                            className="w-4 h-4 text-primary rounded border-slate-300 focus:ring-primary/20 cursor-pointer"
-                          />
-                          <span
-                            className={`text-sm font-semibold ${
-                              sched.enabled ? "text-slate-900" : "text-slate-500"
-                            }`}
-                            style={{ fontFamily: "DM Sans, sans-serif" }}
-                          >
-                            {label}
-                          </span>
+                  return (
+                    <div
+                      key={key}
+                      className={`flex flex-col md:flex-row md:items-start p-4 sm:p-4.5 gap-4 transition-colors ${
+                        hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
+                      }`}
+                    >
+                      {/* Left Column: Day info & Checkbox (NO slot count badge) */}
+                      <div className="w-36 shrink-0 flex items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          id={`drawer-toggle-${key}`}
+                          checked={hasSlots}
+                          onChange={(e) => handleToggleDayEnabled(key, e.target.checked)}
+                          className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer"
+                        />
+                        <label
+                          htmlFor={`drawer-toggle-${key}`}
+                          className="text-sm font-bold text-slate-800 cursor-pointer select-none"
+                          style={{ fontFamily: "DM Sans, sans-serif" }}
+                        >
+                          {label}
                         </label>
+                      </div>
 
-                        {sched.enabled ? (
-                          <div className="flex items-center gap-2.5 flex-1 sm:justify-end">
-                            <div className="flex items-center gap-1.5">
-                              <Clock className="w-3.5 h-3.5 text-slate-400" />
-                              <input
-                                type="time"
-                                value={sched.start}
-                                onChange={(e) => handleTimeChange(key, "start", e.target.value)}
-                                className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              />
-                            </div>
-                            <span className="text-xs text-slate-400">to</span>
-                            <input
-                              type="time"
-                              value={sched.end}
-                              onChange={(e) => handleTimeChange(key, "end", e.target.value)}
-                              className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary font-medium text-slate-900"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            />
-                            <span
-                              className="text-[11px] text-slate-500 font-medium hidden md:inline-block ml-2 w-32 text-right"
-                              style={{ fontFamily: "Outfit, sans-serif" }}
-                            >
-                              ({formatTimeStr(sched.start)} – {formatTimeStr(sched.end)})
-                            </span>
-                          </div>
-                        ) : (
-                          <span
-                            className="text-xs font-medium text-slate-400 italic px-2 py-0.5 rounded bg-slate-100 w-fit"
-                            style={{ fontFamily: "Outfit, sans-serif" }}
-                          >
-                            Unavailable / Off
+                      {/* Middle Column: In front of the day, show slots */}
+                      <div className="flex-1 min-w-0">
+                        {!hasSlots ? (
+                          <span className="text-xs font-medium text-slate-400 italic">
+                            Unavailable
                           </span>
+                        ) : (
+                          <div className="space-y-2">
+                            {day.slots.map((slot, slotIdx) => (
+                              <div
+                                key={slotIdx}
+                                className="flex items-center gap-2 flex-wrap sm:flex-nowrap"
+                              >
+                                {/* Start Time Clock Picker */}
+                                <ClockTimePicker
+                                  value={slot.start}
+                                  onChange={(newTime) =>
+                                    handleUpdateSlot(key, slotIdx, "start", newTime)
+                                  }
+                                />
+
+                                <span className="text-xs text-slate-400 font-medium">–</span>
+
+                                {/* End Time Clock Picker */}
+                                <ClockTimePicker
+                                  value={slot.end}
+                                  onChange={(newTime) =>
+                                    handleUpdateSlot(key, slotIdx, "end", newTime)
+                                  }
+                                />
+
+                                {/* Duration with Custom Option */}
+                                <SlotDurationPicker
+                                  value={slot.durationMinutes}
+                                  onChange={(newDuration) =>
+                                    handleUpdateSlot(
+                                      key,
+                                      slotIdx,
+                                      "durationMinutes",
+                                      newDuration
+                                    )
+                                  }
+                                />
+
+                                {/* Delete Slot */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveSlot(key, slotIdx)}
+                                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                  title="Delete Slot"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
 
-                <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100 flex items-start gap-2.5 text-xs text-blue-700 mt-2">
-                  <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                  <span>
-                    When patients or clients book appointments for <strong>{currentSchedule.locationName}</strong>, only these working hours will be presented for {memberName}.
-                  </span>
-                </div>
+                      {/* Right Corner: Add Slot Button */}
+                      <div className="shrink-0 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handleAddSlot(key)}
+                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                          title={`Add slot for ${label}`}
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            )}
 
-            {/* SUB-TAB 2: DAYS OFF & ABSENCES */}
-            {activeSubTab === "days-off" && (
-              <div className="space-y-4">
-                {/* Add Day Off Form */}
-                <div className="p-4 rounded-xl border border-slate-200 bg-white space-y-3">
-                  <label
-                    className="block text-xs font-semibold text-slate-700"
+              {/* Save Slots Action */}
+              <div className="flex justify-end pt-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveSlots}
+                  className="gap-1.5 text-xs font-semibold px-4 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  Save Availability
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* SUB-TAB 2: DAYS OFF */}
+          {activeSubTab === "days-off" && (
+            <div className="space-y-4">
+              {/* Header + Add Day Off Button */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4
+                    className="text-xs font-bold text-slate-800"
                     style={{ fontFamily: "DM Sans, sans-serif" }}
                   >
-                    Schedule Day Off / Absence for {memberName} at {currentSchedule.locationName}
-                  </label>
+                    Scheduled Days Off
+                  </h4>
+                  <p
+                    className="text-[11px] text-slate-400 mt-0.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Days when {memberName} will not be available for appointments
+                  </p>
+                </div>
+
+                {!showAddDayOffInline && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAddDayOffInline(true)}
+                    className="gap-1.5 text-xs font-semibold cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-primary" />
+                    Add Day Off
+                  </Button>
+                )}
+              </div>
+
+              {/* Inline Add Day Off Form */}
+              {showAddDayOffInline && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <span
+                      className="text-xs font-bold text-slate-800"
+                      style={{ fontFamily: "DM Sans, sans-serif" }}
+                    >
+                      New Day Off
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetDayOffDraft();
+                        setShowAddDayOffInline(false);
+                      }}
+                      className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                      <span className="text-[11px] text-slate-500 block mb-1">Date *</span>
+                      <span className="text-[11px] text-slate-500 block mb-1">Start Date *</span>
                       <input
                         type="date"
-                        value={draftDate}
-                        onChange={(e) => setDraftDate(e.target.value)}
-                        min={new Date().toISOString().split("T")[0]}
-                        className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                        value={draftStartDate}
+                        onChange={(e) => setDraftStartDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
                       />
                     </div>
+
+                    <div>
+                      <span className="text-[11px] text-slate-500 block mb-1">End Date (Optional)</span>
+                      <input
+                        type="date"
+                        value={draftEndDate}
+                        min={draftStartDate || undefined}
+                        onChange={(e) => setDraftEndDate(e.target.value)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                      />
+                    </div>
+
                     <div>
                       <span className="text-[11px] text-slate-500 block mb-1">Duration</span>
                       <select
                         value={draftDuration}
-                        onChange={(e) => setDraftDuration(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                        onChange={(e) => setDraftDuration(e.target.value as any)}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900 cursor-pointer"
                       >
                         <option value="All Day">All Day</option>
-                        <option value="Morning (Until 1 PM)">Morning Only (Until 1 PM)</option>
-                        <option value="Afternoon (After 1 PM)">Afternoon Only (After 1 PM)</option>
+                        <option value="Morning (Until 1 PM)">Morning (Until 1 PM)</option>
+                        <option value="Afternoon (After 1 PM)">Afternoon (After 1 PM)</option>
                       </select>
-                    </div>
-                    <div>
-                      <span className="text-[11px] text-slate-500 block mb-1">Reason (Optional)</span>
-                      <input
-                        type="text"
-                        placeholder="e.g. Surgery at NY, Holiday"
-                        value={draftReason}
-                        onChange={(e) => setDraftReason(e.target.value)}
-                        className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
-                        style={{ fontFamily: "Outfit, sans-serif" }}
-                      />
                     </div>
                   </div>
 
-                  <div className="flex justify-end">
+                  <div>
+                    <span className="text-[11px] text-slate-500 block mb-1">Reason (Optional)</span>
+                    <input
+                      type="text"
+                      placeholder="e.g., Vacation, Personal leave, Holiday"
+                      value={draftReason}
+                      onChange={(e) => setDraftReason(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary text-slate-900"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        resetDayOffDraft();
+                        setShowAddDayOffInline(false);
+                      }}
+                      className="text-xs"
+                    >
+                      Cancel
+                    </Button>
                     <Button
                       variant="primary"
                       size="sm"
-                      onClick={handleAddDayOff}
-                      className="flex items-center gap-1.5 font-semibold text-xs"
+                      onClick={handleSaveDayOff}
+                      className="text-xs font-semibold"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      Add Location Day Off
+                      Save Day Off
                     </Button>
                   </div>
                 </div>
+              )}
 
-                {/* Days Off List */}
-                {currentSchedule.daysOff.length > 0 ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {currentSchedule.daysOff.map((item) => {
-                      const dateObj = new Date(item.date + "T00:00:00");
-                      const formatted = !isNaN(dateObj.getTime())
-                        ? dateObj.toLocaleDateString("en-US", {
-                            weekday: "short",
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })
-                        : item.date;
-
-                      return (
-                        <div
-                          key={item.id}
-                          className="flex items-center justify-between p-3 rounded-xl border border-slate-200 bg-white shadow-2xs text-xs"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-8 h-8 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center shrink-0">
-                              <CalendarOff className="w-4 h-4" />
-                            </div>
-                            <div className="min-w-0">
-                              <div
-                                className="font-bold text-slate-900 truncate"
-                                style={{ fontFamily: "Outfit, sans-serif" }}
-                              >
-                                {formatted}
-                              </div>
-                              <div className="flex items-center gap-1.5 text-[11px] text-slate-500 mt-0.5">
-                                <span className="font-medium text-slate-600">{item.duration}</span>
-                                {item.reason && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="truncate">{item.reason}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDayOff(item.id)}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer shrink-0 ml-2"
-                            title="Remove day off"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+              {/* Days Off List */}
+              {daysOff.length === 0 ? (
+                <div className="text-center py-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/50">
+                  <CalendarOff className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                  <p
+                    className="text-xs font-semibold text-slate-600"
+                    style={{ fontFamily: "DM Sans, sans-serif" }}
+                  >
+                    No days off scheduled
+                  </p>
+                  <p
+                    className="text-[11px] text-slate-400 mt-0.5"
+                    style={{ fontFamily: "Outfit, sans-serif" }}
+                  >
+                    Click &quot;Add Day Off&quot; to add holidays or absences.
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {daysOff.map((day) => (
+                    <div
+                      key={day.id}
+                      className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                          <Calendar className="w-4 h-4" />
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 border-2 border-dashed border-slate-200 rounded-2xl bg-white/50">
-                    <CalendarOff className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                    <p className="text-xs text-slate-600 font-medium">No days off recorded for {currentSchedule.locationName}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      Days off added here will only block availability for this specific location.
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+                        <div>
+                          <div
+                            className="text-xs font-bold text-slate-900"
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            {day.date.includes(" to ")
+                              ? `${formatDateText(day.date.split(" to ")[0])} – ${formatDateText(day.date.split(" to ")[1])}`
+                              : formatDateText(day.date)}
+                          </div>
+                          <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                            <span className="px-1.5 py-0.2 rounded bg-slate-100 font-medium text-slate-600">
+                              {day.duration}
+                            </span>
+                            {day.reason && <span>• {day.reason}</span>}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDayOff(day.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                        title="Remove day off"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ export default function TargetUserDropdown({
     bookableMembers,
     nonBookableMembers,
     enableBooking,
+    enableMultipleBooking,
   } = useTeamMembers();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -26,6 +27,7 @@ export default function TargetUserDropdown({
   const [dropdownView, setDropdownView] = useState<"list" | "choose-existing">("list");
   const [showAddDrawer, setShowAddDrawer] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedMemberIds, setSelectedMemberIds] = useState<(string | number)[]>([]);
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -36,6 +38,7 @@ export default function TargetUserDropdown({
         setIsOpen(false);
         setDropdownView("list");
         setSearchQuery("");
+        setSelectedMemberIds([]);
       }
     };
     if (isOpen) {
@@ -64,6 +67,28 @@ export default function TargetUserDropdown({
     setIsOpen(false);
     setDropdownView("list");
     setSearchQuery("");
+    setSelectedMemberIds([]);
+  };
+
+  const handleEnableSelected = () => {
+    if (selectedMemberIds.length === 0) return;
+    if (enableMultipleBooking) {
+      enableMultipleBooking(selectedMemberIds);
+    } else {
+      selectedMemberIds.forEach((id) => enableBooking(id));
+    }
+    onSelectUser(selectedMemberIds[0]);
+    toast.success(`${selectedMemberIds.length} team member(s) enabled for appointments`);
+    setSelectedMemberIds([]);
+    setIsOpen(false);
+    setDropdownView("list");
+    setSearchQuery("");
+  };
+
+  const toggleSelectMember = (id: string | number) => {
+    setSelectedMemberIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
   };
 
   const handleNewMemberCreated = (newMember: TeamMember) => {
@@ -101,7 +126,7 @@ export default function TargetUserDropdown({
               <User className="w-3 h-3" />
             </div>
             <span className="truncate">
-              {selectedUser ? `${selectedUser.name} (${selectedUser.email})` : "Select Team Member"}
+              {selectedUser ? selectedUser.name : "Select Team Member"}
             </span>
           </div>
           <ChevronDown
@@ -161,9 +186,6 @@ export default function TargetUserDropdown({
                             <div className="text-xs font-semibold truncate text-slate-800">
                               {member.name}
                             </div>
-                            <div className="text-[11px] text-slate-400 truncate">
-                              {member.email}
-                            </div>
                           </div>
                           {isSelected && <Check className="w-4 h-4 text-primary shrink-0" />}
                         </button>
@@ -184,20 +206,11 @@ export default function TargetUserDropdown({
                       onClick={() => {
                         setDropdownView("choose-existing");
                         setSearchQuery("");
+                        setSelectedMemberIds([]);
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer text-left"
+                      className="w-full px-2.5 py-1.5 text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer text-left"
                     >
-                      <div className="w-6 h-6 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-primary shrink-0">
-                        <UserCheck className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-bold text-slate-800">
-                          Choose from available team members
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-normal truncate">
-                          {nonBookableMembers.length} team members without booking enabled
-                        </div>
-                      </div>
+                      Choose from available team members
                     </button>
 
                     {/* Option 2: Add new team member */}
@@ -206,19 +219,9 @@ export default function TargetUserDropdown({
                       onClick={() => {
                         setShowAddDrawer(true);
                       }}
-                      className="w-full flex items-center gap-2 px-2.5 py-2 text-xs font-semibold text-primary hover:bg-primary/5 rounded-xl transition-colors cursor-pointer text-left"
+                      className="w-full px-2.5 py-1.5 text-[11px] font-medium text-primary hover:bg-primary/5 rounded-lg transition-colors cursor-pointer text-left"
                     >
-                      <div className="w-6 h-6 rounded-lg bg-primary text-white flex items-center justify-center shrink-0">
-                        <UserPlus className="w-3.5 h-3.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-xs font-bold text-primary">
-                          Add new team member
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-normal truncate">
-                          Pre-configured for appointment booking
-                        </div>
-                      </div>
+                      + Add new team member
                     </button>
                   </div>
                 </div>
@@ -228,26 +231,41 @@ export default function TargetUserDropdown({
             {/* VIEW 2: Sub-dropdown of left available team members (who cannot book appointments yet) */}
             {dropdownView === "choose-existing" && (
               <>
-                <div className="p-2.5 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDropdownView("list");
-                      setSearchQuery("");
-                    }}
-                    className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
-                    title="Back to available list"
-                  >
-                    <ArrowLeft className="w-4 h-4" />
-                  </button>
-                  <div>
+                <div className="p-2.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDropdownView("list");
+                        setSearchQuery("");
+                        setSelectedMemberIds([]);
+                      }}
+                      className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-200/60 rounded-lg transition-colors cursor-pointer"
+                      title="Back to available list"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                    </button>
                     <div className="text-xs font-bold text-slate-900">
                       Enable Existing Member
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      Select a team member to enable for booking
-                    </div>
                   </div>
+                  {filteredNonBookable.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (selectedMemberIds.length === filteredNonBookable.length) {
+                          setSelectedMemberIds([]);
+                        } else {
+                          setSelectedMemberIds(filteredNonBookable.map((m) => m.id));
+                        }
+                      }}
+                      className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      {selectedMemberIds.length === filteredNonBookable.length
+                        ? "Deselect All"
+                        : "Select All"}
+                    </button>
+                  )}
                 </div>
 
                 {nonBookableMembers.length > 4 && (
@@ -265,14 +283,11 @@ export default function TargetUserDropdown({
                   </div>
                 )}
 
-                <div className="max-h-[240px] overflow-y-auto p-1.5 space-y-1">
+                <div className="max-h-[220px] overflow-y-auto p-1.5 space-y-1">
                   {nonBookableMembers.length === 0 ? (
                     <div className="p-4 text-center">
                       <p className="text-xs font-medium text-slate-600">
                         All team members are already enabled!
-                      </p>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        Every member in your organization can currently book appointments.
                       </p>
                       <button
                         type="button"
@@ -288,33 +303,58 @@ export default function TargetUserDropdown({
                       No matching team members found
                     </div>
                   ) : (
-                    filteredNonBookable.map((member) => (
-                      <button
-                        key={member.id}
-                        type="button"
-                        onClick={() => handleEnableExisting(member)}
-                        className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-slate-50 transition-colors text-left cursor-pointer border border-transparent hover:border-slate-200"
-                      >
-                        <div className="min-w-0 pr-2">
-                          <div className="text-xs font-bold text-slate-800 truncate">
-                            {member.name}
-                          </div>
-                          <div className="text-[11px] text-slate-400 truncate">
-                            {member.email}
-                          </div>
-                          {member.role && (
-                            <span className="inline-block mt-0.5 text-[10px] font-medium px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
-                              {member.role}
+                    filteredNonBookable.map((member) => {
+                      const isChecked = selectedMemberIds.includes(member.id);
+                      return (
+                        <div
+                          key={member.id}
+                          onClick={() => toggleSelectMember(member.id)}
+                          className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg transition-colors text-left cursor-pointer border ${
+                            isChecked
+                              ? "bg-blue-50/60 border-blue-200 text-slate-900"
+                              : "hover:bg-slate-50 border-transparent text-slate-800"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {}} // handled by parent div onClick
+                              className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                            />
+                            {/* Show only name, nothing else */}
+                            <span className="text-xs font-semibold text-slate-800 truncate">
+                              {member.name}
                             </span>
-                          )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEnableExisting(member);
+                            }}
+                            className="shrink-0 text-[10px] font-semibold text-primary px-2 py-0.5 rounded bg-blue-50 border border-blue-100 hover:bg-primary hover:text-white transition-colors cursor-pointer"
+                          >
+                            Enable
+                          </button>
                         </div>
-                        <span className="shrink-0 text-[11px] font-semibold text-primary px-2 py-1 rounded-lg bg-blue-50 border border-blue-100 hover:bg-primary hover:text-white transition-colors">
-                          Enable
-                        </span>
-                      </button>
-                    ))
+                      );
+                    })
                   )}
                 </div>
+
+                {filteredNonBookable.length > 0 && (
+                  <div className="p-2 border-t border-slate-100 bg-slate-50/50">
+                    <button
+                      type="button"
+                      disabled={selectedMemberIds.length === 0}
+                      onClick={handleEnableSelected}
+                      className="w-full py-1.5 px-3 text-xs font-bold text-white bg-primary disabled:bg-slate-200 disabled:text-slate-400 rounded-xl transition-all cursor-pointer shadow-xs"
+                    >
+                      Enable Selected {selectedMemberIds.length > 0 ? `(${selectedMemberIds.length})` : ""}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>

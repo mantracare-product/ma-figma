@@ -34,6 +34,7 @@ import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryCon
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ScheduleAppointmentDrawer from "../components/appointments/ScheduleAppointmentDrawer";
 import TeamAvailabilityTab from "../components/appointments/TeamAvailabilityTab";
+import TargetUserLocationBar from "../components/appointments/TargetUserLocationBar";
 import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
@@ -171,7 +172,10 @@ export default function Appointments() {
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"calendar" | "list" | "availability">("list");
-  const [calendarViewMode, setCalendarViewMode] = useState<"day" | "week" | "month" | "schedule">("month");
+  const [calendarViewMode, setCalendarViewMode] = useState<"day" | "week" | "month">("month");
+  const [selectedUserId, setSelectedUserId] = useState<string | number>(() => employees[0]?.id || 1);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("loc-1");
+  const [availabilitySubTab, setAvailabilitySubTab] = useState<"slots" | "days-off">("slots");
   const [selectedEmployee, setSelectedEmployee] = useState<number | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -819,295 +823,73 @@ export default function Appointments() {
             </span>
           }
         >
-          {/* DEV ONLY: Role toggle for testing admin vs provider booking flow */}
           <div className="flex items-center gap-3">
             <HowItWorksButton label="How Appointments Works" onClick={() => setShowHelp(true)} />
-            <span style={{ fontSize: '11px', color: '#9CA3AF', fontStyle: 'italic', fontFamily: 'Outfit, sans-serif' }}>
-              Dev only — view as:
-            </span>
-            <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-              <button
-                onClick={() => setDevUserRole("admin")}
-                style={{
-                  height: '28px',
-                  padding: '0 12px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: devUserRole === "admin" ? "#FFFFFF" : "#6B7280",
-                  backgroundColor: devUserRole === "admin" ? "#1A73E8" : "#FFFFFF",
-                  border: 'none',
-                  fontFamily: 'Outfit, sans-serif',
-                }}
-              >
-                Admin
-              </button>
-              <button
-                onClick={() => setDevUserRole("provider")}
-                style={{
-                  height: '28px',
-                  padding: '0 12px',
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: devUserRole === "provider" ? "#FFFFFF" : "#6B7280",
-                  backgroundColor: devUserRole === "provider" ? "#1A73E8" : "#FFFFFF",
-                  border: 'none',
-                  fontFamily: 'Outfit, sans-serif',
-                }}
-              >
-                Individual Provider
-              </button>
-            </div>
           </div>
         </PageHeader>
 
-        {/* Stats Capsules */}
-        <div className="flex items-center gap-3">
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <CalendarIcon className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.total}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Total Appointments</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderColor: 'rgba(59, 130, 246, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <Clock className="w-4 h-4" style={{ color: '#3B82F6' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.scheduled}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Scheduled</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              borderColor: 'rgba(16, 185, 129, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <CheckCircle className="w-4 h-4" style={{ color: '#10B981' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.completed}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Completed</span>
-          </div>
-
-          <div
-            className="flex items-center gap-2 px-4 py-2.5 border"
-            style={{
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              borderColor: 'rgba(239, 68, 68, 0.2)',
-              borderRadius: '999px',
-              height: '40px'
-            }}
-          >
-            <XCircle className="w-4 h-4" style={{ color: '#EF4444' }} />
-            <span className="font-semibold" style={{ fontSize: '14px', color: '#020817' }}>{stats.cancelled}</span>
-            <span style={{ fontSize: '12px', color: '#64748B' }}>Cancelled</span>
-          </div>
-        </div>
-
-        {/* Controls */}
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="Search appointments..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10"
-            />
-          </div>
-
-          {devUserRole === "admin" && (
-            <div className="relative">
+        {/* Navigation & Controls Row: Segmented View Switcher (List | Calendar | Availability) + Book Appointment */}
+        <div className="flex items-center justify-end gap-3">
+            {/* Segmented View Switcher */}
+            <div className="inline-flex items-center p-1 bg-slate-100/90 rounded-xl border border-slate-200/80 shadow-2xs">
               <button
-                onClick={() => setShowProviderDropdown(!showProviderDropdown)}
-                className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
-                style={{ height: '36px' }}
+                type="button"
+                onClick={() => setView("list")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  view === "list"
+                    ? "bg-[#181e25] text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+                title="List View"
               >
-                <User className="w-4 h-4 text-muted-foreground" />
-                <span>{selectedEmployee === "all" ? "All Providers" : employees.find(e => e.id === selectedEmployee)?.name}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">List</span>
               </button>
-              {showProviderDropdown && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowProviderDropdown(false)} />
-                  <div
-                    className="absolute left-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg py-1"
-                    style={{ width: '220px', top: '100%' }}
-                  >
-                    <button
-                      onClick={() => { setSelectedEmployee("all"); setShowProviderDropdown(false); }}
-                      className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === "all" ? "text-blue-600 font-semibold" : "text-slate-700"}`}
-                    >
-                      All Providers
-                    </button>
-                    {employees.map((emp) => (
-                      <button
-                        key={emp.id}
-                        onClick={() => { setSelectedEmployee(emp.id); setShowProviderDropdown(false); }}
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-slate-50 ${selectedEmployee === emp.id ? "text-blue-600 font-semibold" : "text-slate-700"}`}
-                      >
-                        {emp.name}
-                      </button>
-                    ))}
-                  </div>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => setView("calendar")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  view === "calendar"
+                    ? "bg-[#181e25] text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+                title="Calendar View"
+              >
+                <CalendarIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Calendar</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("availability")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  view === "availability"
+                    ? "bg-[#181e25] text-white shadow-xs"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-white/50"
+                }`}
+                style={{ fontFamily: "DM Sans, sans-serif" }}
+                title="Team Availability & Days Off"
+              >
+                <CalendarClock className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Availability</span>
+              </button>
             </div>
-          )}
 
-          <div className="relative">
+            {/* Book Appointment CTA (Electric Blue Pill) */}
             <button
-              onClick={() => setShowFilterModal(!showFilterModal)}
-              className="flex items-center gap-2 px-4 py-2 border border-border rounded-lg text-sm bg-white hover:bg-gray-50 transition-colors"
-              style={{ height: '36px' }}
-            >
-              <Filter className="w-4 h-4 text-muted-foreground" />
-              <span>Filters</span>
-            </button>
-            {showFilterModal && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowFilterModal(false)} />
-                <div
-                  className="absolute right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-lg p-4 space-y-4"
-                  style={{ width: '320px', top: '100%' }}
-                >
-                  <div>
-                    <div className="flex items-center gap-1 mb-2">
-                      <label className="block text-xs font-semibold text-slate-700">Date Range</label>
-                      <InfoTooltip text="Only show appointments that fall in this date range." />
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {["Today", "This Week", "This Month", "Custom"].map((opt) => (
-                        <button
-                          key={opt}
-                          onClick={() => setFilterDate(opt)}
-                          className={`px-3 py-2 rounded-lg text-xs font-medium border ${filterDate === opt ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
-                        >
-                          {opt}
-                        </button>
-                      ))}
-                    </div>
-                    {filterDate === "Custom" && (
-                      <div className="flex gap-2 mt-2">
-                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                        <input type="date" className="flex-1 px-2 py-1.5 border border-slate-200 rounded-lg text-xs" />
-                      </div>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-2">Status</label>
-                    <div className="flex flex-wrap gap-2">
-                      {["All", "Scheduled", "Completed", "Cancelled", "No-show", "Pending"].map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => setFilterStatus(status)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border ${filterStatus === status ? "border-cyan-500 bg-cyan-50 text-cyan-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                            }`}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setShowFilterModal(false);
-                      toast.success("Filters applied");
-                    }}
-                    className="w-full py-2.5 rounded-lg text-sm font-semibold text-white"
-                    style={{ background: 'linear-gradient(to right, #06B6D4, #1A73E8)' }}
-                  >
-                    Apply Filters
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setView("list")}
-              className="transition-all"
-              style={{
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: view === "list" ? "#1A73E8" : "#FFFFFF",
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
+              type="button"
+              onClick={() => {
+                resetBookingWorkflow();
+                setShowAddModal(true);
               }}
-              title="List View"
+              className="inline-flex items-center justify-center gap-1.5 px-4.5 py-2 rounded-full bg-[#1456f0] hover:bg-[#1044bf] text-white text-xs font-semibold shadow-xs transition-all cursor-pointer active:scale-98"
+              style={{ fontFamily: "Outfit, sans-serif", height: '36px' }}
             >
-              <List className="w-4 h-4" style={{ color: view === "list" ? "#FFFFFF" : "#6B7280" }} />
-            </button>
-            <button
-              onClick={() => setView("calendar")}
-              className="transition-all"
-              style={{
-                width: '36px',
-                height: '36px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: view === "calendar" ? "#1A73E8" : "#FFFFFF",
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-              }}
-              title="Calendar View"
-            >
-              <CalendarIcon className="w-4 h-4" style={{ color: view === "calendar" ? "#FFFFFF" : "#6B7280" }} />
-            </button>
-            <button
-              onClick={() => setView("availability")}
-              className="transition-all flex items-center gap-1.5 px-3 cursor-pointer"
-              style={{
-                height: '36px',
-                backgroundColor: view === "availability" ? "#1A73E8" : "#FFFFFF",
-                color: view === "availability" ? "#FFFFFF" : "#6B7280",
-                border: '1px solid #E5E7EB',
-                borderRadius: '6px',
-                fontSize: '12px',
-                fontWeight: 500,
-                fontFamily: 'Outfit, sans-serif',
-              }}
-              title="Team Availability & Days Off"
-            >
-              <CalendarClock className="w-4 h-4" style={{ color: view === "availability" ? "#FFFFFF" : "#6B7280" }} />
-              <span className="hidden sm:inline">Availability</span>
+              <Plus className="w-4 h-4" />
+              Book Appointment
             </button>
           </div>
-
-          <Button
-            variant="primary"
-            onClick={() => {
-              resetBookingWorkflow();
-              setShowAddModal(true);
-            }}
-            style={{ width: '160px', height: '36px' }}
-          >
-            <Plus className="w-4 h-4" />
-            Book Appointment
-          </Button>
-        </div>
 
         {/* Calendar View */}
         {view === "calendar" && (
@@ -1175,21 +957,7 @@ export default function Appointments() {
                         >
                           Month
                         </button>
-                        <button
-                          onClick={() => setCalendarViewMode("schedule")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Schedule
-                        </button>
+
                       </div>
                       <InfoTooltip text="Choose how far ahead you want to see your schedule." />
                     </div>
@@ -1357,21 +1125,7 @@ export default function Appointments() {
                         >
                           Month
                         </button>
-                        <button
-                          onClick={() => setCalendarViewMode("schedule")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Schedule
-                        </button>
+
                       </div>
 
                       {/* Navigation */}
@@ -1527,274 +1281,6 @@ export default function Appointments() {
               );
             })()}
 
-            {/* SCHEDULE VIEW */}
-            {currentCalendarViewMode === "schedule" && (() => {
-              // Get all appointments for the current month, grouped by date
-              const monthAppointments = appointments.filter((apt) => {
-                const aptDate = new Date(apt.date + "T00:00:00");
-                const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
-                return aptDate.getMonth() === month && aptDate.getFullYear() === year && matchesEmployee;
-              });
-
-              // Group by date
-              const groupedByDate: { [key: string]: Appointment[] } = {};
-              monthAppointments.forEach((apt) => {
-                if (!groupedByDate[apt.date]) {
-                  groupedByDate[apt.date] = [];
-                }
-                groupedByDate[apt.date].push(apt);
-              });
-
-              // Sort dates
-              const sortedDates = Object.keys(groupedByDate).sort();
-
-              return (
-                <>
-                  {/* Schedule View Header */}
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-xl font-bold" style={{ color: "#020817", fontFamily: "DM Sans, sans-serif" }}>
-                      {monthNames[month]}, {year}
-                    </h2>
-
-                    <div className="flex items-center gap-3">
-                      {/* View Mode Tabs */}
-                      <div className="flex items-center bg-white border" style={{ borderColor: '#E5E7EB', borderRadius: '6px', overflow: 'hidden' }}>
-                        <button
-                          onClick={() => setCalendarViewMode("day")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "day" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "day" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Day
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("week")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "week" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "week" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Week
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("month")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "month" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "month" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Month
-                        </button>
-                        <button
-                          onClick={() => setCalendarViewMode("schedule")}
-                          style={{
-                            width: '64px',
-                            height: '32px',
-                            fontSize: '12px',
-                            fontWeight: 500,
-                            color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
-                            backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
-                            border: 'none',
-                            fontFamily: 'Outfit, sans-serif',
-                          }}
-                        >
-                          Schedule
-                        </button>
-                      </div>
-
-                      {/* Navigation */}
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => navigateMonth("prev")}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => setCurrentDate(new Date())}>
-                          Today
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => navigateMonth("next")}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-6">
-                    {/* Schedule list */}
-                    <div style={{ flex: 1 }}>
-                      {sortedDates.length === 0 ? (
-                        <div className="text-center py-16">
-                          <CalendarIcon className="w-16 h-16 mx-auto mb-4" style={{ color: '#9CA3AF' }} />
-                          <h3 className="text-lg font-bold mb-2" style={{ color: "#6B7280", fontFamily: "DM Sans, sans-serif" }}>
-                            There are no appointments
-                          </h3>
-                          <Button variant="primary" className="mt-4" onClick={() => {
-                            resetBookingWorkflow();
-                            setShowAddModal(true);
-                          }}>
-                            Book Appointment
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          {sortedDates.map((dateStr) => {
-                            const date = new Date(dateStr + "T00:00:00");
-                            const dayName = date.toLocaleDateString("en-US", { weekday: "long" });
-                            const monthDay = date.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-
-                            return (
-                              <div key={dateStr}>
-                                {/* Date section header */}
-                                <div className="flex items-center gap-3 mb-3">
-                                  <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
-                                  <div style={{ fontSize: '12px', color: '#6B7280', fontFamily: 'Outfit, sans-serif', whiteSpace: 'nowrap' }}>
-                                    {monthDay}, {dayName}
-                                  </div>
-                                  <div style={{ flex: 1, height: '1px', backgroundColor: '#E5E7EB' }} />
-                                </div>
-
-                                {/* Appointments for this date */}
-                                <div className="space-y-0">
-                                  {groupedByDate[dateStr].map((apt) => {
-                                    const employee = employees.find((e) => e.id === apt.employeeId);
-                                    const service = services.find((s) => s.id === apt.serviceId);
-                                    const [hours, minutes] = apt.time.split(':').map(Number);
-                                    const endHour = hours + Math.floor((minutes + apt.duration) / 60);
-                                    const endMinute = (minutes + apt.duration) % 60;
-
-                                    return (
-                                      <div
-                                        key={apt.id}
-                                        onClick={() => openEditModal(apt)}
-                                        className="cursor-pointer hover:bg-muted/30 transition-colors"
-                                        style={{
-                                          height: '56px',
-                                          borderBottom: '1px solid #F3F4F6',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '12px',
-                                          padding: '0 12px',
-                                        }}
-                                      >
-                                        {/* Time column */}
-                                        <div style={{ width: '120px', fontSize: '12px', color: '#6B7280', fontFamily: 'Outfit, sans-serif' }}>
-                                          {apt.time} – {String(endHour).padStart(2, '0')}:{String(endMinute).padStart(2, '0')}
-                                        </div>
-
-                                        {/* Color dot */}
-                                        <div
-                                          style={{
-                                            width: '8px',
-                                            height: '8px',
-                                            borderRadius: '50%',
-                                            backgroundColor: '#1A73E8',
-                                            flexShrink: 0,
-                                          }}
-                                        />
-
-                                        {/* Patient info */}
-                                        <div style={{ flex: 1 }}>
-                                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#111827', fontFamily: 'DM Sans, sans-serif', marginBottom: '2px' }}>
-                                            {apt.clientName}
-                                          </div>
-                                          <div style={{ fontSize: '12px', color: '#9CA3AF', fontFamily: 'Outfit, sans-serif' }}>
-                                            {service?.name} · {employee?.name}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Mini month calendar */}
-                    <div style={{ width: '220px', flexShrink: 0 }}>
-                      <div className="bg-white border rounded-lg p-4" style={{ borderColor: '#E5E7EB' }}>
-                        <div className="text-center mb-3" style={{ fontSize: '13px', fontWeight: 600, color: '#111827', fontFamily: 'DM Sans, sans-serif' }}>
-                          {monthNames[month]} {year}
-                        </div>
-
-                        {/* Mini calendar grid */}
-                        <div className="grid grid-cols-7 gap-1">
-                          {/* Day headers */}
-                          {["S", "M", "T", "W", "T", "F", "S"].map((day, i) => (
-                            <div
-                              key={i}
-                              className="text-center"
-                              style={{
-                                fontSize: '10px',
-                                fontWeight: 600,
-                                color: '#9CA3AF',
-                                padding: '4px 0',
-                                fontFamily: 'Outfit, sans-serif',
-                              }}
-                            >
-                              {day}
-                            </div>
-                          ))}
-
-                          {/* Empty cells */}
-                          {Array.from({ length: startingDayOfWeek }).map((_, i) => (
-                            <div key={`empty-${i}`} />
-                          ))}
-
-                          {/* Calendar days */}
-                          {Array.from({ length: daysInMonth }).map((_, i) => {
-                            const day = i + 1;
-                            const dateStr = formatDate(new Date(year, month, day));
-                            const isToday = dateStr === formatDate(new Date());
-
-                            return (
-                              <div
-                                key={day}
-                                style={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  width: '24px',
-                                  height: '24px',
-                                  fontSize: '11px',
-                                  fontWeight: isToday ? 600 : 400,
-                                  color: isToday ? '#FFFFFF' : '#374151',
-                                  backgroundColor: isToday ? '#06B6D4' : 'transparent',
-                                  borderRadius: '50%',
-                                  fontFamily: 'Outfit, sans-serif',
-                                }}
-                              >
-                                {day}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              );
-            })()}
-
             {/* MONTH VIEW */}
             {currentCalendarViewMode === "month" && (
               <>
@@ -1851,21 +1337,6 @@ export default function Appointments() {
                         }}
                       >
                         Month
-                      </button>
-                      <button
-                        onClick={() => setCalendarViewMode("schedule")}
-                        style={{
-                          width: '64px',
-                          height: '32px',
-                          fontSize: '12px',
-                          fontWeight: 500,
-                          color: calendarViewMode === "schedule" ? "#FFFFFF" : "#6B7280",
-                          backgroundColor: calendarViewMode === "schedule" ? "#1A73E8" : "#FFFFFF",
-                          border: 'none',
-                          fontFamily: 'Outfit, sans-serif',
-                        }}
-                      >
-                        Schedule
                       </button>
                     </div>
 
@@ -2532,6 +2003,12 @@ export default function Appointments() {
         {view === "availability" && (
           <TeamAvailabilityTab
             employees={employees}
+            selectedUserId={selectedUserId}
+            onSelectUser={setSelectedUserId}
+            selectedLocationId={selectedLocationId}
+            onSelectLocation={setSelectedLocationId}
+            activeTab={availabilitySubTab}
+            onTabChange={setAvailabilitySubTab}
           />
         )}
       </div>

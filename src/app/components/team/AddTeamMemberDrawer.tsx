@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Drawer } from "../ui/drawer";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { addTeamMemberToStore, TeamMember } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
@@ -35,6 +35,34 @@ export default function AddTeamMemberDrawer({
   const [role, setRole] = useState("Specialist");
   const [canBookAppointments, setCanBookAppointments] = useState(initialCanBookAppointments);
 
+  // Fetch organization locations from storage or activeOrganization
+  const orgLocations = useMemo(() => {
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization?.id || "1"}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((l: any, idx: number) => ({
+            id: l.id || `loc-${idx + 1}`,
+            name: l.name,
+          }));
+        }
+      }
+    } catch {}
+
+    const orgLocs =
+      activeOrganization?.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization?.location || "California"];
+
+    return orgLocs.map((name: string, idx: number) => ({
+      id: `loc-${idx + 1}`,
+      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
+    }));
+  }, [activeOrganization]);
+
+  const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
+
   useEffect(() => {
     if (isOpen) {
       setName("");
@@ -42,8 +70,9 @@ export default function AddTeamMemberDrawer({
       setDepartment("");
       setRole("Specialist");
       setCanBookAppointments(initialCanBookAppointments);
+      setSelectedLocationIds(orgLocations.map((l) => l.id));
     }
-  }, [isOpen, initialCanBookAppointments]);
+  }, [isOpen, initialCanBookAppointments, orgLocations]);
 
   const handleSave = () => {
     if (!name.trim() || !email.trim()) {
@@ -57,6 +86,15 @@ export default function AddTeamMemberDrawer({
       return;
     }
 
+    if (canBookAppointments && selectedLocationIds.length === 0) {
+      toast.error("Please select at least one available location for appointment booking");
+      return;
+    }
+
+    const selectedLocationNames = orgLocations
+      .filter((l) => selectedLocationIds.includes(l.id))
+      .map((l) => l.name);
+
     const created = addTeamMemberToStore({
       name: name.trim(),
       email: email.trim(),
@@ -65,7 +103,20 @@ export default function AddTeamMemberDrawer({
       status: true,
       organizationId: activeOrganization?.id || "1",
       canBookAppointments,
+      locations: selectedLocationNames,
     });
+
+    // Save active locations map for this member
+    try {
+      const activeMap: Record<string, boolean> = {};
+      orgLocations.forEach((loc) => {
+        activeMap[loc.id] = selectedLocationIds.includes(loc.id);
+      });
+      localStorage.setItem(
+        `mantra_user_loc_active_map_${created.id}_${activeOrganization?.id || "1"}`,
+        JSON.stringify(activeMap)
+      );
+    } catch {}
 
     toast.success(`Team member "${created.name}" added successfully`);
     if (onSuccess) {
@@ -230,6 +281,79 @@ export default function AddTeamMemberDrawer({
             </div>
           </label>
         </div>
+
+        {/* Available Locations for Booking */}
+        {canBookAppointments && (
+          <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  Available Locations
+                </div>
+                <div className="text-[11px] text-slate-400">
+                  Select clinic locations where this member can be booked
+                </div>
+              </div>
+              {orgLocations.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedLocationIds.length === orgLocations.length) {
+                      setSelectedLocationIds([]);
+                    } else {
+                      setSelectedLocationIds(orgLocations.map((l) => l.id));
+                    }
+                  }}
+                  className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                >
+                  {selectedLocationIds.length === orgLocations.length ? "Deselect All" : "Select All"}
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 gap-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+              {orgLocations.length === 0 ? (
+                <div className="p-2.5 text-center text-xs text-slate-400">
+                  No organization locations found
+                </div>
+              ) : (
+                orgLocations.map((loc, idx) => {
+                  const isChecked = selectedLocationIds.includes(loc.id);
+                  return (
+                    <label
+                      key={loc.id}
+                      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all cursor-pointer ${
+                        isChecked
+                          ? "bg-white border-blue-200 text-slate-900 shadow-2xs"
+                          : "bg-white/60 border-slate-200/80 text-slate-500 hover:bg-white"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedLocationIds([...selectedLocationIds, loc.id]);
+                          } else {
+                            setSelectedLocationIds(selectedLocationIds.filter((id) => id !== loc.id));
+                          }
+                        }}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                      />
+                      <span className="text-xs font-medium flex-1 truncate">{loc.name}</span>
+                      {idx === 0 && (
+                        <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                          Primary
+                        </span>
+                      )}
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex items-center gap-3 pt-3 border-t border-slate-100">

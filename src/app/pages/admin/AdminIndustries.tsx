@@ -394,7 +394,7 @@ export function AdminIndustries() {
           {activeTab === "industries" ? (
             <button
               type="button"
-              onClick={handleOpenCreateIndustry}
+              onClick={() => handleOpenCreateIndustry()}
               className="px-3.5 py-1.5 bg-[#111827] text-white rounded-lg text-xs font-semibold hover:bg-[#1f2937] transition-all flex items-center gap-1.5 cursor-pointer shrink-0 shadow-2xs"
             >
               <Plus className="w-3.5 h-3.5" />

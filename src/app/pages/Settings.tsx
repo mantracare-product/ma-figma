@@ -168,6 +168,7 @@ interface User {
   daysOff?: string[]; // Array of ISO date strings (YYYY-MM-DD)
   assignedServices?: number[]; // service IDs
   canBookAppointments?: boolean;
+  locations?: string[];
 }
 
 interface CustomField {
@@ -946,8 +947,13 @@ export default function Settings() {
   }, [activeOrganization]);
 
   // Users State
-  const [allUsers, setAllUsers] = useState<User[]>([
-    // Healthcare Org (ID: "1")
+  const [allUsers, setAllUsers] = useState<User[]>(() => {
+    try {
+      const stored = getStoredTeamMembers();
+      if (stored && stored.length > 0) return stored as any;
+    } catch {}
+    return [
+      // Healthcare Org (ID: "1")
     {
       id: 1,
       name: "John Smith",
@@ -1029,7 +1035,8 @@ export default function Settings() {
       role: "Reception",
       permissions: createDefaultPermissions(),
     },
-  ]);
+  ];
+  });
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDeleteUserModal, setShowDeleteUserModal] = useState(false);
@@ -1048,6 +1055,40 @@ export default function Settings() {
     canBookAppointments: false,
     permissions: createDefaultPermissions(),
   });
+
+  // Organization locations for Add Member drawer
+  const settingsOrgLocations = useMemo(() => {
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization?.id || "1"}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((l: any, idx: number) => ({
+            id: l.id || `loc-${idx + 1}`,
+            name: l.name,
+          }));
+        }
+      }
+    } catch {}
+
+    const orgLocs =
+      activeOrganization?.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization?.location || "California"];
+
+    return orgLocs.map((name: string, idx: number) => ({
+      id: `loc-${idx + 1}`,
+      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
+    }));
+  }, [activeOrganization]);
+
+  const [addMemberSelectedLocationIds, setAddMemberSelectedLocationIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (showAddUserModal) {
+      setAddMemberSelectedLocationIds(settingsOrgLocations.map((l) => l.id));
+    }
+  }, [showAddUserModal, settingsOrgLocations]);
 
   // Section-level permission state for Add User modal
   const [corePermission, setCorePermission] = useState<"" | ActionScope>("");
@@ -1208,24 +1249,37 @@ export default function Settings() {
     }
   }, [location.state, navigate]);
 
+  const isInternalSaveRef = useRef(false);
+
   // Restore users from team store on mount & listen to store updates
   useEffect(() => {
     const loadUsers = () => {
+      if (isInternalSaveRef.current) return;
       const stored = getStoredTeamMembers();
       if (stored && stored.length > 0) {
-        setAllUsers(stored as any);
+        setAllUsers((prev) => {
+          if (JSON.stringify(prev) === JSON.stringify(stored)) return prev;
+          return stored as any;
+        });
       }
     };
     loadUsers();
     window.addEventListener(TEAM_STORE_EVENT, loadUsers);
+    window.addEventListener("storage", loadUsers);
     return () => {
       window.removeEventListener(TEAM_STORE_EVENT, loadUsers);
+      window.removeEventListener("storage", loadUsers);
     };
   }, []);
 
   // Save users to team store on change
   useEffect(() => {
-    saveStoredTeamMembers(allUsers as any);
+    isInternalSaveRef.current = true;
+    try {
+      saveStoredTeamMembers(allUsers as any);
+    } finally {
+      isInternalSaveRef.current = false;
+    }
   }, [allUsers]);
 
   // Custom Fields Context
@@ -3165,6 +3219,10 @@ export default function Settings() {
       );
       toast.success("User settings updated successfully");
     } else {
+      const selectedLocationNames = settingsOrgLocations
+        .filter((l) => addMemberSelectedLocationIds.includes(l.id))
+        .map((l) => l.name);
+
       const newUser: User = {
         id: Math.max(...allUsers.map((u) => u.id), 0) + 1,
         name: userFormData.name,
@@ -3174,11 +3232,26 @@ export default function Settings() {
         role: userFormData.role,
         permissions: userFormData.permissions,
         canBookAppointments: Boolean(userFormData.canBookAppointments),
+        locations: selectedLocationNames,
         calendarConnected,
         connectedCalendar,
         availability,
         daysOff,
       };
+
+      if (userFormData.canBookAppointments) {
+        try {
+          const activeMap: Record<string, boolean> = {};
+          settingsOrgLocations.forEach((loc) => {
+            activeMap[loc.id] = addMemberSelectedLocationIds.includes(loc.id);
+          });
+          localStorage.setItem(
+            `mantra_user_loc_active_map_${newUser.id}_${activeOrganization.id}`,
+            JSON.stringify(activeMap)
+          );
+        } catch {}
+      }
+
       setAllUsers([...allUsers, newUser]);
       toast.success("User added successfully");
     }
@@ -6358,7 +6431,7 @@ export default function Settings() {
                           <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody key={`fields-${customFieldsTab}-${currentModule}`}>
                         {(() => {
                           const currentFields = getCustomFields(currentModule).filter((field) =>
                             isFieldMatchingOrg(field, activeOrganization)
@@ -6400,7 +6473,7 @@ export default function Settings() {
                             else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
 
                             return (
-                              <tr key={field.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
+                              <tr key={`${currentModule}-${field.key}-${field.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
                                 <td className="px-5 py-3.5">
                                   <span className="text-sm font-medium text-[#111827]">{field.label}</span>
                                 </td>
@@ -6478,7 +6551,7 @@ export default function Settings() {
                           <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody key={`sections-${customFieldsTab}-${currentModule}`}>
                         {(() => {
                           const allSecs = getAllSections(currentModule).filter((sec) =>
                             isSectionMatchingOrg(sec, activeOrganization)
@@ -6497,7 +6570,7 @@ export default function Settings() {
                             const isSystem = sec.source === "system";
                             const assignedFieldCount = (sec.fieldKeys || []).length;
                             return (
-                              <tr key={sec.id} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
+                              <tr key={`${currentModule}-${sec.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
                                 <td className="px-5 py-3.5">
                                   <span className="text-sm font-medium text-[#111827]">{sec.title}</span>
                                 </td>
@@ -7809,6 +7882,79 @@ export default function Settings() {
               </label>
             </div>
 
+            {/* Available Locations for Booking */}
+            {userFormData.canBookAppointments && (
+              <div className="p-3.5 bg-slate-50/80 rounded-xl border border-slate-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <MapPin className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      Available Locations
+                    </div>
+                    <div className="text-[11px] text-slate-400">
+                      Select clinic locations where this member can be booked
+                    </div>
+                  </div>
+                  {settingsOrgLocations.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (addMemberSelectedLocationIds.length === settingsOrgLocations.length) {
+                          setAddMemberSelectedLocationIds([]);
+                        } else {
+                          setAddMemberSelectedLocationIds(settingsOrgLocations.map((l) => l.id));
+                        }
+                      }}
+                      className="text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+                    >
+                      {addMemberSelectedLocationIds.length === settingsOrgLocations.length ? "Deselect All" : "Select All"}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 gap-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+                  {settingsOrgLocations.length === 0 ? (
+                    <div className="p-2.5 text-center text-xs text-slate-400">
+                      No organization locations found
+                    </div>
+                  ) : (
+                    settingsOrgLocations.map((loc, idx) => {
+                      const isChecked = addMemberSelectedLocationIds.includes(loc.id);
+                      return (
+                        <label
+                          key={loc.id}
+                          className={`flex items-center gap-2.5 px-3 py-2 rounded-lg border transition-all cursor-pointer ${
+                            isChecked
+                              ? "bg-white border-blue-200 text-slate-900 shadow-2xs"
+                              : "bg-white/60 border-slate-200/80 text-slate-500 hover:bg-white"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setAddMemberSelectedLocationIds([...addMemberSelectedLocationIds, loc.id]);
+                              } else {
+                                setAddMemberSelectedLocationIds(addMemberSelectedLocationIds.filter((id) => id !== loc.id));
+                              }
+                            }}
+                            className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
+                          />
+                          <span className="text-xs font-medium flex-1 truncate">{loc.name}</span>
+                          {idx === 0 && (
+                            <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
+                              Primary
+                            </span>
+                          )}
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex items-center gap-3 pt-2 border-t border-slate-100">
               <button
@@ -7847,6 +7993,7 @@ export default function Settings() {
               name: "",
               email: "",
               role: "Agent",
+              canBookAppointments: false,
               permissions: createDefaultPermissions(),
             });
             setCalendarConnected(false);
@@ -7876,6 +8023,7 @@ export default function Settings() {
                     name: "",
                     email: "",
                     role: "Agent",
+                    canBookAppointments: false,
                     permissions: createDefaultPermissions(),
                   });
                   setCalendarConnected(false);
@@ -7916,18 +8064,20 @@ export default function Settings() {
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
               )}
             </button>
-            <button
-              onClick={() => setManageTeamTab("availability")}
-              className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${manageTeamTab === "availability"
-                ? "text-[#2563EB] font-semibold"
-                : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
-                }`}
-            >
-              Availability & Days Off
-              {manageTeamTab === "availability" && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
-              )}
-            </button>
+            {selectedUser?.canBookAppointments && (
+              <button
+                onClick={() => setManageTeamTab("availability")}
+                className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${manageTeamTab === "availability"
+                  ? "text-[#2563EB] font-semibold"
+                  : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
+                  }`}
+              >
+                Availability & Days Off
+                {manageTeamTab === "availability" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setManageTeamTab("services")}
               className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${manageTeamTab === "services"
@@ -8045,10 +8195,11 @@ export default function Settings() {
             )}
 
             {/* TAB 2 - Availability & Days Off Section (Location-Specific) */}
-            {manageTeamTab === "availability" && (
+            {selectedUser?.canBookAppointments && manageTeamTab === "availability" && (
               <MemberLocationScheduleTab
                 memberId={selectedUser?.id}
                 memberName={selectedUser?.name}
+                canBookAppointments={selectedUser?.canBookAppointments}
               />
             )}
 

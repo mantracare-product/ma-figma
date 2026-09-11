@@ -142,11 +142,26 @@ export const LEGACY_SECTION_REGISTRY_EVENT = "SECTION_REGISTRY_CHANGED";
  * Check whether a field definition matches an organization's scoping attributes.
  * System fields are always global and match all organizations.
  */
+const SYSTEM_FIELD_KEYS = new Set([
+  "name", "email", "phone", "location", "country",
+  "company", "role", "status", "processes", "stage",
+  "responsible", "lastContact", "companyName", "jobPosition"
+]);
+
+const SYSTEM_SECTION_IDS = new Set([
+  "sec-client-details",
+  "sec-general-info",
+  "sec-company-details",
+  "sec-company-role",
+  "sec-process-pipeline",
+]);
+
 export function isFieldMatchingOrg(
-  field: FieldDefinition,
+  field: FieldDefinition | { id?: number; key?: string; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[] },
   org?: OrgScopeFilter | null
 ): boolean {
-  if (field.source === "system" || field.id < 0) return true;
+  if (!field) return true;
+  if (field.source === "system" || (field.id !== undefined && field.id < 0) || (field.key && SYSTEM_FIELD_KEYS.has(field.key))) return true;
 
   // If multi-rule scoping is present, check against rules
   if (field.scopingRules && field.scopingRules.length > 0) {
@@ -241,10 +256,11 @@ export function isFieldMatchingOrg(
  * System sections are always global and match all organizations.
  */
 export function isSectionMatchingOrg(
-  section: SectionDefinition,
+  section: SectionDefinition | { id: string; isCustom?: boolean; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[] },
   org?: OrgScopeFilter | null
 ): boolean {
-  if (section.source === "system") return true;
+  if (!section) return true;
+  if (section.source === "system" || (section as any).isCustom === false || SYSTEM_SECTION_IDS.has(section.id)) return true;
 
   // If multi-rule scoping is present, check against rules
   if (section.scopingRules && section.scopingRules.length > 0) {
@@ -610,7 +626,7 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
 
   // ── 5. Instructions ───────────────────────────────────────
   {
-    id: 913,
+    id: 918,
     key: "patient_instructions",
     label: "Patient Instructions",
     module: "scribe",
@@ -619,12 +635,12 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "+ Type instruction and press Enter...",
     required: false,
     showAlways: true,
-    createdAt: 1700000000013,
+    createdAt: 1700000000018,
   },
 
   // ── 6. Precautions ────────────────────────────────────────
   {
-    id: 914,
+    id: 919,
     key: "patient_precautions",
     label: "Precautions & Warnings",
     module: "scribe",
@@ -633,12 +649,12 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "+ Type precaution and press Enter...",
     required: false,
     showAlways: true,
-    createdAt: 1700000000014,
+    createdAt: 1700000000019,
   },
 
   // ── 7. Prognosis ──────────────────────────────────────────
   {
-    id: 915,
+    id: 920,
     key: "prognosis_status",
     label: "Prognosis",
     module: "scribe",
@@ -653,10 +669,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     ],
     required: true,
     showAlways: true,
-    createdAt: 1700000000015,
+    createdAt: 1700000000020,
   },
   {
-    id: 916,
+    id: 921,
     key: "expected_course",
     label: "Expected Course / Recovery",
     module: "scribe",
@@ -671,10 +687,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     ],
     required: false,
     showAlways: true,
-    createdAt: 1700000000016,
+    createdAt: 1700000000021,
   },
   {
-    id: 917,
+    id: 922,
     key: "complication_risk",
     label: "Complication Risk",
     module: "scribe",
@@ -688,12 +704,12 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     ],
     required: false,
     showAlways: true,
-    createdAt: 1700000000017,
+    createdAt: 1700000000022,
   },
 
   // ── 8. Follow-up ──────────────────────────────────────────
   {
-    id: 918,
+    id: 923,
     key: "follow_up_review",
     label: "Review Timeline",
     module: "scribe",
@@ -709,10 +725,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     ],
     required: true,
     showAlways: true,
-    createdAt: 1700000000018,
+    createdAt: 1700000000023,
   },
   {
-    id: 919,
+    id: 924,
     key: "follow_up_criteria",
     label: "Follow-up Conditions",
     module: "scribe",
@@ -721,12 +737,12 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "e.g. If symptoms worsen or do not improve within 5 days",
     required: false,
     showAlways: true,
-    createdAt: 1700000000019,
+    createdAt: 1700000000024,
   },
 
   // ── 9. Doctor Information ─────────────────────────────────
   {
-    id: 920,
+    id: 925,
     key: "doctor_name",
     label: "Doctor Name",
     module: "scribe",
@@ -735,10 +751,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "e.g. Dr. Ankit Mehra",
     required: true,
     showAlways: true,
-    createdAt: 1700000000020,
+    createdAt: 1700000000025,
   },
   {
-    id: 921,
+    id: 926,
     key: "doctor_qualification",
     label: "Qualification",
     module: "scribe",
@@ -747,10 +763,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "e.g. MBBS, MD",
     required: false,
     showAlways: true,
-    createdAt: 1700000000021,
+    createdAt: 1700000000026,
   },
   {
-    id: 922,
+    id: 927,
     key: "registration_no",
     label: "Registration No.",
     module: "scribe",
@@ -759,10 +775,10 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "e.g. MCI-482910",
     required: false,
     showAlways: true,
-    createdAt: 1700000000022,
+    createdAt: 1700000000027,
   },
   {
-    id: 923,
+    id: 928,
     key: "doctor_signature_date",
     label: "Signature Date",
     module: "scribe",
@@ -771,7 +787,7 @@ export const INITIAL_SCRIBE_CUSTOM_FIELDS: FieldDefinition[] = [
     placeholder: "e.g. 24 August 2026",
     required: false,
     showAlways: true,
-    createdAt: 1700000000023,
+    createdAt: 1700000000028,
   },
 ];
 
@@ -1277,11 +1293,31 @@ function ensureScribeSeeds(registry: Record<Exclude<FieldModule, "deal">, FieldD
     registry.scribe = [...INITIAL_SCRIBE_CUSTOM_FIELDS];
     return;
   }
+  const keyToCorrectSeed = new Map(INITIAL_SCRIBE_CUSTOM_FIELDS.map((f) => [f.key, f]));
+  const scribeSeedKeys = new Set(INITIAL_SCRIBE_CUSTOM_FIELDS.map((f) => f.key));
+
+  // 1. Repair duplicate/stale IDs on scribe fields
+  registry.scribe = registry.scribe.map((f) => {
+    const correctSeed = keyToCorrectSeed.get(f.key);
+    if (correctSeed && f.id !== correctSeed.id) {
+      return { ...f, id: correctSeed.id };
+    }
+    return f;
+  });
+
+  // 2. Ensure all seed fields exist
   const existingScribeKeys = new Set(registry.scribe.map((f) => f.key));
   INITIAL_SCRIBE_CUSTOM_FIELDS.forEach((seed) => {
     if (!existingScribeKeys.has(seed.key)) {
       registry.scribe.push(seed);
       existingScribeKeys.add(seed.key);
+    }
+  });
+
+  // 3. Purge any scribe seed fields that accidentally got into other modules (e.g. client, call, etc.)
+  (Object.keys(registry) as (keyof typeof registry)[]).forEach((mod) => {
+    if (mod !== "scribe" && Array.isArray(registry[mod])) {
+      registry[mod] = registry[mod].filter((f) => !scribeSeedKeys.has(f.key) && f.module !== "scribe");
     }
   });
 }

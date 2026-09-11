@@ -59,12 +59,15 @@ interface Service {
 }
 
 interface User {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
+  role?: string;
+  department?: string;
   status: boolean;
   organizationId: string;
   permissions: ItemPermissions;
+  canBookAppointments?: boolean;
   calendarConnected?: boolean;
   connectedCalendar?: "google" | "outlook" | null;
   availability?: WeeklyAvailability;
@@ -287,19 +290,21 @@ export default function ManageTeamMember() {
                 <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
               )}
             </button>
-            <button
-              onClick={() => setActiveTab("availability")}
-              className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${
-                activeTab === "availability"
-                  ? "text-[#2563EB] font-semibold"
-                  : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
-              }`}
-            >
-              Availability & Days Off
-              {activeTab === "availability" && (
-                <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
-              )}
-            </button>
+            {user?.canBookAppointments && (
+              <button
+                onClick={() => setActiveTab("availability")}
+                className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${
+                  activeTab === "availability"
+                    ? "text-[#2563EB] font-semibold"
+                    : "text-[#6B7280] hover:text-[#111827] hover:bg-[rgba(0,0,0,0.03)]"
+                }`}
+              >
+                Availability & Days Off
+                {activeTab === "availability" && (
+                  <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB]"></div>
+                )}
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("services")}
               className={`h-11 px-[18px] text-sm font-medium transition-colors relative ${
@@ -404,10 +409,11 @@ export default function ManageTeamMember() {
             )}
 
             {/* TAB 2 - Availability & Days Off Section (Location-Specific) */}
-            {activeTab === "availability" && (
+            {user?.canBookAppointments && activeTab === "availability" && (
               <MemberLocationScheduleTab
                 memberId={user?.id}
                 memberName={user?.name}
+                canBookAppointments={user?.canBookAppointments}
               />
             )}
 
