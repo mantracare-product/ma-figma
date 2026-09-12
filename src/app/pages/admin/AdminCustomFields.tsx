@@ -128,7 +128,7 @@ function renderScopeCell(item: {
     }
   }
 
-  // Calculate location count (pure number)
+  // Calculate country/location count (pure number)
   let locCount = scoping.locations.filter((l) => l !== "All").length;
   if (isAllLocs) {
     locCount = STANDARD_LOCATIONS.length;
@@ -136,7 +136,7 @@ function renderScopeCell(item: {
 
   return (
     <span className="text-xs text-gray-600 font-medium">
-      {indCount} {indCount === 1 ? "industry" : "industries"}, {locCount} {locCount === 1 ? "location" : "locations"}
+      {indCount} {indCount === 1 ? "industry" : "industries"}, {locCount} {locCount === 1 ? "country" : "countries"}
     </span>
   );
 }

@@ -87,7 +87,7 @@ function needsOptions(t: FieldInputType): boolean {
 interface FieldFormState {
   label: string; key: string; module: Exclude<FieldModule, "deal">;
   inputType: FieldInputType; placeholder: string;
-  required: boolean; showAlways: boolean; sectionId: string;
+  required: boolean; showAlways: boolean; userVisibility: boolean; sectionId: string;
   scopingRules: ScopingRule[];
   options: FieldOption[]; tableColumns: TableColumnConfig[];
   isReusable: boolean;
@@ -98,7 +98,7 @@ interface FieldFormState {
 function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
   return {
     label: "", key: "", module, inputType: "text", placeholder: "",
-    required: false, showAlways: true, sectionId: "",
+    required: false, showAlways: true, userVisibility: true, sectionId: "",
     scopingRules: [],
     isReusable: false,
     reusableModules: [],
@@ -106,6 +106,7 @@ function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
       canHide: true,
       canEdit: true,
       canAddOptions: true,
+      canDelete: true,
     },
     options: [
       { id: 1, label: "Option 1", value: "option_1" },
@@ -119,7 +120,7 @@ function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
   };
 }
 
-function fieldToForm(f: FieldDefinition): FieldFormState {
+export function initFormFromField(f: FieldDefinition): FieldFormState {
   let rules: ScopingRule[] = f.scopingRules ? [...f.scopingRules] : [];
   // Backward compat: if legacy industry/location properties exist but no scopingRules
   if (rules.length === 0 && (f.industryCategory || f.industry || (f.locations && f.locations.length > 0))) {
@@ -138,6 +139,7 @@ function fieldToForm(f: FieldDefinition): FieldFormState {
     module: f.module as Exclude<FieldModule, "deal">,
     inputType: f.inputType, placeholder: f.placeholder ?? "",
     required: f.required ?? false, showAlways: f.showAlways !== false,
+    userVisibility: f.userVisibility !== false,
     sectionId: f.sectionId ?? "",
     scopingRules: rules,
     isReusable: Boolean(f.isReusable),
@@ -146,6 +148,7 @@ function fieldToForm(f: FieldDefinition): FieldFormState {
       canHide: f.permissions?.canHide !== false,
       canEdit: f.permissions?.canEdit !== false,
       canAddOptions: f.permissions?.canAddOptions !== false,
+      canDelete: f.permissions?.canDelete !== false,
     },
     options: f.options ?? [
       { id: 1, label: "Option 1", value: "option_1" },
@@ -158,6 +161,7 @@ function fieldToForm(f: FieldDefinition): FieldFormState {
     ],
   };
 }
+export const fieldToForm = initFormFromField;
 
 export interface AdminFieldDrawerProps {
   field: FieldDefinition | null;
@@ -177,7 +181,7 @@ export function AdminFieldDrawer({
   const isReadOnly = isScribeSeed;
 
   const [form, setForm] = useState<FieldFormState>(
-    isEdit ? fieldToForm(field!) : defaultForm(initialModule),
+    isEdit ? initFormFromField(field!) : defaultForm(initialModule),
   );
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
@@ -240,6 +244,7 @@ export function AdminFieldDrawer({
       inputType: form.inputType,
       placeholder: form.placeholder.trim() || `Enter ${form.label.toLowerCase()}`,
       required: form.required, showAlways: form.showAlways,
+      userVisibility: form.userVisibility,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       isReusable: form.isReusable,
@@ -487,6 +492,29 @@ export function AdminFieldDrawer({
                               </label>
                               <InfoTooltip text="Tenant users can add custom options on top of admin-configured options (for lists, dropdowns, etc.)." size="sm" />
                             </div>
+
+                            {/* 4. Delete permission */}
+                            <div className="flex items-center">
+                              <label
+                                className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.canDelete !== false}
+                                  disabled={isReadOnly}
+                                  onChange={(e) => setForm((p) => ({
+                                    ...p,
+                                    permissions: {
+                                      ...p.permissions,
+                                      canDelete: e.target.checked,
+                                    }
+                                  }))}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-medium text-gray-800">Delete</span>
+                              </label>
+                              <InfoTooltip text="Field will be deleted from the user only, not admin." size="sm" />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -634,6 +662,11 @@ export function AdminFieldDrawer({
                             Visible
                           </span>
                         )}
+                        {form.userVisibility !== false && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            User Visible
+                          </span>
+                        )}
                         {form.isReusable && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                             Reusable
@@ -678,6 +711,21 @@ export function AdminFieldDrawer({
                     <div>
                       <span className="text-sm font-semibold text-gray-800">Always visible in profile view</span>
                       <p className="text-xs text-gray-500">Ensure this field is always displayed in profile and overview cards</p>
+                    </div>
+                  </label>
+
+                  {/* 3. User Visibility */}
+                  <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                    <input
+                      type="checkbox"
+                      checked={form.userVisibility !== false}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-800">User Visibility</span>
+                      <p className="text-xs text-gray-500">Configure whether this field is visible to end users</p>
                     </div>
                   </label>
 

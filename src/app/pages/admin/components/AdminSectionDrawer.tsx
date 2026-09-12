@@ -107,6 +107,8 @@ interface SectionFormState {
   iconName: SectionDefinition["iconName"];
   module: Exclude<FieldModule, "deal">;
   fieldKeys: string[];
+  required: boolean;
+  userVisibility: boolean;
   scopingRules: ScopingRule[];
   isReusable: boolean;
   reusableModules: Exclude<FieldModule, "deal">[];
@@ -120,6 +122,8 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     iconName: "layers",
     module,
     fieldKeys: [],
+    required: false,
+    userVisibility: true,
     scopingRules: [],
     isReusable: false,
     reusableModules: [],
@@ -127,6 +131,7 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
       canHide: true,
       canEdit: true,
       canAddFields: true,
+      canDelete: true,
     },
   };
 }
@@ -149,6 +154,8 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     iconName: s.iconName ?? "layers",
     module: s.module as Exclude<FieldModule, "deal">,
     fieldKeys: s.fieldKeys ?? [],
+    required: Boolean(s.required),
+    userVisibility: s.userVisibility !== false,
     scopingRules: rules,
     isReusable: Boolean(s.isReusable),
     reusableModules: (s.reusableModules as Exclude<FieldModule, "deal">[]) || [],
@@ -156,6 +163,7 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
       canHide: s.permissions?.canHide !== false,
       canEdit: s.permissions?.canEdit !== false,
       canAddFields: s.permissions?.canAddFields !== false,
+      canDelete: s.permissions?.canDelete !== false,
     },
   };
 }
@@ -316,6 +324,8 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
       iconName: form.iconName || "layers",
       module: form.module,
       fieldKeys: form.fieldKeys,
+      required: form.required,
+      userVisibility: form.userVisibility,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       isReusable: form.isReusable,
       reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
@@ -514,6 +524,28 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                               </label>
                               <InfoTooltip text="Tenant users can add more custom fields to this section in client and record profiles." size="sm" />
                             </div>
+
+                            {/* 4. Delete permission */}
+                            <div className="flex items-center">
+                              <label
+                                className="flex items-center gap-1.5 select-none cursor-pointer"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.canDelete !== false}
+                                  onChange={(e) => setForm((p) => ({
+                                    ...p,
+                                    permissions: {
+                                      ...p.permissions,
+                                      canDelete: e.target.checked,
+                                    }
+                                  }))}
+                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                />
+                                <span className="text-xs font-medium text-gray-800">Delete</span>
+                              </label>
+                              <InfoTooltip text="Section will be deleted from the user only, not admin." size="sm" />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -560,6 +592,16 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">Section Settings</span>
                       <div className="flex items-center gap-1.5 flex-wrap">
+                        {form.required && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                            Required
+                          </span>
+                        )}
+                        {form.userVisibility !== false && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            User Visible
+                          </span>
+                        )}
                         {form.isReusable && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                             Reusable Global
@@ -577,8 +619,36 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
 
               {sectionSettingsOpen && (
                 <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
-                  {/* Make reusable across other modules */}
-                  <div>
+                  {/* 1. Required Section */}
+                  <label className="flex items-start gap-3 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.required}
+                      onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-800">Required section</span>
+                      <p className="text-xs text-gray-500 mt-0.5">Users must complete all required fields within this section</p>
+                    </div>
+                  </label>
+
+                  {/* 2. User Visibility */}
+                  <label className="flex items-start gap-3 select-none cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.userVisibility !== false}
+                      onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-sm font-semibold text-gray-800">User Visibility</span>
+                      <p className="text-xs text-gray-500 mt-0.5">Configure whether this section is visible to end users</p>
+                    </div>
+                  </label>
+
+                  {/* 3. Make reusable across other modules */}
+                  <div className="pt-3 border-t border-gray-100">
                     <label className="flex items-start gap-3 select-none cursor-pointer">
                       <input
                         type="checkbox"
@@ -593,8 +663,6 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                         </p>
                       </div>
                     </label>
-
-
                   </div>
                 </div>
               )}

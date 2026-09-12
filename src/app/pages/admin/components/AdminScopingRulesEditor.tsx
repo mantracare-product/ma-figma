@@ -7,6 +7,7 @@ import {
   getIndustriesForCategory,
 } from "../../../../data/industryReferenceData";
 import { AdminMultiSelectDropdown } from "./AdminMultiSelectDropdown";
+import { AdminCategoryDropdown } from "./AdminCategoryDropdown";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 
 interface AdminScopingRulesEditorProps {
@@ -40,7 +41,7 @@ export function AdminScopingRulesEditor({
     const newId = `rule_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const newRule: ScopingRule = {
       id: newId,
-      industryCategory: "All",
+      industryCategory: INITIAL_CATEGORIES[0]?.name || "Automobile",
       industries: [],
       locations: [],
     };
@@ -88,7 +89,7 @@ export function AdminScopingRulesEditor({
           <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center mx-auto mb-1.5">
             <Globe className="w-3.5 h-3.5" />
           </div>
-          <p className="text-xs font-medium text-gray-700">All Industries & Locations</p>
+          <p className="text-xs font-medium text-gray-700">All Industries & Countries</p>
           <p className="text-[11px] text-gray-400 mt-0.5 max-w-xs mx-auto">
             No scope restrictions added.
           </p>
@@ -108,9 +109,19 @@ export function AdminScopingRulesEditor({
           {rules.map((rule, idx) => {
             const ruleKey = rule.id || `rule_${idx}`;
             const isOpen = isRuleOpen(ruleKey);
-            const availableIndustries = getIndustriesForCategory(rule.industryCategory || "All");
-            const selectedIndustries = rule.industries || [];
-            const selectedLocations = rule.locations || [];
+            const activeCategory =
+              rule.industryCategory && rule.industryCategory !== "All"
+                ? rule.industryCategory
+                : INITIAL_CATEGORIES[0]?.name || "Automobile";
+            const availableIndustries = getIndustriesForCategory(activeCategory).filter(
+              (ind) => !/^(all|all\s+industr(y|ies))$/i.test(ind.trim())
+            );
+            const selectedIndustries = (rule.industries || []).filter(
+              (ind) => !/^(all|all\s+industr(y|ies))$/i.test(ind.trim())
+            );
+            const selectedLocations = (rule.locations || []).filter(
+              (loc) => !/^(all|all\s+locations|all\s+countries)$/i.test(loc.trim())
+            );
 
             return (
               <div
@@ -150,60 +161,55 @@ export function AdminScopingRulesEditor({
                   <div className="p-3 space-y-3 border-t border-gray-100 bg-white">
                     {/* Step 1: Industry Category */}
                     <div>
-                      <div className="flex items-center mb-1">
-                        <label className="block text-[11px] font-medium text-gray-700">
-                          1. Industry Category
-                        </label>
-                        <InfoTooltip text="Filter by industry category, or select Universal for all categories." size="sm" />
-                      </div>
-                      <select
-                        value={rule.industryCategory || "All"}
+                      <AdminCategoryDropdown
+                        value={activeCategory}
                         disabled={isReadOnly}
-                        onChange={(e) => {
-                          const newCat = e.target.value;
+                        onChange={(newCat) => {
                           handleUpdateRule(idx, {
                             industryCategory: newCat,
                             industries: [],
                           });
                         }}
-                        className={`w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-gray-800 ${
-                          isReadOnly ? "bg-gray-50 cursor-not-allowed" : "cursor-pointer"
-                        }`}
-                      >
-                        <option value="All">All Categories (Universal)</option>
-                        {INITIAL_CATEGORIES.map((c) => (
-                          <option key={c.id} value={c.name}>
-                            {c.name}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
 
                     {/* Step 2: Industries */}
                     <div>
                       <AdminMultiSelectDropdown
                         label="2. Industries"
-                        tooltipText="Select specific industries or leave empty to include all industries in this category."
+                        tooltipText="Select specific industries or click 'Select All' to include all industries in this category."
                         options={availableIndustries}
                         selected={selectedIndustries}
-                        onChange={(newIndustries) => handleUpdateRule(idx, { industries: newIndustries })}
-                        placeholder="All industries included (Universal)"
+                        onChange={(newIndustries) =>
+                          handleUpdateRule(idx, {
+                            industries: newIndustries.filter((i) => !/^(all|all\s+industr(y|ies))$/i.test(i.trim())),
+                          })
+                        }
+                        placeholder="Select industries (use 'Select All' for all)"
                         disabled={isReadOnly}
                       />
                     </div>
 
-                    {/* Step 3: Locations */}
+                    {/* Step 3: Country (Optional) */}
                     <div>
+                      <div className="flex items-center mb-1">
+                        <label className="block text-[11px] font-medium text-gray-700">
+                          3. Country <span className="text-[10px] font-normal text-gray-400">(optional)</span>
+                        </label>
+                        <InfoTooltip text="Optional. If country conditions are added, they only apply to selected countries. If left empty, it applies to all locations by default." size="sm" />
+                      </div>
                       <AdminMultiSelectDropdown
-                        label="3. Locations"
-                        tooltipText="Select specific states or regions, or leave empty to include all locations."
                         options={STANDARD_LOCATIONS}
                         selected={selectedLocations}
-                        onChange={(newLocations) => handleUpdateRule(idx, { locations: newLocations })}
-                        placeholder="All locations included (Universal)"
+                        onChange={(newLocations) =>
+                          handleUpdateRule(idx, {
+                            locations: newLocations.filter((l) => !/^(all|all\s+locations|all\s+countries)$/i.test(l.trim())),
+                          })
+                        }
+                        placeholder="All countries included by default"
                         disabled={isReadOnly}
                         allowCustomInput={!isReadOnly}
-                        customInputPlaceholder="Add other location..."
+                        customInputPlaceholder="Add other country..."
                       />
                     </div>
                   </div>

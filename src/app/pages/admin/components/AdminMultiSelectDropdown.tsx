@@ -72,11 +72,15 @@ export function AdminMultiSelectDropdown({
     };
   }, [isOpen]);
 
+  // Filter out any "All", "All Industry", "All Industries", "All Categories", "All Locations" pseudo-options
+  const isAllPseudoOption = (opt: string) =>
+    /^(all|all\s+industr(y|ies)|all\s+categories|all\s+locations|all\s+countries)$/i.test(opt.trim());
+
   // Combined options (standard options + any custom selected items not in standard options)
   const allAvailableOptions = useMemo(() => {
-    const list = [...options];
+    const list = options.filter((opt) => !isAllPseudoOption(opt));
     for (const item of selected) {
-      if (!list.includes(item)) {
+      if (!isAllPseudoOption(item) && !list.includes(item)) {
         list.push(item);
       }
     }
@@ -91,11 +95,11 @@ export function AdminMultiSelectDropdown({
   }, [allAvailableOptions, searchQuery]);
 
   const handleToggle = (item: string) => {
-    if (disabled) return;
+    if (disabled || isAllPseudoOption(item)) return;
     if (selected.includes(item)) {
-      onChange(selected.filter((i) => i !== item));
+      onChange(selected.filter((i) => i !== item && !isAllPseudoOption(i)));
     } else {
-      onChange([...selected, item]);
+      onChange([...selected.filter((i) => !isAllPseudoOption(i)), item]);
     }
   };
 
@@ -111,9 +115,9 @@ export function AdminMultiSelectDropdown({
 
   const handleAddCustom = () => {
     const val = customInputValue.trim();
-    if (!val || disabled) return;
+    if (!val || disabled || isAllPseudoOption(val)) return;
     if (!selected.includes(val)) {
-      onChange([...selected, val]);
+      onChange([...selected.filter((i) => !isAllPseudoOption(i)), val]);
     }
     setCustomInputValue("");
   };

@@ -70,6 +70,7 @@ export interface FieldPermissions {
   canEdit?: boolean;       // Allow users to edit this field
   canAdd?: boolean;        // Allow users to add options on top of admin options
   canAddOptions?: boolean; // Alias / backwards compat
+  canDelete?: boolean;     // Allow users to delete this field (deleted from user only, not admin)
 }
 
 export interface SectionPermissions {
@@ -77,6 +78,7 @@ export interface SectionPermissions {
   canEdit?: boolean;       // Allow users to edit this section
   canAdd?: boolean;        // Allow users to add more fields to this section
   canAddFields?: boolean;  // Alias / backwards compat
+  canDelete?: boolean;     // Allow users to delete this section (deleted from user only, not admin)
 }
 
 export interface FieldDefinition {
@@ -92,6 +94,7 @@ export interface FieldDefinition {
   tableColumns?: TableColumnConfig[]; // for table type
   sectionId?: string;        // assigned section id
   required?: boolean;
+  userVisibility?: boolean;   // Setting for user visibility
   showAlways?: boolean;       // legacy — kept for backward compat, do not write for new fields
   /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
   visibleToRecordIds?: string[];
@@ -114,6 +117,8 @@ export interface SectionDefinition {
   source: "system" | "custom";
   iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   fieldKeys: string[];
+  required?: boolean;         // Required section
+  userVisibility?: boolean;   // Setting for user visibility
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
@@ -1264,6 +1269,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     tableColumns: f.tableColumns,
     sectionId: f.sectionId,
     required: f.required ?? f.isRequired ?? false,
+    userVisibility: f.userVisibility !== false,
     showAlways: f.showAlways !== false,
     visibleToRecordIds: f.visibleToRecordIds,
     sourceFormId: f.sourceFormId,
@@ -1278,11 +1284,13 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
       canEdit: f.permissions.canEdit !== false,
       canAdd: f.permissions.canAdd !== false && f.permissions.canAddOptions !== false,
       canAddOptions: f.permissions.canAdd !== false && f.permissions.canAddOptions !== false,
+      canDelete: f.permissions.canDelete !== false,
     } : {
       canHide: true,
       canEdit: true,
       canAdd: true,
       canAddOptions: true,
+      canDelete: true,
     },
     createdAt: typeof f.createdAt === "number" ? f.createdAt : Date.now(),
   };
@@ -1474,6 +1482,8 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       : Array.isArray(s.fieldIds)
       ? s.fieldIds
       : [],
+    required: Boolean(s.required),
+    userVisibility: s.userVisibility !== false,
     industryCategory: s.industryCategory,
     industry: s.industry,
     locations: Array.isArray(s.locations) ? s.locations : undefined,
@@ -1485,11 +1495,13 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       canEdit: s.permissions.canEdit !== false,
       canAdd: s.permissions.canAdd !== false && s.permissions.canAddFields !== false,
       canAddFields: s.permissions.canAdd !== false && s.permissions.canAddFields !== false,
+      canDelete: s.permissions.canDelete !== false,
     } : {
       canHide: true,
       canEdit: true,
       canAdd: true,
       canAddFields: true,
+      canDelete: true,
     },
     createdAt: typeof s.createdAt === "number" ? s.createdAt : Date.now(),
   };
