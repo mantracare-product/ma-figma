@@ -11,6 +11,7 @@ import DrawerShell from "../components/ui/DrawerShell";
 import CPTCodeInput from "../components/ui/CPTCodeInput";
 import { useFieldRegistry, ALL_MODULES, FieldDefinition } from "../context/FieldRegistryContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
+import { FieldInputRenderer } from "../components/fields/FieldInputRenderer";
 import {
   Service, EMPLOYEES, CURRENCIES, INIT_FORM, getCurrencySymbol,
   getStoredServices, addService, updateService, deleteService,
@@ -599,46 +600,15 @@ export default function Services() {
               <label className="block text-xs font-semibold text-gray-700 mb-1.5" style={{ fontFamily: "Outfit, sans-serif" }}>
                 {field.label} {field.required && <span className="text-rose-500">*</span>}
               </label>
-              {field.inputType === "select" && field.options && field.options.length > 0 ? (
-                <select
-                  value={form.customFields?.[field.key] || ""}
-                  onChange={(e) => setForm({
-                    ...form,
-                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
-                  })}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                >
-                  <option value="">{field.placeholder || `Select ${field.label.toLowerCase()}...`}</option>
-                  {field.options.map((opt) => (
-                    <option key={opt.id} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-              ) : field.inputType === "textarea" ? (
-                <textarea
-                  rows={3}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
-                  value={form.customFields?.[field.key] || ""}
-                  onChange={(e) => setForm({
-                    ...form,
-                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
-                  })}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all resize-none"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                />
-              ) : (
-                <input
-                  type={field.inputType === "number" || field.inputType === "money" ? "number" : field.inputType === "date" ? "date" : field.inputType === "date_time" ? "datetime-local" : "text"}
-                  placeholder={field.placeholder || `Enter ${field.label.toLowerCase()}...`}
-                  value={form.customFields?.[field.key] || ""}
-                  onChange={(e) => setForm({
-                    ...form,
-                    customFields: { ...(form.customFields || {}), [field.key]: e.target.value }
-                  })}
-                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all"
-                  style={{ fontFamily: "DM Sans, sans-serif" }}
-                />
-              )}
+              <FieldInputRenderer
+                field={field}
+                value={form.customFields?.[field.key] ?? field.defaultValue}
+                onChange={(val) => setForm({
+                  ...form,
+                  customFields: { ...(form.customFields || {}), [field.key]: val }
+                })}
+                mode="runtime"
+              />
             </div>
           ))}
         </div>

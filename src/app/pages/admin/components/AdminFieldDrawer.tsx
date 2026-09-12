@@ -17,16 +17,18 @@
  * 4. Delete button is NOT in this drawer; it lives in AdminCustomFields row actions.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info } from "lucide-react";
 import type {
   FieldDefinition, FieldInputType, FieldModule,
   FieldOption, SectionDefinition, TableColumnConfig,
-  ScopingRule, FieldPermissions,
+  ScopingRule, FieldPermissions, CrmBindModule, SubFieldConfig,
+  SubFieldInputType,
 } from "../../../context/FieldRegistryContext";
-import { useFieldRegistry } from "../../../context/FieldRegistryContext";
+import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
+import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 // Unrecognised values silently fall back to "client" — no error thrown.
@@ -61,12 +63,14 @@ const FIELD_TYPE_GROUPS: { group: string; items: { label: string; value: FieldIn
     { label: "Date & Time", value: "date_time" },
   ]},
   { group: "Options", items: [
-    { label: "Dropdown (Select)", value: "select" },
-    { label: "Multi-Select", value: "multiselect" },
+    { label: "List", value: "list_select" },
     { label: "Yes / No", value: "yes_no" },
+    { label: "Open List (Tags)", value: "list_open" },
   ]},
-  { group: "Advanced", items: [
+  { group: "Advanced & Composite", items: [
     { label: "Table / Matrix", value: "table" },
+    { label: "Group / Composite", value: "group" },
+    { label: "CRM Bind", value: "crm_bind" },
     { label: "Digital Signature", value: "signature" },
     { label: "File / Attachment", value: "file" },
     { label: "User / Member", value: "user" },
@@ -81,7 +85,7 @@ function getLabelForInputType(t: FieldInputType): string {
   return t;
 }
 function needsOptions(t: FieldInputType): boolean {
-  return t === "select" || t === "multiselect" || t === "list";
+  return t === "list_select" || t === "select" || t === "multiselect" || t === "list";
 }
 
 interface FieldFormState {
@@ -93,6 +97,12 @@ interface FieldFormState {
   isReusable: boolean;
   reusableModules: Exclude<FieldModule, "deal">[];
   permissions: FieldPermissions;
+  crmBindModule?: CrmBindModule;
+  crmBindSelectionMode?: "single" | "multiple";
+  selectionMode?: "single" | "multiple";
+  listEntryType?: "plain_text" | "structured";
+  defaultValue?: any;
+  currency?: string;
 }
 
 function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
@@ -115,8 +125,14 @@ function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
     tableColumns: [
       { id: "col_1", name: "Item Name", type: "Text" },
       { id: "col_2", name: "Quantity", type: "Number" },
-      { id: "col_3", name: "Unit Price", type: "Money" },
+      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR" },
     ],
+    crmBindModule: "teamMember",
+    crmBindSelectionMode: "single",
+    selectionMode: "single",
+    listEntryType: "plain_text",
+    defaultValue: undefined,
+    currency: "INR",
   };
 }
 
@@ -154,11 +170,27 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
       { id: 1, label: "Option 1", value: "option_1" },
       { id: 2, label: "Option 2", value: "option_2" },
     ],
-    tableColumns: f.tableColumns ?? [
+    tableColumns: f.tableColumns ?? (f.subFields ? f.subFields.map(sf => ({
+      id: sf.id,
+      name: sf.name,
+      type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
+      inputType: sf.inputType,
+      options: sf.options,
+      currency: sf.currency,
+      selectionMode: sf.selectionMode || "single",
+      crmBindConfig: sf.crmBindConfig,
+      defaultValue: sf.defaultValue,
+    })) : [
       { id: "col_1", name: "Item Name", type: "Text" },
       { id: "col_2", name: "Quantity", type: "Number" },
-      { id: "col_3", name: "Unit Price", type: "Money" },
-    ],
+      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR" },
+    ]),
+    crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
+    crmBindSelectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
+    selectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
+    listEntryType: f.listEntryType || "plain_text",
+    defaultValue: f.defaultValue,
+    currency: f.currency || "INR",
   };
 }
 export const fieldToForm = initFormFromField;
@@ -176,7 +208,7 @@ export interface AdminFieldDrawerProps {
 export function AdminFieldDrawer({
   field, initialModule, sections, isScribeSeed = false, isAdmin = true, onClose, onSaved,
 }: AdminFieldDrawerProps) {
-  const { addCustomField, updateCustomField } = useFieldRegistry();
+  const { addCustomField, updateCustomField, getAllFields } = useFieldRegistry();
   const isEdit = field !== null;
   const isReadOnly = isScribeSeed;
 
@@ -185,6 +217,7 @@ export function AdminFieldDrawer({
   );
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
+  const [existingFieldPickerOpen, setExistingFieldPickerOpen] = useState(false);
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false);
   const [adminControlOpen, setAdminControlOpen] = useState(true);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
@@ -192,11 +225,54 @@ export function AdminFieldDrawer({
   const [errors, setErrors] = useState<{ label?: string; key?: string }>({});
   const typePickerRef = useRef<HTMLDivElement>(null);
   const modulePickerRef = useRef<HTMLDivElement>(null);
+  const existingFieldPickerRef = useRef<HTMLDivElement>(null);
+
+  const allAvailableFields = useMemo(() => {
+    try {
+      return getAllFields(form.module).filter(
+        (f) => f.key !== form.key && f.inputType !== "table" && f.inputType !== "group" && f.inputType !== "group_repeatable"
+      );
+    } catch {
+      return [];
+    }
+  }, [getAllFields, form.module, form.key]);
+
+  const importExistingFieldToColumn = (f: FieldDefinition) => {
+    let colType = "Text";
+    if (f.inputType === "number") colType = "Number";
+    else if (f.inputType === "money") colType = "Money";
+    else if (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect") colType = "Select";
+    else if (f.inputType === "date") colType = "Date";
+    else if (f.inputType === "date_time") colType = "Date & Time";
+    else if (f.inputType === "textarea") colType = "Long Text";
+    else if (f.inputType === "yes_no") colType = "Yes / No";
+    else if (f.inputType === "email") colType = "Email";
+    else if (f.inputType === "tel") colType = "Phone";
+    else if (f.inputType === "link") colType = "Link";
+    else if (f.inputType === "rating") colType = "Rating";
+    else if (f.inputType === "crm_bind") colType = "crm_bind";
+
+    const newCol: TableColumnConfig = {
+      id: `col_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: f.label,
+      type: colType,
+      inputType: (f.inputType as SubFieldInputType) || "text",
+      options: f.options ? [...f.options] : undefined,
+      currency: f.currency || (f.inputType === "money" ? "INR" : undefined),
+      selectionMode: f.selectionMode || "single",
+      crmBindConfig: f.crmBindConfig ? { ...f.crmBindConfig } : undefined,
+    };
+    setForm((p) => ({
+      ...p,
+      tableColumns: [...p.tableColumns, newCol],
+    }));
+  };
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) setTypePickerOpen(false);
       if (modulePickerRef.current && !modulePickerRef.current.contains(e.target as Node)) setModulePickerOpen(false);
+      if (existingFieldPickerRef.current && !existingFieldPickerRef.current.contains(e.target as Node)) setExistingFieldPickerOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -255,6 +331,18 @@ export function AdminFieldDrawer({
       locations: legacyLocations,
       options: needsOptions(form.inputType) ? form.options : undefined,
       tableColumns: form.inputType === "table" ? form.tableColumns : undefined,
+      crmBindConfig: form.inputType === "crm_bind" ? {
+        sourceModule: form.crmBindModule || "teamMember",
+        displayField: "name",
+        selectionMode: form.crmBindSelectionMode || "single",
+      } : undefined,
+      selectionMode: form.inputType === "crm_bind" || form.inputType === "list_select" ? form.crmBindSelectionMode : undefined,
+      listEntryType: form.inputType === "list_open" ? form.listEntryType : undefined,
+      subFields: (form.inputType === "group" || form.inputType === "table") && form.tableColumns.length > 0
+        ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
+        : undefined,
+      defaultValue: form.defaultValue !== undefined && form.defaultValue !== "" ? form.defaultValue : undefined,
+      currency: form.inputType === "money" ? (form.currency || "INR") : undefined,
     };
     if (isEdit && field) {
       updateCustomField(form.module, field.id, payload);
@@ -594,6 +682,25 @@ export function AdminFieldDrawer({
             />
           </div>
 
+          {/* Currency picker for money fields */}
+          {form.inputType === "money" && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Currency</label>
+              <select
+                value={form.currency || "INR"}
+                disabled={isReadOnly}
+                onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}
+                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+              >
+                {Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => (
+                  <option key={code} value={code}>
+                    {symbol} {code}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           {/* Options */}
           {needsOptions(form.inputType) && (
             <div>
@@ -611,29 +718,438 @@ export function AdminFieldDrawer({
                   </div>
                 ))}
               </div>
+
+              {/* Single / Multiple selection mode toggle for List */}
+              {form.inputType === "list_select" && (
+                <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-1.5">
+                  <label className="text-xs font-semibold text-gray-700">Selection Mode</label>
+                  <div className="flex items-center gap-4">
+                    <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="listSelectMode"
+                        disabled={isReadOnly}
+                        checked={(form.selectionMode || form.crmBindSelectionMode) !== "multiple"}
+                        onChange={() => setForm((p) => ({
+                          ...p,
+                          selectionMode: "single",
+                          crmBindSelectionMode: "single",
+                          defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue[0] || "" : p.defaultValue || "",
+                        }))}
+                        className="text-blue-600 cursor-pointer"
+                      />
+                      Single Selection (Dropdown)
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="listSelectMode"
+                        disabled={isReadOnly}
+                        checked={(form.selectionMode || form.crmBindSelectionMode) === "multiple"}
+                        onChange={() => setForm((p) => ({
+                          ...p,
+                          selectionMode: "multiple",
+                          crmBindSelectionMode: "multiple",
+                          defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue : p.defaultValue ? [p.defaultValue] : [],
+                        }))}
+                        className="text-blue-600 cursor-pointer"
+                      />
+                      Multiple Selection (Dropdown)
+                    </label>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Table columns */}
-          {form.inputType === "table" && (
+          {/* CRM Bind configuration card */}
+          {form.inputType === "crm_bind" && (
+            <div className="p-4 bg-blue-50/40 border border-blue-200 rounded-xl space-y-3.5">
+              <div className="flex items-center gap-2">
+                <Link2 className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">CRM Bind Configuration</span>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Bind to Module</label>
+                <select
+                  value={form.crmBindModule || "teamMember"}
+                  disabled={isReadOnly}
+                  onChange={(e) => setForm((p) => ({ ...p, crmBindModule: e.target.value as CrmBindModule }))}
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                >
+                  <option value="teamMember">Team Member (Staff / Doctors)</option>
+                  <option value="client">Client (Link to Client Record)</option>
+                  <option value="organization">Organization</option>
+                  <option value="service">Service (Treatments / Catalog)</option>
+                  <option value="process">Process (Workflows / Pipelines)</option>
+                </select>
+                <p className="text-[11px] text-slate-400">
+                  Values will dynamically pull from the selected module with real-time sync.
+                </p>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-slate-700">Selection Mode</label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="crmSelectionMode"
+                      disabled={isReadOnly}
+                      checked={form.crmBindSelectionMode !== "multiple"}
+                      onChange={() => setForm((p) => ({ ...p, crmBindSelectionMode: "single" }))}
+                      className="text-blue-600"
+                    />
+                    Single Record
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="crmSelectionMode"
+                      disabled={isReadOnly}
+                      checked={form.crmBindSelectionMode === "multiple"}
+                      onChange={() => setForm((p) => ({ ...p, crmBindSelectionMode: "multiple" }))}
+                      className="text-blue-600"
+                    />
+                    Multiple Records
+                  </label>
+                </div>
+              </div>
+              <div className="p-2.5 bg-blue-100/50 border border-blue-200 rounded-lg flex items-start gap-2">
+                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  CRM Bind fields dynamically pull records at runtime on client records. Client records and live data are not loaded in Admin.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Open List info card */}
+          {form.inputType === "list_open" && (
+            <div className="p-3.5 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-2">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Dynamic Tag / List Mode</span>
+              </div>
+              <p className="text-xs text-slate-600">
+                End users can dynamically enter custom tags or items into this list on any record by pressing Enter.
+              </p>
+            </div>
+          )}
+
+          {/* Table columns & Group subfields */}
+          {(form.inputType === "table" || form.inputType === "group") && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-700">Table Columns</label>
-                {!isReadOnly && <button type="button" onClick={addColumn} className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"><Plus className="w-3 h-3" />Add column</button>}
+                <label className="text-xs font-semibold text-gray-700">
+                  {form.inputType === "table" ? "Table Columns" : "Group Sub-Fields"}
+                </label>
+                {!isReadOnly && (
+                  <div className="flex items-center gap-2">
+                    {/* Existing Field Picker Dropdown */}
+                    <div className="relative" ref={existingFieldPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setExistingFieldPickerOpen((v) => !v)}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
+                        title="Import schema from an existing field"
+                      >
+                        <Layers className="w-3 h-3 text-slate-500" />
+                        <span>Use Existing Field</span>
+                        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${existingFieldPickerOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {existingFieldPickerOpen && (
+                        <div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5">
+                          <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Choose field to import
+                          </div>
+                          {allAvailableFields.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-slate-400 italic">No other fields found</div>
+                          ) : (
+                            allAvailableFields.map((f) => (
+                              <button
+                                key={f.key}
+                                type="button"
+                                onClick={() => {
+                                  importExistingFieldToColumn(f);
+                                  setExistingFieldPickerOpen(false);
+                                }}
+                                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between text-xs cursor-pointer group"
+                              >
+                                <span className="font-medium text-slate-700 group-hover:text-blue-700 truncate">{f.label}</span>
+                                <span className="text-[10px] text-slate-400 uppercase font-mono px-1.5 py-0.5 bg-slate-100 rounded">
+                                  {f.inputType === "list_select" ? "List" : f.inputType}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={addColumn}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      {form.inputType === "table" ? "Add column" : "Add sub-field"}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="space-y-2">
                 {form.tableColumns.map((col, idx) => (
-                  <div key={col.id} className="flex items-center gap-2">
-                    <input type="text" value={col.name} readOnly={isReadOnly} onChange={e => updateColumn(idx, { name: e.target.value })} placeholder="Column name"
-                      className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"}`}
-                    />
-                    <select value={col.type} disabled={isReadOnly} onChange={e => updateColumn(idx, { type: e.target.value })} className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none">
-                      <option>Text</option><option>Number</option><option>Money</option><option>Date</option><option>Select</option>
-                    </select>
-                    {!isReadOnly && <button type="button" onClick={() => removeColumn(idx)} className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>}
+                  <div key={col.id} className="space-y-2 p-2.5 border border-gray-200 rounded-xl bg-gray-50/50">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={col.name}
+                        readOnly={isReadOnly}
+                        onChange={(e) => updateColumn(idx, { name: e.target.value })}
+                        placeholder={form.inputType === "table" ? "Column name" : "Sub-field name"}
+                        className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"}`}
+                      />
+                      <select
+                        value={col.type}
+                        disabled={isReadOnly}
+                        onChange={(e) => {
+                          const newType = e.target.value;
+                          const patch: Partial<TableColumnConfig> = { type: newType };
+                          if (newType === "Select" && (!col.options || col.options.length === 0)) {
+                            patch.options = [
+                              { id: 1, label: "Option A", value: "option_a" },
+                              { id: 2, label: "Option B", value: "option_b" },
+                            ];
+                            patch.selectionMode = col.selectionMode || "single";
+                          }
+                          if (newType === "Money" && !col.currency) {
+                            patch.currency = "INR";
+                          }
+                          if (newType === "crm_bind" && !col.crmBindConfig) {
+                            patch.crmBindConfig = {
+                              sourceModule: "teamMember",
+                              displayField: "name",
+                              selectionMode: col.selectionMode || "single",
+                            };
+                          }
+                          updateColumn(idx, patch);
+                        }}
+                        className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none cursor-pointer font-medium"
+                      >
+                        <option value="Text">Text (Single Line)</option>
+                        <option value="Long Text">Long Text (Textarea)</option>
+                        <option value="Select">Selection List</option>
+                        <option value="Number">Number</option>
+                        <option value="Money">Money</option>
+                        <option value="Date">Date</option>
+                        <option value="Date & Time">Date & Time</option>
+                        <option value="Yes / No">Yes / No</option>
+                        <option value="Email">Email</option>
+                        <option value="Phone">Phone</option>
+                        <option value="Link">Link / URL</option>
+                        <option value="Rating">Rating (1-5)</option>
+                        <option value="crm_bind">CRM Bind</option>
+                      </select>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => removeColumn(idx)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Inline options editor & selection mode when column type is Select */}
+                    {col.type === "Select" && (
+                      <div className="ml-2 pl-3 border-l-2 border-blue-300 py-1 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-700">Column Options:</span>
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const curOpts = col.options && col.options.length > 0 ? col.options : [
+                                  { id: 1, label: "Option A", value: "option_a" },
+                                  { id: 2, label: "Option B", value: "option_b" },
+                                ];
+                                updateColumn(idx, {
+                                  options: [
+                                    ...curOpts,
+                                    {
+                                      id: Date.now(),
+                                      label: `Option ${curOpts.length + 1}`,
+                                      value: `option_${curOpts.length + 1}`,
+                                    },
+                                  ],
+                                });
+                              }}
+                              className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" /> Add
+                            </button>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          {(col.options && col.options.length > 0 ? col.options : [
+                            { id: 1, label: "Option A", value: "option_a" },
+                            { id: 2, label: "Option B", value: "option_b" },
+                          ]).map((opt, optIdx) => (
+                            <div key={opt.id || optIdx} className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={opt.label}
+                                readOnly={isReadOnly}
+                                onChange={(e) => {
+                                  const curOpts = col.options && col.options.length > 0 ? [...col.options] : [
+                                    { id: 1, label: "Option A", value: "option_a" },
+                                    { id: 2, label: "Option B", value: "option_b" },
+                                  ];
+                                  curOpts[optIdx] = {
+                                    ...opt,
+                                    label: e.target.value,
+                                    value: e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
+                                  };
+                                  updateColumn(idx, { options: curOpts });
+                                }}
+                                className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                              />
+                              {!isReadOnly && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const curOpts = (col.options && col.options.length > 0 ? col.options : [
+                                      { id: 1, label: "Option A", value: "option_a" },
+                                      { id: 2, label: "Option B", value: "option_b" },
+                                    ]).filter((_, i) => i !== optIdx);
+                                    updateColumn(idx, { options: curOpts });
+                                  }}
+                                  className="p-1 text-gray-300 hover:text-red-500 rounded cursor-pointer"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Selection Mode toggle for column Selection List */}
+                        <div className="flex items-center gap-3 pt-1 border-t border-blue-100">
+                          <span className="text-[11px] font-semibold text-slate-600">Selection:</span>
+                          <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`col_mode_${col.id}_${idx}`}
+                              disabled={isReadOnly}
+                              checked={col.selectionMode !== "multiple"}
+                              onChange={() => updateColumn(idx, { selectionMode: "single" })}
+                              className="text-blue-600 cursor-pointer"
+                            />
+                            <span>Single</span>
+                          </label>
+                          <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`col_mode_${col.id}_${idx}`}
+                              disabled={isReadOnly}
+                              checked={col.selectionMode === "multiple"}
+                              onChange={() => updateColumn(idx, { selectionMode: "multiple" })}
+                              className="text-blue-600 cursor-pointer"
+                            />
+                            <span>Multiple (Multiselect)</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Inline currency selector when column type is Money */}
+                    {col.type === "Money" && (
+                      <div className="ml-2 pl-3 border-l-2 border-emerald-300 py-1 flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-700">Currency:</span>
+                        <select
+                          value={col.currency || "INR"}
+                          disabled={isReadOnly}
+                          onChange={(e) => updateColumn(idx, { currency: e.target.value })}
+                          className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
+                        >
+                          {Object.entries(CURRENCY_SYMBOLS).map(([cCode, cSym]) => (
+                            <option key={cCode} value={cCode}>{cSym} {cCode}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {/* Inline CRM Bind module selector when column type is CRM Bind */}
+                    {col.type === "crm_bind" && (
+                      <div className="ml-2 pl-3 border-l-2 border-purple-300 py-1 space-y-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] font-semibold text-slate-700">Bind Module:</span>
+                          <select
+                            value={col.crmBindConfig?.sourceModule || "teamMember"}
+                            disabled={isReadOnly}
+                            onChange={(e) => updateColumn(idx, {
+                              crmBindConfig: {
+                                sourceModule: e.target.value as CrmBindModule,
+                                displayField: "name",
+                                selectionMode: col.selectionMode || "single",
+                              },
+                            })}
+                            className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
+                          >
+                            <option value="teamMember">Team Member</option>
+                            <option value="client">Client</option>
+                            <option value="organization">Organization</option>
+                            <option value="service">Service</option>
+                            <option value="process">Process</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Default Value Configurator */}
+          {!isReadOnly && form.inputType !== "signature" && form.inputType !== "file" && (
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Default Value (Optional)
+                </label>
+                {form.defaultValue !== undefined && form.defaultValue !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, defaultValue: undefined }))}
+                    className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Pre-fill new client records with this default value.
+              </p>
+              <FieldInputRenderer
+                field={{
+                  inputType: form.inputType,
+                  options: form.options,
+                  currency: form.currency || "INR",
+                  selectionMode: form.selectionMode || form.crmBindSelectionMode || "single",
+                  crmBindConfig: form.inputType === "crm_bind" ? {
+                    sourceModule: form.crmBindModule || "teamMember",
+                    displayField: "name",
+                    selectionMode: form.selectionMode || form.crmBindSelectionMode || "single",
+                  } : undefined,
+                  subFields: form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null),
+                  placeholder: form.placeholder || `Default value for ${form.label || "field"}...`,
+                }}
+                value={form.defaultValue}
+                onChange={(val) => setForm((p) => ({ ...p, defaultValue: val }))}
+                mode="admin_default"
+              />
             </div>
           )}
 

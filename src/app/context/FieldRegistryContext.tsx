@@ -24,12 +24,17 @@ export const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: strin
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
 };
 
+export const CURRENCY_SYMBOLS: Record<string, string> = {
+  INR: "\u20b9", USD: "$", EUR: "\u20ac", GBP: "\u00a3",
+  JPY: "\u00a5", AED: "\u062f.\u0625", SGD: "S$", CAD: "CA$",
+  AUD: "A$", CHF: "Fr", CNY: "\u00a5", BRL: "R$",
+};
+
 export type FieldInputType =
+  // Primitives
   | "text"
   | "email"
   | "tel"
-  | "select"
-  | "multiselect"
   | "textarea"
   | "richtext"
   | "date"
@@ -39,21 +44,146 @@ export type FieldInputType =
   | "link"
   | "whatsapp_link"
   | "yes_no"
+  | "rating"
+  // Consolidated & Composable
+  | "list_select"
+  | "list_open"
+  | "group"
+  | "group_repeatable"
   | "table"
+  | "crm_bind"
+  // Media / Non-defaultable
   | "signature"
   | "drawing"
   | "drawer"
-  | "list"
   | "file"
-  | "rating"
+  // Legacy Aliases
+  | "select"
+  | "multiselect"
+  | "list"
   | "user"
   | "formula"
   | "resource";
+
+export type SubFieldInputType =
+  | "text"
+  | "textarea"
+  | "number"
+  | "money"
+  | "date"
+  | "date_time"
+  | "list_select"
+  | "yes_no"
+  | "link"
+  | "email"
+  | "tel"
+  | "rating"
+  | "crm_bind";
+
+export type CrmBindModule = "teamMember" | "client" | "organization" | "service" | "process";
+
+export interface CrmBindConfig {
+  sourceModule: CrmBindModule;
+  displayField: string;             // e.g. "name", "title", "email"
+  secondaryDisplayField?: string;   // e.g. "role", "phoneNumber"
+  selectionMode: "single" | "multiple";
+}
+
+export interface SubFieldConfig {
+  id: string;
+  name: string;
+  inputType: SubFieldInputType;
+  placeholder?: string;
+  required?: boolean;
+  options?: FieldOption[];
+  crmBindConfig?: CrmBindConfig;
+  defaultValue?: any;
+  currency?: string;  // for money sub-fields
+  selectionMode?: "single" | "multiple"; // for list_select and crm_bind sub-fields
+}
 
 export interface TableColumnConfig {
   id: string;
   name: string;
   type: string;
+  inputType?: SubFieldInputType;
+  options?: FieldOption[];
+  crmBindConfig?: CrmBindConfig;
+  defaultValue?: any;
+  currency?: string;  // for money columns
+  selectionMode?: "single" | "multiple"; // for list_select columns
+}
+
+export interface DynamicDateDefault {
+  mode: "today" | "fixed";
+  fixedDate?: string;
+  offsetDays?: number;
+}
+
+export type FieldDefaultValue =
+  | string
+  | number
+  | boolean
+  | string[]
+  | DynamicDateDefault
+  | Record<string, any>
+  | Record<string, any>[];
+
+export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
+  if (!col || typeof col !== "object") return null;
+  // Ignore objects that have no identifier or descriptive properties at all
+  const hasContent = Boolean(
+    col.id || col.key || col.colId || col.name || col.label || col.title || col.type || col.inputType
+  );
+  if (!hasContent) return null;
+
+  const rawType = String(col.inputType || col.type || "text").toLowerCase();
+  let inputType: SubFieldInputType = "text";
+  if (rawType.includes("num")) inputType = "number";
+  else if (rawType.includes("money") || rawType.includes("curr") || rawType.includes("price")) inputType = "money";
+  else if (rawType.includes("date_time")) inputType = "date_time";
+  else if (rawType.includes("date")) inputType = "date";
+  else if (rawType.includes("select") || rawType.includes("list") || rawType.includes("dropdown")) inputType = "list_select";
+  else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
+  else if (rawType.includes("rating") || rawType.includes("score")) inputType = "rating";
+  else if (rawType.includes("yes") || rawType.includes("bool")) inputType = "yes_no";
+  else if (rawType.includes("crm")) inputType = "crm_bind";
+  else if (rawType.includes("email")) inputType = "email";
+  else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
+  else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
+
+  return {
+    id: col.id || col.key || col.colId || col.name || `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name: col.name || col.label || col.title || "Column",
+    inputType,
+    placeholder: col.placeholder || "",
+    required: Boolean(col.required),
+    options: (col.options && col.options.length > 0)
+      ? col.options
+      : inputType === "list_select"
+      ? [
+          { id: 1, label: "Option A", value: "option_a" },
+          { id: 2, label: "Option B", value: "option_b" },
+          { id: 3, label: "Option C", value: "option_c" },
+        ]
+      : [],
+    crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
+    defaultValue: col.defaultValue,
+    currency: col.currency,
+    selectionMode: col.selectionMode || "single",
+  };
+}
+
+export function resolveColumnsOrSubFields(field?: { subFields?: SubFieldConfig[]; tableColumns?: TableColumnConfig[] }): SubFieldConfig[] {
+  if (field?.subFields && Array.isArray(field.subFields) && field.subFields.length > 0) {
+    return field.subFields.filter((s): s is SubFieldConfig => Boolean(s && typeof s === "object" && (s.id || s.name)));
+  }
+  if (field?.tableColumns && Array.isArray(field.tableColumns) && field.tableColumns.length > 0) {
+    return field.tableColumns
+      .map(normalizeLegacyColumn)
+      .filter((c): c is SubFieldConfig => c !== null);
+  }
+  return [];
 }
 
 export interface FieldOption { id: number; label: string; value: string; }
@@ -91,7 +221,13 @@ export interface FieldDefinition {
   placeholder?: string;
   validation?: string;
   options?: FieldOption[];    // for select/dropdown/list types
-  tableColumns?: TableColumnConfig[]; // for table type
+  tableColumns?: TableColumnConfig[]; // for table type (legacy)
+  subFields?: SubFieldConfig[];       // canonical sub-fields for table, group, group_repeatable, structured list_open
+  crmBindConfig?: CrmBindConfig;      // for crm_bind
+  selectionMode?: "single" | "multiple"; // for list_select and crm_bind
+  listEntryType?: "plain_text" | "structured"; // for list_open
+  currency?: string;  // for money fields (ISO code e.g. "INR", "USD")
+  defaultValue?: FieldDefaultValue;   // type-specific default value
   sectionId?: string;        // assigned section id
   required?: boolean;
   userVisibility?: boolean;   // Setting for user visibility
@@ -1247,6 +1383,18 @@ function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
 
 function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "deal">): FieldDefinition {
   const targetModule = f.module ? normalizeModuleKey(f.module) : fallbackModule;
+  const rawType = f.inputType;
+  let normalizedType: FieldInputType = rawType || "text";
+  let normalizedSelectionMode = f.selectionMode;
+
+  if (rawType === "select") {
+    normalizedType = "list_select";
+    if (!normalizedSelectionMode) normalizedSelectionMode = "single";
+  } else if (rawType === "multiselect") {
+    normalizedType = "list_select";
+    if (!normalizedSelectionMode) normalizedSelectionMode = "multiple";
+  }
+
   return {
     id:
       typeof f.id === "number"
@@ -1258,7 +1406,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     label: f.label || f.name || "Untitled Field",
     module: targetModule,
     source: f.source === "system" ? "system" : "custom",
-    inputType: (f.inputType ? f.inputType.toLowerCase() : f.type ? f.type.toLowerCase() : "text") as FieldInputType,
+    inputType: normalizedType,
     placeholder: f.placeholder || "",
     validation: f.validation || "",
     options: Array.isArray(f.options)
@@ -1293,6 +1441,13 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
       canDelete: true,
     },
     createdAt: typeof f.createdAt === "number" ? f.createdAt : Date.now(),
+    // Preserve Phase-3 fields through storage normalization
+    defaultValue: f.defaultValue !== undefined ? f.defaultValue : undefined,
+    subFields: Array.isArray(f.subFields) ? f.subFields : undefined,
+    crmBindConfig: f.crmBindConfig ?? undefined,
+    selectionMode: normalizedSelectionMode,
+    listEntryType: f.listEntryType ?? undefined,
+    currency: f.currency ?? undefined,
   };
 }
 

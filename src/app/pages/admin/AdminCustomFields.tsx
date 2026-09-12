@@ -38,6 +38,7 @@ import {
   Star,
   User,
   Globe,
+  Layers,
 } from "lucide-react";
 
 import type {
@@ -158,13 +159,15 @@ const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
   { label: "Number", value: "number" },
   { label: "Money / Currency", value: "money" },
   { label: "Date", value: "date" },
-  { label: "Select (Dropdown)", value: "select" },
-  { label: "Multi-Select", value: "multiselect" },
+  { label: "List", value: "list_select" },
+  { label: "Open List (Tags)", value: "list_open" },
   { label: "Boolean (Yes/No)", value: "yes_no" },
   { label: "Email", value: "email" },
   { label: "Phone Number", value: "tel" },
   { label: "Link / URL", value: "link" },
   { label: "Table / Matrix", value: "table" },
+  { label: "Group / Composite", value: "group" },
+  { label: "CRM Bind", value: "crm_bind" },
   { label: "Digital Signature", value: "signature" },
   { label: "File Attachment", value: "file" },
   { label: "User / Member", value: "user" },
@@ -175,8 +178,13 @@ const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   table: "Table",
   signature: "Drawing / Signature",
   drawing: "Drawing / Signature",
-  select: "List (Dropdown)",
-  multiselect: "Multi-Select",
+  list_select: "List",
+  list_open: "Open List (Tags)",
+  group: "Group / Composite",
+  group_repeatable: "Repeatable Group",
+  crm_bind: "CRM Bind",
+  select: "List",
+  multiselect: "List (Multi)",
   date: "Date",
   date_time: "Date & Time",
   number: "Number",
@@ -405,8 +413,14 @@ export function AdminCustomFields() {
                   let TypeIcon = Type;
                   if (field.inputType === "table") { typeBadgeStyle = "bg-indigo-50 text-indigo-700"; TypeIcon = TableIcon; }
                   else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
-                  else if (field.inputType === "select" || field.inputType === "list") { typeBadgeStyle = "bg-emerald-50 text-emerald-700"; TypeIcon = ClipboardList; }
+                  else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                    typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                    TypeIcon = ClipboardList;
+                  }
                   else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
+                  else if (field.inputType === "list_open") { typeBadgeStyle = "bg-emerald-50 text-emerald-700"; TypeIcon = Tag; }
+                  else if (field.inputType === "group" || field.inputType === "group_repeatable") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Layers; }
+                  else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
                   else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
                   else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
                   else if (field.inputType === "money") { typeBadgeStyle = "bg-green-50 text-green-700"; TypeIcon = DollarSign; }

@@ -7,8 +7,7 @@ import { toast } from "sonner";
 const FIELD_TYPE_MAP: Record<string, FieldInputType> = {
   "String": "text",
   "Table": "table",
-  "List": "select",
-  "Multi-Select List": "multiselect",
+  "List": "list_select",
   "Date/Time": "date_time",
   "Date": "date",
   "Number": "number",
@@ -20,6 +19,9 @@ const FIELD_TYPE_MAP: Record<string, FieldInputType> = {
   "Yes/No": "yes_no",
   "File": "file",
   "Rating": "rating",
+  "CRM Bind (Team/Staff)": "crm_bind",
+  "Open List (Tags)": "list_open",
+  "Group": "group",
   "User / Member": "user",
   "Formula": "formula",
   "Book a Resource": "resource",
@@ -142,6 +144,11 @@ export function CreateFieldModal({
       ] : undefined,
       placeholder: `Enter ${newFieldName.toLowerCase()}`,
       sourceFormId,
+      crmBindConfig: inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: "single" } : undefined,
+      subFields: inputType === "group" ? [
+        { id: "sub_1", name: "Primary Details", inputType: "text" },
+        { id: "sub_2", name: "Secondary Notes", inputType: "text" },
+      ] : undefined,
     });
 
     toast.success(`Field "${newField.label}" created successfully in ${MODULE_LABELS[selectedModule]}`);
