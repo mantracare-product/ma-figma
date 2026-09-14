@@ -219,15 +219,16 @@ export const fieldToForm = initFormFromField;
 export interface AdminFieldDrawerProps {
   field: FieldDefinition | null;
   initialModule: Exclude<FieldModule, "deal">;
-  sections: SectionDefinition[];
+  sections?: SectionDefinition[];
   isScribeSeed?: boolean;
   isAdmin?: boolean;
+  lockModule?: boolean;
   onClose: () => void;
   onSaved?: (field: FieldDefinition) => void;
 }
 
 export function AdminFieldDrawer({
-  field, initialModule, sections, isScribeSeed = false, isAdmin = true, onClose, onSaved,
+  field, initialModule, sections = [], isScribeSeed = false, isAdmin = true, lockModule = false, onClose, onSaved,
 }: AdminFieldDrawerProps) {
   const { addCustomField, updateCustomField, getAllFields } = useFieldRegistry();
   const isEdit = field !== null;
@@ -424,7 +425,7 @@ export function AdminFieldDrawer({
   const roCls = "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed";
 
   return (
-    <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: "none" }}>
+    <div className="fixed inset-0 z-[10001] flex" style={{ pointerEvents: "none", zIndex: 10001 }}>
       <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
       <div className="flex-1 bg-black/30 backdrop-blur-[1px]" style={{ pointerEvents: "auto" }} onClick={onClose} />
       <div className="flex flex-col bg-white" style={{ width: 540, maxWidth: "100%", height: "100vh", boxShadow: "-4px 0 40px rgba(0,0,0,0.14)", animation: "slideInFromRight 220ms cubic-bezier(0.16,1,0.3,1)", pointerEvents: "auto" }}>
@@ -475,14 +476,14 @@ export function AdminFieldDrawer({
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Module <span className="text-red-500">*</span></label>
             <div className="relative" ref={modulePickerRef}>
-              <button type="button" disabled={isEdit || isReadOnly}
-                onClick={() => !isEdit && !isReadOnly && setModulePickerOpen(v => !v)}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white flex items-center justify-between transition-all ${isEdit || isReadOnly ? "border-gray-100 bg-gray-50 cursor-not-allowed" : "border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"}`}
+              <button type="button" disabled={isEdit || isReadOnly || lockModule}
+                onClick={() => !isEdit && !isReadOnly && !lockModule && setModulePickerOpen(v => !v)}
+                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white flex items-center justify-between transition-all ${isEdit || isReadOnly || lockModule ? "border-gray-100 bg-gray-50 cursor-not-allowed" : "border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"}`}
               >
-                <span className={`font-medium ${isEdit || isReadOnly ? "text-gray-400" : "text-[#111827]"}`}>{modLabel}</span>
-                {!isEdit && !isReadOnly && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${modulePickerOpen ? "rotate-180" : ""}`} />}
+                <span className={`font-medium ${isEdit || isReadOnly || lockModule ? "text-gray-400" : "text-[#111827]"}`}>{modLabel}</span>
+                {!isEdit && !isReadOnly && !lockModule && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${modulePickerOpen ? "rotate-180" : ""}`} />}
               </button>
-              {modulePickerOpen && !isEdit && !isReadOnly && (
+              {modulePickerOpen && !isEdit && !isReadOnly && !lockModule && (
                 <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
                   {MODULE_OPTIONS.map(mod => (
                     <button key={mod.value} type="button"
@@ -496,7 +497,7 @@ export function AdminFieldDrawer({
                 </div>
               )}
             </div>
-            {isEdit && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
+            {(isEdit || lockModule) && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
           </div>
 
           {/* Admin Control Dropdown (Scope & Permissions) */}
