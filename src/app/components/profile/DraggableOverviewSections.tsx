@@ -565,7 +565,8 @@ export default function DraggableOverviewSections({
     const regField = allRegistryFields.find((f) => f.key === key);
 
     // Compute effective value pre-filled with defaultValue if unedited
-    const effectiveVal = rawVal !== undefined
+    const isTableWithEmptyVal = regField?.inputType === "table" && (!rawVal || (Array.isArray(rawVal) && rawVal.length === 0));
+    const effectiveVal = (rawVal !== undefined && !isTableWithEmptyVal)
       ? rawVal
       : (regField?.defaultValue && typeof regField.defaultValue === "object" && "mode" in regField.defaultValue && regField.defaultValue.mode === "today")
       ? new Date().toISOString().split("T")[0]
@@ -577,6 +578,9 @@ export default function DraggableOverviewSections({
       } else {
         onFieldValueChange(key, newVal);
       }
+      try {
+        window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+      } catch {}
     };
 
     // If not a system field AND not in allRegistryFields (which is filtered by activeOrganization), do NOT render!
@@ -1005,12 +1009,14 @@ export default function DraggableOverviewSections({
             regField?.inputType === "crm_bind" ||
             regField?.inputType === "list_select" ||
             regField?.inputType === "multiselect" ||
+            regField?.inputType === "rating" ||
             (regField?.inputType === "list_open" && key !== "prescribed_medications" && key !== "medications") ? (
           <FieldInputRenderer
             field={regField}
             value={effectiveVal}
             onChange={(val) => setVal(val)}
             mode="runtime"
+            recordData={fieldValues}
           />
         ) : regField?.inputType === "signature" ||
             regField?.inputType === "drawing" ||
@@ -1135,43 +1141,6 @@ export default function DraggableOverviewSections({
               className="w-full px-3 py-1.5 bg-transparent text-xs font-medium text-slate-800 outline-none"
               style={{ fontFamily: "Outfit, sans-serif" }}
             />
-          </div>
-        ) : regField?.inputType === "rating" ? (
-          /* ── Rating / Score Field ── */
-          <div className="flex items-center gap-1.5 py-1">
-            {[1, 2, 3, 4, 5].map((score) => {
-              const currentScore = Number(rawVal) || 0;
-              const isFilled = score <= currentScore;
-              return (
-                <button
-                  key={score}
-                  type="button"
-                  onClick={() => setVal(score)}
-                  className="p-1 hover:scale-110 transition-transform cursor-pointer"
-                  title={`Rate ${score} of 5`}
-                >
-                  <Star
-                    className={`w-5 h-5 ${
-                      isFilled
-                        ? "text-amber-400 fill-amber-400"
-                        : "text-slate-200 fill-slate-100 hover:text-amber-300"
-                    }`}
-                  />
-                </button>
-              );
-            })}
-            <span className="text-xs font-bold text-slate-600 ml-2">
-              {rawVal ? `${rawVal} / 5` : "Not rated"}
-            </span>
-            {rawVal && (
-              <button
-                type="button"
-                onClick={() => setVal("")}
-                className="text-[10px] text-slate-400 hover:text-red-500 ml-1 cursor-pointer"
-              >
-                (Clear)
-              </button>
-            )}
           </div>
         ) : regField?.inputType === "yes_no" ? (
           /* ── Yes / No Toggle ── */

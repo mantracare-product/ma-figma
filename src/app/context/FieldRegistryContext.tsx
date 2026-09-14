@@ -89,6 +89,14 @@ export interface CrmBindConfig {
   selectionMode: "single" | "multiple";
 }
 
+export interface ListBindConfig {
+  sourceType: "open_list" | "table" | "crm" | "field" | "group"; // "group" retained as legacy alias for "open_list"
+  targetFieldKey?: string;             // Key of target Open List or Table field
+  targetColumnOrSubFieldId?: string;   // ID of column or sub-field to extract options from
+  crmModule?: CrmBindModule;           // Module if binding to CRM records
+  displayField?: string;               // Display property e.g. "name", "title"
+}
+
 export interface SubFieldConfig {
   id: string;
   name: string;
@@ -100,6 +108,8 @@ export interface SubFieldConfig {
   defaultValue?: any;
   currency?: string;  // for money sub-fields
   selectionMode?: "single" | "multiple"; // for list_select and crm_bind sub-fields
+  maxRating?: number; // for rating sub-fields
+  listBindConfig?: ListBindConfig; // for list_select sub-fields
 }
 
 export interface TableColumnConfig {
@@ -112,6 +122,8 @@ export interface TableColumnConfig {
   defaultValue?: any;
   currency?: string;  // for money columns
   selectionMode?: "single" | "multiple"; // for list_select columns
+  maxRating?: number; // for rating columns
+  listBindConfig?: ListBindConfig; // for list_select columns
 }
 
 export interface DynamicDateDefault {
@@ -171,6 +183,8 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
     defaultValue: col.defaultValue,
     currency: col.currency,
     selectionMode: col.selectionMode || "single",
+    maxRating: col.maxRating || (inputType === "rating" ? 5 : undefined),
+    listBindConfig: col.listBindConfig,
   };
 }
 
@@ -226,6 +240,8 @@ export interface FieldDefinition {
   crmBindConfig?: CrmBindConfig;      // for crm_bind
   selectionMode?: "single" | "multiple"; // for list_select and crm_bind
   listEntryType?: "plain_text" | "structured"; // for list_open
+  listBindConfig?: ListBindConfig;    // for list_select dynamic data source binding
+  maxRating?: number;                 // for rating type (default: 5)
   currency?: string;  // for money fields (ISO code e.g. "INR", "USD")
   defaultValue?: FieldDefaultValue;   // type-specific default value
   sectionId?: string;        // assigned section id
@@ -1393,7 +1409,14 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
   } else if (rawType === "multiselect") {
     normalizedType = "list_select";
     if (!normalizedSelectionMode) normalizedSelectionMode = "multiple";
+  } else if (rawType === "group_repeatable") {
+    normalizedType = "list_open";
   }
+
+  const isStructured =
+    rawType === "group_repeatable" ||
+    f.listEntryType === "structured" ||
+    f.entryType === "structured";
 
   return {
     id:
@@ -1443,10 +1466,19 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     createdAt: typeof f.createdAt === "number" ? f.createdAt : Date.now(),
     // Preserve Phase-3 fields through storage normalization
     defaultValue: f.defaultValue !== undefined ? f.defaultValue : undefined,
-    subFields: Array.isArray(f.subFields) ? f.subFields : undefined,
+    subFields: Array.isArray(f.subFields)
+      ? f.subFields
+      : Array.isArray(f.tableColumns) && f.tableColumns.length > 0
+      ? f.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
+      : undefined,
     crmBindConfig: f.crmBindConfig ?? undefined,
     selectionMode: normalizedSelectionMode,
-    listEntryType: f.listEntryType ?? undefined,
+    listEntryType: isStructured ? "structured" : (f.listEntryType || (normalizedType === "list_open" ? "plain_text" : undefined)),
+    listBindConfig: f.listBindConfig ? {
+      ...f.listBindConfig,
+      sourceType: f.listBindConfig.sourceType === "group" ? "open_list" : f.listBindConfig.sourceType,
+    } : undefined,
+    maxRating: f.maxRating ?? undefined,
     currency: f.currency ?? undefined,
   };
 }
@@ -1877,8 +1909,13 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     fieldData: Omit<FieldDefinition, "id" | "source" | "createdAt">
   ): FieldDefinition => {
     const norm = normalizeModule(module);
+    const normalizedData = { ...fieldData };
+    if (normalizedData.inputType === ("group_repeatable" as any)) {
+      normalizedData.inputType = "list_open";
+      normalizedData.listEntryType = "structured";
+    }
     const newField: FieldDefinition = {
-      ...fieldData,
+      ...normalizedData,
       module: norm,
       id: Date.now() + Math.floor(Math.random() * 1000),
       source: "custom",
@@ -1899,9 +1936,14 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const updateCustomField = (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => {
     const norm = normalizeModule(module);
+    const normalizedPatch = { ...patch };
+    if (normalizedPatch.inputType === ("group_repeatable" as any)) {
+      normalizedPatch.inputType = "list_open";
+      normalizedPatch.listEntryType = "structured";
+    }
     setCustomFields((prev) => {
       const updated = (prev[norm] || []).map((f) =>
-        f.id === id ? { ...f, ...patch } : f
+        f.id === id ? { ...f, ...normalizedPatch } : f
       );
       return {
         ...prev,

@@ -362,6 +362,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
   // Persist any client mutations back to sessionStorage
   useEffect(() => {
     sessionStorage.setItem("clients", JSON.stringify(clients));
+    try {
+      window.dispatchEvent(new CustomEvent(CLIENTS_STORE_EVENT));
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
   }, [clients]);
 
   // Live-sync: pick up clients written by TestProcessChatDrawer or other tabs
@@ -661,6 +665,10 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
         })
       );
     }
+
+    try {
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
   };
 
   const handleSectionsChange = (newSections: OverviewSection[]) => {

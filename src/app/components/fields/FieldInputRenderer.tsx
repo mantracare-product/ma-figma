@@ -11,6 +11,7 @@ import {
   Phone,
   Layers,
   Check,
+  Star,
 } from "lucide-react";
 import type {
   FieldDefinition,
@@ -21,6 +22,7 @@ import type {
 } from "../../context/FieldRegistryContext";
 import { resolveColumnsOrSubFields, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useCrmBindOptions } from "./useCrmBindOptions";
+import { useDynamicListOptions } from "./useDynamicListOptions";
 import { RichTextEditor } from "./RichTextEditor";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 
@@ -35,6 +37,87 @@ export interface FieldInputRendererProps {
   mode?: FieldRendererMode;
   disabled?: boolean;
   isSubField?: boolean; // Caps recursion at 1 level
+  recordData?: Record<string, any>; // Active in-memory record data for dynamic binding
+}
+
+// ─────────────────────────────────────────────────────────────
+// Interactive Star Rating Component
+// ─────────────────────────────────────────────────────────────
+interface RatingInputProps {
+  maxRating?: number;
+  value: any;
+  onChange: (val: any) => void;
+  disabled?: boolean;
+  isAdminDefault?: boolean;
+  size?: "sm" | "md";
+}
+
+function RatingInput({
+  maxRating = 5,
+  value,
+  onChange,
+  disabled = false,
+  isAdminDefault = false,
+  size = "md",
+}: RatingInputProps) {
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const currentScore = Number(value) || 0;
+  const count = Math.max(1, Math.min(20, maxRating));
+  const starArray = useMemo(() => Array.from({ length: count }, (_, i) => i + 1), [count]);
+
+  const starSize = size === "sm" ? "w-3.5 h-3.5" : "w-5 h-5";
+
+  return (
+    <div className="flex items-center gap-1.5 py-0.5 select-none flex-wrap">
+      <div className="flex items-center gap-0.5">
+        {starArray.map((star) => {
+          const isFilled = hoverRating !== null ? star <= hoverRating : star <= currentScore;
+          return (
+            <button
+              key={star}
+              type="button"
+              disabled={disabled}
+              onClick={() => {
+                if (disabled) return;
+                onChange(currentScore === star ? (isAdminDefault ? undefined : 0) : star);
+              }}
+              onMouseEnter={() => !disabled && setHoverRating(star)}
+              onMouseLeave={() => !disabled && setHoverRating(null)}
+              className={`p-0.5 transition-transform cursor-pointer ${
+                disabled ? "cursor-not-allowed opacity-60" : "hover:scale-115 active:scale-95"
+              }`}
+              title={`Rate ${star} of ${count}`}
+            >
+              <Star
+                className={`${starSize} transition-colors ${
+                  isFilled
+                    ? "text-amber-400 fill-amber-400 drop-shadow-xs"
+                    : "text-slate-200 fill-slate-50 hover:text-amber-300"
+                }`}
+              />
+            </button>
+          );
+        })}
+      </div>
+
+      <span className={`font-semibold text-slate-600 ml-1 select-none ${size === "sm" ? "text-[11px]" : "text-xs min-w-[45px]"}`}>
+        {currentScore > 0
+          ? `${currentScore} / ${count}`
+          : (isAdminDefault ? "— No Default —" : "Not rated")}
+      </span>
+
+      {!disabled && currentScore > 0 && (
+        <button
+          type="button"
+          onClick={() => onChange(isAdminDefault ? undefined : "")}
+          className="text-[10px] text-slate-400 hover:text-red-500 hover:underline cursor-pointer ml-1"
+          title="Clear rating"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -180,10 +263,14 @@ export function FieldInputRenderer({
   mode = "runtime",
   disabled = false,
   isSubField = false,
+  recordData,
 }: FieldInputRendererProps) {
   // Resolve effective metadata
-  const effectiveType: FieldInputType = (subField?.inputType || field?.inputType || "text") as FieldInputType;
+  const rawType = subField?.inputType || field?.inputType || "text";
+  const effectiveType: FieldInputType = (rawType === "group_repeatable" ? "list_open" : rawType) as FieldInputType;
   const effectiveOptions: FieldOption[] = subField?.options || field?.options || [];
+  const effectiveListBindConfig = subField?.listBindConfig || field?.listBindConfig;
+  const { options: dynamicOptions } = useDynamicListOptions(effectiveListBindConfig, effectiveOptions, recordData);
   const effectiveCrmConfig: CrmBindConfig | undefined = subField?.crmBindConfig || field?.crmBindConfig;
   const effectivePlaceholder: string =
     subField?.placeholder ||
@@ -222,7 +309,7 @@ export function FieldInputRenderer({
     if (isMultiple) {
       return (
         <MultiSelectDropdown
-          options={effectiveOptions}
+          options={dynamicOptions}
           value={value}
           onChange={onChange}
           disabled={disabled}
@@ -244,7 +331,7 @@ export function FieldInputRenderer({
         }`}
       >
         <option value="">{isAdminDefault ? "— No Default (Empty) —" : "Select an option..."}</option>
-        {effectiveOptions.map((opt) => (
+        {dynamicOptions.map((opt) => (
           <option key={opt.id} value={opt.value}>
             {opt.label}
           </option>
@@ -254,15 +341,19 @@ export function FieldInputRenderer({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 3. OPEN LIST (User adds dynamic entries)
+  // 3. OPEN LIST (Plain Text Tags OR Structured Sub-Fields)
   // ─────────────────────────────────────────────────────────────
-  if (effectiveType === "list_open" && !isSubField) {
-    const childFields = resolveColumnsOrSubFields(field);
-    const isStructured = field?.listEntryType === "structured" && childFields.length > 0;
-    const entries: any[] = Array.isArray(value) ? value : [];
+  if ((effectiveType === "list_open" || effectiveType === "group_repeatable") && !isSubField) {
+    const childFields: SubFieldConfig[] = resolveColumnsOrSubFields(field);
+    const isStructured =
+      effectiveType === "group_repeatable" ||
+      field?.listEntryType === "structured" ||
+      (field as any)?.entryType === "structured" ||
+      (childFields.length > 0 && field?.listEntryType !== "plain_text");
 
     if (!isStructured) {
       // Plain text tags/items mode
+      const entries: string[] = Array.isArray(value) ? value.map(String) : [];
       return (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-1.5 min-h-[34px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
@@ -313,70 +404,99 @@ export function FieldInputRenderer({
       );
     }
 
-    // Structured open list mode (cards with sub-fields)
+    // Structured open list mode (cards with sub-fields - verified repeatable UI)
+    let instances: Record<string, any>[] = [];
+    if (Array.isArray(value)) {
+      instances = value;
+    } else if (typeof value === "string" && value.trim()) {
+      try {
+        const parsed = JSON.parse(value);
+        if (Array.isArray(parsed)) instances = parsed;
+      } catch {
+        instances = [];
+      }
+    }
+
     return (
-      <div className="space-y-2.5">
-        {entries.map((row: any, rIdx: number) => (
-          <div
-            key={row.id || rIdx}
-            className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5 relative group"
-          >
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-              <span className="text-xs font-bold text-slate-800">
-                {label} #{rIdx + 1}
-              </span>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    const updated = entries.filter((_, i) => i !== rIdx);
-                    onChange(updated);
-                  }}
-                  className="p-1 text-slate-400 hover:text-red-500 rounded transition-colors cursor-pointer"
-                  title="Remove entry"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+      <div className="space-y-3">
+        {instances.length === 0 ? (
+          <div className="py-3 px-3.5 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-center">
+            <p className="text-xs text-slate-400 font-medium">
+              {isAdminDefault
+                ? "No default instances pre-seeded. New records will start empty."
+                : `No ${label.toLowerCase()} added yet. Click "+ Add Another ${label}" below to add one.`}
+            </p>
+          </div>
+        ) : (
+          instances.map((instance, idx) => (
+            <div
+              key={instance.id || `inst_${idx}`}
+              className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5 hover:border-slate-300 transition-colors"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-purple-500" />
+                  <span className="text-xs font-bold text-slate-800">
+                    {label} #{idx + 1}
+                  </span>
+                </div>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => onChange(instances.filter((_, i) => i !== idx))}
+                    className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 cursor-pointer transition-colors"
+                    title={`Remove ${label} #${idx + 1}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {childFields.length === 0 ? (
+                <p className="text-xs text-slate-400 italic">No sub-fields configured for this open list.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5">
+                  {childFields.map((child) => (
+                    <div key={child.id} className="space-y-1">
+                      <label className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                        {child.name} {child.required && <span className="text-red-500">*</span>}
+                      </label>
+                      <FieldInputRenderer
+                        subField={child}
+                        value={instance[child.id] ?? (isAdminDefault ? child.defaultValue : undefined)}
+                        onChange={(childVal) => {
+                          const updated = [...instances];
+                          updated[idx] = { ...updated[idx], [child.id]: childVal };
+                          onChange(updated);
+                        }}
+                        mode={mode}
+                        disabled={disabled}
+                        isSubField={true}
+                        recordData={recordData}
+                      />
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {childFields.map((child) => (
-                <div key={child.id} className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-slate-600">
-                    {child.name} {child.required && <span className="text-red-500">*</span>}
-                  </label>
-                  <FieldInputRenderer
-                    subField={child}
-                    value={row[child.id] ?? (isAdminDefault ? child.defaultValue : undefined)}
-                    onChange={(childVal) => {
-                      const updated = [...entries];
-                      updated[rIdx] = { ...updated[rIdx], [child.id]: childVal };
-                      onChange(updated);
-                    }}
-                    mode={mode}
-                    disabled={disabled}
-                    isSubField={true}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+          ))
+        )}
 
         {!disabled && (
           <button
             type="button"
             onClick={() => {
-              const newRow: Record<string, any> = { id: `item_${Date.now()}` };
+              const newInstance: Record<string, any> = {
+                id: `inst_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+              };
               childFields.forEach((c) => {
-                newRow[c.id] = c.defaultValue ?? "";
+                newInstance[c.id] = c.defaultValue ?? "";
               });
-              onChange([...entries, newRow]);
+              onChange([...instances, newInstance]);
             }}
             className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
           >
-            <Plus className="w-3.5 h-3.5" /> Add {label} Entry
+            <Plus className="w-3.5 h-3.5" /> Add Another {label}
           </button>
         )}
       </div>
@@ -414,6 +534,7 @@ export function FieldInputRenderer({
                 mode={mode}
                 disabled={disabled}
                 isSubField={true}
+                recordData={recordData}
               />
             </div>
           ))}
@@ -423,81 +544,32 @@ export function FieldInputRenderer({
   }
 
   // ─────────────────────────────────────────────────────────────
-  // 5. GROUP REPEATABLE (Multiple Instances)
-  // ─────────────────────────────────────────────────────────────
-  if (effectiveType === "group_repeatable" && !isSubField) {
-    const childFields: SubFieldConfig[] = resolveColumnsOrSubFields(field);
-    const instances: Record<string, any>[] = Array.isArray(value) ? value : [];
-
-    return (
-      <div className="space-y-3">
-        {instances.map((instance, idx) => (
-          <div key={instance.id || idx} className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5">
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-              <span className="text-xs font-bold text-slate-800">
-                {label} Instance {idx + 1}
-              </span>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => onChange(instances.filter((_, i) => i !== idx))}
-                  className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 cursor-pointer"
-                  title="Remove instance"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {childFields.map((child) => (
-                <div key={child.id} className="space-y-1">
-                  <label className="block text-[10px] font-semibold text-slate-500 uppercase">
-                    {child.name}
-                  </label>
-                  <FieldInputRenderer
-                    subField={child}
-                    value={instance[child.id]}
-                    onChange={(childVal) => {
-                      const updated = [...instances];
-                      updated[idx] = { ...updated[idx], [child.id]: childVal };
-                      onChange(updated);
-                    }}
-                    mode={mode}
-                    disabled={disabled}
-                    isSubField={true}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-
-        {!disabled && (
-          <button
-            type="button"
-            onClick={() => {
-              const newInstance: Record<string, any> = { id: `inst_${Date.now()}` };
-              childFields.forEach((c) => {
-                newInstance[c.id] = c.defaultValue ?? "";
-              });
-              onChange([...instances, newInstance]);
-            }}
-            className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-          >
-            <Plus className="w-3.5 h-3.5" /> Add Another {label}
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────────
   // 6. TABLE (Matrix / Grid with Typed Columns)
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "table" && !isSubField) {
     const cols = resolveColumnsOrSubFields(field);
-    const rows: Record<string, any>[] = Array.isArray(value) ? value : [];
+    const defaultTemplateRows: Record<string, any>[] =
+      Array.isArray(field?.defaultValue) && field.defaultValue.length > 0
+        ? field.defaultValue
+        : [];
+
+    const effectiveRows: Record<string, any>[] =
+      Array.isArray(value) && value.length > 0
+        ? value
+        : (mode === "runtime" && defaultTemplateRows.length > 0)
+        ? defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_default_${i}_${Date.now()}` }))
+        : Array.isArray(value)
+        ? value
+        : [];
+
+    const rows = effectiveRows;
+
+    // Sync initial default rows to parent state if client record is empty
+    useEffect(() => {
+      if (mode === "runtime" && (!value || (Array.isArray(value) && value.length === 0)) && defaultTemplateRows.length > 0) {
+        onChange(defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_init_${Date.now()}_${i}` })));
+      }
+    }, [mode]);
 
     const handleCellChange = (rIdx: number, colId: string, cellVal: any) => {
       const updated = [...rows];
@@ -507,8 +579,9 @@ export function FieldInputRenderer({
 
     const handleAddRow = () => {
       const newRow: Record<string, any> = { id: `row_${Date.now()}` };
+      const templateRow = defaultTemplateRows.length > 0 ? defaultTemplateRows[0] : undefined;
       cols.forEach((col) => {
-        newRow[col.id] = col.defaultValue ?? "";
+        newRow[col.id] = col.defaultValue ?? (templateRow ? templateRow[col.id] : undefined) ?? "";
       });
       onChange([...rows, newRow]);
     };
@@ -572,6 +645,7 @@ export function FieldInputRenderer({
                             mode={mode}
                             disabled={disabled}
                             isSubField={true}
+                            recordData={recordData}
                           />
                         </td>
                       ))}
@@ -761,6 +835,20 @@ export function FieldInputRenderer({
           className={`w-full pl-7 pr-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
         />
       </div>
+    );
+  }
+
+  if (effectiveType === "rating") {
+    const maxRating = Number(subField?.maxRating || field?.maxRating) || 5;
+    return (
+      <RatingInput
+        maxRating={maxRating}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        isAdminDefault={isAdminDefault}
+        size={isSubField ? "sm" : "md"}
+      />
     );
   }
 

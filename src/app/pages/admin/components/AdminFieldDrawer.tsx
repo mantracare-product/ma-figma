@@ -18,17 +18,18 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info } from "lucide-react";
+import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info, Star, Database } from "lucide-react";
 import type {
   FieldDefinition, FieldInputType, FieldModule,
   FieldOption, SectionDefinition, TableColumnConfig,
   ScopingRule, FieldPermissions, CrmBindModule, SubFieldConfig,
-  SubFieldInputType,
+  SubFieldInputType, ListBindConfig,
 } from "../../../context/FieldRegistryContext";
 import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
+import { useDynamicListOptions } from "../../../components/fields/useDynamicListOptions";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 // Unrecognised values silently fall back to "client" — no error thrown.
@@ -65,7 +66,7 @@ const FIELD_TYPE_GROUPS: { group: string; items: { label: string; value: FieldIn
   { group: "Options", items: [
     { label: "List", value: "list_select" },
     { label: "Yes / No", value: "yes_no" },
-    { label: "Open List (Tags)", value: "list_open" },
+    { label: "Open List", value: "list_open" },
   ]},
   { group: "Advanced & Composite", items: [
     { label: "Table / Matrix", value: "table" },
@@ -103,6 +104,9 @@ interface FieldFormState {
   listEntryType?: "plain_text" | "structured";
   defaultValue?: any;
   currency?: string;
+  maxRating?: number;
+  listBindConfig?: ListBindConfig;
+  optionSourceMode?: "manual" | "bind";
 }
 
 function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
@@ -133,6 +137,9 @@ function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
     listEntryType: "plain_text",
     defaultValue: undefined,
     currency: "INR",
+    maxRating: 5,
+    listBindConfig: undefined,
+    optionSourceMode: "manual",
   };
 }
 
@@ -150,10 +157,16 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     ];
   }
 
+  const isGroupRepeatable = f.inputType === ("group_repeatable" as any);
+  const effectiveInputType = isGroupRepeatable ? "list_open" : f.inputType;
+  const effectiveListEntryType = (isGroupRepeatable || f.listEntryType === "structured" || (f as any).entryType === "structured")
+    ? "structured"
+    : (f.listEntryType || "plain_text");
+
   return {
     label: f.label, key: f.key,
     module: f.module as Exclude<FieldModule, "deal">,
-    inputType: f.inputType, placeholder: f.placeholder ?? "",
+    inputType: effectiveInputType, placeholder: f.placeholder ?? "",
     required: f.required ?? false, showAlways: f.showAlways !== false,
     userVisibility: f.userVisibility !== false,
     sectionId: f.sectionId ?? "",
@@ -179,6 +192,8 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
       currency: sf.currency,
       selectionMode: sf.selectionMode || "single",
       crmBindConfig: sf.crmBindConfig,
+      maxRating: sf.maxRating || 5,
+      listBindConfig: sf.listBindConfig,
       defaultValue: sf.defaultValue,
     })) : [
       { id: "col_1", name: "Item Name", type: "Text" },
@@ -188,9 +203,15 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
     crmBindSelectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
     selectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
-    listEntryType: f.listEntryType || "plain_text",
+    listEntryType: effectiveListEntryType,
     defaultValue: f.defaultValue,
     currency: f.currency || "INR",
+    maxRating: f.maxRating || 5,
+    listBindConfig: f.listBindConfig ? {
+      ...f.listBindConfig,
+      sourceType: f.listBindConfig.sourceType === "group" ? "open_list" : f.listBindConfig.sourceType,
+    } : undefined,
+    optionSourceMode: f.listBindConfig?.sourceType ? "bind" : "manual",
   };
 }
 export const fieldToForm = initFormFromField;
@@ -227,15 +248,44 @@ export function AdminFieldDrawer({
   const modulePickerRef = useRef<HTMLDivElement>(null);
   const existingFieldPickerRef = useRef<HTMLDivElement>(null);
 
-  const allAvailableFields = useMemo(() => {
+  const allFieldsInModule = useMemo(() => {
     try {
-      return getAllFields(form.module).filter(
-        (f) => f.key !== form.key && f.inputType !== "table" && f.inputType !== "group" && f.inputType !== "group_repeatable"
-      );
+      return getAllFields(form.module);
     } catch {
       return [];
     }
-  }, [getAllFields, form.module, form.key]);
+  }, [getAllFields, form.module]);
+
+  const allAvailableFields = useMemo(() => {
+    return allFieldsInModule.filter(
+      (f) =>
+        f.key !== form.key &&
+        f.inputType !== "table" &&
+        f.inputType !== "group" &&
+        f.inputType !== "group_repeatable" &&
+        f.inputType !== "list_open"
+    );
+  }, [allFieldsInModule, form.key]);
+
+  const availableTableFields = useMemo(() => {
+    return allFieldsInModule.filter((f) => f.inputType === "table");
+  }, [allFieldsInModule]);
+
+  const availableOpenListFields = useMemo(() => {
+    return allFieldsInModule.filter(
+      (f) =>
+        f.key !== form.key &&
+        ((f.inputType === "list_open" && (f.listEntryType === "structured" || (f as any).entryType === "structured")) ||
+          f.inputType === "group_repeatable" ||
+          f.inputType === "group")
+    );
+  }, [allFieldsInModule, form.key]);
+
+  const availableListFields = useMemo(() => {
+    return allFieldsInModule.filter(
+      (f) => f.key !== form.key && (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect")
+    );
+  }, [allFieldsInModule, form.key]);
 
   const importExistingFieldToColumn = (f: FieldDefinition) => {
     let colType = "Text";
@@ -337,12 +387,17 @@ export function AdminFieldDrawer({
         selectionMode: form.crmBindSelectionMode || "single",
       } : undefined,
       selectionMode: form.inputType === "crm_bind" || form.inputType === "list_select" ? form.crmBindSelectionMode : undefined,
-      listEntryType: form.inputType === "list_open" ? form.listEntryType : undefined,
-      subFields: (form.inputType === "group" || form.inputType === "table") && form.tableColumns.length > 0
+      listEntryType: form.inputType === "list_open" ? (form.listEntryType || "plain_text") : undefined,
+      subFields: (form.inputType === "group" || form.inputType === "table" || (form.inputType === "list_open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && form.tableColumns.length > 0
         ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
         : undefined,
       defaultValue: form.defaultValue !== undefined && form.defaultValue !== "" ? form.defaultValue : undefined,
       currency: form.inputType === "money" ? (form.currency || "INR") : undefined,
+      maxRating: form.inputType === "rating" ? (form.maxRating || 5) : undefined,
+      listBindConfig: form.inputType === "list_select" && form.optionSourceMode === "bind" && form.listBindConfig ? {
+        ...form.listBindConfig,
+        sourceType: form.listBindConfig.sourceType === "group" ? "open_list" : form.listBindConfig.sourceType,
+      } : undefined,
     };
     if (isEdit && field) {
       updateCustomField(form.module, field.id, payload);
@@ -701,64 +756,396 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* Options */}
-          {needsOptions(form.inputType) && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-700">Options</label>
-                {!isReadOnly && <button type="button" onClick={addOption} className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"><Plus className="w-3 h-3" />Add option</button>}
+          {/* Rating max stars configuration */}
+          {form.inputType === "rating" && (
+            <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Maximum Rating (Stars)
+                  </label>
+                </div>
+                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                  {form.maxRating || 5} Stars
+                </span>
               </div>
-              <div className="space-y-2">
-                {form.options.map((opt, idx) => (
-                  <div key={opt.id} className="flex items-center gap-2">
-                    <input type="text" value={opt.label} readOnly={isReadOnly} onChange={e => updateOption(idx, e.target.value)}
-                      className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"}`}
-                    />
-                    {!isReadOnly && <button type="button" onClick={() => removeOption(idx)} className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /></button>}
-                  </div>
+              <p className="text-[11px] text-slate-500">
+                Choose the maximum rating stars users can select for this field.
+              </p>
+              <div className="flex items-center gap-2">
+                {[3, 5, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => {
+                      setForm((p) => ({
+                        ...p,
+                        maxRating: num,
+                        defaultValue: p.defaultValue && Number(p.defaultValue) > num ? num : p.defaultValue,
+                      }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      (form.maxRating || 5) === num
+                        ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {num} Stars
+                  </button>
                 ))}
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <span className="text-xs text-slate-500 font-medium">Custom:</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={form.maxRating || 5}
+                    disabled={isReadOnly}
+                    onChange={(e) => {
+                      const val = Math.max(1, Math.min(20, Number(e.target.value) || 5));
+                      setForm((p) => ({
+                        ...p,
+                        maxRating: val,
+                        defaultValue: p.defaultValue && Number(p.defaultValue) > val ? val : p.defaultValue,
+                      }));
+                    }}
+                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-amber-500 text-center"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Options & List Bind Configuration */}
+          {needsOptions(form.inputType) && (
+            <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+              {/* Option Source Toggle: Manual vs List Bind */}
+              <div className="flex items-center justify-between pb-1 border-b border-slate-200/80">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Option Source</label>
+                  <p className="text-[11px] text-slate-500">Configure where the list options come from</p>
+                </div>
+                <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, optionSourceMode: "manual" }))}
+                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      form.optionSourceMode !== "bind"
+                        ? "bg-white text-slate-800 shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    Manual Options
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => {
+                      setForm((p) => ({
+                        ...p,
+                        optionSourceMode: "bind",
+                        listBindConfig: p.listBindConfig || {
+                          sourceType: availableTableFields.length > 0 ? "table" : "crm",
+                          targetFieldKey: availableTableFields[0]?.key || "",
+                          targetColumnOrSubFieldId: availableTableFields[0]?.tableColumns?.[0]?.id || availableTableFields[0]?.subFields?.[0]?.id || "",
+                          crmModule: "teamMember",
+                        },
+                      }));
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                      form.optionSourceMode === "bind"
+                        ? "bg-blue-600 text-white shadow-2xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <Database className="w-3 h-3" />
+                    <span>List Bind (Data Source)</span>
+                  </button>
+                </div>
               </div>
 
-              {/* Single / Multiple selection mode toggle for List */}
-              {form.inputType === "list_select" && (
-                <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg space-y-1.5">
-                  <label className="text-xs font-semibold text-gray-700">Selection Mode</label>
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="listSelectMode"
+              {/* Dynamic List Bind Configuration Panel */}
+              {form.optionSourceMode === "bind" ? (
+                <div className="space-y-3 bg-white p-3 rounded-lg border border-blue-200 shadow-2xs">
+                  <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
+                    <Database className="w-3.5 h-3.5" />
+                    <span>Dynamic Data Binding Source</span>
+                  </div>
+
+                  {/* 1. Source Type Selector */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Data Source Type
+                    </label>
+                    <select
+                      value={form.listBindConfig?.sourceType || "open_list"}
+                      disabled={isReadOnly}
+                      onChange={(e) => {
+                        const newSourceType = e.target.value as "open_list" | "table" | "crm" | "field";
+                        let defaultTargetKey = "";
+                        let defaultColId = "";
+                        if (newSourceType === "open_list" && availableOpenListFields.length > 0) {
+                          defaultTargetKey = availableOpenListFields[0].key;
+                          defaultColId = availableOpenListFields[0].subFields?.[0]?.id || availableOpenListFields[0].tableColumns?.[0]?.id || "";
+                        } else if (newSourceType === "table" && availableTableFields.length > 0) {
+                          defaultTargetKey = availableTableFields[0].key;
+                          defaultColId = availableTableFields[0].tableColumns?.[0]?.id || availableTableFields[0].subFields?.[0]?.id || "";
+                        } else if (newSourceType === "field" && availableListFields.length > 0) {
+                          defaultTargetKey = availableListFields[0].key;
+                        }
+
+                        setForm((p) => ({
+                          ...p,
+                          listBindConfig: {
+                            sourceType: newSourceType,
+                            targetFieldKey: defaultTargetKey,
+                            targetColumnOrSubFieldId: defaultColId,
+                            crmModule: "teamMember",
+                          },
+                        }));
+                      }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value="open_list">Bind to Open List (extract values from structured open list)</option>
+                      <option value="table">Table Field Column (extract distinct values from table)</option>
+                      <option value="crm">CRM Entity (Team Members, Clients, Services, Processes, Orgs)</option>
+                      <option value="field">Existing Custom List Field (mirror options)</option>
+                    </select>
+                  </div>
+
+                  {/* 2. Target Field and Sub-field for Open List Source */}
+                  {(form.listBindConfig?.sourceType === "open_list" || form.listBindConfig?.sourceType === ("group" as any)) && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Select Structured Open List
+                        </label>
+                        {availableOpenListFields.length === 0 ? (
+                          <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
+                            No structured Open List fields exist in this module yet.
+                          </div>
+                        ) : (
+                          <select
+                            value={form.listBindConfig?.targetFieldKey || availableOpenListFields[0]?.key}
+                            disabled={isReadOnly}
+                            onChange={(e) => {
+                              setForm((p) => ({
+                                ...p,
+                                listBindConfig: {
+                                  ...p.listBindConfig!,
+                                  sourceType: "open_list",
+                                  targetFieldKey: e.target.value,
+                                  targetColumnOrSubFieldId: undefined,
+                                },
+                              }));
+                            }}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
+                          >
+                            {availableOpenListFields.map((f) => (
+                              <option key={f.key} value={f.key}>
+                                {f.label} ({f.key})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Target Field and Column for Table Source */}
+                  {form.listBindConfig?.sourceType === "table" && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                          Select Table Field
+                        </label>
+                        {availableTableFields.length === 0 ? (
+                          <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
+                            No Table fields exist in this module yet.
+                          </div>
+                        ) : (
+                          <select
+                            value={form.listBindConfig.targetFieldKey || availableTableFields[0]?.key}
+                            disabled={isReadOnly}
+                            onChange={(e) => {
+                              const targetTbl = availableTableFields.find((f) => f.key === e.target.value);
+                              const targetColId = targetTbl?.tableColumns?.[0]?.id || targetTbl?.subFields?.[0]?.id || "";
+                              setForm((p) => ({
+                                ...p,
+                                listBindConfig: {
+                                  ...p.listBindConfig!,
+                                  targetFieldKey: e.target.value,
+                                  targetColumnOrSubFieldId: targetColId,
+                                },
+                              }));
+                            }}
+                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
+                          >
+                            {availableTableFields.map((t) => (
+                              <option key={t.key} value={t.key}>
+                                {t.label} ({t.key})
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 4. Target CRM Module */}
+                  {form.listBindConfig?.sourceType === "crm" && (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        CRM Entity Module
+                      </label>
+                      <select
+                        value={form.listBindConfig.crmModule || "teamMember"}
                         disabled={isReadOnly}
-                        checked={(form.selectionMode || form.crmBindSelectionMode) !== "multiple"}
-                        onChange={() => setForm((p) => ({
+                        onChange={(e) => {
+                          setForm((p) => ({
+                            ...p,
+                            listBindConfig: {
+                              ...p.listBindConfig!,
+                              crmModule: e.target.value as CrmBindModule,
+                              displayField: "name",
+                            },
+                          }));
+                        }}
+                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
+                      >
+                        <option value="teamMember">Team Members</option>
+                        <option value="client">Clients</option>
+                        <option value="organization">Organizations</option>
+                        <option value="service">Services / Catalog</option>
+                        <option value="process">Processes</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {/* 5. Target Existing Custom Field */}
+                  {form.listBindConfig?.sourceType === "field" && (
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                        Mirror From Field
+                      </label>
+                      {availableListFields.length === 0 ? (
+                        <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
+                          No other List fields found in this module.
+                        </div>
+                      ) : (
+                        <select
+                          value={form.listBindConfig.targetFieldKey || availableListFields[0]?.key}
+                          disabled={isReadOnly}
+                          onChange={(e) => {
+                            setForm((p) => ({
+                              ...p,
+                              listBindConfig: {
+                                ...p.listBindConfig!,
+                                targetFieldKey: e.target.value,
+                              },
+                            }));
+                          }}
+                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
+                        >
+                          {availableListFields.map((f) => (
+                            <option key={f.key} value={f.key}>
+                              {f.label} ({f.options?.length || 0} options)
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="p-2 bg-blue-50/70 border border-blue-100 rounded-lg text-[11px] text-blue-800 leading-relaxed">
+                    Options for this list will be dynamically bound from the selected source at runtime on client records and forms.
+                  </div>
+                </div>
+              ) : (
+                /* Manual Options List */
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold text-slate-600">Manual Options:</span>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={addOption}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                      >
+                        <Plus className="w-3 h-3" /> Add option
+                      </button>
+                    )}
+                  </div>
+                  {form.options.map((opt, idx) => (
+                    <div key={opt.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={opt.label}
+                        readOnly={isReadOnly}
+                        onChange={(e) => updateOption(idx, e.target.value)}
+                        className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${
+                          isReadOnly ? roCls + " border-gray-100" : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        }`}
+                      />
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => removeOption(idx)}
+                          className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Selection Mode toggle for List */}
+              <div className="mt-2 pt-2.5 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-700">Selection Mode:</span>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="listSelectMode"
+                      disabled={isReadOnly}
+                      checked={(form.selectionMode || form.crmBindSelectionMode) !== "multiple"}
+                      onChange={() =>
+                        setForm((p) => ({
                           ...p,
                           selectionMode: "single",
                           crmBindSelectionMode: "single",
                           defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue[0] || "" : p.defaultValue || "",
-                        }))}
-                        className="text-blue-600 cursor-pointer"
-                      />
-                      Single Selection (Dropdown)
-                    </label>
-                    <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="listSelectMode"
-                        disabled={isReadOnly}
-                        checked={(form.selectionMode || form.crmBindSelectionMode) === "multiple"}
-                        onChange={() => setForm((p) => ({
+                        }))
+                      }
+                      className="text-blue-600 cursor-pointer"
+                    />
+                    Single Selection
+                  </label>
+                  <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="listSelectMode"
+                      disabled={isReadOnly}
+                      checked={(form.selectionMode || form.crmBindSelectionMode) === "multiple"}
+                      onChange={() =>
+                        setForm((p) => ({
                           ...p,
                           selectionMode: "multiple",
                           crmBindSelectionMode: "multiple",
                           defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue : p.defaultValue ? [p.defaultValue] : [],
-                        }))}
-                        className="text-blue-600 cursor-pointer"
-                      />
-                      Multiple Selection (Dropdown)
-                    </label>
-                  </div>
+                        }))
+                      }
+                      className="text-blue-600 cursor-pointer"
+                    />
+                    Multiple (Multiselect)
+                  </label>
                 </div>
-              )}
+              </div>
             </div>
           )}
 
@@ -823,25 +1210,64 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* Open List info card */}
+          {/* Open List Entry Format & Options */}
           {form.inputType === "list_open" && (
-            <div className="p-3.5 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-2">
-              <div className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-emerald-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Dynamic Tag / List Mode</span>
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Entry Format
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={isReadOnly}
+                  onClick={() => setForm((p) => ({ ...p, listEntryType: "plain_text" }))}
+                  className={`p-3 text-left rounded-xl border transition-all cursor-pointer ${
+                    form.listEntryType !== "structured"
+                      ? "bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
+                      : "bg-white/60 border-slate-200 hover:bg-white"
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
+                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Plain Text Tags</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-normal">
+                    Users type and press Enter to add tags/chips (e.g. Symptoms, Instructions).
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isReadOnly}
+                  onClick={() => setForm((p) => ({ ...p, listEntryType: "structured" }))}
+                  className={`p-3 text-left rounded-xl border transition-all cursor-pointer ${
+                    form.listEntryType === "structured"
+                      ? "bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
+                      : "bg-white/60 border-slate-200 hover:bg-white"
+                  }`}
+                >
+                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
+                    <Layers className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Structured Sub-Fields</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-normal">
+                    Repeatable mini-records with sub-fields (e.g. Prescriptions, Medicines).
+                  </p>
+                </button>
               </div>
-              <p className="text-xs text-slate-600">
-                End users can dynamically enter custom tags or items into this list on any record by pressing Enter.
-              </p>
             </div>
           )}
 
           {/* Table columns & Group subfields */}
-          {(form.inputType === "table" || form.inputType === "group") && (
+          {(form.inputType === "table" || form.inputType === "group" || (form.inputType === "list_open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && (
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-semibold text-gray-700">
-                  {form.inputType === "table" ? "Table Columns" : "Group Sub-Fields"}
+                  {form.inputType === "table"
+                    ? "Table Columns"
+                    : form.inputType === "group"
+                    ? "Group Sub-Fields"
+                    : "Repeatable Sub-Fields"}
                 </label>
                 {!isReadOnly && (
                   <div className="flex items-center gap-2">
@@ -1063,6 +1489,23 @@ export function AdminFieldDrawer({
                       </div>
                     )}
 
+                    {/* Inline max stars selector when column type is Rating */}
+                    {col.type === "Rating" && (
+                      <div className="ml-2 pl-3 border-l-2 border-amber-300 py-1 flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-700">Max Stars:</span>
+                        <select
+                          value={col.maxRating || 5}
+                          disabled={isReadOnly}
+                          onChange={(e) => updateColumn(idx, { maxRating: Number(e.target.value) || 5 })}
+                          className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
+                        >
+                          <option value={3}>3 Stars</option>
+                          <option value={5}>5 Stars</option>
+                          <option value={10}>10 Stars</option>
+                        </select>
+                      </div>
+                    )}
+
                     {/* Inline currency selector when column type is Money */}
                     {col.type === "Money" && (
                       <div className="ml-2 pl-3 border-l-2 border-emerald-300 py-1 flex items-center gap-2">
@@ -1143,6 +1586,9 @@ export function AdminFieldDrawer({
                     displayField: "name",
                     selectionMode: form.selectionMode || form.crmBindSelectionMode || "single",
                   } : undefined,
+                  maxRating: form.maxRating || 5,
+                  listEntryType: form.inputType === "list_open" ? form.listEntryType : undefined,
+                  listBindConfig: form.optionSourceMode === "bind" ? form.listBindConfig : undefined,
                   subFields: form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null),
                   placeholder: form.placeholder || `Default value for ${form.label || "field"}...`,
                 }}

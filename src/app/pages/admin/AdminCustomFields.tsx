@@ -179,9 +179,9 @@ const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   signature: "Drawing / Signature",
   drawing: "Drawing / Signature",
   list_select: "List",
-  list_open: "Open List (Tags)",
+  list_open: "Open List",
   group: "Group / Composite",
-  group_repeatable: "Repeatable Group",
+  group_repeatable: "Open List (Structured)",
   crm_bind: "CRM Bind",
   select: "List",
   multiselect: "List (Multi)",
@@ -408,7 +408,12 @@ export function AdminCustomFields() {
                   const scribeSeed = isScribeSeed(field);
                   const systemField = isSystemField(field);
 
-                  const typeName = FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+                  const typeName =
+                    field.inputType === "list_open"
+                      ? field.listEntryType === "structured"
+                        ? "Open List (Structured)"
+                        : "Open List (Tags)"
+                      : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
                   let typeBadgeStyle = "bg-blue-50 text-blue-700";
                   let TypeIcon = Type;
                   if (field.inputType === "table") { typeBadgeStyle = "bg-indigo-50 text-indigo-700"; TypeIcon = TableIcon; }
@@ -418,7 +423,15 @@ export function AdminCustomFields() {
                     TypeIcon = ClipboardList;
                   }
                   else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
-                  else if (field.inputType === "list_open") { typeBadgeStyle = "bg-emerald-50 text-emerald-700"; TypeIcon = Tag; }
+                  else if (field.inputType === "list_open") {
+                    if (field.listEntryType === "structured") {
+                      typeBadgeStyle = "bg-purple-50 text-purple-700";
+                      TypeIcon = Layers;
+                    } else {
+                      typeBadgeStyle = "bg-emerald-50 text-emerald-700";
+                      TypeIcon = Tag;
+                    }
+                  }
                   else if (field.inputType === "group" || field.inputType === "group_repeatable") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Layers; }
                   else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
                   else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
