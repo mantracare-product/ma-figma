@@ -318,11 +318,16 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
       ? firstRule.locations
       : undefined;
 
-    const payload: Omit<SectionDefinition, "id" | "source" | "createdAt"> = {
+    const targetSource: "template" | "custom" = isAdmin ? "template" : "custom";
+    const targetCreatedIn: "admin" | "client" = isAdmin ? "admin" : "client";
+
+    const payload: Omit<SectionDefinition, "id" | "createdAt"> & { source: "system" | "custom" | "template"; createdIn?: "admin" | "client" } = {
       title: form.title.trim(),
       description: form.description.trim(),
       iconName: form.iconName || "layers",
       module: form.module,
+      source: isEdit && section ? section.source : targetSource,
+      createdIn: isEdit && section ? section.createdIn : targetCreatedIn,
       fieldKeys: form.fieldKeys,
       required: form.required,
       userVisibility: form.userVisibility,

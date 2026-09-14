@@ -529,6 +529,8 @@ export default function DraggableOverviewSections({
       module: customFieldsModule,
       iconName: newSectionIcon || "layers",
       fieldKeys: selectedInitialFields || [],
+      source: "custom",
+      createdIn: "client",
     });
 
     const newSection: OverviewSection = {

@@ -408,11 +408,21 @@ export function AdminCustomFields() {
                   const scribeSeed = isScribeSeed(field);
                   const systemField = isSystemField(field);
 
+                  const isListField =
+                    field.inputType === "list_open" ||
+                    field.inputType === "list_select" ||
+                    field.inputType === "select" ||
+                    field.inputType === "multiselect" ||
+                    field.inputType === "list";
                   const typeName =
                     field.inputType === "list_open"
                       ? field.listEntryType === "structured"
-                        ? "Open List (Structured)"
-                        : "Open List (Tags)"
+                        ? "List (Open · Structured)"
+                        : "List (Open · Tags)"
+                      : isListField
+                      ? field.selectionMode === "multiple" || field.inputType === "multiselect"
+                        ? "List (Multi-Select)"
+                        : "List (Select)"
                       : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
                   let typeBadgeStyle = "bg-blue-50 text-blue-700";
                   let TypeIcon = Type;

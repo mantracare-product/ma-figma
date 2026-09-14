@@ -66,7 +66,6 @@ const FIELD_TYPE_GROUPS: { group: string; items: { label: string; value: FieldIn
   { group: "Options", items: [
     { label: "List", value: "list_select" },
     { label: "Yes / No", value: "yes_no" },
-    { label: "Open List", value: "list_open" },
   ]},
   { group: "Advanced & Composite", items: [
     { label: "Table / Matrix", value: "table" },
@@ -79,6 +78,9 @@ const FIELD_TYPE_GROUPS: { group: string; items: { label: string; value: FieldIn
 ];
 
 function getLabelForInputType(t: FieldInputType): string {
+  if (t === "list_select" || t === "list_open" || t === "select" || t === "multiselect" || t === "list" || (t as any) === "group_repeatable") {
+    return "List";
+  }
   for (const g of FIELD_TYPE_GROUPS) {
     const f = g.items.find(i => i.value === t);
     if (f) return f.label;
@@ -86,6 +88,7 @@ function getLabelForInputType(t: FieldInputType): string {
   return t;
 }
 function needsOptions(t: FieldInputType): boolean {
+  if (t === "list_open") return false;
   return t === "list_select" || t === "select" || t === "multiselect" || t === "list";
 }
 
@@ -201,8 +204,8 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
       { id: "col_3", name: "Unit Price", type: "Money", currency: "INR" },
     ]),
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
-    crmBindSelectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
-    selectionMode: f.selectionMode || f.crmBindConfig?.selectionMode || "single",
+    crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
+    selectionMode: f.inputType === "multiselect" ? "multiple" : f.selectionMode || f.crmBindConfig?.selectionMode || "single",
     listEntryType: effectiveListEntryType,
     defaultValue: f.defaultValue,
     currency: f.currency || "INR",
@@ -284,7 +287,7 @@ export function AdminFieldDrawer({
 
   const availableListFields = useMemo(() => {
     return allFieldsInModule.filter(
-      (f) => f.key !== form.key && (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect")
+      (f) => f.key !== form.key && (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect" || f.inputType === "list")
     );
   }, [allFieldsInModule, form.key]);
 
@@ -366,8 +369,13 @@ export function AdminFieldDrawer({
       ? firstRule.locations
       : undefined;
 
-    const payload: Omit<FieldDefinition, "id" | "source" | "createdAt"> = {
+    const targetSource: "template" | "custom" = isAdmin ? "template" : "custom";
+    const targetCreatedIn: "admin" | "client" = isAdmin ? "admin" : "client";
+
+    const payload: Omit<FieldDefinition, "id" | "createdAt"> & { source: "system" | "custom" | "template"; createdIn?: "admin" | "client" } = {
       label: form.label.trim(), key: form.key.trim(), module: form.module,
+      source: isEdit && field ? field.source : targetSource,
+      createdIn: isEdit && field ? field.createdIn : targetCreatedIn,
       inputType: form.inputType,
       placeholder: form.placeholder.trim() || `Enter ${form.label.toLowerCase()}`,
       required: form.required, showAlways: form.showAlways,
@@ -380,22 +388,26 @@ export function AdminFieldDrawer({
       industryCategory: legacyCategory,
       industry: legacyIndustry,
       locations: legacyLocations,
-      options: needsOptions(form.inputType) ? form.options : undefined,
+      options: isList && activeListType !== "open" ? form.options : undefined,
       tableColumns: form.inputType === "table" ? form.tableColumns : undefined,
       crmBindConfig: form.inputType === "crm_bind" ? {
         sourceModule: form.crmBindModule || "teamMember",
         displayField: "name",
         selectionMode: form.crmBindSelectionMode || "single",
       } : undefined,
-      selectionMode: form.inputType === "crm_bind" || form.inputType === "list_select" ? form.crmBindSelectionMode : undefined,
-      listEntryType: form.inputType === "list_open" ? (form.listEntryType || "plain_text") : undefined,
-      subFields: (form.inputType === "group" || form.inputType === "table" || (form.inputType === "list_open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && form.tableColumns.length > 0
+      selectionMode: form.inputType === "crm_bind"
+        ? form.crmBindSelectionMode
+        : isList && activeListType !== "open"
+        ? (activeListType === "multi_select" ? "multiple" : "single")
+        : undefined,
+      listEntryType: isList && activeListType === "open" ? (form.listEntryType || "plain_text") : undefined,
+      subFields: (form.inputType === "group" || form.inputType === "table" || (isList && activeListType === "open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && form.tableColumns.length > 0
         ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
         : undefined,
       defaultValue: form.defaultValue !== undefined && form.defaultValue !== "" ? form.defaultValue : undefined,
       currency: form.inputType === "money" ? (form.currency || "INR") : undefined,
       maxRating: form.inputType === "rating" ? (form.maxRating || 5) : undefined,
-      listBindConfig: form.inputType === "list_select" && form.optionSourceMode === "bind" && form.listBindConfig ? {
+      listBindConfig: isList && activeListType !== "open" && form.optionSourceMode === "bind" && form.listBindConfig ? {
         ...form.listBindConfig,
         sourceType: form.listBindConfig.sourceType === "group" ? "open_list" : form.listBindConfig.sourceType,
       } : undefined,
@@ -416,6 +428,21 @@ export function AdminFieldDrawer({
   const addColumn = () => setForm(p => ({ ...p, tableColumns: [...p.tableColumns, { id: `col_${Date.now()}`, name: "New Column", type: "Text" }] }));
   const updateColumn = (idx: number, patch: Partial<TableColumnConfig>) => setForm(p => ({ ...p, tableColumns: p.tableColumns.map((c, i) => i === idx ? { ...c, ...patch } : c) }));
   const removeColumn = (idx: number) => setForm(p => ({ ...p, tableColumns: p.tableColumns.filter((_, i) => i !== idx) }));
+
+  const isList =
+    form.inputType === "list_select" ||
+    form.inputType === "list_open" ||
+    form.inputType === "select" ||
+    form.inputType === "multiselect" ||
+    form.inputType === "list" ||
+    (form.inputType as any) === "group_repeatable";
+
+  const activeListType: "open" | "select" | "multi_select" =
+    form.inputType === "list_open" || (form.inputType as any) === "group_repeatable"
+      ? "open"
+      : form.inputType === "multiselect" || form.selectionMode === "multiple"
+      ? "multi_select"
+      : "select";
 
   const typeLabel = getLabelForInputType(form.inputType);
   const modLabel = MODULE_OPTIONS.find(m => m.value === form.module)?.label ?? form.module;
@@ -710,21 +737,82 @@ export function AdminFieldDrawer({
                   {FIELD_TYPE_GROUPS.map(grp => (
                     <div key={grp.group}>
                       <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
-                      {grp.items.map(item => (
-                        <button key={item.value} type="button"
-                          onClick={() => { setForm(p => ({ ...p, inputType: item.value })); setTypePickerOpen(false); }}
-                          className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${form.inputType === item.value ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
-                        >
-                          <span>{item.label}</span>
-                          {form.inputType === item.value && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                        </button>
-                      ))}
+                      {grp.items.map(item => {
+                        const isItemActive = item.value === "list_select" ? isList : form.inputType === item.value;
+                        return (
+                          <button key={item.value} type="button"
+                            onClick={() => {
+                              if (item.value === "list_select") {
+                                if (!isList) {
+                                  setForm(p => ({ ...p, inputType: "list_select", selectionMode: "single", crmBindSelectionMode: "single" }));
+                                }
+                              } else {
+                                setForm(p => ({ ...p, inputType: item.value }));
+                              }
+                              setTypePickerOpen(false);
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${isItemActive ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
+                          >
+                            <span>{item.label}</span>
+                            {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
               )}
             </div>
           </div>
+
+          {/* List Type Dropdown */}
+          {isList && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700">
+                  List Type <span className="text-red-500">*</span>
+                </label>
+                <InfoTooltip text="Select whether the list is single-choice, multiple-choice, or open for user-added entries." size="sm" />
+              </div>
+              <select
+                value={activeListType}
+                disabled={isReadOnly}
+                onChange={(e) => {
+                  const val = e.target.value as "open" | "select" | "multi_select";
+                  if (val === "open") {
+                    setForm((p) => ({
+                      ...p,
+                      inputType: "list_open",
+                      listEntryType: p.listEntryType || "plain_text",
+                    }));
+                  } else if (val === "select") {
+                    setForm((p) => ({
+                      ...p,
+                      inputType: "list_select",
+                      selectionMode: "single",
+                      crmBindSelectionMode: "single",
+                      defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue[0] || "" : p.defaultValue || "",
+                    }));
+                  } else if (val === "multi_select") {
+                    setForm((p) => ({
+                      ...p,
+                      inputType: "list_select",
+                      selectionMode: "multiple",
+                      crmBindSelectionMode: "multiple",
+                      defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue : p.defaultValue ? [p.defaultValue] : [],
+                    }));
+                  }
+                }}
+                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
+                  isReadOnly ? roCls : "border-gray-200 hover:border-gray-300 text-gray-900"
+                }`}
+              >
+                <option value="select">Select (Single Choice Dropdown)</option>
+                <option value="multi_select">Multi-Select (Multiple Choice)</option>
+                <option value="open">Open List (User Added Entries)</option>
+              </select>
+            </div>
+          )}
 
           {/* Placeholder */}
           <div>
@@ -819,32 +907,23 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* Options & List Bind Configuration */}
-          {needsOptions(form.inputType) && (
+          {/* Options & List Bind Configuration (for Select and Multi-Select) */}
+          {isList && activeListType !== "open" && (
             <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
-              {/* Option Source Toggle: Manual vs List Bind */}
-              <div className="flex items-center justify-between pb-1 border-b border-slate-200/80">
-                <div>
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Option Source</label>
-                  <p className="text-[11px] text-slate-500">Configure where the list options come from</p>
+              {/* Option Source Dropdown */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Option Source
+                  </label>
+                  <InfoTooltip text="Choose whether options are entered manually or dynamically bound from CRM records, tables, or open lists." size="sm" />
                 </div>
-                <div className="flex items-center bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, optionSourceMode: "manual" }))}
-                    className={`px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      form.optionSourceMode !== "bind"
-                        ? "bg-white text-slate-800 shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    Manual Options
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => {
+                <select
+                  value={form.optionSourceMode === "bind" ? "bind" : "manual"}
+                  disabled={isReadOnly}
+                  onChange={(e) => {
+                    const mode = e.target.value as "manual" | "bind";
+                    if (mode === "bind") {
                       setForm((p) => ({
                         ...p,
                         optionSourceMode: "bind",
@@ -855,17 +934,17 @@ export function AdminFieldDrawer({
                           crmModule: "teamMember",
                         },
                       }));
-                    }}
-                    className={`flex items-center gap-1 px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer ${
-                      form.optionSourceMode === "bind"
-                        ? "bg-blue-600 text-white shadow-2xs"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
-                  >
-                    <Database className="w-3 h-3" />
-                    <span>List Bind (Data Source)</span>
-                  </button>
-                </div>
+                    } else {
+                      setForm((p) => ({ ...p, optionSourceMode: "manual" }));
+                    }
+                  }}
+                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
+                    isReadOnly ? roCls : "border-slate-200 hover:border-slate-300 text-slate-800"
+                  }`}
+                >
+                  <option value="manual">Manual Options</option>
+                  <option value="bind">Dynamic List Bind (Data Source)</option>
+                </select>
               </div>
 
               {/* Dynamic List Bind Configuration Panel */}
@@ -1104,49 +1183,6 @@ export function AdminFieldDrawer({
                   ))}
                 </div>
               )}
-
-              {/* Selection Mode toggle for List */}
-              <div className="mt-2 pt-2.5 border-t border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-semibold text-slate-700">Selection Mode:</span>
-                <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="listSelectMode"
-                      disabled={isReadOnly}
-                      checked={(form.selectionMode || form.crmBindSelectionMode) !== "multiple"}
-                      onChange={() =>
-                        setForm((p) => ({
-                          ...p,
-                          selectionMode: "single",
-                          crmBindSelectionMode: "single",
-                          defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue[0] || "" : p.defaultValue || "",
-                        }))
-                      }
-                      className="text-blue-600 cursor-pointer"
-                    />
-                    Single Selection
-                  </label>
-                  <label className="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer">
-                    <input
-                      type="radio"
-                      name="listSelectMode"
-                      disabled={isReadOnly}
-                      checked={(form.selectionMode || form.crmBindSelectionMode) === "multiple"}
-                      onChange={() =>
-                        setForm((p) => ({
-                          ...p,
-                          selectionMode: "multiple",
-                          crmBindSelectionMode: "multiple",
-                          defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue : p.defaultValue ? [p.defaultValue] : [],
-                        }))
-                      }
-                      className="text-blue-600 cursor-pointer"
-                    />
-                    Multiple (Multiselect)
-                  </label>
-                </div>
-              </div>
             </div>
           )}
 
@@ -1211,51 +1247,26 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* Open List Entry Format & Options */}
-          {form.inputType === "list_open" && (
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
-                Entry Format
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  disabled={isReadOnly}
-                  onClick={() => setForm((p) => ({ ...p, listEntryType: "plain_text" }))}
-                  className={`p-3 text-left rounded-xl border transition-all cursor-pointer ${
-                    form.listEntryType !== "structured"
-                      ? "bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
-                      : "bg-white/60 border-slate-200 hover:bg-white"
-                  }`}
-                >
-                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
-                    <Tag className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Plain Text Tags</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal">
-                    Users type and press Enter to add tags/chips (e.g. Symptoms, Instructions).
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isReadOnly}
-                  onClick={() => setForm((p) => ({ ...p, listEntryType: "structured" }))}
-                  className={`p-3 text-left rounded-xl border transition-all cursor-pointer ${
-                    form.listEntryType === "structured"
-                      ? "bg-white border-blue-500 ring-2 ring-blue-500/20 shadow-xs"
-                      : "bg-white/60 border-slate-200 hover:bg-white"
-                  }`}
-                >
-                  <div className="text-xs font-semibold text-slate-800 flex items-center gap-1.5 mb-1">
-                    <Layers className="w-3.5 h-3.5 text-purple-600" />
-                    <span>Structured Sub-Fields</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-normal">
-                    Repeatable mini-records with sub-fields (e.g. Prescriptions, Medicines).
-                  </p>
-                </button>
+          {/* Open List Entry Format Dropdown */}
+          {isList && activeListType === "open" && (
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Open List Format
+                </label>
+                <InfoTooltip text="Plain Text Tags allows users to type chips/tags. Structured Sub-Fields allows repeatable mini-records with custom sub-fields." size="sm" />
               </div>
+              <select
+                value={form.listEntryType || "plain_text"}
+                disabled={isReadOnly}
+                onChange={(e) => setForm((p) => ({ ...p, listEntryType: e.target.value as "plain_text" | "structured" }))}
+                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
+                  isReadOnly ? roCls : "border-gray-200 hover:border-gray-300 text-gray-900"
+                }`}
+              >
+                <option value="plain_text">Plain Text Tags</option>
+                <option value="structured">Structured Sub-Fields</option>
+              </select>
             </div>
           )}
 

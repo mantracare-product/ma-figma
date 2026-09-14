@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "lucide-react";
 
@@ -13,6 +13,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
   const [isPinned, setIsPinned] = useState(false);
   const [position, setPosition] = useState({ top: 0, left: 0 });
   const [actualPlacement, setActualPlacement] = useState(placement);
+  const [isPositioned, setIsPositioned] = useState(false);
 
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -25,10 +26,6 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
     const tooltipRect = tooltipRef.current.getBoundingClientRect();
     const gap = 8;
     const arrowSize = 6;
-
-    let top = 0;
-    let left = 0;
-    let finalPlacement = placement;
 
     const positions = {
       top: {
@@ -68,14 +65,27 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
     else if (placement === "left") tryPlacements.push("right", "top", "bottom");
     else if (placement === "right") tryPlacements.push("left", "top", "bottom");
 
+    let finalPlacement = placement;
+    let top = 0;
+    let left = 0;
+    let found = false;
+
     for (const p of tryPlacements) {
       const pos = positions[p];
       if (fitsInViewport(pos)) {
         top = pos.top;
         left = pos.left;
         finalPlacement = p;
+        found = true;
         break;
       }
+    }
+
+    if (!found) {
+      const fallbackPos = positions[placement] || positions.top;
+      top = fallbackPos.top;
+      left = fallbackPos.left;
+      finalPlacement = placement;
     }
 
     if (left < padding) left = padding;
@@ -89,6 +99,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
 
     setPosition({ top, left });
     setActualPlacement(finalPlacement);
+    setIsPositioned(true);
   };
 
   const handleMouseEnter = () => {
@@ -103,6 +114,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
     if (!isPinned) {
       timeoutRef.current = setTimeout(() => {
         setIsVisible(false);
+        setIsPositioned(false);
       }, 150);
     }
   };
@@ -112,6 +124,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
     if (isPinned) {
       setIsPinned(false);
       setIsVisible(false);
+      setIsPositioned(false);
     } else {
       setIsPinned(true);
       setIsVisible(true);
@@ -128,6 +141,7 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
       ) {
         setIsPinned(false);
         setIsVisible(false);
+        setIsPositioned(false);
       }
     };
 
@@ -139,9 +153,14 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
     };
   }, [isPinned]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (isVisible) {
       updatePosition();
+    }
+  }, [isVisible]);
+
+  useEffect(() => {
+    if (isVisible) {
       const handleUpdate = () => updatePosition();
       window.addEventListener("scroll", handleUpdate, true);
       window.addEventListener("resize", handleUpdate);
@@ -177,11 +196,12 @@ export function InfoTooltip({ text, placement = "top", size = "sm" }: InfoToolti
         createPortal(
           <div
             ref={tooltipRef}
-            className="fixed z-[9999] px-3 py-2 bg-[#1F2A44] text-white rounded-lg shadow-2xl text-xs font-medium transition-opacity duration-200 ease-in-out max-w-[240px] leading-relaxed"
+            className="fixed px-3 py-2 bg-[#1F2A44] text-white rounded-lg shadow-2xl text-xs font-medium transition-opacity duration-200 ease-in-out max-w-[260px] leading-relaxed pointer-events-none"
             style={{
               top: `${position.top}px`,
               left: `${position.left}px`,
-              opacity: position.top === 0 && position.left === 0 ? 0 : 1,
+              opacity: isPositioned ? 1 : 0,
+              zIndex: 999999,
               whiteSpace: "normal",
             }}
           >

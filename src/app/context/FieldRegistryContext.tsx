@@ -230,7 +230,8 @@ export interface FieldDefinition {
   key: string;               // stable machine key, used in {{key}} variables
   label: string;              // display name
   module: FieldModule;        // which entity this field belongs to
-  source: "system" | "custom";
+  source: "system" | "custom" | "template";
+  createdIn?: "admin" | "client";
   inputType: FieldInputType;
   placeholder?: string;
   validation?: string;
@@ -266,7 +267,8 @@ export interface SectionDefinition {
   title: string;
   description?: string;
   module: FieldModule;
-  source: "system" | "custom";
+  source: "system" | "custom" | "template";
+  createdIn?: "admin" | "client";
   iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   fieldKeys: string[];
   required?: boolean;         // Required section
@@ -1365,7 +1367,7 @@ interface FieldRegistryContextValue {
   getCustomFields: (module: FieldModule) => FieldDefinition[];
   getAllFields: (module: FieldModule) => FieldDefinition[];
   getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => FieldDefinition[];
-  addCustomField: (module: FieldModule, field: Omit<FieldDefinition, "id" | "source" | "createdAt">) => FieldDefinition;
+  addCustomField: (module: FieldModule, field: Omit<FieldDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }) => FieldDefinition;
   updateCustomField: (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => void;
   deleteCustomField: (module: FieldModule, id: number) => void;
 
@@ -1374,7 +1376,7 @@ interface FieldRegistryContextValue {
   getCustomSections: (module: FieldModule) => SectionDefinition[];
   getAllSections: (module: FieldModule) => SectionDefinition[];
   getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => SectionDefinition[];
-  addCustomSection: (module: FieldModule, section: Omit<SectionDefinition, "id" | "source" | "createdAt">) => SectionDefinition;
+  addCustomSection: (module: FieldModule, section: Omit<SectionDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }) => SectionDefinition;
   updateCustomSection: (module: FieldModule, id: string, patch: Partial<SectionDefinition>) => void;
   deleteCustomSection: (module: FieldModule, id: string) => void;
   assignFieldToSection: (module: FieldModule, sectionId: string, fieldKey: string) => void;
@@ -1409,6 +1411,9 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
   } else if (rawType === "multiselect") {
     normalizedType = "list_select";
     if (!normalizedSelectionMode) normalizedSelectionMode = "multiple";
+  } else if (rawType === "list") {
+    normalizedType = "list_select";
+    if (!normalizedSelectionMode) normalizedSelectionMode = "single";
   } else if (rawType === "group_repeatable") {
     normalizedType = "list_open";
   }
@@ -1428,7 +1433,16 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     key: f.key || (f.label || f.name || "field").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
     label: f.label || f.name || "Untitled Field",
     module: targetModule,
-    source: f.source === "system" ? "system" : "custom",
+    source: f.source === "system" || (typeof f.id === "number" && f.id < 0) || (f.key && SYSTEM_FIELD_KEYS.has(f.key))
+      ? "system"
+      : f.source === "template"
+      ? "template"
+      : f.source === "custom" && f.createdIn === "client"
+      ? "custom"
+      : f.createdIn === "client"
+      ? "custom"
+      : "template",
+    createdIn: f.createdIn || (f.source === "custom" && f.createdIn === "client" ? "client" : "admin"),
     inputType: normalizedType,
     placeholder: f.placeholder || "",
     validation: f.validation || "",
@@ -1662,7 +1676,16 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
     title: s.title || s.name || "Untitled Section",
     description: s.description || "",
     module: targetModule,
-    source: s.source === "system" ? "system" : "custom",
+    source: s.source === "system" || SYSTEM_SECTION_IDS.has(s.id)
+      ? "system"
+      : s.source === "template"
+      ? "template"
+      : s.source === "custom" && s.createdIn === "client"
+      ? "custom"
+      : s.createdIn === "client"
+      ? "custom"
+      : "template",
+    createdIn: s.createdIn || (s.source === "custom" && s.createdIn === "client" ? "client" : "admin"),
     iconName: s.iconName || "layers",
     fieldKeys: Array.isArray(s.fieldKeys)
       ? s.fieldKeys
@@ -1906,7 +1929,7 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const addCustomField = (
     module: FieldModule,
-    fieldData: Omit<FieldDefinition, "id" | "source" | "createdAt">
+    fieldData: Omit<FieldDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }
   ): FieldDefinition => {
     const norm = normalizeModule(module);
     const normalizedData = { ...fieldData };
@@ -1914,11 +1937,17 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
       normalizedData.inputType = "list_open";
       normalizedData.listEntryType = "structured";
     }
+    const targetSource: "system" | "custom" | "template" =
+      fieldData.source || (fieldData.createdIn === "admin" ? "template" : "custom");
+    const targetCreatedIn: "admin" | "client" =
+      fieldData.createdIn || (targetSource === "template" ? "admin" : "client");
+
     const newField: FieldDefinition = {
       ...normalizedData,
       module: norm,
       id: Date.now() + Math.floor(Math.random() * 1000),
-      source: "custom",
+      source: targetSource,
+      createdIn: targetCreatedIn,
       createdAt: Date.now(),
     };
     setCustomFields((prev) => ({
@@ -2019,14 +2048,20 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 
   const addCustomSection = (
     module: FieldModule,
-    sectionData: Omit<SectionDefinition, "id" | "source" | "createdAt">
+    sectionData: Omit<SectionDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }
   ): SectionDefinition => {
     const norm = normalizeModule(module);
+    const targetSource: "system" | "custom" | "template" =
+      sectionData.source || (sectionData.createdIn === "admin" ? "template" : "custom");
+    const targetCreatedIn: "admin" | "client" =
+      sectionData.createdIn || (targetSource === "template" ? "admin" : "client");
+
     const newSection: SectionDefinition = {
       ...sectionData,
       id: `sec-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
       module: norm,
-      source: "custom",
+      source: targetSource,
+      createdIn: targetCreatedIn,
       createdAt: Date.now(),
       fieldKeys: sectionData.fieldKeys || [],
     };

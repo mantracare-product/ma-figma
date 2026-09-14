@@ -91,6 +91,8 @@ export function useClientFields() {
       showAlways: fieldData.showAlways,
       sourceFormId: fieldData.sourceFormId,
       options: [],
+      source: "custom",
+      createdIn: "client",
     });
     return {
       id: created.id,

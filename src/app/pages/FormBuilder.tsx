@@ -78,7 +78,7 @@ interface FormField {
   allowOther?: boolean;
   defaultValue?: string;
   module?: FieldModule;
-  sourceType?: "system" | "custom";
+  sourceType?: "system" | "custom" | "template";
   sourceFieldKey?: string;
 }
 
@@ -202,7 +202,7 @@ export default function FormBuilder() {
    * Using a FieldDefinition directly avoids the React async state-update delay
    * that occurs when looking up a freshly-added custom field from the context.
    */
-  const addFormFieldFromDefinition = (sf: FieldDefinition, source: "system" | "custom") => {
+  const addFormFieldFromDefinition = (sf: FieldDefinition, source: "system" | "custom" | "template") => {
     const isAlreadyAdded = formFields.some(
       f => f.sourceFieldKey === sf.key && f.module === sf.module
     );
@@ -248,7 +248,7 @@ export default function FormBuilder() {
   };
 
   /** Look up a field in the registry then delegate to addFormFieldFromDefinition. */
-  const handleAddRegistryField = (fieldKey: string, module: FieldModule, source: "system" | "custom") => {
+  const handleAddRegistryField = (fieldKey: string, module: FieldModule, source: "system" | "custom" | "template") => {
     const fields = getAllFields(module);
     const sf = fields.find(f => f.key === fieldKey);
     if (!sf) return;

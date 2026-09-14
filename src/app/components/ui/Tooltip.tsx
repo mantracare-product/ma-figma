@@ -156,11 +156,12 @@ export function Tooltip({ children, text, placement = "top" }: TooltipProps) {
         createPortal(
           <div
             ref={tooltipRef}
-            className="fixed z-[9999] px-3 py-2 bg-[#1F2A44] text-white rounded-lg shadow-2xl text-xs font-medium pointer-events-none transition-opacity duration-200 ease-in-out max-w-xs"
+            className="fixed px-3 py-2 bg-[#1F2A44] text-white rounded-lg shadow-2xl text-xs font-medium pointer-events-none transition-opacity duration-200 ease-in-out max-w-xs"
             style={{
               top: `${position.top}px`,
               left: `${position.left}px`,
               opacity: position.top === 0 && position.left === 0 ? 0 : 1,
+              zIndex: 999999,
               whiteSpace: text.length > 50 ? "normal" : "nowrap",
             }}
           >

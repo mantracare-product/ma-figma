@@ -6427,13 +6427,14 @@ export default function Settings() {
                           <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
                           <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
                           <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                          <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Field Type</th>
                           <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
                           <th className="text-right px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                         </tr>
                       </thead>
                       <tbody key={`fields-${customFieldsTab}-${currentModule}`}>
                         {(() => {
-                          const currentFields = getCustomFields(currentModule).filter((field) =>
+                          const currentFields = getAllFields(currentModule).filter((field) =>
                             isFieldMatchingOrg(field, activeOrganization)
                           );
                           const sections = getAllSections(currentModule).filter((sec) =>
@@ -6444,23 +6445,47 @@ export default function Settings() {
                             if (!layoutSearchQuery.trim()) return true;
                             const q = layoutSearchQuery.toLowerCase();
                             const typeName = (FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType).toLowerCase();
+                            const originType = (field.source || "custom").toLowerCase();
                             return (
                               field.label.toLowerCase().includes(q) ||
                               field.key.toLowerCase().includes(q) ||
-                              typeName.includes(q)
+                              typeName.includes(q) ||
+                              originType.includes(q)
                             );
                           });
 
                           return filteredFields.map((field) => {
                             const assignedSection = sections.find((s) => s.fieldKeys?.includes(field.key) || s.id === field.sectionId);
-                            const typeName = FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
+                            const isListField =
+                              field.inputType === "list_open" ||
+                              field.inputType === "list_select" ||
+                              field.inputType === "select" ||
+                              field.inputType === "multiselect" ||
+                              field.inputType === "list";
+                            const typeName =
+                              field.inputType === "list_open"
+                                ? field.listEntryType === "structured"
+                                  ? "List (Open · Structured)"
+                                  : "List (Open · Tags)"
+                                : isListField
+                                ? field.selectionMode === "multiple" || field.inputType === "multiselect"
+                                  ? "List (Multi-Select)"
+                                  : "List (Select)"
+                                : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
 
                             // Type badge style
                             let typeBadgeStyle = "bg-blue-50 text-blue-700";
                             let TypeIcon = Type;
                             if (field.inputType === "table") { typeBadgeStyle = "bg-indigo-50 text-indigo-700"; TypeIcon = TableIcon; }
                             else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
-                            else if (field.inputType === "select" || field.inputType === "list") { typeBadgeStyle = "bg-emerald-50 text-emerald-700"; TypeIcon = ClipboardList; }
+                            else if (field.inputType === "list_open") {
+                              typeBadgeStyle = field.listEntryType === "structured" ? "bg-purple-50 text-purple-700" : "bg-emerald-50 text-emerald-700";
+                              TypeIcon = field.listEntryType === "structured" ? Layers : Tag;
+                            }
+                            else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
+                              typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
+                              TypeIcon = field.selectionMode === "multiple" ? Tag : ClipboardList;
+                            }
                             else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
                             else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
                             else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }
@@ -6472,6 +6497,9 @@ export default function Settings() {
                             else if (field.inputType === "rating") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Star; }
                             else if (field.inputType === "user") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = User; }
 
+                            const isSystem = field.source === "system";
+                            const isTemplate = field.source === "template";
+
                             return (
                               <tr key={`${currentModule}-${field.key}-${field.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
                                 <td className="px-5 py-3.5">
@@ -6479,6 +6507,15 @@ export default function Settings() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <span className="text-xs font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">{field.key}</span>
+                                </td>
+                                <td className="px-5 py-3.5">
+                                  {isSystem ? (
+                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
+                                  ) : isTemplate ? (
+                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
+                                  ) : (
+                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
+                                  )}
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold ${typeBadgeStyle}`}>
@@ -6495,41 +6532,45 @@ export default function Settings() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setEditingFieldId(field.id);
-                                        setEditingFieldData({
-                                          label: field.label,
-                                          type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
-                                          sectionId: assignedSection?.id || "",
-                                          required: field.required || false,
-                                          options: field.options || [
-                                            { id: 1, label: "Option 1", value: "option_1" },
-                                            { id: 2, label: "Option 2", value: "option_2" },
-                                          ],
-                                          tableColumns: field.tableColumns || [
-                                            { id: "col_1", name: "Item Name", type: "Text" },
-                                            { id: "col_2", name: "Quantity", type: "Number" },
-                                          ],
-                                        });
-                                      }}
-                                      className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-                                      title="Edit field"
-                                    >
-                                      <Edit className="w-3.5 h-3.5" />
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        if (confirm(`Delete field "${field.label}"?`)) {
-                                          deleteCustomField(currentModule, field.id);
-                                          toast.success("Field deleted");
-                                        }
-                                      }}
-                                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                                      title="Delete field"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
+                                    {!isSystem && (
+                                      <button
+                                        onClick={() => {
+                                          setEditingFieldId(field.id);
+                                          setEditingFieldData({
+                                            label: field.label,
+                                            type: FIELD_TYPE_REVERSE_MAP[field.inputType] || "String / Text",
+                                            sectionId: assignedSection?.id || "",
+                                            required: field.required || false,
+                                            options: field.options || [
+                                              { id: 1, label: "Option 1", value: "option_1" },
+                                              { id: 2, label: "Option 2", value: "option_2" },
+                                            ],
+                                            tableColumns: field.tableColumns || [
+                                              { id: "col_1", name: "Item Name", type: "Text" },
+                                              { id: "col_2", name: "Quantity", type: "Number" },
+                                            ],
+                                          });
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-[#111827] hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                                        title="Edit field"
+                                      >
+                                        <Edit className="w-3.5 h-3.5" />
+                                      </button>
+                                    )}
+                                    {!isSystem ? (
+                                      <button
+                                        onClick={() => {
+                                          if (confirm(`Delete field "${field.label}"?`)) {
+                                            deleteCustomField(currentModule, field.id);
+                                            toast.success("Field deleted");
+                                          }
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                        title="Delete field"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    ) : <span className="w-7" />}
                                   </div>
                                 </td>
                               </tr>
@@ -6560,14 +6601,17 @@ export default function Settings() {
                           const filteredSections = allSecs.filter((sec) => {
                             if (!layoutSearchQuery.trim()) return true;
                             const q = layoutSearchQuery.toLowerCase();
+                            const originType = (sec.source || "custom").toLowerCase();
                             return (
                               sec.title.toLowerCase().includes(q) ||
-                              (sec.description && sec.description.toLowerCase().includes(q))
+                              (sec.description && sec.description.toLowerCase().includes(q)) ||
+                              originType.includes(q)
                             );
                           });
 
                           return filteredSections.map((sec) => {
                             const isSystem = sec.source === "system";
+                            const isTemplate = sec.source === "template";
                             const assignedFieldCount = (sec.fieldKeys || []).length;
                             return (
                               <tr key={`${currentModule}-${sec.id}`} className="border-b border-gray-100 hover:bg-gray-50/60 transition-colors last:border-0">
@@ -6576,9 +6620,11 @@ export default function Settings() {
                                 </td>
                                 <td className="px-5 py-3.5">
                                   {isSystem ? (
-                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">System</span>
+                                    <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200/60">System</span>
+                                  ) : isTemplate ? (
+                                    <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-lg border border-purple-200/60">Template</span>
                                   ) : (
-                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">Custom</span>
+                                    <span className="text-xs font-semibold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-200/60">Custom</span>
                                   )}
                                 </td>
                                 <td className="px-5 py-3.5">

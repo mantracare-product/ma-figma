@@ -303,7 +303,7 @@ export function FieldInputRenderer({
   // ─────────────────────────────────────────────────────────────
   // 2. LIST SELECT (Single or Multiple)
   // ─────────────────────────────────────────────────────────────
-  if (effectiveType === "list_select" || effectiveType === "select" || effectiveType === "multiselect") {
+  if (effectiveType === "list_select" || effectiveType === "select" || effectiveType === "multiselect" || effectiveType === "list") {
     const isMultiple = subField?.selectionMode === "multiple" || field?.selectionMode === "multiple" || effectiveType === "multiselect";
 
     if (isMultiple) {
