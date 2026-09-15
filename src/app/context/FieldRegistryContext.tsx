@@ -117,6 +117,7 @@ export interface TableColumnConfig {
   name: string;
   type: string;
   inputType?: SubFieldInputType;
+  placeholder?: string;
   options?: FieldOption[];
   crmBindConfig?: CrmBindConfig;
   defaultValue?: any;
@@ -198,6 +199,27 @@ export function resolveColumnsOrSubFields(field?: { subFields?: SubFieldConfig[]
       .filter((c): c is SubFieldConfig => c !== null);
   }
   return [];
+}
+
+export function getSuggestedPlaceholderForType(type?: string, label?: string): string {
+  const t = (type || "").toLowerCase();
+  const name = label ? label.toLowerCase() : "";
+
+  if (t === "money" || t.includes("curr") || t.includes("price")) return "e.g. 0.00";
+  if (t === "number" || t.includes("num")) return "e.g. 0";
+  if (t === "email") return "e.g. name@company.com";
+  if (t === "tel" || t === "phone") return "e.g. +1 (555) 000-0000";
+  if (t === "link" || t.includes("url")) return "e.g. https://example.com";
+  if (t === "date") return "Select date...";
+  if (t === "date_time") return "Select date & time...";
+  if (t === "textarea" || t.includes("long") || t === "richtext") return name ? `e.g. Enter ${name} details...` : "e.g. Enter details...";
+  if (t === "crm_bind") return "Search and select record...";
+  if (t === "select" || t === "list_select" || t === "multiselect" || t === "list") return "Select an option...";
+  if (t === "yes_no") return "Select Yes / No";
+  if (t === "rating") return "Select rating (1-5)";
+  if (t === "signature") return "Sign here...";
+  if (t === "file") return "Upload document...";
+  return name ? `e.g. Enter ${name}...` : "e.g. Enter value...";
 }
 
 export interface FieldOption { id: number; label: string; value: string; }

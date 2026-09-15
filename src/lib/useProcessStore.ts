@@ -15,6 +15,13 @@ export interface StageChannelSource {
   source: string;
 }
 
+export interface TransferNumberItem {
+  id: string;
+  countryCode: string;
+  phoneNumber: string;
+  isPrimary?: boolean;
+}
+
 export interface CallTriggerSettings {
   timingType: "immediate" | "wait";
   waitDuration: number;
@@ -32,6 +39,17 @@ export interface CallTriggerSettings {
   retryRulesEnabled?: boolean;
   retryAttempts?: number;
   retryDelay?: number;
+  // Transfer Call
+  transferCallEnabled?: boolean;
+  transferNumbers?: TransferNumberItem[];
+  transferPrimaryCountryCode?: string;
+  transferPrimaryPhoneNumber?: string;
+  transferSecondaryCountryCode?: string;
+  transferSecondaryPhoneNumber?: string;
+  transferCountryCode?: string;
+  transferPhoneNumber?: string;
+  transferVoiceResponse?: string;
+  transferReason?: string;
 }
 
 export interface Stage {
@@ -80,6 +98,16 @@ export const DEFAULT_CALL_TRIGGER_SETTINGS: CallTriggerSettings = {
   retryRulesEnabled: false,
   retryAttempts: 3,
   retryDelay: 5,
+  transferCallEnabled: false,
+  transferNumbers: [
+    { id: "tn-1", countryCode: "+1", phoneNumber: "", isPrimary: true },
+  ],
+  transferPrimaryCountryCode: "+1",
+  transferPrimaryPhoneNumber: "",
+  transferSecondaryCountryCode: "+1",
+  transferSecondaryPhoneNumber: "",
+  transferVoiceResponse: "Please hold while I transfer your call",
+  transferReason: "",
 };
 
 export function getDefaultCallTriggerSettings(): CallTriggerSettings {

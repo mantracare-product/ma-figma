@@ -20,11 +20,12 @@ import type {
   CrmBindConfig,
   FieldInputType,
 } from "../../context/FieldRegistryContext";
-import { resolveColumnsOrSubFields, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
+import { resolveColumnsOrSubFields, CURRENCY_SYMBOLS, getSuggestedPlaceholderForType } from "../../context/FieldRegistryContext";
 import { useCrmBindOptions } from "./useCrmBindOptions";
 import { useDynamicListOptions } from "./useDynamicListOptions";
 import { RichTextEditor } from "./RichTextEditor";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
+import { AdminSelect } from "../ui/AdminSelect";
 
 export type FieldRendererMode = "runtime" | "admin_default";
 
@@ -91,8 +92,8 @@ function RatingInput({
               <Star
                 className={`${starSize} transition-colors ${
                   isFilled
-                    ? "text-amber-400 fill-amber-400 drop-shadow-xs"
-                    : "text-slate-200 fill-slate-50 hover:text-amber-300"
+                    ? "text-blue-500 fill-blue-500 drop-shadow-xs"
+                    : "text-slate-200 fill-slate-50 hover:text-blue-300"
                 }`}
               />
             </button>
@@ -198,7 +199,7 @@ function MultiSelectDropdown({
       <PopoverContent
         align="start"
         sideOffset={4}
-        className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0 z-[9999] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
+        className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0 z-[100005] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
       >
         {options.length > 3 && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[11px]">
@@ -255,6 +256,162 @@ function MultiSelectDropdown({
   );
 }
 
+interface TableInputRendererProps {
+  field?: Partial<FieldDefinition>;
+  value: any;
+  onChange: (val: any) => void;
+  mode: FieldRendererMode;
+  disabled: boolean;
+  recordData?: Record<string, any>;
+  isAdminDefault: boolean;
+}
+
+function TableInputRenderer({
+  field,
+  value,
+  onChange,
+  mode,
+  disabled,
+  recordData,
+  isAdminDefault,
+}: TableInputRendererProps) {
+  const cols = resolveColumnsOrSubFields(field);
+  const defaultTemplateRows: Record<string, any>[] =
+    Array.isArray(field?.defaultValue) && field.defaultValue.length > 0
+      ? field.defaultValue
+      : [];
+
+  const effectiveRows: Record<string, any>[] =
+    Array.isArray(value) && value.length > 0
+      ? value
+      : (mode === "runtime" && defaultTemplateRows.length > 0)
+      ? defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_default_${i}_${Date.now()}` }))
+      : Array.isArray(value)
+      ? value
+      : [];
+
+  const rows = effectiveRows;
+
+  // Sync initial default rows to parent state if client record is empty
+  useEffect(() => {
+    if (mode === "runtime" && (!value || (Array.isArray(value) && value.length === 0)) && defaultTemplateRows.length > 0) {
+      onChange(defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_init_${Date.now()}_${i}` })));
+    }
+  }, [mode]);
+
+  const handleCellChange = (rIdx: number, colId: string, cellVal: any) => {
+    const updated = [...rows];
+    updated[rIdx] = { ...updated[rIdx], [colId]: cellVal };
+    onChange(updated);
+  };
+
+  const handleAddRow = () => {
+    const newRow: Record<string, any> = { id: `row_${Date.now()}` };
+    const templateRow = defaultTemplateRows.length > 0 ? defaultTemplateRows[0] : undefined;
+    cols.forEach((col) => {
+      newRow[col.id] = col.defaultValue ?? (templateRow ? templateRow[col.id] : undefined) ?? "";
+    });
+    onChange([...rows, newRow]);
+  };
+
+  const handleRemoveRow = (rIdx: number) => {
+    onChange(rows.filter((_, i) => i !== rIdx));
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {rows.length === 0 ? (
+        <div className="p-4 text-center border border-slate-200 rounded-xl bg-white shadow-2xs">
+          <p className="text-xs text-slate-400">
+            {isAdminDefault ? "Table starts empty by default." : "No entries added yet."}
+          </p>
+          {!disabled && (
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer bg-transparent p-0"
+              >
+                <Plus className="w-3 h-3" />
+                <span>{isAdminDefault ? "Pre-seed a Default Row" : "Add Row"}</span>
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-200">
+                  <th className="w-8 px-2.5 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
+                    #
+                  </th>
+                  {cols.map((col) => (
+                    <th
+                      key={col.id}
+                      className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[120px]"
+                    >
+                      {col.name}
+                    </th>
+                  ))}
+                  <th className="w-8 px-2 py-2 text-center" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((row, rIdx) => (
+                  <tr key={row.id || rIdx} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
+                      {rIdx + 1}
+                    </td>
+                    {cols.map((col) => (
+                      <td key={col.id} className="px-2 py-1.5">
+                        <FieldInputRenderer
+                          subField={col}
+                          value={row[col.id]}
+                          onChange={(val) => handleCellChange(rIdx, col.id, val)}
+                          mode={mode}
+                          disabled={disabled}
+                          isSubField={true}
+                          recordData={recordData}
+                        />
+                      </td>
+                    ))}
+                    <td className="px-2 py-1.5 text-center">
+                      {!disabled && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveRow(rIdx)}
+                          className="p-1 text-slate-300 hover:text-red-600 rounded cursor-pointer"
+                          title="Delete row"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!disabled && (
+            <div className="flex justify-end p-2 bg-slate-50/50 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleAddRow}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer bg-transparent p-0"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Add Row</span>
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FieldInputRenderer({
   field,
   subField,
@@ -272,11 +429,11 @@ export function FieldInputRenderer({
   const effectiveListBindConfig = subField?.listBindConfig || field?.listBindConfig;
   const { options: dynamicOptions } = useDynamicListOptions(effectiveListBindConfig, effectiveOptions, recordData);
   const effectiveCrmConfig: CrmBindConfig | undefined = subField?.crmBindConfig || field?.crmBindConfig;
+  const label: string = subField?.name || field?.label || "Field";
   const effectivePlaceholder: string =
     subField?.placeholder ||
     field?.placeholder ||
-    (mode === "admin_default" ? "Set default value..." : "Enter value...");
-  const label: string = subField?.name || field?.label || "Field";
+    (mode === "admin_default" ? "Set default value..." : getSuggestedPlaceholderForType(effectiveType, label));
 
   // Mode-based styling tokens
   const isAdminDefault = mode === "admin_default";
@@ -321,22 +478,21 @@ export function FieldInputRenderer({
     }
 
     // Single select mode
+    const currentSingleVal = typeof value === "string" ? value : Array.isArray(value) && value.length > 0 ? value[0] : "";
     return (
-      <select
-        value={typeof value === "string" ? value : Array.isArray(value) && value.length > 0 ? value[0] : ""}
+      <AdminSelect
+        value={currentSingleVal}
         disabled={disabled}
-        onChange={(e) => onChange(e.target.value)}
-        className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer ${borderClass} ${
-          disabled ? "bg-slate-50 text-slate-400 cursor-not-allowed" : ""
-        }`}
-      >
-        <option value="">{isAdminDefault ? "— No Default (Empty) —" : "Select an option..."}</option>
-        {dynamicOptions.map((opt) => (
-          <option key={opt.id} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+        onChange={(val) => onChange(val)}
+        placeholder={isAdminDefault ? "— No Default (Empty) —" : (effectivePlaceholder || "Select an option...")}
+        options={dynamicOptions.map((opt) => ({
+          value: opt.value,
+          label: opt.label,
+          subtitle: (opt as any).subtitle,
+        }))}
+        size="sm"
+        triggerClassName={borderClass}
+      />
     );
   }
 
@@ -547,140 +703,16 @@ export function FieldInputRenderer({
   // 6. TABLE (Matrix / Grid with Typed Columns)
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "table" && !isSubField) {
-    const cols = resolveColumnsOrSubFields(field);
-    const defaultTemplateRows: Record<string, any>[] =
-      Array.isArray(field?.defaultValue) && field.defaultValue.length > 0
-        ? field.defaultValue
-        : [];
-
-    const effectiveRows: Record<string, any>[] =
-      Array.isArray(value) && value.length > 0
-        ? value
-        : (mode === "runtime" && defaultTemplateRows.length > 0)
-        ? defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_default_${i}_${Date.now()}` }))
-        : Array.isArray(value)
-        ? value
-        : [];
-
-    const rows = effectiveRows;
-
-    // Sync initial default rows to parent state if client record is empty
-    useEffect(() => {
-      if (mode === "runtime" && (!value || (Array.isArray(value) && value.length === 0)) && defaultTemplateRows.length > 0) {
-        onChange(defaultTemplateRows.map((r, i) => ({ ...r, id: r.id || `row_init_${Date.now()}_${i}` })));
-      }
-    }, [mode]);
-
-    const handleCellChange = (rIdx: number, colId: string, cellVal: any) => {
-      const updated = [...rows];
-      updated[rIdx] = { ...updated[rIdx], [colId]: cellVal };
-      onChange(updated);
-    };
-
-    const handleAddRow = () => {
-      const newRow: Record<string, any> = { id: `row_${Date.now()}` };
-      const templateRow = defaultTemplateRows.length > 0 ? defaultTemplateRows[0] : undefined;
-      cols.forEach((col) => {
-        newRow[col.id] = col.defaultValue ?? (templateRow ? templateRow[col.id] : undefined) ?? "";
-      });
-      onChange([...rows, newRow]);
-    };
-
-    const handleRemoveRow = (rIdx: number) => {
-      onChange(rows.filter((_, i) => i !== rIdx));
-    };
-
     return (
-      <div className="space-y-1.5">
-        {rows.length === 0 ? (
-          <div className="p-4 text-center border border-slate-200 rounded-xl bg-white shadow-2xs">
-            <p className="text-xs text-slate-400">
-              {isAdminDefault ? "Table starts empty by default." : "No entries added yet."}
-            </p>
-            {!disabled && (
-              <div className="flex justify-end pt-2">
-                <button
-                  type="button"
-                  onClick={handleAddRow}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer bg-transparent p-0"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>{isAdminDefault ? "Pre-seed a Default Row" : "Add Row"}</span>
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200">
-                    <th className="w-8 px-2.5 py-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider text-center">
-                      #
-                    </th>
-                    {cols.map((col) => (
-                      <th
-                        key={col.id}
-                        className="px-3 py-2 text-[11px] font-bold text-slate-600 uppercase tracking-wider min-w-[120px]"
-                      >
-                        {col.name}
-                      </th>
-                    ))}
-                    <th className="w-8 px-2 py-2 text-center" />
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.map((row, rIdx) => (
-                    <tr key={row.id || rIdx} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-2.5 py-2 text-center text-[10px] font-bold text-slate-400 bg-slate-50/30">
-                        {rIdx + 1}
-                      </td>
-                      {cols.map((col) => (
-                        <td key={col.id} className="px-2 py-1.5">
-                          <FieldInputRenderer
-                            subField={col}
-                            value={row[col.id]}
-                            onChange={(val) => handleCellChange(rIdx, col.id, val)}
-                            mode={mode}
-                            disabled={disabled}
-                            isSubField={true}
-                            recordData={recordData}
-                          />
-                        </td>
-                      ))}
-                      <td className="px-2 py-1.5 text-center">
-                        {!disabled && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveRow(rIdx)}
-                            className="p-1 text-slate-300 hover:text-red-600 rounded cursor-pointer"
-                            title="Delete row"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {!disabled && (
-              <div className="flex justify-end p-2 bg-slate-50/50 border-t border-slate-100">
-                <button
-                  type="button"
-                  onClick={handleAddRow}
-                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 cursor-pointer bg-transparent p-0"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Add Row</span>
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      <TableInputRenderer
+        field={field}
+        value={value}
+        onChange={onChange}
+        mode={mode}
+        disabled={disabled}
+        recordData={recordData}
+        isAdminDefault={isAdminDefault}
+      />
     );
   }
 
@@ -938,26 +970,19 @@ function CrmBindInput({
 
   // Single mode
   const currentVal = typeof value === "string" ? value : "";
-  const matchExists = !currentVal || options.some((o) => o.value === currentVal);
 
   return (
-    <select
+    <AdminSelect
       value={currentVal}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-    >
-      <option value="">{isAdminDefault ? "— No Default (Select on Record) —" : placeholder || "Select bound record..."}</option>
-      {!matchExists && (
-        <option value={currentVal} disabled>
-          [Unknown / Deleted Record] ({currentVal})
-        </option>
-      )}
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label} {opt.subtitle ? `(${opt.subtitle})` : ""}
-        </option>
-      ))}
-    </select>
+      onChange={(val) => onChange(val)}
+      placeholder={isAdminDefault ? "— No Default (Select on Record) —" : (placeholder || "Select bound record...")}
+      options={options.map((opt) => ({
+        value: opt.value,
+        label: opt.label,
+        subtitle: opt.subtitle,
+      }))}
+      size="sm"
+    />
   );
 }

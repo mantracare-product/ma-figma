@@ -25,11 +25,12 @@ import type {
   ScopingRule, FieldPermissions, CrmBindModule, SubFieldConfig,
   SubFieldInputType, ListBindConfig,
 } from "../../../context/FieldRegistryContext";
-import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS } from "../../../context/FieldRegistryContext";
+import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS, getSuggestedPlaceholderForType } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { useDynamicListOptions } from "../../../components/fields/useDynamicListOptions";
+import { AdminSelect } from "../../../components/ui/AdminSelect";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 // Unrecognised values silently fall back to "client" — no error thrown.
@@ -130,9 +131,9 @@ function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
       { id: 2, label: "Option 2", value: "option_2" },
     ],
     tableColumns: [
-      { id: "col_1", name: "Item Name", type: "Text" },
-      { id: "col_2", name: "Quantity", type: "Number" },
-      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR" },
+      { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
+      { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
+      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
     ],
     crmBindModule: "teamMember",
     crmBindSelectionMode: "single",
@@ -186,23 +187,29 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
       { id: 1, label: "Option 1", value: "option_1" },
       { id: 2, label: "Option 2", value: "option_2" },
     ],
-    tableColumns: f.tableColumns ?? (f.subFields ? f.subFields.map(sf => ({
-      id: sf.id,
-      name: sf.name,
-      type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
-      inputType: sf.inputType,
-      options: sf.options,
-      currency: sf.currency,
-      selectionMode: sf.selectionMode || "single",
-      crmBindConfig: sf.crmBindConfig,
-      maxRating: sf.maxRating || 5,
-      listBindConfig: sf.listBindConfig,
-      defaultValue: sf.defaultValue,
-    })) : [
-      { id: "col_1", name: "Item Name", type: "Text" },
-      { id: "col_2", name: "Quantity", type: "Number" },
-      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR" },
-    ]),
+    tableColumns: f.tableColumns
+      ? f.tableColumns.map(col => ({
+          ...col,
+          placeholder: col.placeholder ?? "",
+        }))
+      : (f.subFields ? f.subFields.map(sf => ({
+          id: sf.id,
+          name: sf.name,
+          type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
+          inputType: sf.inputType,
+          placeholder: sf.placeholder ?? "",
+          options: sf.options,
+          currency: sf.currency,
+          selectionMode: sf.selectionMode || "single",
+          crmBindConfig: sf.crmBindConfig,
+          maxRating: sf.maxRating || 5,
+          listBindConfig: sf.listBindConfig,
+          defaultValue: sf.defaultValue,
+        })) : [
+          { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
+          { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
+          { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
+        ]),
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
     crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
     selectionMode: f.inputType === "multiselect" ? "multiple" : f.selectionMode || f.crmBindConfig?.selectionMode || "single",
@@ -311,6 +318,7 @@ export function AdminFieldDrawer({
       name: f.label,
       type: colType,
       inputType: (f.inputType as SubFieldInputType) || "text",
+      placeholder: f.placeholder || "",
       options: f.options ? [...f.options] : undefined,
       currency: f.currency || (f.inputType === "money" ? "INR" : undefined),
       selectionMode: f.selectionMode || "single",
@@ -347,9 +355,9 @@ export function AdminFieldDrawer({
 
   const validate = (): boolean => {
     const errs: { label?: string; key?: string } = {};
-    if (!form.label.trim()) errs.label = "Field name is required.";
-    if (!form.key.trim()) errs.key = "Machine key is required.";
-    else if (!/^[a-z0-9_]+$/.test(form.key)) errs.key = "Key may only contain a-z, 0-9, and underscores.";
+    if (!form.label.trim()) errs.label = "Field name is required";
+    if (!form.key.trim()) errs.key = "Field key is required";
+    else if (!/^[a-z0-9_]+$/.test(form.key)) errs.key = "Only lowercase letters, numbers, and underscores";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -377,7 +385,7 @@ export function AdminFieldDrawer({
       source: isEdit && field ? field.source : targetSource,
       createdIn: isEdit && field ? field.createdIn : targetCreatedIn,
       inputType: form.inputType,
-      placeholder: form.placeholder.trim() || `Enter ${form.label.toLowerCase()}`,
+      placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(form.inputType, form.label),
       required: form.required, showAlways: form.showAlways,
       userVisibility: form.userVisibility,
       sectionId: form.sectionId || undefined,
@@ -409,7 +417,7 @@ export function AdminFieldDrawer({
       maxRating: form.inputType === "rating" ? (form.maxRating || 5) : undefined,
       listBindConfig: isList && activeListType !== "open" && form.optionSourceMode === "bind" && form.listBindConfig ? {
         ...form.listBindConfig,
-        sourceType: form.listBindConfig.sourceType === "group" ? "open_list" : form.listBindConfig.sourceType,
+        sourceType: (form.listBindConfig.sourceType === "group" || form.listBindConfig.sourceType === "field") ? "open_list" : form.listBindConfig.sourceType,
       } : undefined,
     };
     if (isEdit && field) {
@@ -425,7 +433,18 @@ export function AdminFieldDrawer({
   const addOption = () => setForm(p => ({ ...p, options: [...p.options, { id: Date.now(), label: `Option ${p.options.length + 1}`, value: `option_${p.options.length + 1}` }] }));
   const updateOption = (idx: number, label: string) => setForm(p => ({ ...p, options: p.options.map((o, i) => i === idx ? { ...o, label, value: label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") } : o) }));
   const removeOption = (idx: number) => setForm(p => ({ ...p, options: p.options.filter((_, i) => i !== idx) }));
-  const addColumn = () => setForm(p => ({ ...p, tableColumns: [...p.tableColumns, { id: `col_${Date.now()}`, name: "New Column", type: "Text" }] }));
+  const addColumn = () => setForm(p => ({
+    ...p,
+    tableColumns: [
+      ...p.tableColumns,
+      {
+        id: `col_${Date.now()}`,
+        name: form.inputType === "table" ? `Column ${p.tableColumns.length + 1}` : `Sub-field ${p.tableColumns.length + 1}`,
+        type: "Text",
+        placeholder: "",
+      },
+    ],
+  }));
   const updateColumn = (idx: number, patch: Partial<TableColumnConfig>) => setForm(p => ({ ...p, tableColumns: p.tableColumns.map((c, i) => i === idx ? { ...c, ...patch } : c) }));
   const removeColumn = (idx: number) => setForm(p => ({ ...p, tableColumns: p.tableColumns.filter((_, i) => i !== idx) }));
 
@@ -435,6 +454,12 @@ export function AdminFieldDrawer({
     form.inputType === "select" ||
     form.inputType === "multiselect" ||
     form.inputType === "list" ||
+    (form.inputType as any) === "group_repeatable";
+
+  const isComposite =
+    form.inputType === "table" ||
+    form.inputType === "group" ||
+    (form.inputType === "list_open" && form.listEntryType === "structured") ||
     (form.inputType as any) === "group_repeatable";
 
   const activeListType: "open" | "select" | "multi_select" =
@@ -497,33 +522,25 @@ export function AdminFieldDrawer({
         )}
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5">
 
           {/* Module */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Module <span className="text-red-500">*</span></label>
-            <div className="relative" ref={modulePickerRef}>
-              <button type="button" disabled={isEdit || isReadOnly || lockModule}
-                onClick={() => !isEdit && !isReadOnly && !lockModule && setModulePickerOpen(v => !v)}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white flex items-center justify-between transition-all ${isEdit || isReadOnly || lockModule ? "border-gray-100 bg-gray-50 cursor-not-allowed" : "border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"}`}
-              >
-                <span className={`font-medium ${isEdit || isReadOnly || lockModule ? "text-gray-400" : "text-[#111827]"}`}>{modLabel}</span>
-                {!isEdit && !isReadOnly && !lockModule && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${modulePickerOpen ? "rotate-180" : ""}`} />}
-              </button>
-              {modulePickerOpen && !isEdit && !isReadOnly && !lockModule && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                  {MODULE_OPTIONS.map(mod => (
-                    <button key={mod.value} type="button"
-                      onClick={() => { setForm(p => ({ ...p, module: mod.value })); setModulePickerOpen(false); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${form.module === mod.value ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
-                    >
-                      <span>{mod.label}</span>
-                      {form.module === mod.value && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Module <span className="text-red-500">*</span>
+              </label>
+              <InfoTooltip text="The CRM entity module this custom field belongs to." size="sm" />
             </div>
+            <AdminSelect
+              value={form.module}
+              disabled={isEdit || isReadOnly || lockModule}
+              onChange={(val) => setForm((p) => ({ ...p, module: val as Exclude<FieldModule, "deal"> }))}
+              options={MODULE_OPTIONS.map((mod) => ({
+                value: mod.value,
+                label: mod.label,
+              }))}
+            />
             {(isEdit || lockModule) && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
           </div>
 
@@ -698,7 +715,10 @@ export function AdminFieldDrawer({
 
           {/* Field Name */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Name <span className="text-red-500">*</span></label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">Field Name <span className="text-red-500">*</span></label>
+              <InfoTooltip text="User-facing label displayed across client records, tables, and forms." size="sm" />
+            </div>
             <input type="text" value={form.label} readOnly={isReadOnly}
               onChange={e => handleLabelChange(e.target.value)} placeholder="e.g. Policy Coverage"
               className={`${isReadOnly ? `${inputCls()} ${roCls}` : inputCls(errors.label)}`}
@@ -708,35 +728,43 @@ export function AdminFieldDrawer({
 
           {/* Machine Key */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Machine Key <span className="text-red-500">*</span>
-              <span className="ml-1.5 text-[10px] font-normal text-gray-400">(auto-generated · used in templates)</span>
-            </label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Machine Key <span className="text-red-500">*</span>
+              </label>
+              <InfoTooltip text="Auto-generated unique identifier used in document templates and workflows. Locked after creation to preserve references." size="sm" />
+            </div>
             <input type="text" value={form.key} readOnly={isReadOnly || isEdit}
               onChange={e => !isEdit && !isReadOnly && setForm(p => ({ ...p, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") }))}
               placeholder="policy_coverage"
               className={`${isEdit || isReadOnly ? `${inputCls()} ${roCls} font-mono` : `${inputCls(errors.key)} font-mono`}`}
             />
             {errors.key && <p className="text-[11px] text-red-500 mt-1">{errors.key}</p>}
-            {(isEdit || isReadOnly) && <p className="text-[11px] text-gray-400 mt-1">Locked after creation to preserve variable references.</p>}
           </div>
 
           {/* Field Type */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Field Type</label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">Field Type</label>
+              <InfoTooltip text="Select the data type and user input format for this field." size="sm" />
+            </div>
             <div className="relative" ref={typePickerRef}>
               <button type="button" disabled={isReadOnly}
                 onClick={() => !isReadOnly && setTypePickerOpen(v => !v)}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white flex items-center justify-between transition-all ${isReadOnly ? "border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed" : "border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"}`}
+                className={`w-full px-3.5 py-2 bg-white border rounded-lg text-xs font-medium flex items-center justify-between transition-all select-none min-h-[38px] ${
+                  isReadOnly
+                    ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                    : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs"
+                }`}
               >
-                <span className={`font-medium ${isReadOnly ? "text-gray-400" : "text-[#111827]"}`}>{typeLabel}</span>
-                {!isReadOnly && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${typePickerOpen ? "rotate-180" : ""}`} />}
+                <span className={`font-medium ${isReadOnly ? "text-slate-400" : "text-slate-800"}`}>{typeLabel}</span>
+                {!isReadOnly && <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${typePickerOpen ? "rotate-180" : ""}`} />}
               </button>
               {typePickerOpen && !isReadOnly && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-y-auto" style={{ maxHeight: 300 }}>
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-y-auto p-1" style={{ maxHeight: 300 }}>
                   {FIELD_TYPE_GROUPS.map(grp => (
-                    <div key={grp.group}>
-                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50 border-b border-gray-100">{grp.group}</div>
+                    <div key={grp.group} className="mb-1 last:mb-0">
+                      <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80 rounded-md mb-0.5">{grp.group}</div>
                       {grp.items.map(item => {
                         const isItemActive = item.value === "list_select" ? isList : form.inputType === item.value;
                         return (
@@ -751,10 +779,12 @@ export function AdminFieldDrawer({
                               }
                               setTypePickerOpen(false);
                             }}
-                            className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${isItemActive ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
+                            className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                              isItemActive ? "bg-blue-50/90 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
+                            }`}
                           >
                             <span>{item.label}</span>
-                            {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600" />}
+                            {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />}
                           </button>
                         );
                       })}
@@ -769,16 +799,15 @@ export function AdminFieldDrawer({
           {isList && (
             <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-gray-700">
+                <label className="block text-xs font-semibold text-slate-700">
                   List Type <span className="text-red-500">*</span>
                 </label>
                 <InfoTooltip text="Select whether the list is single-choice, multiple-choice, or open for user-added entries." size="sm" />
               </div>
-              <select
+              <AdminSelect
                 value={activeListType}
                 disabled={isReadOnly}
-                onChange={(e) => {
-                  const val = e.target.value as "open" | "select" | "multi_select";
+                onChange={(val) => {
                   if (val === "open") {
                     setForm((p) => ({
                       ...p,
@@ -803,65 +832,81 @@ export function AdminFieldDrawer({
                     }));
                   }
                 }}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
-                  isReadOnly ? roCls : "border-gray-200 hover:border-gray-300 text-gray-900"
-                }`}
-              >
-                <option value="select">Select (Single Choice Dropdown)</option>
-                <option value="multi_select">Multi-Select (Multiple Choice)</option>
-                <option value="open">Open List (User Added Entries)</option>
-              </select>
+                options={[
+                  { value: "select", label: "Select (Single Choice Dropdown)", tooltip: "Users pick a single value from options" },
+                  { value: "multi_select", label: "Multi-Select (Multiple Choice)", tooltip: "Users can choose multiple options" },
+                  { value: "open", label: "Open List (User Added Entries)", tooltip: "Users add chips or repeatable records" },
+                ]}
+              />
             </div>
           )}
 
-          {/* Placeholder */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Placeholder <span className="text-[10px] font-normal text-gray-400">(optional)</span>
-            </label>
-            <input type="text" value={form.placeholder} readOnly={isReadOnly}
-              onChange={e => setForm(p => ({ ...p, placeholder: e.target.value }))}
-              placeholder="e.g. Enter policy coverage amount"
-              className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls()}
-            />
-          </div>
+          {/* Placeholder for non-composite fields */}
+          {!isComposite && form.inputType !== "signature" && form.inputType !== "file" && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Placeholder <span className="text-[10px] font-normal text-slate-400">(optional)</span>
+                </label>
+                <InfoTooltip text="Hint or example text displayed inside the field when empty to guide user input." size="sm" />
+              </div>
+              <input
+                type="text"
+                value={form.placeholder}
+                readOnly={isReadOnly}
+                onChange={e => setForm(p => ({ ...p, placeholder: e.target.value }))}
+                placeholder={getSuggestedPlaceholderForType(form.inputType, form.label)}
+                className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls()}
+              />
+            </div>
+          )}
+
+          {/* Composite Placeholder Notice */}
+          {isComposite && (
+            <div className="p-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <span className="font-semibold text-slate-700">Placeholders:</span>
+                <span>Configured individually for each column / sub-field below.</span>
+              </div>
+              <InfoTooltip text="Because this is a composite field, each column or sub-field has its own contextual placeholder matching its specific data type." size="sm" />
+            </div>
+          )}
 
           {/* Currency picker for money fields */}
           {form.inputType === "money" && (
             <div>
-              <label className="block text-xs font-semibold text-gray-700 mb-1.5">Currency</label>
-              <select
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700">Currency</label>
+                <InfoTooltip text="Select the currency denomination displayed alongside monetary amounts." size="sm" />
+              </div>
+              <AdminSelect
                 value={form.currency || "INR"}
                 disabled={isReadOnly}
-                onChange={(e) => setForm((p) => ({ ...p, currency: e.target.value }))}
-                className="w-full px-3.5 py-2.5 border border-gray-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
-              >
-                {Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => (
-                  <option key={code} value={code}>
-                    {symbol} {code}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setForm((p) => ({ ...p, currency: val }))}
+                options={Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => ({
+                  value: code,
+                  label: `${code} (${symbol})`,
+                  badge: symbol,
+                }))}
+              />
             </div>
           )}
 
           {/* Rating max stars configuration */}
           {form.inputType === "rating" && (
-            <div className="p-3.5 bg-amber-50/50 border border-amber-200 rounded-xl space-y-2.5">
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                  <Star className="w-4 h-4 text-blue-600 fill-blue-500/20" />
                   <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                     Maximum Rating (Stars)
                   </label>
+                  <InfoTooltip text="Choose the maximum rating score users can select for this rating field." size="sm" />
                 </div>
-                <span className="text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-md">
+                <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
                   {form.maxRating || 5} Stars
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500">
-                Choose the maximum rating stars users can select for this field.
-              </p>
               <div className="flex items-center gap-2">
                 {[3, 5, 10].map((num) => (
                   <button
@@ -877,7 +922,7 @@ export function AdminFieldDrawer({
                     }}
                     className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                       (form.maxRating || 5) === num
-                        ? "bg-amber-500 text-white border-amber-600 shadow-2xs"
+                        ? "bg-primary text-white border-primary shadow-2xs"
                         : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -900,7 +945,7 @@ export function AdminFieldDrawer({
                         defaultValue: p.defaultValue && Number(p.defaultValue) > val ? val : p.defaultValue,
                       }));
                     }}
-                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-amber-500 text-center"
+                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-center"
                   />
                 </div>
               </div>
@@ -909,7 +954,7 @@ export function AdminFieldDrawer({
 
           {/* Options & List Bind Configuration (for Select and Multi-Select) */}
           {isList && activeListType !== "open" && (
-            <div className="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+            <div className="space-y-3.5 p-4 bg-slate-50/70 border border-slate-200 rounded-xl">
               {/* Option Source Dropdown */}
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
@@ -918,11 +963,11 @@ export function AdminFieldDrawer({
                   </label>
                   <InfoTooltip text="Choose whether options are entered manually or dynamically bound from CRM records, tables, or open lists." size="sm" />
                 </div>
-                <select
+                <AdminSelect
                   value={form.optionSourceMode === "bind" ? "bind" : "manual"}
                   disabled={isReadOnly}
-                  onChange={(e) => {
-                    const mode = e.target.value as "manual" | "bind";
+                  onChange={(val) => {
+                    const mode = val as "manual" | "bind";
                     if (mode === "bind") {
                       setForm((p) => ({
                         ...p,
@@ -938,33 +983,39 @@ export function AdminFieldDrawer({
                       setForm((p) => ({ ...p, optionSourceMode: "manual" }));
                     }
                   }}
-                  className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
-                    isReadOnly ? roCls : "border-slate-200 hover:border-slate-300 text-slate-800"
-                  }`}
-                >
-                  <option value="manual">Manual Options</option>
-                  <option value="bind">Dynamic List Bind (Data Source)</option>
-                </select>
+                  options={[
+                    { value: "manual", label: "Manual Options", tooltip: "Define custom static choices for this field" },
+                    { value: "bind", label: "Dynamic List Bind (Data Source)", tooltip: "Dynamically populate options from CRM records, tables, or open lists" },
+                  ]}
+                />
               </div>
 
               {/* Dynamic List Bind Configuration Panel */}
               {form.optionSourceMode === "bind" ? (
-                <div className="space-y-3 bg-white p-3 rounded-lg border border-blue-200 shadow-2xs">
-                  <div className="flex items-center gap-2 text-xs font-bold text-blue-700">
-                    <Database className="w-3.5 h-3.5" />
-                    <span>Dynamic Data Binding Source</span>
+                <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
+                  <div className="flex items-center justify-between pb-0.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600">
+                        <Database className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Dynamic Data Binding Source</span>
+                    </div>
+                    <InfoTooltip text="Options for this list will be dynamically bound from the selected source at runtime on client records and forms." size="sm" />
                   </div>
 
                   {/* 1. Source Type Selector */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Data Source Type
-                    </label>
-                    <select
-                      value={form.listBindConfig?.sourceType || "open_list"}
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Data Source Type
+                      </label>
+                      <InfoTooltip text="Choose whether to bind to an open list, table field column, or CRM entity." size="sm" />
+                    </div>
+                    <AdminSelect
+                      value={form.listBindConfig?.sourceType === "field" ? "open_list" : (form.listBindConfig?.sourceType || "open_list")}
                       disabled={isReadOnly}
-                      onChange={(e) => {
-                        const newSourceType = e.target.value as "open_list" | "table" | "crm" | "field";
+                      onChange={(val) => {
+                        const newSourceType = val as "open_list" | "table" | "crm";
                         let defaultTargetKey = "";
                         let defaultColId = "";
                         if (newSourceType === "open_list" && availableOpenListFields.length > 0) {
@@ -973,8 +1024,6 @@ export function AdminFieldDrawer({
                         } else if (newSourceType === "table" && availableTableFields.length > 0) {
                           defaultTargetKey = availableTableFields[0].key;
                           defaultColId = availableTableFields[0].tableColumns?.[0]?.id || availableTableFields[0].subFields?.[0]?.id || "";
-                        } else if (newSourceType === "field" && availableListFields.length > 0) {
-                          defaultTargetKey = availableListFields[0].key;
                         }
 
                         setForm((p) => ({
@@ -987,162 +1036,159 @@ export function AdminFieldDrawer({
                           },
                         }));
                       }}
-                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="open_list">Bind to Open List (extract values from structured open list)</option>
-                      <option value="table">Table Field Column (extract distinct values from table)</option>
-                      <option value="crm">CRM Entity (Team Members, Clients, Services, Processes, Orgs)</option>
-                      <option value="field">Existing Custom List Field (mirror options)</option>
-                    </select>
+                      options={[
+                        { value: "open_list", label: "Bind to Open List", tooltip: "Extract values from structured open list" },
+                        { value: "table", label: "Table Field Column", tooltip: "Extract distinct values from table" },
+                        { value: "crm", label: "CRM Entity", tooltip: "Team Members, Clients, Services, Processes, Orgs" },
+                      ]}
+                    />
                   </div>
 
                   {/* 2. Target Field and Sub-field for Open List Source */}
                   {(form.listBindConfig?.sourceType === "open_list" || form.listBindConfig?.sourceType === ("group" as any)) && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-600">
                           Select Structured Open List
                         </label>
-                        {availableOpenListFields.length === 0 ? (
-                          <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
-                            No structured Open List fields exist in this module yet.
-                          </div>
-                        ) : (
-                          <select
-                            value={form.listBindConfig?.targetFieldKey || availableOpenListFields[0]?.key}
-                            disabled={isReadOnly}
-                            onChange={(e) => {
-                              setForm((p) => ({
-                                ...p,
-                                listBindConfig: {
-                                  ...p.listBindConfig!,
-                                  sourceType: "open_list",
-                                  targetFieldKey: e.target.value,
-                                  targetColumnOrSubFieldId: undefined,
-                                },
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
-                          >
-                            {availableOpenListFields.map((f) => (
-                              <option key={f.key} value={f.key}>
-                                {f.label} ({f.key})
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                        <InfoTooltip text="Select which structured open list in this module to pull options from." size="sm" />
                       </div>
+                      {availableOpenListFields.length === 0 ? (
+                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
+                          No structured Open List fields exist in this module yet.
+                        </div>
+                      ) : (
+                        <AdminSelect
+                          value={form.listBindConfig?.targetFieldKey || availableOpenListFields[0]?.key}
+                          disabled={isReadOnly}
+                          onChange={(val) => {
+                            setForm((p) => ({
+                              ...p,
+                              listBindConfig: {
+                                ...p.listBindConfig!,
+                                sourceType: "open_list",
+                                targetFieldKey: val,
+                                targetColumnOrSubFieldId: undefined,
+                              },
+                            }));
+                          }}
+                          options={availableOpenListFields.map((f) => ({
+                            value: f.key,
+                            label: f.label,
+                            badge: f.key,
+                          }))}
+                        />
+                      )}
                     </div>
                   )}
 
                   {/* 3. Target Field and Column for Table Source */}
                   {form.listBindConfig?.sourceType === "table" && (
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-600">
                           Select Table Field
                         </label>
-                        {availableTableFields.length === 0 ? (
-                          <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
-                            No Table fields exist in this module yet.
-                          </div>
-                        ) : (
-                          <select
-                            value={form.listBindConfig.targetFieldKey || availableTableFields[0]?.key}
-                            disabled={isReadOnly}
-                            onChange={(e) => {
-                              const targetTbl = availableTableFields.find((f) => f.key === e.target.value);
-                              const targetColId = targetTbl?.tableColumns?.[0]?.id || targetTbl?.subFields?.[0]?.id || "";
-                              setForm((p) => ({
-                                ...p,
-                                listBindConfig: {
-                                  ...p.listBindConfig!,
-                                  targetFieldKey: e.target.value,
-                                  targetColumnOrSubFieldId: targetColId,
-                                },
-                              }));
-                            }}
-                            className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
-                          >
-                            {availableTableFields.map((t) => (
-                              <option key={t.key} value={t.key}>
-                                {t.label} ({t.key})
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                        <InfoTooltip text="Select the table field in this module to extract unique column values from." size="sm" />
                       </div>
+                      {availableTableFields.length === 0 ? (
+                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
+                          No Table fields exist in this module yet.
+                        </div>
+                      ) : (
+                        <AdminSelect
+                          value={form.listBindConfig.targetFieldKey || availableTableFields[0]?.key}
+                          disabled={isReadOnly}
+                          onChange={(val) => {
+                            const targetTbl = availableTableFields.find((f) => f.key === val);
+                            const targetColId = targetTbl?.tableColumns?.[0]?.id || targetTbl?.subFields?.[0]?.id || "";
+                            setForm((p) => ({
+                              ...p,
+                              listBindConfig: {
+                                ...p.listBindConfig!,
+                                targetFieldKey: val,
+                                targetColumnOrSubFieldId: targetColId,
+                              },
+                            }));
+                          }}
+                          options={availableTableFields.map((t) => ({
+                            value: t.key,
+                            label: t.label,
+                            badge: t.key,
+                          }))}
+                        />
+                      )}
                     </div>
                   )}
 
                   {/* 4. Target CRM Module */}
                   {form.listBindConfig?.sourceType === "crm" && (
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                        CRM Entity Module
-                      </label>
-                      <select
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-600">
+                          CRM Entity Module
+                        </label>
+                        <InfoTooltip text="Select which CRM entity records to pull dynamically into this list." size="sm" />
+                      </div>
+                      <AdminSelect
                         value={form.listBindConfig.crmModule || "teamMember"}
                         disabled={isReadOnly}
-                        onChange={(e) => {
+                        onChange={(val) => {
                           setForm((p) => ({
                             ...p,
                             listBindConfig: {
                               ...p.listBindConfig!,
-                              crmModule: e.target.value as CrmBindModule,
+                              crmModule: val as CrmBindModule,
                               displayField: "name",
                             },
                           }));
                         }}
-                        className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
-                      >
-                        <option value="teamMember">Team Members</option>
-                        <option value="client">Clients</option>
-                        <option value="organization">Organizations</option>
-                        <option value="service">Services / Catalog</option>
-                        <option value="process">Processes</option>
-                      </select>
+                        options={[
+                          { value: "teamMember", label: "Team Members", tooltip: "Staff & doctors directory" },
+                          { value: "client", label: "Clients", tooltip: "Client profiles & contacts" },
+                          { value: "organization", label: "Organizations", tooltip: "Companies & organizations" },
+                          { value: "service", label: "Services / Catalog", tooltip: "Treatments, procedures & services" },
+                          { value: "process", label: "Processes", tooltip: "Workflows & pipeline stages" },
+                        ]}
+                      />
                     </div>
                   )}
 
                   {/* 5. Target Existing Custom Field */}
                   {form.listBindConfig?.sourceType === "field" && (
                     <div>
-                      <label className="block text-[11px] font-semibold text-slate-600 mb-1">
-                        Mirror From Field
-                      </label>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <label className="block text-[11px] font-semibold text-slate-600">
+                          Mirror From Field
+                        </label>
+                        <InfoTooltip text="Select another List field in this module to mirror options from." size="sm" />
+                      </div>
                       {availableListFields.length === 0 ? (
-                        <div className="text-xs text-amber-600 italic bg-amber-50 p-2 rounded border border-amber-200">
+                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
                           No other List fields found in this module.
                         </div>
                       ) : (
-                        <select
+                        <AdminSelect
                           value={form.listBindConfig.targetFieldKey || availableListFields[0]?.key}
                           disabled={isReadOnly}
-                          onChange={(e) => {
+                          onChange={(val) => {
                             setForm((p) => ({
                               ...p,
                               listBindConfig: {
                                 ...p.listBindConfig!,
-                                targetFieldKey: e.target.value,
+                                targetFieldKey: val,
                               },
                             }));
                           }}
-                          className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none cursor-pointer"
-                        >
-                          {availableListFields.map((f) => (
-                            <option key={f.key} value={f.key}>
-                              {f.label} ({f.options?.length || 0} options)
-                            </option>
-                          ))}
-                        </select>
+                          options={availableListFields.map((f) => ({
+                            value: f.key,
+                            label: f.label,
+                            badge: `${f.options?.length || 0} options`,
+                          }))}
+                        />
                       )}
                     </div>
                   )}
-
-                  <div className="p-2 bg-blue-50/70 border border-blue-100 rounded-lg text-[11px] text-blue-800 leading-relaxed">
-                    Options for this list will be dynamically bound from the selected source at runtime on client records and forms.
-                  </div>
                 </div>
               ) : (
                 /* Manual Options List */
@@ -1188,85 +1234,87 @@ export function AdminFieldDrawer({
 
           {/* CRM Bind configuration card */}
           {form.inputType === "crm_bind" && (
-            <div className="p-4 bg-blue-50/40 border border-blue-200 rounded-xl space-y-3.5">
-              <div className="flex items-center gap-2">
-                <Link2 className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">CRM Bind Configuration</span>
+            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
+              <div className="flex items-center justify-between pb-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600">
+                    <Link2 className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">CRM Bind Configuration</span>
+                </div>
+                <InfoTooltip text="CRM Bind fields dynamically pull records at runtime on client records. Client records and live data are not loaded in Admin." size="sm" />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Bind to Module</label>
-                <select
+
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Bind to Module</label>
+                  <InfoTooltip text="Values will dynamically pull from the selected module with real-time sync." size="sm" />
+                </div>
+                <AdminSelect
                   value={form.crmBindModule || "teamMember"}
                   disabled={isReadOnly}
-                  onChange={(e) => setForm((p) => ({ ...p, crmBindModule: e.target.value as CrmBindModule }))}
-                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 cursor-pointer"
-                >
-                  <option value="teamMember">Team Member (Staff / Doctors)</option>
-                  <option value="client">Client (Link to Client Record)</option>
-                  <option value="organization">Organization</option>
-                  <option value="service">Service (Treatments / Catalog)</option>
-                  <option value="process">Process (Workflows / Pipelines)</option>
-                </select>
-                <p className="text-[11px] text-slate-400">
-                  Values will dynamically pull from the selected module with real-time sync.
-                </p>
+                  onChange={(val) => setForm((p) => ({ ...p, crmBindModule: val as CrmBindModule }))}
+                  options={[
+                    { value: "teamMember", label: "Team Member", tooltip: "Staff / Doctors" },
+                    { value: "client", label: "Client", tooltip: "Link to Client Record" },
+                    { value: "organization", label: "Organization", tooltip: "Companies / Accounts" },
+                    { value: "service", label: "Service", tooltip: "Treatments / Catalog" },
+                    { value: "process", label: "Process", tooltip: "Workflows / Pipelines" },
+                  ]}
+                />
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-700">Selection Mode</label>
+
+              <div>
+                <div className="flex items-center gap-1.5 mb-2">
+                  <label className="text-xs font-semibold text-slate-700">Selection Mode</label>
+                  <InfoTooltip text="Choose whether users can link a single record or multiple records." size="sm" />
+                </div>
                 <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
                     <input
                       type="radio"
                       name="crmSelectionMode"
                       disabled={isReadOnly}
                       checked={form.crmBindSelectionMode !== "multiple"}
                       onChange={() => setForm((p) => ({ ...p, crmBindSelectionMode: "single" }))}
-                      className="text-blue-600"
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
-                    Single Record
+                    <span>Single Record</span>
                   </label>
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
                     <input
                       type="radio"
                       name="crmSelectionMode"
                       disabled={isReadOnly}
                       checked={form.crmBindSelectionMode === "multiple"}
                       onChange={() => setForm((p) => ({ ...p, crmBindSelectionMode: "multiple" }))}
-                      className="text-blue-600"
+                      className="w-4 h-4 text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer accent-blue-600"
                     />
-                    Multiple Records
+                    <span>Multiple Records</span>
                   </label>
                 </div>
-              </div>
-              <div className="p-2.5 bg-blue-100/50 border border-blue-200 rounded-lg flex items-start gap-2">
-                <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-blue-800 leading-relaxed">
-                  CRM Bind fields dynamically pull records at runtime on client records. Client records and live data are not loaded in Admin.
-                </p>
               </div>
             </div>
           )}
 
           {/* Open List Entry Format Dropdown */}
           {isList && activeListType === "open" && (
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5">
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
                   Open List Format
                 </label>
                 <InfoTooltip text="Plain Text Tags allows users to type chips/tags. Structured Sub-Fields allows repeatable mini-records with custom sub-fields." size="sm" />
               </div>
-              <select
+              <AdminSelect
                 value={form.listEntryType || "plain_text"}
                 disabled={isReadOnly}
-                onChange={(e) => setForm((p) => ({ ...p, listEntryType: e.target.value as "plain_text" | "structured" }))}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer font-medium ${
-                  isReadOnly ? roCls : "border-gray-200 hover:border-gray-300 text-gray-900"
-                }`}
-              >
-                <option value="plain_text">Plain Text Tags</option>
-                <option value="structured">Structured Sub-Fields</option>
-              </select>
+                onChange={(val) => setForm((p) => ({ ...p, listEntryType: val as "plain_text" | "structured" }))}
+                options={[
+                  { value: "plain_text", label: "Plain Text Tags", tooltip: "Users type simple chips or tags" },
+                  { value: "structured", label: "Structured Sub-Fields", tooltip: "Repeatable mini-records with sub-fields" },
+                ]}
+              />
             </div>
           )}
 
@@ -1337,21 +1385,20 @@ export function AdminFieldDrawer({
               </div>
               <div className="space-y-2">
                 {form.tableColumns.map((col, idx) => (
-                  <div key={col.id} className="space-y-2 p-2.5 border border-gray-200 rounded-xl bg-gray-50/50">
-                    <div className="flex items-center gap-2">
+                  <div key={col.id} className="space-y-2.5 p-3 border border-slate-200 rounded-xl bg-slate-50/60 shadow-2xs overflow-hidden">
+                    <div className="flex items-center gap-2 min-w-0">
                       <input
                         type="text"
                         value={col.name}
                         readOnly={isReadOnly}
                         onChange={(e) => updateColumn(idx, { name: e.target.value })}
                         placeholder={form.inputType === "table" ? "Column name" : "Sub-field name"}
-                        className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20"}`}
+                        className={`flex-1 min-w-0 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`}
                       />
-                      <select
+                      <AdminSelect
                         value={col.type}
                         disabled={isReadOnly}
-                        onChange={(e) => {
-                          const newType = e.target.value;
+                        onChange={(newType) => {
                           const patch: Partial<TableColumnConfig> = { type: newType };
                           if (newType === "Select" && (!col.options || col.options.length === 0)) {
                             patch.options = [
@@ -1372,31 +1419,50 @@ export function AdminFieldDrawer({
                           }
                           updateColumn(idx, patch);
                         }}
-                        className="px-2.5 py-2 border border-gray-200 rounded-lg text-xs bg-white focus:outline-none cursor-pointer font-medium"
-                      >
-                        <option value="Text">Text (Single Line)</option>
-                        <option value="Long Text">Long Text (Textarea)</option>
-                        <option value="Select">Selection List</option>
-                        <option value="Number">Number</option>
-                        <option value="Money">Money</option>
-                        <option value="Date">Date</option>
-                        <option value="Date & Time">Date & Time</option>
-                        <option value="Yes / No">Yes / No</option>
-                        <option value="Email">Email</option>
-                        <option value="Phone">Phone</option>
-                        <option value="Link">Link / URL</option>
-                        <option value="Rating">Rating (1-5)</option>
-                        <option value="crm_bind">CRM Bind</option>
-                      </select>
+                        size="sm"
+                        className="w-40 shrink-0 min-w-0"
+                        options={[
+                          { value: "Text", label: "Text (Single Line)" },
+                          { value: "Long Text", label: "Long Text (Textarea)" },
+                          { value: "Select", label: "Selection List" },
+                          { value: "Number", label: "Number" },
+                          { value: "Money", label: "Money / Currency" },
+                          { value: "Date", label: "Date" },
+                          { value: "Date & Time", label: "Date & Time" },
+                          { value: "Yes / No", label: "Yes / No" },
+                          { value: "Email", label: "Email" },
+                          { value: "Phone", label: "Phone" },
+                          { value: "Link", label: "Link / URL" },
+                          { value: "Rating", label: "Rating (1-5)" },
+                          { value: "crm_bind", label: "CRM Bind" },
+                        ]}
+                      />
                       {!isReadOnly && (
                         <button
                           type="button"
                           onClick={() => removeColumn(idx)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"
+                          className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                          title="Delete column"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
+                    </div>
+
+                    {/* Individual Column Placeholder */}
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 min-w-0">
+                      <span className="text-[11px] font-semibold text-slate-500 shrink-0 flex items-center gap-1">
+                        Placeholder:
+                      </span>
+                      <input
+                        type="text"
+                        value={col.placeholder || ""}
+                        readOnly={isReadOnly}
+                        onChange={(e) => updateColumn(idx, { placeholder: e.target.value })}
+                        placeholder={getSuggestedPlaceholderForType(col.type, col.name)}
+                        className={`flex-1 min-w-0 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${isReadOnly ? "cursor-not-allowed bg-slate-50 text-slate-400" : ""}`}
+                      />
+                      <InfoTooltip text={`Type-specific placeholder for ${col.name || 'this column'} (${col.type}). Shown inside cell inputs.`} size="sm" />
                     </div>
 
                     {/* Inline options editor & selection mode when column type is Select */}
@@ -1505,16 +1571,18 @@ export function AdminFieldDrawer({
                     {col.type === "Rating" && (
                       <div className="ml-2 pl-3 border-l-2 border-amber-300 py-1 flex items-center gap-2">
                         <span className="text-[11px] font-semibold text-slate-700">Max Stars:</span>
-                        <select
-                          value={col.maxRating || 5}
+                        <AdminSelect
+                          value={String(col.maxRating || 5)}
                           disabled={isReadOnly}
-                          onChange={(e) => updateColumn(idx, { maxRating: Number(e.target.value) || 5 })}
-                          className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
-                        >
-                          <option value={3}>3 Stars</option>
-                          <option value={5}>5 Stars</option>
-                          <option value={10}>10 Stars</option>
-                        </select>
+                          onChange={(val) => updateColumn(idx, { maxRating: Number(val) || 5 })}
+                          size="sm"
+                          className="w-28"
+                          options={[
+                            { value: "3", label: "3 Stars" },
+                            { value: "5", label: "5 Stars" },
+                            { value: "10", label: "10 Stars" },
+                          ]}
+                        />
                       </div>
                     )}
 
@@ -1522,16 +1590,17 @@ export function AdminFieldDrawer({
                     {col.type === "Money" && (
                       <div className="ml-2 pl-3 border-l-2 border-emerald-300 py-1 flex items-center gap-2">
                         <span className="text-[11px] font-semibold text-slate-700">Currency:</span>
-                        <select
+                        <AdminSelect
                           value={col.currency || "INR"}
                           disabled={isReadOnly}
-                          onChange={(e) => updateColumn(idx, { currency: e.target.value })}
-                          className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
-                        >
-                          {Object.entries(CURRENCY_SYMBOLS).map(([cCode, cSym]) => (
-                            <option key={cCode} value={cCode}>{cSym} {cCode}</option>
-                          ))}
-                        </select>
+                          onChange={(val) => updateColumn(idx, { currency: val })}
+                          size="sm"
+                          className="w-32"
+                          options={Object.entries(CURRENCY_SYMBOLS).map(([cCode, cSym]) => ({
+                            value: cCode,
+                            label: `${cCode} (${cSym})`,
+                          }))}
+                        />
                       </div>
                     )}
 
@@ -1540,24 +1609,26 @@ export function AdminFieldDrawer({
                       <div className="ml-2 pl-3 border-l-2 border-purple-300 py-1 space-y-1.5">
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-semibold text-slate-700">Bind Module:</span>
-                          <select
+                          <AdminSelect
                             value={col.crmBindConfig?.sourceModule || "teamMember"}
                             disabled={isReadOnly}
-                            onChange={(e) => updateColumn(idx, {
+                            onChange={(val) => updateColumn(idx, {
                               crmBindConfig: {
-                                sourceModule: e.target.value as CrmBindModule,
+                                sourceModule: val as CrmBindModule,
                                 displayField: "name",
                                 selectionMode: col.selectionMode || "single",
                               },
                             })}
-                            className="px-2 py-1 border border-gray-200 rounded text-xs bg-white focus:outline-none cursor-pointer"
-                          >
-                            <option value="teamMember">Team Member</option>
-                            <option value="client">Client</option>
-                            <option value="organization">Organization</option>
-                            <option value="service">Service</option>
-                            <option value="process">Process</option>
-                          </select>
+                            size="sm"
+                            className="w-40"
+                            options={[
+                              { value: "teamMember", label: "Team Member" },
+                              { value: "client", label: "Client" },
+                              { value: "organization", label: "Organization" },
+                              { value: "service", label: "Service" },
+                              { value: "process", label: "Process" },
+                            ]}
+                          />
                         </div>
                       </div>
                     )}
@@ -1569,24 +1640,24 @@ export function AdminFieldDrawer({
 
           {/* Default Value Configurator */}
           {!isReadOnly && form.inputType !== "signature" && form.inputType !== "file" && (
-            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Default Value (Optional)
-                </label>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Default Value (Optional)
+                  </label>
+                  <InfoTooltip text="Pre-fill new client records with this default value. Leave blank for no default." size="sm" />
+                </div>
                 {form.defaultValue !== undefined && form.defaultValue !== "" && (
                   <button
                     type="button"
                     onClick={() => setForm((p) => ({ ...p, defaultValue: undefined }))}
-                    className="text-[11px] text-slate-400 hover:text-red-500 cursor-pointer"
+                    className="text-[11px] font-medium text-slate-400 hover:text-red-500 cursor-pointer"
                   >
                     Clear
                   </button>
                 )}
               </div>
-              <p className="text-[11px] text-slate-500">
-                Pre-fill new client records with this default value.
-              </p>
               <FieldInputRenderer
                 field={{
                   inputType: form.inputType,
@@ -1602,7 +1673,7 @@ export function AdminFieldDrawer({
                   listEntryType: form.inputType === "list_open" ? form.listEntryType : undefined,
                   listBindConfig: form.optionSourceMode === "bind" ? form.listBindConfig : undefined,
                   subFields: form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null),
-                  placeholder: form.placeholder || `Default value for ${form.label || "field"}...`,
+                  placeholder: form.placeholder || getSuggestedPlaceholderForType(form.inputType, form.label),
                 }}
                 value={form.defaultValue}
                 onChange={(val) => setForm((p) => ({ ...p, defaultValue: val }))}
