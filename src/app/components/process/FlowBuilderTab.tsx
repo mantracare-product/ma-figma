@@ -62,7 +62,7 @@ type NodeType =
   | "call-transfer" | "call-transfer-human" | "call-transfer-ai" | "call-hangup"
   | "fetch-availability" | "fetch-field-value"
   | "send-email" | "send-sms" | "send-whatsapp"
-  | "field-update" | "assign-responsible" | "move-stage" | "move-process"
+  | "field-update" | "assign-responsible" | "move-stage" | "move-process" | "move-new-process"
   | "book-appointment" | "reschedule-appointment" | "cancel-appointment"
   | "webhook" | "api"
   | "idle-messages";
@@ -111,6 +111,7 @@ const NODE_TYPE_TO_STEP_KEY: Partial<Record<NodeType, string>> = {
   "assign-responsible": "assignhuman",
   "move-stage": "stagemovement",
   "move-process": "processmovement",
+  "move-new-process": "movetonewprocess",
   "book-appointment": "scheduleappointment",
   "reschedule-appointment": "scheduleappointment",
   "cancel-appointment": "scheduleappointment",
@@ -134,6 +135,7 @@ const NODE_TYPE_TO_ICON_KEY: Record<string, string> = {
   "assign-responsible": "usercheck",
   "move-stage": "gitbranch",
   "move-process": "zap",
+  "move-new-process": "gitbranch",
   "book-appointment": "calendar",
   "reschedule-appointment": "calendar",
   "cancel-appointment": "x",
@@ -152,7 +154,8 @@ const NODE_CATEGORIES = [
       { type: "condition" as NodeType, label: "Condition", icon: <Split className="w-4 h-4" />, desc: "Gate this step behind field or intent conditions" },
       { type: "wait" as NodeType, label: "Wait / Delay", icon: <Clock className="w-4 h-4" />, desc: "Delay this step before it runs" },
       { type: "parallel" as NodeType, label: "Parallel Branches", icon: <Layers className="w-4 h-4" />, desc: "Run this step alongside adjacent steps" },
-      { type: "move-process" as NodeType, label: "Process/Stage Movement", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a different process and select the target stage" },
+      { type: "move-process" as NodeType, label: "Assign Process / Stage", icon: <Workflow className="w-4 h-4" />, desc: "Move the contact to a specific process and stage" },
+      { type: "move-new-process" as NodeType, label: "Move to New Process", icon: <GitBranch className="w-4 h-4" />, desc: "Move user to a new process and start at its initial stage so the pipeline continues" },
       { type: "end" as NodeType, label: "End Workflow", icon: <XCircle className="w-4 h-4" />, desc: "Terminate the workflow" },
     ],
   },
@@ -217,6 +220,7 @@ const NODE_STYLE: Record<string, { bg: string; border: string; text: string; ico
   "assign-responsible":  { bg: "bg-indigo-50 dark:bg-indigo-900/20", border: "border-indigo-400", text: "text-indigo-700 dark:text-indigo-400" },
   "move-stage":          { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "move-process":        { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
+  "move-new-process":    { bg: "bg-purple-50 dark:bg-purple-900/20", border: "border-purple-400", text: "text-purple-700 dark:text-purple-400" },
   "book-appointment":    { bg: "bg-teal-50 dark:bg-teal-900/20",     border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "reschedule-appointment": { bg: "bg-teal-50 dark:bg-teal-900/20", border: "border-teal-400",   text: "text-teal-700 dark:text-teal-400" },
   "cancel-appointment":  { bg: "bg-rose-50 dark:bg-rose-900/20",     border: "border-rose-400",   text: "text-rose-700 dark:text-rose-400" },
@@ -256,6 +260,7 @@ const STEP_KEY_TO_NODE_TYPE: Record<string, NodeType> = {
   fieldupdate: "field-update",
   assignhuman: "assign-responsible",
   processmovement: "move-process",
+  movetonewprocess: "move-new-process",
   stagemovement: "move-stage",
   callaction: "call-transfer",
   callhangup: "call-hangup",

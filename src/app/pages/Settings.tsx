@@ -11686,7 +11686,16 @@ export default function Settings() {
         <SettingsMemberProfileDrawer
           isOpen={isTeamDrawerOpen}
           onClose={handleCloseTeamDrawer}
-          member={selectedTeamMember ? { name: (selectedTeamMember as any).name, email: (selectedTeamMember as any).email, role: (selectedTeamMember as any).role, phone: (selectedTeamMember as any).phone } : null}
+          member={selectedTeamMember ? {
+            id: (selectedTeamMember as any).id,
+            name: (selectedTeamMember as any).name || "",
+            email: (selectedTeamMember as any).email || "",
+            role: (selectedTeamMember as any).role || "",
+            phone: (selectedTeamMember as any).phone || "",
+            department: (selectedTeamMember as any).department || "",
+            canBookAppointments: (selectedTeamMember as any).canBookAppointments,
+            locations: (selectedTeamMember as any).locations,
+          } : null}
         />
 
         {/* OLD EXTERNAL MODALS REMOVED - NOW INSIDE DRAWER */}

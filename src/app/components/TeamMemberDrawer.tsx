@@ -411,19 +411,20 @@ export function TeamMemberDrawer({
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saved">("idle");
 
-  // Update personal info when member changes
-  useState(() => {
+  // Update personal info when member changes or drawer opens
+  useEffect(() => {
     if (member) {
-      setPersonalInfo(prev => ({
+      setPersonalInfo((prev) => ({
         ...prev,
-        fullName: member.name || prev.fullName,
-        email: member.email || prev.email,
-        phone: member.phone || prev.phone,
-        role: member.role || prev.role,
-        department: member.department || prev.department,
+        fullName: member.name || "",
+        email: member.email || "",
+        phone: member.phone || "",
+        role: member.role || prev.role || "Admin",
+        department: member.department || prev.department || "Engineering",
       }));
+      setHasUnsavedChanges(false);
     }
-  });
+  }, [member, isOpen]);
 
   const monthCells = buildMonthCells(viewDate);
   const weekDates = getWeekDates(viewDate);
@@ -564,12 +565,13 @@ export function TeamMemberDrawer({
               {activeTab === "personal-info" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Full Name */}
+                    {/* Name */}
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Full Name</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1.5">Name</label>
                       <Input
                         value={personalInfo.fullName}
                         onChange={(e) => updatePersonalInfo({ fullName: e.target.value })}
+                        placeholder="Enter name"
                         className="w-full text-sm"
                       />
                     </div>

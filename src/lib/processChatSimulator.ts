@@ -324,7 +324,7 @@ export function generateProcessStageReply(
   for (const step of inChatSteps) {
     if (!stepMatchesMessage(step, userMessage)) continue;
 
-    if (step.stepKey === "processmovement" || step.stepKey === "stagemovement") {
+    if (step.stepKey === "processmovement" || step.stepKey === "stagemovement" || step.stepKey === "movetonewprocess") {
       const targetStageName = step.params?.stepDetailStage;
       if (targetStageName && targetStageName !== "Select stage...") {
         return {

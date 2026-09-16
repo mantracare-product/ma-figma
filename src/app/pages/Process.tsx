@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -62,6 +62,9 @@ export interface Stage {
   description: string;
   status: string;
   color?: string;
+  isInitial?: boolean;
+  isFinal?: boolean;
+  stagePosition?: "initial" | "final" | null;
   aiSettings?: AISettings;
   // Persisted stage configuration
   stageType?: string;
@@ -99,14 +102,22 @@ export interface Process {
 }
 
 
-const STAGE_COLORS = [
-  "#22D3EE", // cyan
-  "#EC4899", // pink
-  "#10B981", // green
-  "#F59E0B", // amber
-  "#8B5CF6", // purple
+const STAGE_PRESET_COLORS = [
+  "#3B82F6", // blue
   "#EF4444", // red
+  "#F97316", // orange
+  "#EAB308", // yellow
+  "#22C55E", // green
+  "#14B8A6", // teal
+  "#06B6D4", // cyan
+  "#6366F1", // indigo
+  "#8B5CF6", // purple
+  "#A855F7", // violet
+  "#EC4899", // pink
+  "#F43F5E", // rose
 ];
+
+const STAGE_COLORS = STAGE_PRESET_COLORS;
 
 // Comprehensive color palette for stage color picker (10x10 grid)
 const COLOR_PALETTE = [
@@ -468,6 +479,7 @@ const STEP_ALLOWED_TRIGGERS: Record<string, Array<"stage" | "incall" | "inchat" 
   "email": ["stage", "incall", "inchat", "postcall"],
   "send-invoice": ["stage", "incall", "inchat", "postcall"],
   "processmovement": ["inchat", "postcall"],
+  "movetonewprocess": ["stage", "inchat", "postcall"],
   "endworkflow": ["stage", "inchat", "postcall"],
   "fieldupdate": ["stage", "inchat", "postcall"],
   "assignhuman": ["stage", "inchat", "postcall"],
@@ -1091,6 +1103,7 @@ export default function Process() {
     fetchfieldvalue: ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
     managecalendar: ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
     processmovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    movetonewprocess: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
     stagemovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
     greetingphrase: ["greetingPhrase", ...CONDITION_FIELDS],
     bypasstohuman: ["bypassStepNumbers", ...CONDITION_FIELDS],
@@ -1675,7 +1688,8 @@ export default function Process() {
 
   // Form states
   const [newProcess, setNewProcess] = useState({ name: "", description: "" });
-  const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_COLORS[0], type: "AI Receives Calls" });
+  const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
+  const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | null>(null);
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
   const [showHowToReceiveCallModal, setShowHowToReceiveCallModal] = useState(false);
   const [applyAdvancedSettingsToAllStages, setApplyAdvancedSettingsToAllStages] = useState(false);
@@ -1965,22 +1979,47 @@ export default function Process() {
     if (!selectedProc) return;
 
     // Manual creation
-    if (!newStage.name || !newStage.description) {
-      toast.error("Please fill all fields");
+    if (!newStage.name || !newStage.name.trim()) {
+      toast.error("Please enter a stage name");
       return;
     }
 
     const stage: Stage = {
-      id: `${selectedProcess}-${selectedProc.stages.length + 1}`,
-      ...newStage,
+      id: `${selectedProcess}-${Date.now()}`,
+      name: newStage.name.trim(),
+      description: newStage.description.trim(),
+      color: newStage.color || STAGE_PRESET_COLORS[0],
+      stageType: newStage.type || "Receive Inbound Calls",
+      isInitial: newStagePosition === "initial",
+      isFinal: newStagePosition === "final",
+      stagePosition: newStagePosition,
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
     };
 
+    let updatedStages: Stage[];
+    if (newStagePosition === "initial") {
+      // First in sequence
+      updatedStages = [stage, ...selectedProc.stages.map(s => ({ ...s, isInitial: false }))];
+    } else if (newStagePosition === "final") {
+      // Last in sequence
+      updatedStages = [...selectedProc.stages.map(s => ({ ...s, isFinal: false })), stage];
+    } else {
+      // Middle stage: if existing stages end with a final stage, insert before it
+      const existingFinalIndex = selectedProc.stages.findIndex(s => s.isFinal);
+      if (existingFinalIndex !== -1) {
+        const before = selectedProc.stages.slice(0, existingFinalIndex);
+        const after = selectedProc.stages.slice(existingFinalIndex);
+        updatedStages = [...before, stage, ...after];
+      } else {
+        updatedStages = [...selectedProc.stages, stage];
+      }
+    }
+
     setProcesses(
       processes.map((p) =>
         p.id === selectedProcess
-          ? { ...p, stages: [...p.stages, stage] }
+          ? { ...p, stages: updatedStages }
           : p
       )
     );
@@ -1991,7 +2030,8 @@ export default function Process() {
     }
     setExpandedStage(stage.id);
     setViewMode("stage");
-    setNewStage({ name: "", description: "", color: STAGE_COLORS[0], type: "AI Receives Calls" });
+    setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
+    setNewStagePosition(null);
     setNewStageSelectedNumbers([]);
     setShowNewStageNumberDropdown(false);
     setHasInteractedWithColor(false);
@@ -2217,6 +2257,19 @@ export default function Process() {
                             );
                           })
                         )}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedProcess(process.id);
+                            setShowAddStageModal(true);
+                          }}
+                          className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-1 cursor-pointer"
+                          style={{ fontFamily: 'Outfit, sans-serif' }}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Stage</span>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -5540,10 +5593,20 @@ export default function Process() {
                               </div>
 
                               {/* Right Steps List */}
-                                  <div className="flex-1 overflow-y-auto">
+                              <div className="flex-1 overflow-y-auto">
                                 {(() => {
+                                  const currentStage = selectedProcessData?.stages.find((s) => s.id === expandedStage);
+                                  const currentStageIndex = selectedProcessData?.stages.findIndex((s) => s.id === expandedStage);
+                                  const isCurrentStageLast = Boolean(
+                                    currentStage?.isFinal ||
+                                    (selectedProcessData && currentStageIndex !== undefined && currentStageIndex !== -1 && currentStageIndex === selectedProcessData.stages.length - 1)
+                                  );
+
                                   const allSteps = [
-                                    { key: "processmovement", name: "Process/Stage Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                    { key: "processmovement", name: "Assign Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
+                                    ...(isCurrentStageLast ? [
+                                      { key: "movetonewprocess", name: "Move to New Process", desc: "Move user to a new process and start at its initial stage so the pipeline continues.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true }
+                                    ] : []),
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
@@ -5837,129 +5900,134 @@ export default function Process() {
           isOpen={showAddStageModal}
           onClose={() => {
             setShowAddStageModal(false);
-            setNewStage({ name: "", description: "", color: STAGE_COLORS[0], type: "Receive Inbound Calls" });
+            setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
+            setNewStagePosition(null);
             setNewStageSelectedNumbers([]);
             setShowNewStageNumberDropdown(false);
             setHasInteractedWithColor(false);
             setIsColorGridExpanded(false);
           }}
-          title="Add New Stage"
+          title="Create Stage"
+          maxWidth="md"
           footer={
-            <>
-              <Button variant="outline" onClick={() => {
-                setShowAddStageModal(false);
-                setNewStage({ name: "", description: "", color: STAGE_COLORS[0], type: "Receive Inbound Calls" });
-                setNewStageSelectedNumbers([]);
-                setShowNewStageNumberDropdown(false);
-                setHasInteractedWithColor(false);
-                setIsColorGridExpanded(false);
-              }}>
+            <div className="flex items-center justify-end gap-3 w-full">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowAddStageModal(false);
+                  setNewStage({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "Receive Inbound Calls" });
+                  setNewStagePosition(null);
+                  setNewStageSelectedNumbers([]);
+                  setShowNewStageNumberDropdown(false);
+                  setHasInteractedWithColor(false);
+                  setIsColorGridExpanded(false);
+                }}
+              >
                 Cancel
               </Button>
-              <Button
-                variant="primary"
+              <button
+                type="button"
                 onClick={handleAddStage}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
               >
-                Add Stage
-              </Button>
-            </>
+                Create Stage
+              </button>
+            </div>
           }
         >
-          <div className="space-y-4">
-            <Input
-              label="Stage Name"
-              value={newStage.name}
-              onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
-              placeholder="Enter stage name"
-            />
+          <div className="space-y-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            <p className="text-xs text-slate-500 -mt-2">Add a new stage to this template.</p>
             <div>
-              <div className="flex items-center gap-2 mb-2">
-                <label className="block text-sm font-medium">Stage Description</label>
-                <Tooltip text="The client's call summary will be analyzed and mapped to this stage based on the description">
-                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
-                </Tooltip>
-              </div>
-              <textarea
-                value={newStage.description}
-                onChange={(e) => setNewStage({ ...newStage, description: e.target.value })}
-                placeholder="Enter stage description"
-                className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none h-24"
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Stage Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={newStage.name}
+                onChange={(e) => setNewStage({ ...newStage, name: e.target.value })}
+                placeholder="e.g. Initial Outreach"
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all placeholder:text-slate-400 text-slate-900 font-medium"
+                autoFocus
               />
             </div>
 
-            {/* Outbound Calling - Only show when Type is "Makes AI Outbound Calls" */}
-            {newStage.type === "Makes AI Outbound Calls" && (
-              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border">
-                <div>
-                  <p className="font-medium" style={{ fontFamily: 'DM Sans, sans-serif' }}>Outbound Calling</p>
-                  <p className="text-sm" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>Enable automated outbound calls</p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" className="sr-only peer" defaultChecked />
-                  <div className="w-11 h-6 bg-switch-background peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-switch-background after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                </label>
-              </div>
-            )}
-
             <div>
-              <label className="block text-sm font-medium mb-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Description
+              </label>
+              <textarea
+                value={newStage.description}
+                onChange={(e) => setNewStage({ ...newStage, description: e.target.value })}
+                placeholder="Describe what happens in this stage..."
+                rows={3}
+                className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all placeholder:text-slate-400 text-slate-900 resize-none"
+              />
+            </div>
+
+            {/* Stage Color Picker */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">
                 Stage Color
               </label>
-              <div className="space-y-3">
-                {/* Color Grid - First row or full grid */}
-                <div className="flex items-start gap-2">
-                  <div className={`flex-1 border border-gray-200 rounded-lg overflow-hidden ${isColorGridExpanded ? 'grid grid-cols-10 gap-0' : 'flex gap-0'}`}>
-                    {(isColorGridExpanded ? COLOR_PALETTE : COLOR_PALETTE.slice(0, 10)).map((color) => (
-                      <button
-                        key={color}
-                        type="button"
-                        onClick={() => {
-                          setNewStage({ ...newStage, color });
-                          setHasInteractedWithColor(true);
-                        }}
-                        className={`w-full aspect-square transition-all hover:scale-110 hover:z-10 ${newStage.color === color
-                          ? "ring-2 ring-white ring-inset z-20"
-                          : ""
-                          }`}
-                        style={{ backgroundColor: color }}
-                        title={color}
-                      />
-                    ))}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsColorGridExpanded(!isColorGridExpanded);
-                      setHasInteractedWithColor(true);
-                    }}
-                    className="flex-shrink-0 w-6 h-6 flex items-center justify-center rounded hover:bg-gray-100 transition-colors mt-0"
-                  >
-                    <Plus className={`w-4 h-4 text-gray-600 transition-transform ${isColorGridExpanded ? 'rotate-45' : ''}`} />
-                  </button>
-                </div>
-
-                {/* Selected Color Bar - Only show when user has interacted with color picker */}
-                {hasInteractedWithColor && (
-                  <div className="flex items-center gap-2">
-                    <div
-                      className="flex-1 h-10 rounded-lg border-2 border-gray-300"
-                      style={{ backgroundColor: newStage.color }}
-                    />
+              <div className="flex flex-wrap gap-2.5 items-center">
+                {STAGE_PRESET_COLORS.map((color) => {
+                  const isSelected = (newStage.color || STAGE_PRESET_COLORS[0]).toLowerCase() === color.toLowerCase();
+                  return (
                     <button
+                      key={color}
                       type="button"
-                      onClick={() => {
-                        const hexInput = prompt("Enter custom hex color:", newStage.color);
-                        if (hexInput && /^#[0-9A-F]{6}$/i.test(hexInput)) {
-                          setNewStage({ ...newStage, color: hexInput });
-                        }
-                      }}
-                      className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                      onClick={() => setNewStage({ ...newStage, color })}
+                      className={`w-7 h-7 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-2xs hover:scale-110 ${
+                        isSelected ? "ring-2 ring-offset-2 ring-slate-400 scale-105" : ""
+                      }`}
+                      style={{ backgroundColor: color }}
+                      title={color}
                     >
-                      Custom color
+                      {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
                     </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Stage Position Buttons */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">
+                Stage Position <span className="text-[11px] font-normal text-slate-400">(Optional)</span>
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNewStagePosition(newStagePosition === "initial" ? null : "initial")}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    newStagePosition === "initial"
+                      ? "bg-blue-50/80 border-blue-500 text-blue-700 shadow-2xs font-semibold ring-1 ring-blue-500/30"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <Play className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Initial Stage</span>
                   </div>
-                )}
+                  <span className="text-[10px] text-slate-400">First in sequence</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewStagePosition(newStagePosition === "final" ? null : "final")}
+                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
+                    newStagePosition === "final"
+                      ? "bg-emerald-50/80 border-emerald-500 text-emerald-700 shadow-2xs font-semibold ring-1 ring-emerald-500/30"
+                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 mb-0.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Final Stage</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">Last in sequence</span>
+                </button>
               </div>
             </div>
           </div>

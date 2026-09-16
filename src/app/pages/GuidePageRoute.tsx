@@ -406,7 +406,7 @@ const GUIDE_DATA: GuidePageData[] = [
             },
             {
                 title: "Workflow Logic & Caller Engagement Automations",
-                whatItDoes: "Workflow Logic automations control the flow itself: Process/Stage Movement moves the contact to a different process and stage, and End Workflow terminates the workflow and marks the contact done. Caller Engagement automations act on the live call: Auto Hangup ends the call with an optional closing message, Transfer Call hands the call to a human or another AI agent, and Idle Messages speaks a message when the caller goes quiet.",
+                whatItDoes: "Workflow Logic automations control the flow itself: Assign New Process moves the contact to a different process starting at its initial stage, and End Workflow terminates the workflow and marks the contact done. Caller Engagement automations act on the live call: Auto Hangup ends the call with an optional closing message, Transfer Call hands the call to a human or another AI agent, and Idle Messages speaks a message when the caller goes quiet.",
                 whyHelps: "These are the automations that change what happens to the contact or the call itself, rather than just sending a message.",
                 howToUse: "Click Add Step in the Automation tab, choose the Workflow Logic or Caller Engagement category on the left, and select the automation.",
             },

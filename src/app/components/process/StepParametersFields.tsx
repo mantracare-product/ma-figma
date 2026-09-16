@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import {
   ChevronDown, Plus, Trash2, Info, Sliders, Star, Volume2, Play, ArrowRight,
   User, PhoneForwarded, PhoneOff, Mail, MessageSquare, Paperclip, ExternalLink,
-  ChevronRight, X, Copy, Pencil
+  ChevronRight, X, Copy, Pencil, Sparkles
 } from "lucide-react";
 import VariablePickerButton, { FETCH_FIELD_SOURCES } from "./VariablePickerButton";
 import { InfoTooltip } from "../help/InfoTooltip";
@@ -1634,19 +1634,78 @@ export default function StepParametersFields({
             {(stepKey === "processmovement" || stepKey === "stagemovement" || stepKey === "move-process" || stepKey === "move-stage") && (
               <div className="space-y-4">
                 {renderField("Target Process",
-                  <select value={stepDetailProcess} onChange={e => onChange({ stepDetailProcess: e.target.value, stepDetailStage: "" })} className="w-full px-3 py-2.5 border rounded-md bg-white">
-                    <option value="">Select process...</option>
+                  <select
+                    value={stepDetailProcess}
+                    onChange={e => onChange({ stepDetailProcess: e.target.value, stepDetailStage: "" })}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                  >
+                    <option value="">Select target process...</option>
                     {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 )}
                 {renderField("Target Stage",
-                  <select value={stepDetailStage} onChange={e => onChange({ stepDetailStage: e.target.value })} className="w-full px-3 py-2.5 border rounded-md bg-white">
-                    <option value="">Select stage...</option>
+                  <select
+                    value={stepDetailStage}
+                    onChange={e => onChange({ stepDetailStage: e.target.value })}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                  >
+                    <option value="">Select target stage...</option>
                     {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
                 )}
+              </div>
+            )}
+
+            {(stepKey === "movetonewprocess" || stepKey === "move-new-process") && (
+              <div className="space-y-4">
+                {renderField("Assign Target Process",
+                  <select
+                    value={stepDetailProcess}
+                    onChange={e => {
+                      const selectedProcId = e.target.value;
+                      const targetProc = processes.find(p => p.id === selectedProcId);
+                      const initialStage = targetProc?.stages?.find((s: any) => s.isInitial) || targetProc?.stages?.[0];
+                      onChange({
+                        stepDetailProcess: selectedProcId,
+                        stepDetailStage: initialStage?.name || initialStage?.id || ""
+                      });
+                    }}
+                    className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                  >
+                    <option value="">Select target process...</option>
+                    {processes.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                )}
+
+                {stepDetailProcess && (() => {
+                  const targetProc = processes.find(p => p.id === stepDetailProcess);
+                  const initialStage = targetProc?.stages?.find((s: any) => s.isInitial) || targetProc?.stages?.[0];
+                  return (
+                    <div className="p-4 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border border-blue-200/80 rounded-xl space-y-2.5">
+                      <div className="flex items-center gap-2 text-blue-900 font-semibold text-xs">
+                        <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
+                        <span>Automatic Initial Stage Assignment</span>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">
+                        When this final stage completes, the contact will automatically transition to <strong className="text-slate-900">{targetProc?.name || "the target process"}</strong> starting at its initial stage so that the pipeline seamlessly continues:
+                      </p>
+                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded-lg shadow-2xs">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: (initialStage as any)?.color || "#3B82F6" }}
+                        />
+                        <span className="text-xs font-bold text-slate-800">
+                          {initialStage?.name || "Initial Stage"}
+                        </span>
+                        <span className="text-[10px] font-semibold uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
+                          Initial Stage
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
