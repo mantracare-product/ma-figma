@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
+import { Search, Filter, Download, Upload, Phone, FileText, Play, Calendar, StopCircle, Settings as SettingsIcon, Eye, ChevronLeft, ChevronRight, ChevronDown, ChevronsLeft, ChevronsRight, AlertCircle, AlertTriangle, X, Pause, TrendingUp, Clock, GitBranch, RefreshCw, Zap, Star, Headphones, User, CheckCircle2, Volume2, Users, Target, Award, Brain, Shield, MessageSquare, Sparkles, ThumbsUp, ThumbsDown, Info, List, LayoutGrid, MoreVertical, Trash2, Pencil, Building2, CalendarClock, Package, CheckCircle, Plus, Globe, Copy } from "lucide-react";
 import { PiArrowSquareOutBold, PiArrowSquareInBold, PiPhoneIncoming, PiPhoneOutgoing } from "react-icons/pi";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -20,11 +20,15 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import { TeamMemberDrawer } from "../components/TeamMemberDrawer";
 import { useFieldRegistry, resolveVisibility } from "../context/FieldRegistryContext";
+import { useOrganization } from "../context/OrganizationContext";
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import ProcessDetailDrawer, { ActivityLogEntry } from "../components/deals/ProcessDetailDrawer";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import { getActivityForProcess } from "../../lib/activityLog";
-import { getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../lib/processLogsStore";
+import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessCallLogStage } from "../../lib/processLogsStore";
+import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
+import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
 
 interface CallLog {
   id: string;
@@ -125,10 +129,27 @@ const mockClients: { [key: string]: Client } = {
 };
 
 const getClientIdByName = (name: string): string => {
+  try {
+    const raw = sessionStorage.getItem("clients");
+    const cs = raw ? JSON.parse(raw) : [];
+    const found = cs.find((c: any) => c.name?.toLowerCase() === name.toLowerCase());
+    if (found) return found.id;
+  } catch {}
   const found = Object.values(mockClients).find(
     (c) => c.name.toLowerCase() === name.toLowerCase()
   );
   return found ? found.id : "CL-001";
+};
+
+const getClientObj = (clientId?: string, clientName?: string): Client | undefined => {
+  if (clientId && mockClients[clientId]) return mockClients[clientId];
+  try {
+    const raw = sessionStorage.getItem("clients");
+    const cs: Client[] = raw ? JSON.parse(raw) : [];
+    const found = cs.find((c: any) => (clientId && c.id === clientId) || (clientName && c.name?.toLowerCase() === clientName.toLowerCase()));
+    if (found) return found;
+  } catch {}
+  return clientId && mockClients[clientId] ? mockClients[clientId] : undefined;
 };
 
 // Comprehensive call logs dataset (100 calls total)
@@ -329,6 +350,22 @@ export default function Deals() {
       window.removeEventListener("storage", handler);
     };
   }, []);
+
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        setStoredProcesses(getStoredProcesses());
+      } catch {}
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterPanel, setShowFilterPanel] = useState(false);
   const [showColumnToggle, setShowColumnToggle] = useState(false);
@@ -470,7 +507,33 @@ export default function Deals() {
   const [selectedProcessFilter, setSelectedProcessFilter] = useState<string | null>(null);
   const [stageDropdownCallId, setStageDropdownCallId] = useState<string | null>(null);
   const [draggedCallId, setDraggedCallId] = useState<string | null>(null);
-  const [deals, setDeals] = useState<Deal[]>(initialDeals);
+  const [deals, setDeals] = useState<Deal[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("deals");
+      return raw ? JSON.parse(raw) : initialDeals;
+    } catch {
+      return initialDeals;
+    }
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem("deals", JSON.stringify(deals));
+  }, [deals]);
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        const raw = sessionStorage.getItem("deals");
+        if (raw) setDeals(JSON.parse(raw));
+      } catch {}
+    };
+    window.addEventListener("deals_updated", handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener("deals_updated", handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [quickDealColumn, setQuickDealColumn] = useState<string | null>(null);
   const [quickDealName, setQuickDealName] = useState("");
@@ -499,7 +562,8 @@ export default function Deals() {
   const [drawerStageIdx, setDrawerStageIdx] = useState(1);
 
   // Process Viewer Select/Create field (FIX 4)
-  const { getAllFields } = useFieldRegistry();
+  const { getAllFields, getSectionsForOrg, getFieldsForOrg } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
   const [fieldManagerMode, setFieldManagerMode] = useState<"select" | "create">("select");
   const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
   const [drawerVisibleFields, setDrawerVisibleFields] = useState<string[]>([
@@ -660,6 +724,7 @@ export default function Deals() {
     date: true,
     activity: true,
     responsible: true,
+    alert: true,
   });
 
   // Client filter state
@@ -793,9 +858,46 @@ export default function Deals() {
 
   const dealStageLabels = ["New", "Can't Contact", "Follow-up Later", "Interested", "Close Deal"];
 
-  const getDealStageIndex = (stageName: string): number => {
+  const getStagesListForProcess = (processName: string, currentStageName?: string): string[] => {
+    if (!processName) return currentStageName ? [currentStageName] : [];
+    const cleanName = processName.trim().toLowerCase();
+
+    // 1. Direct match in Process Settings stored processes
+    const foundProc = storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === cleanName || p.id === processName
+    );
+    if (foundProc && foundProc.stages && foundProc.stages.length > 0) {
+      return foundProc.stages.map((s) => s.name);
+    }
+
+    // 2. getStagesForProcess fallback
+    const options = getStagesForProcess(processName);
+    if (options && options.length > 0) {
+      return options.map((o) => o.label);
+    }
+
+    // 3. If single stage known for this row
+    if (currentStageName) {
+      const clean = currentStageName.includes(":") ? currentStageName.split(":")[1].trim() : currentStageName.trim();
+      return [clean];
+    }
+    return [];
+  };
+
+  const getStageIndexForProcess = (processName: string, stageName: string): number => {
+    const stages = getStagesListForProcess(processName, stageName);
+    if (stages.length === 0) return 1;
+    const cleanStage = stageName.includes(":") ? stageName.split(":")[1].trim() : stageName.trim();
+    const idx = stages.findIndex((s) => s.trim().toLowerCase() === cleanStage.toLowerCase());
+    return idx !== -1 ? idx + 1 : 1;
+  };
+
+  const getDealStageIndex = (stageName: string, processName?: string): number => {
+    if (processName) {
+      return getStageIndexForProcess(processName, stageName);
+    }
     // Find the index directly in dealStageLabels
-    const index = dealStageLabels.findIndex(label => label === stageName);
+    const index = dealStageLabels.findIndex((label) => label === stageName);
     if (index !== -1) {
       return index + 1; // Convert to 1-based index
     }
@@ -808,7 +910,11 @@ export default function Deals() {
     return 5;
   };
 
-  const getDealStageFromIndex = (idx: number): string => {
+  const getDealStageFromIndex = (idx: number, processName?: string): string => {
+    if (processName) {
+      const stages = getStagesListForProcess(processName);
+      return stages[idx - 1] || stages[0] || "Initial Contact";
+    }
     // Map index directly to dealStageLabels
     return dealStageLabels[idx - 1] || dealStageLabels[0];
   };
@@ -2113,6 +2219,7 @@ export default function Deals() {
                     {visibleColumns.date && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Created</th>}
                     {visibleColumns.activity && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Activity</th>}
                     {visibleColumns.responsible && <th className="px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Responsible</th>}
+                    {visibleColumns.alert && <th className="px-4 py-2.5 text-center text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Alert</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -2195,55 +2302,64 @@ export default function Deals() {
                       )}
                       {visibleColumns.currentStage && (
                         <td className="px-4 py-2.5 relative">
-                          {/* FIX 1: Stage segments with completed/active/future colors */}
-                          <div className="flex items-center gap-[3px]">
-                            {dealStageLabels.map((stageName, i) => {
-                              const segIdx = i + 1;
-                              const activeIdx = getDealStageIndex(log.currentStage);
-                              const isCompleted = segIdx < activeIdx;
-                              const isActive = segIdx === activeIdx;
-                              const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
-                              return (
-                                <div key={stageName} className="relative">
-                                  {isHovered && (
-                                    <div
-                                      className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 rounded pointer-events-none"
-                                      style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200, borderRadius: '4px' }}
-                                    >
-                                      {stageName}
+                          {(() => {
+                            const stages = getStagesListForProcess(log.process, log.currentStage);
+                            const activeIdx = getStageIndexForProcess(log.process, log.currentStage);
+                            return (
+                              <div className="flex items-center gap-[3px]">
+                                {stages.map((stageName, i) => {
+                                  const segIdx = i + 1;
+                                  const isCompleted = segIdx < activeIdx;
+                                  const isActive = segIdx === activeIdx;
+                                  const isHovered = hoveredStageSegment?.logId === log.id && hoveredStageSegment?.segIdx === segIdx;
+                                  return (
+                                    <div key={stageName} className="relative">
+                                      {isHovered && (
+                                        <div
+                                          className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 whitespace-nowrap px-2 py-1 rounded pointer-events-none"
+                                          style={{ backgroundColor: '#1A2B4A', color: '#fff', fontSize: '12px', zIndex: 200, borderRadius: '4px' }}
+                                        >
+                                          {stageName}
+                                        </div>
+                                      )}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          const updatedLog = { ...log, currentStage: stageName };
+                                          setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
+                                          updateProcessCallLogStage(log.clientId, log.process, stageName);
+                                          
+                                          // Open ProcessDetailDrawer with the new stage so required fields are highlighted
+                                          setSelectedLogForView(updatedLog);
+                                          setViewDrawerTab("general");
+                                          setHistoryFilter("");
+                                          setShowViewDrawer(true);
+
+                                          toast.success(`Stage moved to ${stageName} ✓`);
+                                        }}
+                                        onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
+                                        onMouseLeave={() => setHoveredStageSegment(null)}
+                                        style={{
+                                          width: '18px',
+                                          height: '8px',
+                                          borderRadius: '2px',
+                                          backgroundColor: (isCompleted || isActive)
+                                            ? '#1E88E5'        // completed and current stages: blue
+                                            : 'transparent',   // future stages: transparent
+                                          border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
+                                          cursor: 'pointer',
+                                          display: 'block',
+                                          padding: 0,
+                                          flexShrink: 0,
+                                          transition: 'background-color 0.2s ease',
+                                        }}
+                                      />
                                     </div>
-                                  )}
-                                  <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      const newStage = getDealStageFromIndex(segIdx);
-                                      setCallLogs(prev => prev.map(l => l.id === log.id
-                                        ? { ...l, currentStage: newStage }
-                                        : l
-                                      ));
-                                      toast.success(`Stage updated to ${stageName} ✓`);
-                                    }}
-                                    onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
-                                    onMouseLeave={() => setHoveredStageSegment(null)}
-                                    style={{
-                                      width: '18px',
-                                      height: '8px',
-                                      borderRadius: '2px',
-                                      backgroundColor: (isCompleted || isActive)
-                                        ? '#1E88E5'        // completed and current stages: blue
-                                        : 'transparent',   // future stages: transparent
-                                      border: (isCompleted || isActive) ? 'none' : '1px solid #E8ECF0',
-                                      cursor: 'pointer',
-                                      display: 'block',
-                                      padding: 0,
-                                      flexShrink: 0,
-                                      transition: 'background-color 0.2s ease',
-                                    }}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })()}
                         </td>
                       )}
                       {visibleColumns.status && (
@@ -2274,8 +2390,52 @@ export default function Deals() {
                       {visibleColumns.responsible && (
                         <td className="px-4 py-2.5">
                           <span className="text-xs" style={{ color: '#1F2937', fontFamily: 'Outfit, sans-serif' }}>
-                            {mockClients[log.clientId]?.responsible || 'Unassigned'}
+                            {getClientObj(log.clientId, log.client)?.responsible || 'Unassigned'}
                           </span>
+                        </td>
+                      )}
+                      {visibleColumns.alert && (
+                        <td className="px-4 py-2.5 text-center whitespace-nowrap">
+                          {(() => {
+                            const clientObj = getClientObj(log.clientId, log.client);
+
+                            const missing = getMissingRequiredProcessFields({
+                              processName: log.process,
+                              currentStageName: log.currentStage,
+                              allFields: getFieldsForOrg("process", activeOrganization),
+                              allSections: getSectionsForOrg("process", activeOrganization),
+                              fieldValues: {
+                                client_name: log.client,
+                                phone: clientObj?.phone || "9667283405",
+                                email: clientObj?.email || "anshul@mantracare.com",
+                                ...(clientObj || {}),
+                                ...(log || {}),
+                              },
+                            });
+
+                            if (missing.length === 0) {
+                              return (
+                                <span className="text-xs font-medium text-slate-400">—</span>
+                              );
+                            }
+
+                            return (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedLogForView(log);
+                                  setViewDrawerTab("general");
+                                  setHistoryFilter("");
+                                  setShowViewDrawer(true);
+                                }}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 transition-all cursor-pointer shadow-2xs hover:scale-105"
+                                title={`Click to review and fill ${missing.length} missing required field(s)`}
+                              >
+                                <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
+                                <span>{missing.length}</span>
+                              </button>
+                            );
+                          })()}
                         </td>
                       )}
                     </tr>
@@ -2559,11 +2719,38 @@ export default function Deals() {
                       e.currentTarget.style.borderColor = 'transparent';
                       e.currentTarget.style.borderStyle = 'solid';
                       if (draggedDealId) {
+                        const targetDeal = deals.find((d) => d.id === draggedDealId);
                         setDeals((prev) =>
                           prev.map((d) =>
                             d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
                           )
                         );
+                        if (targetDeal) {
+                          const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Patient Intake";
+                          const stageClean = stage.label || stage.fullLabel.split(":")[1]?.trim() || stage.fullLabel;
+                          const clientId = getClientIdByName(targetDeal.clientName);
+                          updateProcessCallLogStage(clientId, procName, stageClean);
+
+                          const matchingLog = callLogs.find((l) => l.client === targetDeal.clientName && l.process === procName) || {
+                            id: `deal-log-${targetDeal.id}`,
+                            client: targetDeal.clientName,
+                            clientId: clientId,
+                            process: procName,
+                            currentStage: stageClean,
+                            status: "In Progress",
+                            date: targetDeal.createdDate,
+                            type: "Outbound",
+                            duration: "0:00",
+                            hasRecording: false,
+                            hasTranscript: false,
+                            hasScheduledCall: false,
+                          };
+
+                          setSelectedLogForView({ ...matchingLog, currentStage: stageClean });
+                          setViewDrawerTab("general");
+                          setHistoryFilter("");
+                          setShowViewDrawer(true);
+                        }
                         toast.success(`Deal moved to ${stage.fullLabel}`);
                         setDraggedDealId(null);
                       }
@@ -3500,24 +3687,12 @@ export default function Deals() {
         isOpen={showViewDrawer && selectedLogForView !== null}
         onClose={() => setShowViewDrawer(false)}
         log={selectedLogForView}
-        client={selectedLogForView ? (mockClients[selectedLogForView.clientId] || (() => {
-          try {
-            const raw = sessionStorage.getItem("clients");
-            const clients = raw ? JSON.parse(raw) : [];
-            return clients.find((c: any) => c.id === selectedLogForView.clientId || c.name === selectedLogForView.client);
-          } catch { return undefined; }
-        })()) : undefined}
+        client={selectedLogForView ? getClientObj(selectedLogForView.clientId, selectedLogForView.client) : undefined}
         activeTab={viewDrawerTab}
         onTabChange={(tab) => setViewDrawerTab(tab)}
         activity={(() => {
           if (!selectedLogForView) return [];
-          const clientObj = mockClients[selectedLogForView.clientId] || (() => {
-            try {
-              const raw = sessionStorage.getItem("clients");
-              const clients = raw ? JSON.parse(raw) : [];
-              return clients.find((c: any) => c.id === selectedLogForView.clientId || c.name === selectedLogForView.client);
-            } catch { return undefined; }
-          })();
+          const clientObj = getClientObj(selectedLogForView.clientId, selectedLogForView.client);
           const realEntries = getActivityForProcess(selectedLogForView.clientId, selectedLogForView.process)
             .map((r) => ({
               id: r.id,
@@ -3676,18 +3851,18 @@ export default function Deals() {
               break;
           }
         }}
-        stageIdx={drawerStageIdx}
+        stageIdx={selectedLogForView ? getDealStageIndex(selectedLogForView.currentStage, selectedLogForView.process) : drawerStageIdx}
         onStageChange={(idx) => {
           if (!selectedLogForView) return;
+          const newStage = getDealStageFromIndex(idx, selectedLogForView.process);
           setDrawerStageIdx(idx);
-          const newStage = getDealStageFromIndex(idx);
-          const label = dealStageLabels[idx - 1] || dealStageLabels[0];
-          toast.success(`Stage updated to ${label} ✓`);
+          toast.success(`Stage updated to ${newStage} ✓`);
           setCallLogs((prev) =>
             prev.map((l) => (l.id === selectedLogForView.id ? { ...l, currentStage: newStage } : l))
           );
+          updateProcessCallLogStage(selectedLogForView.clientId, selectedLogForView.process, newStage);
           setDeals((allDeals) =>
-            allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: newStage } : d))
+            allDeals.map((d) => (d.clientName === selectedLogForView.client ? { ...d, stage: `${selectedLogForView.process}: ${newStage}` } : d))
           );
         }}
         visibleFieldKeys={drawerVisibleFields}
@@ -3714,8 +3889,8 @@ export default function Deals() {
           setEditingField(null);
           setEditedValues((prev) => ({ ...prev, [key]: val }));
           if (selectedLogForView) {
-            setCallLogs((prevLogs) =>
-              prevLogs.map((l) => {
+            setCallLogs((prevLogs) => {
+              const updated = prevLogs.map((l) => {
                 if (l.id === selectedLogForView.id) {
                   return {
                     ...l,
@@ -3724,8 +3899,10 @@ export default function Deals() {
                   };
                 }
                 return l;
-              })
-            );
+              });
+              saveCallLogs(updated);
+              return updated;
+            });
           }
           toast.success("Saved ✓", { duration: 2000 });
         }}

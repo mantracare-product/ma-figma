@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router";
 import {
   X,
@@ -44,6 +44,8 @@ import {
   Layers,
   PhoneIncoming,
   PhoneOutgoing,
+  AlertCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
@@ -56,7 +58,9 @@ import {
   SECTION_REGISTRY_EVENT,
   LEGACY_SECTION_REGISTRY_EVENT,
 } from "../../context/FieldRegistryContext";
-import { getStoredProcesses } from "../../../lib/useProcessStore";
+import { useOrganization } from "../../context/OrganizationContext";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
+import { getStagesForProcess } from "../ui/ProcessStageSelect";
 import DocumentsTab from "../profile/DocumentsTab";
 import { getStoredClientDocuments } from "../../../lib/clientDocumentsStore";
 import {
@@ -65,6 +69,7 @@ import {
   subscribeToActivity,
   formatTimestamp,
 } from "../../../lib/activityEngine";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
 
 export interface ProcessDocument {
   id: string;
@@ -277,7 +282,8 @@ export default function ProcessDetailDrawer({
     },
   ];
 
-  const { getCustomSections, getAllFields } = useFieldRegistry();
+  const { getSectionsForOrg, getFieldsForOrg, getCustomSections, getAllFields } = useFieldRegistry();
+  const { activeOrganization } = useOrganization();
 
   const computeMergedProcessSections = (
     existingSections: OverviewSection[] | undefined,
@@ -368,22 +374,28 @@ export default function ProcessDetailDrawer({
     return updatedSections;
   };
 
+  const currentProcessId = (log as any)?.processId || (log as any)?.process;
+
   const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
+    const customSecs = getSectionsForOrg("process", activeOrganization, currentProcessId).filter((s) => s.source !== "system");
+    const fields = getFieldsForOrg("process", activeOrganization, currentProcessId);
     return computeMergedProcessSections(
       undefined,
-      getCustomSections("process"),
-      getAllFields("process"),
+      customSecs,
+      fields,
       visibleFieldKeys
     );
   });
 
   useEffect(() => {
     const handleSectionsUpdate = () => {
+      const customSecs = getSectionsForOrg("process", activeOrganization, currentProcessId).filter((s) => s.source !== "system");
+      const fields = getFieldsForOrg("process", activeOrganization, currentProcessId);
       setProcessSections((prev) =>
         computeMergedProcessSections(
           prev,
-          getCustomSections("process"),
-          getAllFields("process"),
+          customSecs,
+          fields,
           visibleFieldKeys
         )
       );
@@ -397,7 +409,7 @@ export default function ProcessDetailDrawer({
       window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener("storage", handleSectionsUpdate);
     };
-  }, [getCustomSections, getAllFields, visibleFieldKeys]);
+  }, [getSectionsForOrg, getFieldsForOrg, activeOrganization, currentProcessId, visibleFieldKeys]);
 
   const fields = React.useMemo(() => {
     return dealFields
@@ -470,6 +482,84 @@ export default function ProcessDetailDrawer({
     }
     return vals;
   }, [client, log, clientName, fields]);
+
+  // Compute active stages
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handler = () => {
+      try {
+        setStoredProcesses(getStoredProcesses());
+      } catch {}
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handler);
+    window.addEventListener("storage", handler);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handler);
+      window.removeEventListener("storage", handler);
+    };
+  }, []);
+
+  const matchedProc = useMemo(() => {
+    if (!log?.process) return undefined;
+    const cleanName = log.process.trim().toLowerCase();
+    return storedProcesses.find(
+      (p) => p.name.trim().toLowerCase() === cleanName || p.id === log.process
+    );
+  }, [storedProcesses, log?.process]);
+
+  const activeStageList = useMemo(() => {
+    if (matchedProc && matchedProc.stages && matchedProc.stages.length > 0) {
+      return matchedProc.stages.map((s) => s.name);
+    }
+    if (log?.process) {
+      const stages = getStagesForProcess(log.process);
+      if (stages && stages.length > 0) {
+        return stages.map((s) => s.label);
+      }
+    }
+    return log?.currentStage ? [log.currentStage] : dealStageLabels;
+  }, [log?.process, log?.currentStage, matchedProc]);
+
+  const matchedIdx = log?.currentStage ? activeStageList.findIndex(
+    (s) => s.toLowerCase() === log.currentStage.toLowerCase()
+  ) : -1;
+  const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
+  const currentStageName = log?.currentStage || activeStageList[effectiveStageIdx - 1] || "";
+
+  const allRegistrySections = useMemo(() => {
+    return getSectionsForOrg("process", activeOrganization, currentProcessId);
+  }, [getSectionsForOrg, activeOrganization, currentProcessId]);
+
+  const allRegistryProcessFields = useMemo(() => {
+    return getFieldsForOrg("process", activeOrganization, currentProcessId);
+  }, [getFieldsForOrg, activeOrganization, currentProcessId]);
+
+  const missingRequiredFields = useMemo(() => {
+    if (!isOpen || !log) return [];
+    return getMissingRequiredProcessFields({
+      processId: currentProcessId,
+      processName: log?.process,
+      currentStageName,
+      allFields: allRegistryProcessFields,
+      allSections: allRegistrySections,
+      fieldValues: processFieldValues,
+    });
+  }, [isOpen, log, currentProcessId, currentStageName, allRegistryProcessFields, allRegistrySections, processFieldValues]);
+
+  const missingFieldKeys = useMemo(() => {
+    return missingRequiredFields.map((f) => f.key);
+  }, [missingRequiredFields]);
+
+  const handleStageClick = (newStageIdx: number) => {
+    if (newStageIdx > effectiveStageIdx && missingRequiredFields.length > 0) {
+      toast.error(
+        `Cannot move to next stage: Please fill all ${missingRequiredFields.length} required field(s) for "${currentStageName}" first.`
+      );
+      return;
+    }
+    onStageChange(newStageIdx);
+  };
 
   // Subscribe to live activity engine
   useEffect(() => {
@@ -560,20 +650,6 @@ export default function ProcessDetailDrawer({
   }, [editingField, fields]);
 
   if (!isOpen || !log) return null;
-
-  // Compute active stages
-  const storedProcesses = getStoredProcesses();
-  const matchedProc = storedProcesses.find(
-    (p) => p.name === log.process || p.name.toLowerCase() === log.process.toLowerCase()
-  );
-  const activeStageList =
-    matchedProc && matchedProc.stages?.length > 0
-      ? matchedProc.stages.map((s) => s.name)
-      : dealStageLabels;
-  const matchedIdx = activeStageList.findIndex(
-    (s) => s.toLowerCase() === log.currentStage.toLowerCase()
-  );
-  const effectiveStageIdx = matchedIdx >= 0 ? matchedIdx + 1 : stageIdx;
 
   const docCount = getStoredClientDocuments(clientId).length;
   const totalActivityCount = (activity?.length || 0) + liveActivities.length;
@@ -756,7 +832,7 @@ export default function ProcessDetailDrawer({
                 return (
                   <button
                     key={label}
-                    onClick={() => onStageChange(idx)}
+                    onClick={() => handleStageClick(idx)}
                     className={`flex-1 min-w-[130px] max-w-[200px] h-9 px-3 flex items-center justify-center text-center gap-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-2xs ${isActive
                         ? "bg-blue-600 text-white shadow-blue-500/20"
                         : isCompleted
@@ -841,6 +917,7 @@ export default function ProcessDetailDrawer({
                         navigate(`/clients/${cId}`);
                       }}
                       customFieldsModule="process"
+                      highlightRequiredKeys={missingFieldKeys}
                     />
                   </div>
 

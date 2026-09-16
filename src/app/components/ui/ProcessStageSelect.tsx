@@ -1,13 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { InfoTooltip } from "../help/InfoTooltip";
-
-export const availableProcesses = [
-  "Patient Intake",
-  "Follow-up Calls",
-  "Billing Support",
-  "Appointment Scheduling",
-  "Insurance Verification"
-];
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT, isProcessMatchingOrg } from "../../../lib/useProcessStore";
+import { useOrganization, Organization } from "../../context/OrganizationContext";
 
 export interface StageOption {
   id: string;
@@ -50,8 +44,49 @@ export const stageMapping: Record<string, StageOption[]> = {
 };
 
 export const getStagesForProcess = (processName: string): StageOption[] => {
-  return stageMapping[processName] || stageMapping["Patient Intake"];
+  if (!processName) return [];
+  const cleanName = processName.trim();
+  try {
+    const stored = getStoredProcesses();
+    const found = stored.find(
+      (p) => p.name.trim().toLowerCase() === cleanName.toLowerCase() || p.id === cleanName
+    );
+    if (found && found.stages && found.stages.length > 0) {
+      return found.stages.map((s, idx) => ({
+        id: s.id || String(idx + 1),
+        label: s.name,
+        fullLabel: `${found.name}: ${s.name}`,
+        category: found.name,
+      }));
+    }
+  } catch {}
+  return stageMapping[cleanName] || [];
 };
+
+export const getAvailableProcesses = (org?: Organization | null): string[] => {
+  try {
+    const stored = getStoredProcesses();
+    const matching = org ? stored.filter((p) => isProcessMatchingOrg(p, org)) : stored;
+    if (matching.length > 0) {
+      return matching.map((p) => p.name);
+    }
+  } catch {}
+  return [
+    "Patient Intake",
+    "Follow-up Calls",
+    "Billing Support",
+    "Appointment Scheduling",
+    "Insurance Verification"
+  ];
+};
+
+export const availableProcesses = [
+  "Patient Intake",
+  "Follow-up Calls",
+  "Billing Support",
+  "Appointment Scheduling",
+  "Insurance Verification"
+];
 
 export const combinedStages = Object.values(stageMapping).flatMap(stages => stages.map(s => s.fullLabel));
 
@@ -60,6 +95,7 @@ interface ProcessStageSelectProps {
   selectedStage: string;
   onProcessChange: (proc: string) => void;
   onStageChange: (stage: string) => void;
+  organization?: Organization | null;
   processPlaceholder?: string;
   stagePlaceholder?: string;
   processLabel?: string;
@@ -72,21 +108,63 @@ export default function ProcessStageSelect({
   selectedStage,
   onProcessChange,
   onStageChange,
+  organization,
   processPlaceholder = "Select a process...",
   stagePlaceholder = "Select a stage...",
   processLabel = "Assign to Process",
   stageLabel = "Initial Stage",
   theme = "standard",
 }: ProcessStageSelectProps) {
-  const stages = selectedProcess ? getStagesForProcess(selectedProcess) : [];
+  const { activeOrganization } = useOrganization();
+  const effectiveOrg = organization !== undefined ? organization : activeOrganization;
+
+  const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const update = () => {
+      setStoredProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, update);
+    window.addEventListener("storage", update);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, update);
+      window.removeEventListener("storage", update);
+    };
+  }, []);
+
+  // Filter processes matching scope rules of the current organization
+  const scopedProcesses = useMemo(() => {
+    const matching = storedProcesses.filter((proc) => {
+      if (proc.permissions?.canHide === false) return false;
+      return isProcessMatchingOrg(proc, effectiveOrg);
+    });
+    if (matching.length > 0) {
+      return matching;
+    }
+    // Fallback to all stored processes if none match scope
+    return storedProcesses;
+  }, [storedProcesses, effectiveOrg]);
+
+  // Derive stages for currently selected process
+  const stages: StageOption[] = useMemo(() => {
+    if (!selectedProcess) return [];
+    const found = storedProcesses.find(
+      (p) => p.name.toLowerCase() === selectedProcess.toLowerCase()
+    );
+    if (found && found.stages && found.stages.length > 0) {
+      return found.stages.map((s, idx) => ({
+        id: s.id || String(idx + 1),
+        label: s.name,
+        fullLabel: `${found.name}: ${s.name}`,
+        category: found.name,
+      }));
+    }
+    return getStagesForProcess(selectedProcess);
+  }, [selectedProcess, storedProcesses]);
 
   const selectClass = theme === "crm"
-    ? "w-full pl-4 pr-10 py-3 bg-white border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium"
-    : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100 disabled:cursor-not-allowed";
-
-  const labelClass = theme === "crm"
-    ? "block text-sm font-semibold mb-1.5 text-foreground"
-    : "block text-xs font-medium mb-1.5 text-gray-500";
+    ? "w-full pl-4 pr-10 py-3 bg-white border-2 border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all text-sm font-medium cursor-pointer"
+    : "w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-100 disabled:cursor-not-allowed cursor-pointer";
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -107,9 +185,9 @@ export default function ProcessStageSelect({
           style={{ fontFamily: "Outfit, sans-serif" }}
         >
           <option value="">{processPlaceholder}</option>
-          {availableProcesses.map((p) => (
-            <option key={p} value={p}>
-              {p}
+          {scopedProcesses.map((p) => (
+            <option key={p.id || p.name} value={p.name}>
+              {p.name}
             </option>
           ))}
         </select>
@@ -131,7 +209,7 @@ export default function ProcessStageSelect({
         >
           <option value="">{stagePlaceholder}</option>
           {stages.map((stage) => (
-            <option key={stage.label} value={stage.label}>
+            <option key={stage.id || stage.label} value={stage.label}>
               {stage.label}
             </option>
           ))}

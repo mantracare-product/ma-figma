@@ -143,6 +143,12 @@ export default function AdminSidebar({ isOpen, onClose }: AdminSidebarProps) {
         location.pathname === "/admin/industry"
       );
     }
+    if (itemPath === "/admin/process-templates") {
+      return (
+        location.pathname === "/admin/process-templates" ||
+        location.pathname === "/admin/process-template"
+      );
+    }
     return location.pathname === itemPath;
   };
 

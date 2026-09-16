@@ -12,7 +12,7 @@
  * - Centered "Create/Edit Custom Field" modal with "FIELD CONFIGURATION" divider
  */
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   Plus,
@@ -39,6 +39,7 @@ import {
   User,
   Globe,
   Layers,
+  GitBranch,
 } from "lucide-react";
 
 import type {
@@ -59,6 +60,11 @@ import {
   STANDARD_LOCATIONS,
   getIndustriesForCategory,
 } from "../../../data/industryReferenceData";
+import {
+  Process,
+  getStoredProcesses,
+  PROCESS_STORE_EVENT,
+} from "../../../lib/useProcessStore";
 
 // Scribe seed keys set for O(1) detection of non-deletable seed fields
 const SCRIBE_SEED_KEYS = new Set(INITIAL_SCRIBE_CUSTOM_FIELDS.map((f) => f.key));
@@ -138,6 +144,46 @@ function renderScopeCell(item: {
   return (
     <span className="text-xs text-gray-600 font-medium">
       {indCount} {indCount === 1 ? "industry" : "industries"}, {locCount} {locCount === 1 ? "country" : "countries"}
+    </span>
+  );
+}
+
+function renderProcessesCell(
+  item: { processIds?: string[] },
+  allProcesses: Process[]
+) {
+  const isAll = !item.processIds || item.processIds.length === 0 || item.processIds.includes("all");
+  if (isAll) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 bg-gray-100 px-2.5 py-1 rounded-lg">
+        All Processes
+      </span>
+    );
+  }
+
+  const selectedNames = item.processIds.map(
+    (id) => allProcesses.find((p) => p.id === id)?.name || `Process #${id}`
+  );
+
+  if (selectedNames.length === 1) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-lg max-w-[200px] truncate"
+        title={selectedNames[0]}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+        <span className="truncate">{selectedNames[0]}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/80 px-2.5 py-1 rounded-lg cursor-help shadow-2xs"
+      title={selectedNames.join(", ")}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+      <span>{selectedNames.length} Processes</span>
     </span>
   );
 }
@@ -227,7 +273,20 @@ export function AdminCustomFields() {
     name: string;
   } | null>(null);
 
+  // Processes store
+  const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
 
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAllProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
 
   // Queries
   const allFields = getAllFields(activeModule);
@@ -348,7 +407,7 @@ export function AdminCustomFields() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all whitespace-nowrap cursor-pointer ${
                     isSelected
                       ? "bg-[#111827] text-white shadow-xs"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                      : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
                   }`}
                 >
                   {m.label}
@@ -392,13 +451,16 @@ export function AdminCustomFields() {
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
+                {activeModule === "process" && (
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Processes</th>
+                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredFields.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-14 text-center">
+                  <td colSpan={activeModule === "process" ? 7 : 6} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No fields found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Field" above to define one.</p>
                   </td>
@@ -482,6 +544,12 @@ export function AdminCustomFields() {
                       <td className="px-5 py-3.5 text-center">
                         {renderScopeCell(field)}
                       </td>
+                      {/* Processes (Only in Process module) */}
+                      {activeModule === "process" && (
+                        <td className="px-5 py-3.5 text-center">
+                          {renderProcessesCell(field, allProcesses)}
+                        </td>
+                      )}
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -538,6 +606,9 @@ export function AdminCustomFields() {
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
+                {activeModule === "process" && (
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Processes</th>
+                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -545,7 +616,7 @@ export function AdminCustomFields() {
             <tbody>
               {filteredSections.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-14 text-center">
+                  <td colSpan={activeModule === "process" ? 6 : 5} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No sections found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Section" above to define one.</p>
                   </td>
@@ -576,6 +647,12 @@ export function AdminCustomFields() {
                       <td className="px-5 py-3.5 text-center">
                         {renderScopeCell(sec)}
                       </td>
+                      {/* Processes (Only in Process module) */}
+                      {activeModule === "process" && (
+                        <td className="px-5 py-3.5 text-center">
+                          {renderProcessesCell(sec, allProcesses)}
+                        </td>
+                      )}
                       <td className="px-5 py-3.5 text-center">
                         <span className="text-xs text-gray-500 font-medium">
                           {assignedFieldCount} {assignedFieldCount === 1 ? "field" : "fields"}

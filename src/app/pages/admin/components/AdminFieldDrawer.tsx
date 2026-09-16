@@ -18,7 +18,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info, Star, Database } from "lucide-react";
+import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info, Star, Database, GitBranch, Sparkles, CheckCircle2 } from "lucide-react";
 import type {
   FieldDefinition, FieldInputType, FieldModule,
   FieldOption, SectionDefinition, TableColumnConfig,
@@ -27,10 +27,13 @@ import type {
 } from "../../../context/FieldRegistryContext";
 import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS, getSuggestedPlaceholderForType } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { useDynamicListOptions } from "../../../components/fields/useDynamicListOptions";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
+import { ProcessMultiSelect } from "./ProcessMultiSelect";
+import { StageMultiSelect } from "./StageMultiSelect";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 // Unrecognised values silently fall back to "client" — no error thrown.
@@ -96,8 +99,11 @@ function needsOptions(t: FieldInputType): boolean {
 interface FieldFormState {
   label: string; key: string; module: Exclude<FieldModule, "deal">;
   inputType: FieldInputType; placeholder: string;
-  required: boolean; showAlways: boolean; userVisibility: boolean; sectionId: string;
+  required: boolean;
+  requiredStages: string[];
+  showAlways: boolean; userVisibility: boolean; sectionId: string;
   scopingRules: ScopingRule[];
+  processIds: string[];
   options: FieldOption[]; tableColumns: TableColumnConfig[];
   isReusable: boolean;
   reusableModules: Exclude<FieldModule, "deal">[];
@@ -116,8 +122,11 @@ interface FieldFormState {
 function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
   return {
     label: "", key: "", module, inputType: "text", placeholder: "",
-    required: false, showAlways: true, userVisibility: true, sectionId: "",
+    required: false,
+    requiredStages: [],
+    showAlways: true, userVisibility: true, sectionId: "",
     scopingRules: [],
+    processIds: [],
     isReusable: false,
     reusableModules: [],
     permissions: {
@@ -171,10 +180,13 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     label: f.label, key: f.key,
     module: f.module as Exclude<FieldModule, "deal">,
     inputType: effectiveInputType, placeholder: f.placeholder ?? "",
-    required: f.required ?? false, showAlways: f.showAlways !== false,
+    required: f.required ?? false,
+    requiredStages: f.requiredStages ? [...f.requiredStages] : [],
+    showAlways: f.showAlways !== false,
     userVisibility: f.userVisibility !== false,
     sectionId: f.sectionId ?? "",
     scopingRules: rules,
+    processIds: f.processIds ? [...f.processIds] : [],
     isReusable: Boolean(f.isReusable),
     reusableModules: (f.reusableModules as Exclude<FieldModule, "deal">[]) || [],
     permissions: {
@@ -254,10 +266,70 @@ export function AdminFieldDrawer({
   const [adminControlOpen, setAdminControlOpen] = useState(true);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
   const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
+  const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
   const [errors, setErrors] = useState<{ label?: string; key?: string }>({});
   const typePickerRef = useRef<HTMLDivElement>(null);
   const modulePickerRef = useRef<HTMLDivElement>(null);
   const existingFieldPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAllProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const availableProcesses = useMemo(() => {
+    if (!form.scopingRules || form.scopingRules.length === 0) {
+      return allProcesses;
+    }
+    return allProcesses.filter((proc) => {
+      return form.scopingRules.some((rule) => {
+        const rCat = rule.industryCategory?.trim();
+        const rInds = (rule.industries || []).map((i) => i.trim()).filter((i) => i && i !== "All" && i !== "*");
+        const rLocs = (rule.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+        const hasCat = Boolean(rCat && rCat !== "All" && rCat !== "*");
+        const hasInd = rInds.length > 0;
+        const hasLoc = rLocs.length > 0;
+        if (!hasCat && !hasInd && !hasLoc) return true;
+        if (hasCat && proc.industryCategory && proc.industryCategory !== "All") {
+          if (proc.industryCategory.toLowerCase() !== rCat!.toLowerCase()) return false;
+        }
+        if (hasInd && proc.industry && proc.industry !== "All") {
+          if (!rInds.some((ind) => ind.toLowerCase() === proc.industry!.toLowerCase())) return false;
+        }
+        if (hasLoc && proc.locations && proc.locations.length > 0 && !proc.locations.includes("All")) {
+          const hasLocationOverlap = proc.locations.some((pl) =>
+            rLocs.some((rl) => rl.toLowerCase() === pl.toLowerCase())
+          );
+          if (!hasLocationOverlap) return false;
+        }
+        return true;
+      });
+    });
+  }, [allProcesses, form.scopingRules]);
+
+  const availableStagesForProcess = useMemo(() => {
+    if (form.module !== "process") return [];
+    const targetProcesses = form.processIds.length > 0
+      ? availableProcesses.filter((p) => form.processIds.includes(p.id))
+      : availableProcesses;
+
+    const stageMap = new Map<string, string>();
+    targetProcesses.forEach((p) => {
+      (p.stages || []).forEach((st) => {
+        if (st.name && !stageMap.has(st.name)) {
+          stageMap.set(st.name, st.name);
+        }
+      });
+    });
+    return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
+  }, [form.module, form.processIds, availableProcesses]);
 
   const allFieldsInModule = useMemo(() => {
     try {
@@ -386,10 +458,13 @@ export function AdminFieldDrawer({
       createdIn: isEdit && field ? field.createdIn : targetCreatedIn,
       inputType: form.inputType,
       placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(form.inputType, form.label),
-      required: form.required, showAlways: form.showAlways,
+      required: form.required,
+      requiredStages: form.module === "process" && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      showAlways: form.showAlways,
       userVisibility: form.userVisibility,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
+      processIds: form.module === "process" && form.processIds.length > 0 ? form.processIds : undefined,
       isReusable: form.isReusable,
       reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
       permissions: form.permissions,
@@ -711,6 +786,17 @@ export function AdminFieldDrawer({
                 )}
               </div>
             </div>
+          )}
+
+          {/* Processes Selection (Applicable when Module is Process - rendered as simple multi-select dropdown below Admin Control) */}
+          {form.module === "process" && (
+            <ProcessMultiSelect
+              selectedProcessIds={form.processIds}
+              onChange={(processIds) => setForm((p) => ({ ...p, processIds }))}
+              availableProcesses={availableProcesses}
+              isReadOnly={isReadOnly}
+              hasScopeRules={Boolean(isAdmin && form.scopingRules && form.scopingRules.length > 0)}
+            />
           )}
 
           {/* Field Name */}
@@ -1730,19 +1816,32 @@ export function AdminFieldDrawer({
               {fieldSettingsOpen && (
                 <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
                   {/* 1. Required */}
-                  <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                    <input
-                      type="checkbox"
-                      checked={form.required}
-                      disabled={isReadOnly}
-                      onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
-                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-800">Required field</span>
-                      <p className="text-xs text-gray-500">Users must provide a value before saving records</p>
-                    </div>
-                  </label>
+                  <div className="space-y-2">
+                    <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                      <input
+                        type="checkbox"
+                        checked={form.required}
+                        disabled={isReadOnly}
+                        onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-sm font-semibold text-gray-800">Required field</span>
+                        <p className="text-xs text-gray-500">Users must provide a value before saving records</p>
+                      </div>
+                    </label>
+
+                    {form.required && form.module === "process" && (
+                      <div className="ml-7 pt-1">
+                        <StageMultiSelect
+                          selectedStages={form.requiredStages}
+                          onChange={(requiredStages) => setForm((p) => ({ ...p, requiredStages }))}
+                          availableStages={availableStagesForProcess}
+                          isReadOnly={isReadOnly}
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {/* 2. Visible */}
                   <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>

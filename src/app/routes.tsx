@@ -35,6 +35,7 @@ import AIScribeConsole from "./pages/AIScribeConsole";
 import Claims from "./pages/Claims";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
+import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
 
 export const router = createBrowserRouter([
   {
@@ -98,6 +99,8 @@ export const router = createBrowserRouter([
           { path: "industries", Component: AdminIndustries },
           { path: "industry", Component: AdminIndustries },
           { path: "industry-category", Component: AdminIndustries },
+          { path: "process-templates", Component: AdminProcessTemplates },
+          { path: "process-template", Component: AdminProcessTemplates },
           { path: "users", Component: UserManagement },
           { path: "organizations", Component: Organizations },
           { path: "forms", Component: WebForms },

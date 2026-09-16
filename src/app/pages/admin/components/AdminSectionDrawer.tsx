@@ -12,13 +12,16 @@
  */
 
 import React, { useEffect, useRef, useState, useMemo } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Layers, Settings2, GripVertical, Globe, Lock, Shield } from "lucide-react";
+import { X, ChevronDown, Check, Plus, Trash2, Layers, Settings2, GripVertical, Globe, Lock, Shield, GitBranch, Sparkles, CheckCircle2 } from "lucide-react";
 import type {
   FieldDefinition, FieldModule, SectionDefinition, ScopingRule, SectionPermissions,
 } from "../../../context/FieldRegistryContext";
 import { useFieldRegistry } from "../../../context/FieldRegistryContext";
 import { MODULE_OPTIONS } from "./AdminFieldDrawer";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
+import { ProcessMultiSelect } from "./ProcessMultiSelect";
+import { StageMultiSelect } from "./StageMultiSelect";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 
 /**
@@ -108,8 +111,10 @@ interface SectionFormState {
   module: Exclude<FieldModule, "deal">;
   fieldKeys: string[];
   required: boolean;
+  requiredStages: string[];
   userVisibility: boolean;
   scopingRules: ScopingRule[];
+  processIds: string[];
   isReusable: boolean;
   reusableModules: Exclude<FieldModule, "deal">[];
   permissions: SectionPermissions;
@@ -123,8 +128,10 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     module,
     fieldKeys: [],
     required: false,
+    requiredStages: [],
     userVisibility: true,
     scopingRules: [],
+    processIds: [],
     isReusable: false,
     reusableModules: [],
     permissions: {
@@ -155,8 +162,10 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     module: s.module as Exclude<FieldModule, "deal">,
     fieldKeys: s.fieldKeys ?? [],
     required: Boolean(s.required),
+    requiredStages: s.requiredStages ? [...s.requiredStages] : [],
     userVisibility: s.userVisibility !== false,
     scopingRules: rules,
+    processIds: s.processIds ? [...s.processIds] : [],
     isReusable: Boolean(s.isReusable),
     reusableModules: (s.reusableModules as Exclude<FieldModule, "deal">[]) || [],
     permissions: {
@@ -183,15 +192,75 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
   const [form, setForm] = useState<SectionFormState>(
     isEdit ? sectionToForm(section!) : defaultSectionForm(initialModule),
   );
-  const [errors, setErrors] = useState<{ title?: string }>({});
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
   const [sectionSettingsOpen, setSectionSettingsOpen] = useState(false);
   const [adminControlOpen, setAdminControlOpen] = useState(true);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
   const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
+  const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
+  const [errors, setErrors] = useState<{ title?: string }>({});
   const modulePickerRef = useRef<HTMLDivElement>(null);
   const fieldPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAllProcesses(getStoredProcesses());
+    };
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const availableProcesses = useMemo(() => {
+    if (!form.scopingRules || form.scopingRules.length === 0) {
+      return allProcesses;
+    }
+    return allProcesses.filter((proc) => {
+      return form.scopingRules.some((rule) => {
+        const rCat = rule.industryCategory?.trim();
+        const rInds = (rule.industries || []).map((i) => i.trim()).filter((i) => i && i !== "All" && i !== "*");
+        const rLocs = (rule.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+        const hasCat = Boolean(rCat && rCat !== "All" && rCat !== "*");
+        const hasInd = rInds.length > 0;
+        const hasLoc = rLocs.length > 0;
+        if (!hasCat && !hasInd && !hasLoc) return true;
+        if (hasCat && proc.industryCategory && proc.industryCategory !== "All") {
+          if (proc.industryCategory.toLowerCase() !== rCat!.toLowerCase()) return false;
+        }
+        if (hasInd && proc.industry && proc.industry !== "All") {
+          if (!rInds.some((ind) => ind.toLowerCase() === proc.industry!.toLowerCase())) return false;
+        }
+        if (hasLoc && proc.locations && proc.locations.length > 0 && !proc.locations.includes("All")) {
+          const hasLocationOverlap = proc.locations.some((pl) =>
+            rLocs.some((rl) => rl.toLowerCase() === pl.toLowerCase())
+          );
+          if (!hasLocationOverlap) return false;
+        }
+        return true;
+      });
+    });
+  }, [allProcesses, form.scopingRules]);
+
+  const availableStagesForProcess = useMemo(() => {
+    if (form.module !== "process") return [];
+    const targetProcesses = form.processIds.length > 0
+      ? availableProcesses.filter((p) => form.processIds.includes(p.id))
+      : availableProcesses;
+
+    const stageMap = new Map<string, string>();
+    targetProcesses.forEach((p) => {
+      (p.stages || []).forEach((st) => {
+        if (st.name && !stageMap.has(st.name)) {
+          stageMap.set(st.name, st.name);
+        }
+      });
+    });
+    return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
+  }, [form.module, form.processIds, availableProcesses]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -330,8 +399,10 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
       createdIn: isEdit && section ? section.createdIn : targetCreatedIn,
       fieldKeys: form.fieldKeys,
       required: form.required,
+      requiredStages: form.module === "process" && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       userVisibility: form.userVisibility,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
+      processIds: form.module === "process" && form.processIds.length > 0 ? form.processIds : undefined,
       isReusable: form.isReusable,
       reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
       permissions: form.permissions,
@@ -561,6 +632,16 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
             </div>
           )}
 
+          {/* Processes Selection (Applicable when Module is Process - rendered as simple multi-select dropdown below Admin Control) */}
+          {form.module === "process" && (
+            <ProcessMultiSelect
+              selectedProcessIds={form.processIds}
+              onChange={(processIds) => setForm((p) => ({ ...p, processIds }))}
+              availableProcesses={availableProcesses}
+              hasScopeRules={Boolean(isAdmin && form.scopingRules && form.scopingRules.length > 0)}
+            />
+          )}
+
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name <span className="text-red-500">*</span></label>
@@ -625,18 +706,30 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
               {sectionSettingsOpen && (
                 <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
                   {/* 1. Required Section */}
-                  <label className="flex items-start gap-3 select-none cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.required}
-                      onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
-                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-800">Required section</span>
-                      <p className="text-xs text-gray-500 mt-0.5">Users must complete all required fields within this section</p>
-                    </div>
-                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-start gap-3 select-none cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={form.required}
+                        onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div>
+                        <span className="text-sm font-semibold text-gray-800">Required section</span>
+                        <p className="text-xs text-gray-500 mt-0.5">Users must complete all required fields within this section</p>
+                      </div>
+                    </label>
+
+                    {form.required && form.module === "process" && (
+                      <div className="ml-7 pt-1">
+                        <StageMultiSelect
+                          selectedStages={form.requiredStages}
+                          onChange={(requiredStages) => setForm((p) => ({ ...p, requiredStages }))}
+                          availableStages={availableStagesForProcess}
+                        />
+                      </div>
+                    )}
+                  </div>
 
                   {/* 2. User Visibility */}
                   <label className="flex items-start gap-3 select-none cursor-pointer">

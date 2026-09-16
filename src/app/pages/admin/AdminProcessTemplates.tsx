@@ -2,34 +2,41 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
 import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch } from "lucide-react";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Modal } from "../components/ui/Modal";
-import { Tooltip } from "../components/ui/Tooltip";
+import { Button } from "../../components/ui/Button";
+import { Input } from "../../components/ui/Input";
+import { Modal } from "../../components/ui/Modal";
+import { Tooltip } from "../../components/ui/Tooltip";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "../components/ui/select";
+} from "../../components/ui/select";
 import { toast } from "sonner";
-import { useAIProviders } from "../context/AIProviderContext";
-import { useSidebar } from "../context/SidebarContext";
-import PageHeader from "../components/layout/PageHeader";
-import { HowItWorksModal, HowItWorksButton } from "../components/help/HowItWorksModal";
-import { InfoTooltip } from "../components/help/InfoTooltip";
+import { useAIProviders } from "../../context/AIProviderContext";
+import { useSidebar } from "../../context/SidebarContext";
+import PageHeader from "../../components/layout/PageHeader";
+import { HowItWorksModal, HowItWorksButton } from "../../components/help/HowItWorksModal";
+import { InfoTooltip } from "../../components/help/InfoTooltip";
 import { useDrag, useDrop } from "react-dnd";
-import FlowBuilderTab from "../components/process/FlowBuilderTab";
-import { WorkflowStep } from "../types/workflow";
-import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../components/process/VariablePickerButton";
-import StepParametersFields from "../components/process/StepParametersFields";
-import StepDetailDrawer from "../components/process/StepDetailDrawer";
-import { assignNumberToStage } from "../../lib/useStageNumberRouting";
-import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
-import CallTriggerDrawer from "../components/process/CallTriggerDrawer";
-import { useProcessTemplates } from "../context/ProcessTemplateContext";
-import { useOrganization } from "../context/OrganizationContext";
+import FlowBuilderTab from "../../components/process/FlowBuilderTab";
+import { WorkflowStep } from "../../types/workflow";
+import VariablePickerButton, { FETCH_FIELD_SOURCES, FIELDS_BY_SOURCE_MAP } from "../../components/process/VariablePickerButton";
+import StepParametersFields from "../../components/process/StepParametersFields";
+import StepDetailDrawer from "../../components/process/StepDetailDrawer";
+import { assignNumberToStage } from "../../../lib/useStageNumberRouting";
+import TestProcessChatDrawer from "../../components/process/TestProcessChatDrawer";
+import CallTriggerDrawer from "../../components/process/CallTriggerDrawer";
+import { useProcessTemplates } from "../../context/ProcessTemplateContext";
+import { useOrganization } from "../../context/OrganizationContext";
+import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
+import {
+  INITIAL_CATEGORIES,
+  INITIAL_INDUSTRIES,
+  STANDARD_LOCATIONS,
+  getIndustriesForCategory,
+} from "../../../data/industryReferenceData";
 import {
   getStoredProcesses,
   saveStoredProcesses,
@@ -39,8 +46,8 @@ import {
   saveDefaultCallTriggerSettings,
   ScopingRule,
   ProcessPermissions,
-  isProcessMatchingOrg,
-} from "../../lib/useProcessStore";
+  isProcessMatchingScope,
+} from "../../../lib/useProcessStore";
 
 interface AISettings {
   platform: string;
@@ -517,7 +524,7 @@ const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "inca
   }));
 };
 
-export default function Process() {
+export default function AdminProcessTemplates() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
   const { setCollapsed } = useSidebar();
@@ -535,19 +542,29 @@ export default function Process() {
     saveStoredProcesses(processes);
   }, [processes]);
 
+  // Scope Filter states for Admin left panel
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>("All");
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string>("All");
+  const [selectedLocationFilter, setSelectedLocationFilter] = useState<string>("All");
+
+  const availableIndustriesForFilter = useMemo(() => {
+    if (selectedCategoryFilter === "All") {
+      return Array.from(new Set(INITIAL_INDUSTRIES.map((i) => i.name)));
+    }
+    return getIndustriesForCategory(selectedCategoryFilter);
+  }, [selectedCategoryFilter]);
+
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Client-visible processes filtered by organization's industry category, industry, and location
-  const clientVisibleProcesses = useMemo(() => {
-    return processes.filter((p) => {
-      if (p.permissions?.canHide === false) return false;
-      return isProcessMatchingOrg(p, organization);
-    });
-  }, [processes, organization]);
-
-  // Filter client-visible processes by search query
+  // Filtered processes based on admin category, industry, and location filters + search query
   const filteredProcesses = useMemo(() => {
-    return clientVisibleProcesses.filter((p) => {
+    return processes.filter((p) => {
+      const matchesScope = isProcessMatchingScope(p, {
+        category: selectedCategoryFilter,
+        industry: selectedIndustryFilter,
+        location: selectedLocationFilter,
+      });
+      if (!matchesScope) return false;
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       return (
@@ -556,7 +573,20 @@ export default function Process() {
         p.stages.some((s) => s.name.toLowerCase().includes(q))
       );
     });
-  }, [clientVisibleProcesses, searchQuery]);
+  }, [processes, selectedCategoryFilter, selectedIndustryFilter, selectedLocationFilter, searchQuery]);
+
+  // Modal scoping rules & permissions state
+  const [modalScopingRules, setModalScopingRules] = useState<ScopingRule[]>([]);
+  const [modalPermissions, setModalPermissions] = useState<ProcessPermissions>({
+    canHide: true,
+    canEdit: true,
+    canAdd: true,
+    canDelete: true,
+  });
+  const [modalAdminControlOpen, setModalAdminControlOpen] = useState(true);
+  const [modalScopeDropdownOpen, setModalScopeDropdownOpen] = useState(true);
+  const [modalPermissionsDropdownOpen, setModalPermissionsDropdownOpen] = useState(true);
+
 
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
@@ -790,11 +820,11 @@ export default function Process() {
         p.id !== selectedProcess
           ? p
           : {
-              ...p,
-              stages: p.stages.map((s) =>
-                s.id !== expandedStage ? s : { ...s, workflowSteps }
-              ),
-            }
+            ...p,
+            stages: p.stages.map((s) =>
+              s.id !== expandedStage ? s : { ...s, workflowSteps }
+            ),
+          }
       )
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1832,6 +1862,8 @@ export default function Process() {
   const selectedProcessData = processes.find((p) => p.id === selectedProcess);
 
   const handleAddProcess = () => {
+    const firstRule = modalScopingRules[0];
+
     // Manual creation
     if (!newProcess.name || !newProcess.description) {
       toast.error("Please fill all fields");
@@ -1850,6 +1882,12 @@ export default function Process() {
         tone: "Professional",
         style: "Balanced",
       },
+      scopingRules: modalScopingRules.length > 0 ? modalScopingRules : undefined,
+      industryCategory: firstRule?.industryCategory || "All",
+      industry: firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : "All",
+      locations: firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : ["All"],
+      permissions: modalPermissions,
+      source: "custom",
     };
 
     setProcesses([...processes, process]);
@@ -1858,6 +1896,8 @@ export default function Process() {
     setExpandedStage(null);
     setViewMode("process");
     setNewProcess({ name: "", description: "" });
+    setModalScopingRules([]);
+    setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
     setShowAddProcessModal(false);
     toast.success("Process added successfully");
   };
@@ -2083,29 +2123,112 @@ export default function Process() {
           }
         />
 
-        {/* Top Control Bar: Search Bar + Add New Process */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search processes..."
-              className="w-full pl-10 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
-              style={{ fontFamily: 'Outfit, sans-serif' }}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
+        {/* Top Control Bar: Search + Scope Filters + Add Process */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex flex-wrap items-center justify-between gap-3">
+          {/* Left / Center: Search & Filters */}
+          <div className="flex flex-wrap items-center gap-2.5 flex-1 min-w-[300px]">
+            {/* Search */}
+            <div className="relative min-w-[200px] flex-1 max-w-xs">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search processes..."
+                className="w-full pl-10 pr-8 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Scope Filter Tag/Divider */}
+            <div className="h-6 w-px bg-gray-200 hidden sm:block mx-0.5" />
+
+            {/* 1. Industry Category */}
+            <div className="min-w-[140px]">
+              <select
+                value={selectedCategoryFilter}
+                onChange={(e) => {
+                  setSelectedCategoryFilter(e.target.value);
+                  setSelectedIndustryFilter("All");
+                }}
+                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
               >
-                <X className="w-3.5 h-3.5" />
+                <option value="All">All Categories</option>
+                {INITIAL_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.name}>
+                    {cat.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Industry */}
+            <div className="min-w-[140px]">
+              <select
+                value={selectedIndustryFilter}
+                onChange={(e) => setSelectedIndustryFilter(e.target.value)}
+                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <option value="All">All Industries</option>
+                {availableIndustriesForFilter.map((ind) => (
+                  <option key={ind} value={ind}>
+                    {ind}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Location */}
+            <div className="min-w-[130px]">
+              <select
+                value={selectedLocationFilter}
+                onChange={(e) => setSelectedLocationFilter(e.target.value)}
+                className="w-full text-xs px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:bg-white text-gray-700 font-medium cursor-pointer transition-all"
+                style={{ fontFamily: 'Outfit, sans-serif' }}
+              >
+                <option value="All">All Locations</option>
+                {STANDARD_LOCATIONS.map((loc) => (
+                  <option key={loc} value={loc}>
+                    {loc}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reset Filters button */}
+            {(selectedCategoryFilter !== "All" || selectedIndustryFilter !== "All" || selectedLocationFilter !== "All" || searchQuery) && (
+              <button
+                onClick={() => {
+                  setSelectedCategoryFilter("All");
+                  setSelectedIndustryFilter("All");
+                  setSelectedLocationFilter("All");
+                  setSearchQuery("");
+                }}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 px-2.5 py-1.5 rounded-lg hover:bg-blue-50 transition-colors cursor-pointer"
+                style={{ fontFamily: 'DM Sans, sans-serif' }}
+              >
+                Reset Filters
               </button>
             )}
           </div>
+
+          {/* Right: Add New Process Button */}
           <button
-            onClick={() => setShowAddProcessModal(true)}
+            onClick={() => {
+              setModalScopingRules([]);
+              setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
+              setShowAddProcessModal(true);
+            }}
             className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer flex-shrink-0"
             style={{ fontFamily: 'DM Sans, sans-serif' }}
           >
@@ -2120,108 +2243,109 @@ export default function Process() {
             <div className="space-y-1.5">
               {filteredProcesses.length === 0 ? (
                 <div className="p-4 text-center rounded-xl bg-gray-50 border border-dashed border-gray-200">
-                  <p className="text-xs text-gray-500 font-medium">
-                    {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
-                  </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Clear Search
-                    </button>
-                  )}
+                  <p className="text-xs text-gray-500 font-medium">No processes match active filters or search</p>
+                  <button
+                    onClick={() => {
+                      setSelectedCategoryFilter("All");
+                      setSelectedIndustryFilter("All");
+                      setSelectedLocationFilter("All");
+                      setSearchQuery("");
+                    }}
+                    className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Clear Filters
+                  </button>
                 </div>
               ) : (
                 filteredProcesses.map((process, index) => {
-                const isExpanded = expandedProcesses.includes(process.id);
-                const isProcessSelected = selectedProcess === process.id && viewMode === "process";
-                const isProcessActive = selectedProcess === process.id; // Highlight if process or any of its stages is active
+                  const isExpanded = expandedProcesses.includes(process.id);
+                  const isProcessSelected = selectedProcess === process.id && viewMode === "process";
+                  const isProcessActive = selectedProcess === process.id; // Highlight if process or any of its stages is active
 
-                return (
-                  <div key={process.id} className={index > 0 ? "pt-1.5" : ""}>
-                    {/* Process Row */}
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedProcesses((prev) =>
-                            prev.includes(process.id)
-                              ? prev.filter((id) => id !== process.id)
-                              : [...prev, process.id]
-                          );
-                        }}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                      >
-                        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
-                          }`} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedProcess(process.id);
-                          setExpandedStage(null);
-                          setViewMode("process");
-                          if (!isExpanded) {
-                            setExpandedProcesses((prev) => [...prev, process.id]);
-                          }
-                        }}
-                        className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : isProcessActive
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "hover:bg-gray-50 border border-transparent"
-                          }`}
-                      >
-                        <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
-                          ? "bg-white/20 text-white"
-                          : isProcessActive
-                            ? "bg-blue-200 text-blue-700"
-                            : "bg-gray-100 text-gray-600"
-                          }`}>
-                          {process.stages.length}
-                        </span>
-                      </button>
-                    </div>
-
-                    {/* Stages (when expanded) */}
-                    {isExpanded && (
-                      <div className="ml-10 mt-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                        {process.stages.length === 0 ? (
-                          <div className="px-4 py-3 text-sm italic text-gray-400 bg-gray-50 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            No stages yet
-                          </div>
-                        ) : (
-                          process.stages.map((stage, index) => {
-                            const isStageSelected = selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
-
-                            return (
-                              <button
-                                key={stage.id}
-                                onClick={() => {
-                                  setSelectedProcess(process.id);
-                                  setExpandedStage(stage.id);
-                                  setViewMode("stage");
-                                }}
-                                className={`w-full flex items-center gap-2.5 text-left px-4 py-2.5 rounded-lg text-sm transition-all ${isStageSelected
-                                  ? "bg-purple-50 text-purple-700 font-medium border border-purple-200"
-                                  : "text-gray-700 hover:bg-gray-100 border border-transparent"
-                                  }`}
-                              >
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: stage.color || '#22D3EE' }}
-                                />
-                                <span className="flex-1 font-medium">{stage.name}</span>
-                              </button>
+                  return (
+                    <div key={process.id} className={index > 0 ? "pt-1.5" : ""}>
+                      {/* Process Row */}
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedProcesses((prev) =>
+                              prev.includes(process.id)
+                                ? prev.filter((id) => id !== process.id)
+                                : [...prev, process.id]
                             );
-                          })
-                        )}
+                          }}
+                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        >
+                          <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
+                            }`} />
+                        </button>
+                        <button
+                          onClick={() => {
+                            setSelectedProcess(process.id);
+                            setExpandedStage(null);
+                            setViewMode("process");
+                            if (!isExpanded) {
+                              setExpandedProcesses((prev) => [...prev, process.id]);
+                            }
+                          }}
+                          className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                            : isProcessActive
+                              ? "bg-blue-50 text-blue-700 border border-blue-200"
+                              : "hover:bg-gray-50 border border-transparent"
+                            }`}
+                        >
+                          <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
+                          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
+                            ? "bg-white/20 text-white"
+                            : isProcessActive
+                              ? "bg-blue-200 text-blue-700"
+                              : "bg-gray-100 text-gray-600"
+                            }`}>
+                            {process.stages.length}
+                          </span>
+                        </button>
                       </div>
-                    )}
-                  </div>
-                );
-              }))}
+
+                      {/* Stages (when expanded) */}
+                      {isExpanded && (
+                        <div className="ml-10 mt-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+                          {process.stages.length === 0 ? (
+                            <div className="px-4 py-3 text-sm italic text-gray-400 bg-gray-50 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              No stages yet
+                            </div>
+                          ) : (
+                            process.stages.map((stage, index) => {
+                              const isStageSelected = selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
+
+                              return (
+                                <button
+                                  key={stage.id}
+                                  onClick={() => {
+                                    setSelectedProcess(process.id);
+                                    setExpandedStage(stage.id);
+                                    setViewMode("stage");
+                                  }}
+                                  className={`w-full flex items-center gap-2.5 text-left px-4 py-2.5 rounded-lg text-sm transition-all ${isStageSelected
+                                    ? "bg-purple-50 text-purple-700 font-medium border border-purple-200"
+                                    : "text-gray-700 hover:bg-gray-100 border border-transparent"
+                                    }`}
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: stage.color || '#22D3EE' }}
+                                  />
+                                  <span className="flex-1 font-medium">{stage.name}</span>
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }))}
             </div>
           </div>
 
@@ -4161,13 +4285,13 @@ export default function Process() {
                                                 p.id !== selectedProcess
                                                   ? p
                                                   : {
-                                                      ...p,
-                                                      stages: p.stages.map((s) =>
-                                                        s.id !== expandedStage
-                                                          ? s
-                                                          : { ...s, enableCalling: newVal }
-                                                      ),
-                                                    }
+                                                    ...p,
+                                                    stages: p.stages.map((s) =>
+                                                      s.id !== expandedStage
+                                                        ? s
+                                                        : { ...s, enableCalling: newVal }
+                                                    ),
+                                                  }
                                               )
                                             );
                                           }
@@ -5540,7 +5664,7 @@ export default function Process() {
                               </div>
 
                               {/* Right Steps List */}
-                                  <div className="flex-1 overflow-y-auto">
+                              <div className="flex-1 overflow-y-auto">
                                 {(() => {
                                   const allSteps = [
                                     { key: "processmovement", name: "Process/Stage Movement", desc: "Move the contact to a different process and select the target stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
@@ -5739,29 +5863,29 @@ export default function Process() {
                                 p.id !== selectedProcess
                                   ? p
                                   : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage
-                                          ? s
-                                          : {
-                                              ...s,
-                                              stageType,
-                                              selectedInboundNumbers,
-                                              selectedStageChannels,
-                                              channelSources,
-                                              responsiblePerson,
-                                              whenToMove,
-                                              callerPitchMode,
-                                              callerPitch,
-                                              greetingIntroMessage,
-                                              objectiveText,
-                                              businessInfoItems,
-                                              primaryLanguage,
-                                              secondaryLanguages,
-                                              enableCalling,
-                                            }
-                                      ),
-                                    }
+                                    ...p,
+                                    stages: p.stages.map((s) =>
+                                      s.id !== expandedStage
+                                        ? s
+                                        : {
+                                          ...s,
+                                          stageType,
+                                          selectedInboundNumbers,
+                                          selectedStageChannels,
+                                          channelSources,
+                                          responsiblePerson,
+                                          whenToMove,
+                                          callerPitchMode,
+                                          callerPitch,
+                                          greetingIntroMessage,
+                                          objectiveText,
+                                          businessInfoItems,
+                                          primaryLanguage,
+                                          secondaryLanguages,
+                                          enableCalling,
+                                        }
+                                    ),
+                                  }
                               )
                             );
                             toast.success("Stage configuration saved");
@@ -5794,6 +5918,8 @@ export default function Process() {
           onClose={() => {
             setShowAddProcessModal(false);
             setNewProcess({ name: "", description: "" });
+            setModalScopingRules([]);
+            setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
           }}
           title="Add New Process"
           footer={
@@ -5801,6 +5927,8 @@ export default function Process() {
               <Button variant="outline" onClick={() => {
                 setShowAddProcessModal(false);
                 setNewProcess({ name: "", description: "" });
+                setModalScopingRules([]);
+                setModalPermissions({ canHide: true, canEdit: true, canAdd: true, canDelete: true });
               }}>
                 Cancel
               </Button>
@@ -5828,6 +5956,125 @@ export default function Process() {
                 placeholder="Enter process description"
                 className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none h-24"
               />
+            </div>
+
+            {/* Admin Control Accordion for New Process */}
+            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs mt-4">
+              <button
+                type="button"
+                onClick={() => setModalAdminControlOpen((v) => !v)}
+                className="w-full px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-blue-600 shrink-0" />
+                  <span className="text-sm font-semibold text-gray-900">
+                    Admin Control
+                  </span>
+                  <span className="text-[11px] font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                    Scope &amp; Permissions
+                  </span>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ${modalAdminControlOpen ? "rotate-180" : ""}`} />
+              </button>
+
+              {modalAdminControlOpen && (
+                <div className="p-4 space-y-3 border-t border-gray-100 bg-gray-50/30">
+                  {/* 1. Scope Rules */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setModalScopeDropdownOpen((v) => !v)}
+                      className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Globe className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                        <span className="text-xs font-semibold text-gray-800">
+                          Scope Rules
+                        </span>
+                        <InfoTooltip text="Define which tenant industry categories, industries, and locations have access to this process." size="sm" />
+                      </div>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${modalScopeDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {modalScopeDropdownOpen && (
+                      <div className="p-3 border-t border-gray-100 bg-white">
+                        <AdminScopingRulesEditor
+                          rules={modalScopingRules}
+                          onChange={(rules) => setModalScopingRules(rules)}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. Tenant Permissions */}
+                  <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setModalPermissionsDropdownOpen((v) => !v)}
+                      className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Lock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                        <span className="text-xs font-semibold text-gray-800">
+                          Tenant Permissions
+                        </span>
+                        <InfoTooltip text="Configure what tenant users are permitted to do with this process." size="sm" />
+                      </div>
+                      <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${modalPermissionsDropdownOpen ? "rotate-180" : ""}`} />
+                    </button>
+
+                    {modalPermissionsDropdownOpen && (
+                      <div className="p-3 border-t border-gray-100 bg-white">
+                        <div className="grid grid-cols-2 gap-4">
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={modalPermissions.canHide !== false}
+                              onChange={(e) => setModalPermissions((p) => ({ ...p, canHide: e.target.checked }))}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-gray-800">Hide</span>
+                            <InfoTooltip text="Tenant users can choose to show or hide this process in their workspace." size="sm" />
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={modalPermissions.canEdit !== false}
+                              onChange={(e) => setModalPermissions((p) => ({ ...p, canEdit: e.target.checked }))}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-gray-800">Edit</span>
+                            <InfoTooltip text="Tenant users can edit process settings, stages, and prompts." size="sm" />
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={modalPermissions.canAdd !== false}
+                              onChange={(e) => setModalPermissions((p) => ({ ...p, canAdd: e.target.checked }))}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-gray-800">Add Stages</span>
+                            <InfoTooltip text="Tenant users can add new stages and steps to this process." size="sm" />
+                          </label>
+
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={modalPermissions.canDelete !== false}
+                              onChange={(e) => setModalPermissions((p) => ({ ...p, canDelete: e.target.checked }))}
+                              className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-medium text-gray-800">Delete</span>
+                            <InfoTooltip text="Tenant users can delete this process from their workspace." size="sm" />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </Modal>
@@ -7269,12 +7516,12 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) => ({
-                          ...s,
-                          callTriggerSettings: { ...updatedSettings },
-                        })),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) => ({
+                        ...s,
+                        callTriggerSettings: { ...updatedSettings },
+                      })),
+                    }
                 )
               );
               toast.success(`Applied trigger settings to all stages in "${procName}"`);
@@ -7285,13 +7532,13 @@ export default function Process() {
                   p.id !== selectedProcess
                     ? p
                     : {
-                        ...p,
-                        stages: p.stages.map((s) =>
-                          s.id !== expandedStage
-                            ? s
-                            : { ...s, callTriggerSettings: updatedSettings }
-                        ),
-                      }
+                      ...p,
+                      stages: p.stages.map((s) =>
+                        s.id !== expandedStage
+                          ? s
+                          : { ...s, callTriggerSettings: updatedSettings }
+                      ),
+                    }
                 )
               );
               toast.success("Call trigger settings saved for this stage");

@@ -76,6 +76,7 @@ export interface DraggableOverviewSectionsProps {
   onDiscard?: () => void;
   onNavigateToClient?: (clientId: string) => void;
   customFieldsModule?: FieldModule;
+  highlightRequiredKeys?: string[];
 }
 
 const SECTION_ICONS: Record<string, React.ReactNode> = {
@@ -257,6 +258,7 @@ export default function DraggableOverviewSections({
   onDiscard,
   onNavigateToClient,
   customFieldsModule = "client",
+  highlightRequiredKeys = [],
 }: DraggableOverviewSectionsProps) {
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
@@ -592,6 +594,8 @@ export default function DraggableOverviewSections({
 
     const label = regField?.label || key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
+    const isRequiredMissing = highlightRequiredKeys.includes(key);
+
     return (
       <div
         key={`${sectionId}-${key}-${index}`}
@@ -604,10 +608,12 @@ export default function DraggableOverviewSections({
             ? "opacity-30 border-2 border-dashed border-blue-400"
             : isFieldDragOver
             ? "bg-blue-50/70 border border-blue-300 ring-2 ring-blue-400/20"
+            : isRequiredMissing
+            ? "bg-amber-50/40 border border-amber-300 shadow-2xs"
             : "hover:bg-slate-50/70"
         } p-2`}
       >
-        <div className="flex items-center justify-between gap-1.5 mb-1">
+        <div className="flex items-center justify-between gap-1.5 mb-1.5">
           <div className="flex items-center gap-1.5 min-w-0">
             <span
               className="cursor-grab active:cursor-grabbing text-slate-300 group-hover:text-slate-500 transition-colors p-0.5"
@@ -615,8 +621,14 @@ export default function DraggableOverviewSections({
             >
               <GripVertical className="w-3 h-3" />
             </span>
-            <label className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">
-              {label}
+            <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
+              <span>{label}</span>
+              {regField?.required && <span className="text-red-500 font-bold">*</span>}
+              {isRequiredMissing && (
+                <span className="text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs tracking-normal">
+                  Required
+                </span>
+              )}
             </label>
           </div>
 

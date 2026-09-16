@@ -278,6 +278,8 @@ export interface FieldDefinition {
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  processIds?: string[];      // Assigned process template IDs (for module="process")
+  requiredStages?: string[];  // Specific stage names/IDs this field is required for (for module="process" when required=true)
   isReusable?: boolean;        // Reusable across other modules (global field)
   reusableModules?: FieldModule[]; // Modules this field is shared with (empty/undefined = all modules)
   permissions?: FieldPermissions;  // Tenant admin control & permissions
@@ -294,11 +296,13 @@ export interface SectionDefinition {
   iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   fieldKeys: string[];
   required?: boolean;         // Required section
+  requiredStages?: string[];  // Specific stage names/IDs this section is required for (for module="process" when required=true)
   userVisibility?: boolean;   // Setting for user visibility
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
+  processIds?: string[];      // Assigned process template IDs (for module="process")
   isReusable?: boolean;        // Reusable across other modules (global section)
   reusableModules?: FieldModule[]; // Modules this section is shared with (empty/undefined = all modules)
   permissions?: SectionPermissions; // Tenant admin control & permissions
@@ -338,11 +342,18 @@ const SYSTEM_SECTION_IDS = new Set([
 ]);
 
 export function isFieldMatchingOrg(
-  field: FieldDefinition | { id?: number; key?: string; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[] },
-  org?: OrgScopeFilter | null
+  field: FieldDefinition | { id?: number; key?: string; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[]; processIds?: string[]; module?: string },
+  org?: OrgScopeFilter | null,
+  processId?: string
 ): boolean {
   if (!field) return true;
   if (field.source === "system" || (field.id !== undefined && field.id < 0) || (field.key && SYSTEM_FIELD_KEYS.has(field.key))) return true;
+
+  // If specific processId is evaluated and field is assigned to specific processes
+  if (processId && field.processIds && field.processIds.length > 0) {
+    const matchesProcess = field.processIds.includes("all") || field.processIds.includes(processId);
+    if (!matchesProcess) return false;
+  }
 
   // If multi-rule scoping is present, check against rules
   if (field.scopingRules && field.scopingRules.length > 0) {
@@ -437,11 +448,18 @@ export function isFieldMatchingOrg(
  * System sections are always global and match all organizations.
  */
 export function isSectionMatchingOrg(
-  section: SectionDefinition | { id: string; isCustom?: boolean; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[] },
-  org?: OrgScopeFilter | null
+  section: SectionDefinition | { id: string; isCustom?: boolean; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[]; processIds?: string[]; module?: string },
+  org?: OrgScopeFilter | null,
+  processId?: string
 ): boolean {
   if (!section) return true;
   if (section.source === "system" || (section as any).isCustom === false || SYSTEM_SECTION_IDS.has(section.id)) return true;
+
+  // If specific processId is evaluated and section is assigned to specific processes
+  if (processId && section.processIds && section.processIds.length > 0) {
+    const matchesProcess = section.processIds.includes("all") || section.processIds.includes(processId);
+    if (!matchesProcess) return false;
+  }
 
   // If multi-rule scoping is present, check against rules
   if (section.scopingRules && section.scopingRules.length > 0) {
@@ -1388,7 +1406,7 @@ interface FieldRegistryContextValue {
   getSystemFields: (module: FieldModule) => FieldDefinition[];
   getCustomFields: (module: FieldModule) => FieldDefinition[];
   getAllFields: (module: FieldModule) => FieldDefinition[];
-  getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => FieldDefinition[];
+  getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) => FieldDefinition[];
   addCustomField: (module: FieldModule, field: Omit<FieldDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }) => FieldDefinition;
   updateCustomField: (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => void;
   deleteCustomField: (module: FieldModule, id: number) => void;
@@ -1397,7 +1415,7 @@ interface FieldRegistryContextValue {
   getSystemSections: (module: FieldModule) => SectionDefinition[];
   getCustomSections: (module: FieldModule) => SectionDefinition[];
   getAllSections: (module: FieldModule) => SectionDefinition[];
-  getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null) => SectionDefinition[];
+  getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) => SectionDefinition[];
   addCustomSection: (module: FieldModule, section: Omit<SectionDefinition, "id" | "source" | "createdAt"> & { source?: "system" | "custom" | "template"; createdIn?: "admin" | "client" }) => SectionDefinition;
   updateCustomSection: (module: FieldModule, id: string, patch: Partial<SectionDefinition>) => void;
   deleteCustomSection: (module: FieldModule, id: string) => void;
@@ -1484,6 +1502,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     industry: f.industry,
     locations: Array.isArray(f.locations) ? f.locations : undefined,
     scopingRules: Array.isArray(f.scopingRules) ? f.scopingRules : undefined,
+    processIds: Array.isArray(f.processIds) ? f.processIds : undefined,
     isReusable: Boolean(f.isReusable),
     reusableModules: Array.isArray(f.reusableModules) ? f.reusableModules : undefined,
     permissions: f.permissions ? {
@@ -1720,6 +1739,7 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
     industry: s.industry,
     locations: Array.isArray(s.locations) ? s.locations : undefined,
     scopingRules: Array.isArray(s.scopingRules) ? s.scopingRules : undefined,
+    processIds: Array.isArray(s.processIds) ? s.processIds : undefined,
     isReusable: Boolean(s.isReusable),
     reusableModules: Array.isArray(s.reusableModules) ? s.reusableModules : undefined,
     permissions: s.permissions ? {
@@ -2053,14 +2073,14 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
     return [...getSystemSections(module), ...getCustomSections(module)];
   };
 
-  const getFieldsForOrg = (module: FieldModule, org?: OrgScopeFilter | null): FieldDefinition[] => {
-    return getAllFields(module).filter((f) => isFieldMatchingOrg(f, org));
+  const getFieldsForOrg = (module: FieldModule, org?: OrgScopeFilter | null, processId?: string): FieldDefinition[] => {
+    return getAllFields(module).filter((f) => isFieldMatchingOrg(f, org, processId));
   };
 
-  const getSectionsForOrg = (module: FieldModule, org?: OrgScopeFilter | null): SectionDefinition[] => {
+  const getSectionsForOrg = (module: FieldModule, org?: OrgScopeFilter | null, processId?: string): SectionDefinition[] => {
     const all = getAllSections(module);
-    const matchedSections = all.filter((s) => isSectionMatchingOrg(s, org));
-    const allowedFieldKeys = new Set(getFieldsForOrg(module, org).map((f) => f.key));
+    const matchedSections = all.filter((s) => isSectionMatchingOrg(s, org, processId));
+    const allowedFieldKeys = new Set(getFieldsForOrg(module, org, processId).map((f) => f.key));
 
     return matchedSections.map((s) => ({
       ...s,

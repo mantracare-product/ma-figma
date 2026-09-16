@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, Outlet } from "react-router";
-import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, RefreshCw } from "lucide-react";
+import { Search, Filter, Plus, Upload, Download, MoreVertical, Eye, Phone, Trash2, Settings as SettingsIcon, FileText, Calendar, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Mail, MapPin, Clock, MessageSquare, Edit, PhoneOutgoing, PhoneIncoming, PhoneOff, Settings, User, CalendarClock, ArrowRight, List, Play, ChevronDown, GripVertical, X, Building, Briefcase, Users, GitBranch, Globe, Copy, Shield, Info, AlertCircle, AlertTriangle, CheckCircle2, RefreshCw } from "lucide-react";
 import { useDrag, useDrop } from "react-dnd";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -22,6 +22,9 @@ import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedSt
 import { useFieldRegistry, isFieldMatchingOrg } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
 import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
+import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
+import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
+import { addProcessCallLog } from "../../lib/processLogsStore";
 
 interface Client {
   id: string;
@@ -139,8 +142,26 @@ const DraggableColumnHeader: React.FC<DraggableColumnHeaderProps> = ({ columnKey
 
 export default function Clients() {
   const navigate = useNavigate();
-  const { getAllFields } = useFieldRegistry();
+  const { getAllFields, getSectionsForOrg, getFieldsForOrg } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
+
+  const allRegistrySections = getSectionsForOrg("process", activeOrganization);
+  const allRegistryProcessFields = getFieldsForOrg("process", activeOrganization);
+
+  const [selectedProcessLogForDrawer, setSelectedProcessLogForDrawer] = useState<any | null>(null);
+  const [showProcessDetailDrawer, setShowProcessDetailDrawer] = useState(false);
+  const [processDrawerTab, setProcessDrawerTab] = useState<"general" | "history" | "documents" | "activity">("general");
+  const [processHistoryFilters, setProcessHistoryFilters] = useState<ProcessDetailHistoryFilterState>({
+    showPopup: false,
+    quickFilter: null,
+    eventTypeFilter: "Not specified",
+    createdByFilter: "",
+    dateFilter: "Any date",
+    filtersActive: false,
+    showAddFieldPopup: false,
+    activeFilterFields: ["Event Type", "Created By", "Date"],
+    selectedAddFields: ["Event Type", "Created By", "Date"],
+  });
 
   const clientInfoFieldsList = Array.from(new Set([
     ...getAllFields("client")
@@ -842,26 +863,70 @@ export default function Clients() {
       return;
     }
 
-    // Extract process from first selected stage
-    const firstStage = newClient.stage[0];
-    const extractedProcess = firstStage.split(":")[0].trim();
+    // Extract unique processes from selected stages
+    const extractedProcesses = Array.from(
+      new Set(
+        newClient.stage.map((s) => (s.includes(":") ? s.split(":")[0].trim() : s.trim()))
+      )
+    );
+
+    const generatedId = `CL-${String(Date.now()).slice(-4)}`;
 
     const client: Client = {
-      id: String(clients.length + 1),
+      id: generatedId,
       name: newClient.name,
       email: newClient.email,
       phone: `${newClient.countryCode} ${newClient.phone}`,
       country: "United States",
       countryCode: newClient.countryCode,
       countryFlag: newClient.countryFlag,
-      processes: [extractedProcess],
+      processes: extractedProcesses.length > 0 ? extractedProcesses : ["Patient Intake"],
       stage: newClient.stage.join(", "),
       responsible: newClient.responsible,
       lastContact: new Date().toISOString().split("T")[0],
       status: "Active",
+      companyName: newClient.companyName,
+      jobPosition: newClient.jobPosition,
+      numberOfEmployees: newClient.numberOfEmployees,
     };
 
-    setClients([client, ...clients]);
+    const updatedClients = [client, ...clients];
+    setClients(updatedClients);
+    sessionStorage.setItem("clients", JSON.stringify(updatedClients));
+    window.dispatchEvent(new Event(CLIENTS_STORE_EVENT));
+
+    // Automatically create process log entries for each assigned process & stage so it appears in /deals
+    newClient.stage.forEach((selectedStage, idx) => {
+      const parts = selectedStage.split(":");
+      const pName = parts[0]?.trim() || "Patient Intake";
+      const sName = parts[1]?.trim() || parts[0]?.trim() || "Initial Contact";
+
+      addProcessCallLog({
+        clientId: client.id,
+        clientName: client.name,
+        processName: pName,
+        stageName: sName,
+      });
+
+      // Also create a Deal entry so it shows up in Kanban/Deals view
+      try {
+        const rawDeals = sessionStorage.getItem("deals");
+        const existingDeals: any[] = rawDeals ? JSON.parse(rawDeals) : [];
+        const newDeal = {
+          id: `DEAL-${client.id}-${idx + 1}`,
+          dealName: `${client.name} - ${pName}`,
+          clientName: client.name,
+          amount: 0,
+          currency: "₹",
+          createdDate: new Date().toISOString().split("T")[0],
+          status: "In Progress" as const,
+          responsible: client.responsible || "Unassigned",
+          stage: `${pName}: ${sName}`,
+        };
+        sessionStorage.setItem("deals", JSON.stringify([newDeal, ...existingDeals]));
+        window.dispatchEvent(new Event("deals_updated"));
+      } catch {}
+    });
 
     // Reset form
     setNewClient({
@@ -5070,6 +5135,43 @@ export default function Clients() {
         ]}
         guideUrl="/guide/clients"
       />
+
+      {showProcessDetailDrawer && selectedProcessLogForDrawer && (
+        <ProcessDetailDrawer
+          isOpen={showProcessDetailDrawer}
+          onClose={() => setShowProcessDetailDrawer(false)}
+          log={selectedProcessLogForDrawer}
+          client={selectedClientForProfile || undefined}
+          activeTab={processDrawerTab}
+          onTabChange={setProcessDrawerTab}
+          stageIdx={1}
+          onStageChange={(newIdx) => {
+            toast.success(`Stage updated to Stage ${newIdx}`);
+          }}
+          visibleFieldKeys={["client_name", "phone", "email", "source", "responsible", "created_at"]}
+          onVisibleFieldKeysChange={() => {}}
+          editedValues={{}}
+          editingField={null}
+          onStartEditingField={() => {}}
+          onFieldSave={(key, val) => {
+            if (selectedClientForProfile) {
+              setClients(prev => prev.map(c => c.id === selectedClientForProfile.id ? { ...c, [key]: val } : c));
+            }
+          }}
+          showResponsibleDropdown={false}
+          onToggleResponsibleDropdown={() => {}}
+          onOpenTeamMember={() => {}}
+          isTeamMemberDrawerOpen={false}
+          fieldManagerOpen={false}
+          fieldManagerMode="select"
+          onOpenFieldManager={() => {}}
+          onCloseFieldManager={() => {}}
+          teamMembersData={[]}
+          dealFields={allRegistryProcessFields}
+          historyFilters={processHistoryFilters}
+          onHistoryFiltersChange={(patch) => setProcessHistoryFilters(prev => ({ ...prev, ...patch }))}
+        />
+      )}
     </>
   );
 }

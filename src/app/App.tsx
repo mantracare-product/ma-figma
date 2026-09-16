@@ -10,6 +10,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { SidebarProvider } from "./context/SidebarContext";
 import { ClientFieldsProvider } from "./context/ClientFieldsContext";
 import { FieldRegistryProvider } from "./context/FieldRegistryContext";
+import { ProcessTemplateProvider } from "./context/ProcessTemplateContext";
 import { InvoiceProvider } from "./context/InvoiceContext";
 import { Toaster } from "sonner";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -24,14 +25,16 @@ export default function App() {
               <HowItWorksProvider>
                 <AIProviderProvider>
                   <FieldRegistryProvider>
-                    <ClientFieldsProvider>
-                      <InvoiceProvider>
-                        <DndProvider backend={HTML5Backend}>
-                          <RouterProvider router={router} />
-                          <Toaster position="bottom-right" />
-                        </DndProvider>
-                      </InvoiceProvider>
-                    </ClientFieldsProvider>
+                    <ProcessTemplateProvider>
+                      <ClientFieldsProvider>
+                        <InvoiceProvider>
+                          <DndProvider backend={HTML5Backend}>
+                            <RouterProvider router={router} />
+                            <Toaster position="bottom-right" />
+                          </DndProvider>
+                        </InvoiceProvider>
+                      </ClientFieldsProvider>
+                    </ProcessTemplateProvider>
                   </FieldRegistryProvider>
                 </AIProviderProvider>
               </HowItWorksProvider>

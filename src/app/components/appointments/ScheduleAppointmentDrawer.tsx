@@ -2,8 +2,7 @@ import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
-import { MOCK_SERVICES } from "../../../lib/mockServicesData";
-import { getStoredServices } from "../../../lib/servicesStore";
+import { getStoredServices, EMPLOYEES } from "../../../lib/servicesStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
 import {
   ChevronDown,
@@ -388,7 +387,14 @@ export default function ScheduleAppointmentDrawer({
 
   // ── Available services ──
   const allAvailableServices = useMemo(() => {
-    const list: Array<{ id: string; name: string; price: number; duration: number; tax?: number }> = [];
+    const list: Array<{
+      id: string;
+      name: string;
+      price: number;
+      duration: number;
+      tax?: number;
+      assignedEmployees?: number[];
+    }> = [];
     const seenNames = new Set<string>();
     try {
       const stored = getStoredServices();
@@ -396,17 +402,18 @@ export default function ScheduleAppointmentDrawer({
         stored.forEach((s) => {
           if (!seenNames.has(s.name.toLowerCase())) {
             seenNames.add(s.name.toLowerCase());
-            list.push({ id: String(s.id), name: s.name, price: s.price, duration: s.duration || 30, tax: s.tax || 0 });
+            list.push({
+              id: String(s.id),
+              name: s.name,
+              price: s.price,
+              duration: s.duration || 30,
+              tax: s.tax || 0,
+              assignedEmployees: s.assignedEmployees,
+            });
           }
         });
       }
     } catch { /* ignore */ }
-    MOCK_SERVICES.forEach((m) => {
-      if (!seenNames.has(m.name.toLowerCase())) {
-        seenNames.add(m.name.toLowerCase());
-        list.push({ id: m.id, name: m.name, price: m.price, duration: m.duration || 30, tax: m.tax || 0 });
-      }
-    });
     return list;
   }, []);
 
@@ -536,6 +543,28 @@ export default function ScheduleAppointmentDrawer({
     return `${h % 12 === 0 ? 12 : h % 12}:${pad(mn)} ${p}`;
   };
 
+  // ── Available responsible providers for selected service ──
+  const availableEmployeesForService = useMemo(() => {
+    if (!values.serviceId) return employees;
+    const selectedSrv = allAvailableServices.find(
+      (s) => String(s.id) === String(values.serviceId)
+    );
+    if (!selectedSrv || !selectedSrv.assignedEmployees || selectedSrv.assignedEmployees.length === 0) {
+      return employees;
+    }
+
+    const assignedIds = new Set(selectedSrv.assignedEmployees.map(String));
+    const assignedNames = new Set(
+      EMPLOYEES.filter((emp) => selectedSrv.assignedEmployees?.includes(emp.id)).map((emp) => emp.name.toLowerCase())
+    );
+
+    const matched = employees.filter(
+      (emp) => assignedIds.has(String(emp.id)) || assignedNames.has(emp.name.toLowerCase())
+    );
+
+    return matched.length > 0 ? matched : employees;
+  }, [values.serviceId, allAvailableServices, employees]);
+
   // ── Handlers ──
   const handleServiceSelect = (serviceId: string) => {
     const srv = allAvailableServices.find((s) => String(s.id) === serviceId);
@@ -545,10 +574,28 @@ export default function ScheduleAppointmentDrawer({
         description: srv.name, quantity: 1, unitPrice: srv.price, taxPercent: srv.tax || 0,
       };
       const patientName = values.client?.name?.trim();
+
+      // Check if current provider is valid for newly selected service
+      let nextProvider = values.provider;
+      if (srv.assignedEmployees && srv.assignedEmployees.length > 0) {
+        const assignedIds = new Set(srv.assignedEmployees.map(String));
+        const assignedNames = new Set(
+          EMPLOYEES.filter((emp) => srv.assignedEmployees?.includes(emp.id)).map((emp) => emp.name.toLowerCase())
+        );
+        const validEmps = employees.filter(
+          (emp) => assignedIds.has(String(emp.id)) || assignedNames.has(emp.name.toLowerCase())
+        );
+        const isCurrentValid = values.provider && validEmps.some((e) => String(e.id) === String(values.provider?.id) || e.name.toLowerCase() === values.provider?.name?.toLowerCase());
+        if (!isCurrentValid) {
+          nextProvider = validEmps.length > 0 ? validEmps[0] : null;
+        }
+      }
+
       onChange({
         serviceId: String(srv.id), serviceName: srv.name,
         title: patientName ? `${srv.name} — ${patientName}` : `${srv.name} Appointment`,
         generateInvoice: values.generateInvoice ?? true, lineItems: [li],
+        provider: nextProvider,
       });
     } else {
       onChange({ serviceId: "", serviceName: "", lineItems: [] });
@@ -596,12 +643,12 @@ export default function ScheduleAppointmentDrawer({
   const total = Math.round((Math.max(0, subtotal - discount) + tax) * 100) / 100;
 
   // ── Validation ──
-  const isSection1Complete = Boolean(values.client && values.provider);
-  const isSection2Complete = Boolean(values.serviceId || values.serviceName);
-  const isSection3Complete = Boolean(
+  const isServiceComplete = Boolean(values.serviceId || values.serviceName);
+  const isParticipantsComplete = Boolean(values.client && values.provider);
+  const isScheduleComplete = Boolean(
     values.date && (values.sessionType !== "inPerson" || (values.location && values.location.trim()))
   );
-  const isFormComplete = isSection1Complete && isSection2Complete && isSection3Complete;
+  const isFormComplete = isServiceComplete && isParticipantsComplete && isScheduleComplete;
 
   const summaryText = isFormComplete
     ? `${values.sessionType === "video" ? "Video" : "In-Person"} · ${fmtShortDate()} · ${fmt12(values.startHour, values.startMinute)} – ${fmt12(endHour, endMin)} · ${values.client?.name} with ${values.provider?.name}`
@@ -618,8 +665,8 @@ export default function ScheduleAppointmentDrawer({
   ];
 
   const providerOptions: DropdownOption[] = [
-    { value: "", label: "Select a user" },
-    ...employees.map((e) => ({ value: String(e.id), label: e.name, meta: e.email })),
+    { value: "", label: values.serviceId ? "Select assigned responsible user" : "Select a user" },
+    ...availableEmployeesForService.map((e) => ({ value: String(e.id), label: e.name, meta: e.email })),
   ];
 
   const serviceOptions: DropdownOption[] = [
@@ -707,7 +754,24 @@ export default function ScheduleAppointmentDrawer({
       <div className="space-y-3 pb-4">
 
         {/* ================================================================ */}
-        {/* SECTION 1 — PARTICIPANTS                                         */}
+        {/* SECTION 1 — SERVICE                                              */}
+        {/* ================================================================ */}
+        <SectionCard>
+          <SectionHeader title="Service" />
+          <div className="p-3">
+            <FieldRow label="Select Service" required>
+              <CustomDropdown
+                value={values.serviceId || ""}
+                options={serviceOptions}
+                placeholder="Select a service"
+                onChange={handleServiceSelect}
+              />
+            </FieldRow>
+          </div>
+        </SectionCard>
+
+        {/* ================================================================ */}
+        {/* SECTION 2 — PARTICIPANTS                                         */}
         {/* ================================================================ */}
         <SectionCard>
           <SectionHeader title="Participants" />
@@ -720,32 +784,15 @@ export default function ScheduleAppointmentDrawer({
                 onChange={handleClientSelect}
               />
             </FieldRow>
-            <FieldRow label="Schedule With" required>
+            <FieldRow label="Schedule With (Responsible)" required>
               <CustomDropdown
                 value={values.provider ? String(values.provider.id) : ""}
                 options={providerOptions}
-                placeholder="Select a user"
+                placeholder={values.serviceId ? "Select assigned responsible user" : "Select a user"}
                 onChange={(val) => {
                   const emp = employees.find((x) => String(x.id) === val);
                   onChange({ provider: emp || null });
                 }}
-              />
-            </FieldRow>
-          </div>
-        </SectionCard>
-
-        {/* ================================================================ */}
-        {/* SECTION 2 — SERVICE                                              */}
-        {/* ================================================================ */}
-        <SectionCard>
-          <SectionHeader title="Service" />
-          <div className="p-3">
-            <FieldRow label="Select Service" required>
-              <CustomDropdown
-                value={values.serviceId || ""}
-                options={serviceOptions}
-                placeholder="Select a service"
-                onChange={handleServiceSelect}
               />
             </FieldRow>
           </div>

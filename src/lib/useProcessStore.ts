@@ -67,13 +67,111 @@ export interface Stage {
   callTriggerSettings?: CallTriggerSettings;
 }
 
+export interface ScopingRule {
+  id?: string;
+  industryCategory?: string;
+  industries?: string[];
+  locations?: string[];
+}
+
+export interface ProcessPermissions {
+  canHide?: boolean;
+  canEdit?: boolean;
+  canAdd?: boolean;
+  canDelete?: boolean;
+}
+
 export interface Process {
   id: string;
   name: string;
   description: string;
-  assignedToUserId: number; // who this record is assigned to — used for "own" checks
+  assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  // Scoping & Tenant Permissions
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+  scopingRules?: ScopingRule[];
+  permissions?: ProcessPermissions;
+  source?: "system" | "template" | "custom";
+}
+
+export function isProcessMatchingScope(
+  process: Process,
+  filter: { category?: string; industry?: string; location?: string }
+): boolean {
+  if (!process) return true;
+  const { category, industry, location } = filter;
+
+  // Multi-rule scoping evaluation
+  if (process.scopingRules && process.scopingRules.length > 0) {
+    return process.scopingRules.some((rule) => {
+      const rCat = rule.industryCategory?.trim();
+      const rInds = (rule.industries || []).map((i) => i.trim()).filter((i) => i && i !== "All" && i !== "*");
+      const rLocs = (rule.locations || []).map((l) => l.trim()).filter((l) => l && l !== "All" && l !== "*");
+
+      const hasCat = Boolean(rCat && rCat !== "All" && rCat !== "*");
+      const hasInd = rInds.length > 0;
+      const hasLoc = rLocs.length > 0;
+
+      // If rule is unconstrained, it matches all
+      if (!hasCat && !hasInd && !hasLoc) return true;
+
+      // Check category match
+      if (category && category !== "all" && category !== "All") {
+        if (hasCat && rCat?.toLowerCase() !== category.toLowerCase()) return false;
+      }
+
+      // Check industry match
+      if (industry && industry !== "all" && industry !== "All") {
+        if (hasInd && !rInds.some((i) => i.toLowerCase() === industry.toLowerCase())) return false;
+      }
+
+      // Check location match
+      if (location && location !== "all" && location !== "All") {
+        if (hasLoc && !rLocs.some((l) => l.toLowerCase() === location.toLowerCase())) return false;
+      }
+
+      return true;
+    });
+  }
+
+  // Legacy single-scope fields fallback
+  if (category && category !== "all" && category !== "All") {
+    if (process.industryCategory && process.industryCategory !== "All" && process.industryCategory.toLowerCase() !== category.toLowerCase()) {
+      return false;
+    }
+  }
+
+  if (industry && industry !== "all" && industry !== "All") {
+    if (process.industry && process.industry !== "All" && process.industry.toLowerCase() !== industry.toLowerCase()) {
+      return false;
+    }
+  }
+
+  if (location && location !== "all" && location !== "All") {
+    if (process.locations && process.locations.length > 0 && !process.locations.includes("All")) {
+      if (!process.locations.some((l) => l.toLowerCase() === location.toLowerCase())) {
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+export function isProcessMatchingOrg(
+  process: Process,
+  org?: { industryCategory?: string; industry?: string; location?: string; locations?: string[] } | null
+): boolean {
+  if (!process) return true;
+  if (!org) return true;
+  return isProcessMatchingScope(process, {
+    category: org.industryCategory,
+    industry: org.industry,
+    location: org.location || (org.locations && org.locations[0]),
+  });
 }
 
 export const PROCESS_STORE_EVENT = "processStore_updated";
