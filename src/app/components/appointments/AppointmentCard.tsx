@@ -7,8 +7,8 @@ interface Appointment {
   clientName: string;
   clientEmail: string;
   clientPhone: string;
-  employeeId: number;
-  serviceId: number;
+  employeeId: number | string;
+  serviceId: number | string;
   date: string;
   time: string;
   duration: number;
@@ -23,7 +23,7 @@ interface Appointment {
 }
 
 interface Employee {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
 }

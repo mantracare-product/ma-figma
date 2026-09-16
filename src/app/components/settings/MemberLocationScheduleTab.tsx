@@ -140,14 +140,29 @@ export default function MemberLocationScheduleTab({
     return true;
   }, [canBookAppointments, resolvedUserId, memberId]);
 
-  // 1. Organization Locations
-  const [locations, setLocations] = useState<Array<{ id: string; name: string }>>(() => {
+  const [locVersion, setLocVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => setLocVersion((v) => v + 1);
+    window.addEventListener("storage", handleUpdate);
+    return () => window.removeEventListener("storage", handleUpdate);
+  }, []);
+
+  // 1. Organization Locations + Online
+  const locations = useMemo<Array<{ id: string; name: string }>>(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any) => ({ id: l.id, name: l.name }));
+          parsed.forEach((l: any) => {
+            if (!seen.has(l.name.toLowerCase())) {
+              seen.add(l.name.toLowerCase());
+              list.push({ id: l.id, name: l.name });
+            }
+          });
         }
       }
     } catch {}
@@ -157,14 +172,25 @@ export default function MemberLocationScheduleTab({
         ? activeOrganization.locations
         : [activeOrganization.location || "California"];
 
-    return orgLocs.map((name, idx) => ({
-      id: `loc-${idx + 1}`,
-      name:
-        name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
-          ? name
-          : `${name} Branch`,
-    }));
-  });
+    orgLocs.forEach((name, idx) => {
+      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+      const formatted = isOnline
+        ? "Online"
+        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+        ? name
+        : `${name} Branch`;
+      if (!seen.has(formatted.toLowerCase())) {
+        seen.add(formatted.toLowerCase());
+        list.push({ id: `loc-${idx + 1}`, name: formatted });
+      }
+    });
+
+    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+      list.push({ id: "loc-online", name: "Online" });
+    }
+
+    return list;
+  }, [activeOrganization, locVersion]);
 
   const [selectedLocationId, setSelectedLocationId] = useState<string>(
     () => locations[0]?.id || "loc-1"

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Drawer } from "../ui/drawer";
-import { ChevronDown, MapPin } from "lucide-react";
+import { ChevronDown, MapPin, Video, Building2 } from "lucide-react";
 import { toast } from "sonner";
-import { addTeamMemberToStore, TeamMember } from "../../../lib/teamStore";
+import { addTeamMemberToStore, TeamMember, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { useOrganization } from "../../context/OrganizationContext";
 
 export interface AddTeamMemberDrawerProps {
@@ -34,18 +34,39 @@ export default function AddTeamMemberDrawer({
   const [department, setDepartment] = useState("");
   const [role, setRole] = useState("Specialist");
   const [canBookAppointments, setCanBookAppointments] = useState(initialCanBookAppointments);
+  const [locVersion, setLocVersion] = useState(0);
 
-  // Fetch organization locations from storage or activeOrganization
+  // Listen to storage/team updates
+  useEffect(() => {
+    const handleUpdate = () => setLocVersion((v) => v + 1);
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+    };
+  }, []);
+
+  // Fetch organization locations strictly from storage / context + Online
   const orgLocations = useMemo(() => {
+    const list: Array<{ id: string; name: string; isOnline?: boolean }> = [];
+    const seen = new Set<string>();
+
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization?.id || "1"}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any, idx: number) => ({
-            id: l.id || `loc-${idx + 1}`,
-            name: l.name,
-          }));
+          parsed.forEach((l: any, idx: number) => {
+            const isOnline =
+              l.type === "online" ||
+              l.name.toLowerCase().includes("online") ||
+              l.name.toLowerCase().includes("virtual");
+            if (!seen.has(l.name.toLowerCase())) {
+              seen.add(l.name.toLowerCase());
+              list.push({ id: l.id || `loc-${idx + 1}`, name: l.name, isOnline });
+            }
+          });
         }
       }
     } catch {}
@@ -55,11 +76,25 @@ export default function AddTeamMemberDrawer({
         ? activeOrganization.locations
         : [activeOrganization?.location || "California"];
 
-    return orgLocs.map((name: string, idx: number) => ({
-      id: `loc-${idx + 1}`,
-      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
-    }));
-  }, [activeOrganization]);
+    orgLocs.forEach((name: string, idx: number) => {
+      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+      const formatted = isOnline
+        ? "Online"
+        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+        ? name
+        : `${name} Branch`;
+      if (!seen.has(formatted.toLowerCase())) {
+        seen.add(formatted.toLowerCase());
+        list.push({ id: `loc-${idx + 1}`, name: formatted, isOnline });
+      }
+    });
+
+    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+      list.push({ id: "loc-online", name: "Online", isOnline: true });
+    }
+
+    return list;
+  }, [activeOrganization, locVersion]);
 
   const [selectedLocationIds, setSelectedLocationIds] = useState<string[]>([]);
 
@@ -111,11 +146,13 @@ export default function AddTeamMemberDrawer({
       const activeMap: Record<string, boolean> = {};
       orgLocations.forEach((loc) => {
         activeMap[loc.id] = selectedLocationIds.includes(loc.id);
+        activeMap[loc.name] = selectedLocationIds.includes(loc.id);
       });
       localStorage.setItem(
         `mantra_user_loc_active_map_${created.id}_${activeOrganization?.id || "1"}`,
         JSON.stringify(activeMap)
       );
+      window.dispatchEvent(new Event("storage"));
     } catch {}
 
     toast.success(`Team member "${created.name}" added successfully`);
@@ -312,7 +349,7 @@ export default function AddTeamMemberDrawer({
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-1.5 max-h-[160px] overflow-y-auto pr-0.5">
+            <div className="grid grid-cols-1 gap-1.5 max-h-[180px] overflow-y-auto pr-0.5">
               {orgLocations.length === 0 ? (
                 <div className="p-2.5 text-center text-xs text-slate-400">
                   No organization locations found
@@ -341,12 +378,23 @@ export default function AddTeamMemberDrawer({
                         }}
                         className="w-3.5 h-3.5 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer accent-blue-600 shrink-0"
                       />
-                      <span className="text-xs font-medium flex-1 truncate">{loc.name}</span>
-                      {idx === 0 && (
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        {loc.isOnline ? (
+                          <Video className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                        ) : (
+                          <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                        )}
+                        <span className="text-xs font-medium truncate">{loc.name}</span>
+                      </div>
+                      {loc.isOnline ? (
+                        <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded">
+                          Online
+                        </span>
+                      ) : idx === 0 ? (
                         <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">
                           Primary
                         </span>
-                      )}
+                      ) : null}
                     </label>
                   );
                 })

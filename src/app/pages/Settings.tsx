@@ -18,6 +18,7 @@ import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
+import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
 import {
   Save,
   Plus,
@@ -1083,10 +1084,22 @@ export default function Settings() {
   }, [activeOrganization]);
 
   const [addMemberSelectedLocationIds, setAddMemberSelectedLocationIds] = useState<string[]>([]);
+  const [addMemberSelectedServiceIds, setAddMemberSelectedServiceIds] = useState<number[]>([]);
+  const [showMemberServiceDrop, setShowMemberServiceDrop] = useState(false);
+  const [memberServiceSearch, setMemberServiceSearch] = useState("");
+  const [settingsServices, setSettingsServices] = useState<Service[]>(getStoredServices);
+
+  useEffect(() => {
+    return onServicesChanged(() => setSettingsServices(getStoredServices()));
+  }, []);
 
   useEffect(() => {
     if (showAddUserModal) {
       setAddMemberSelectedLocationIds(settingsOrgLocations.map((l) => l.id));
+      setSettingsServices(getStoredServices());
+      setAddMemberSelectedServiceIds([]);
+      setShowMemberServiceDrop(false);
+      setMemberServiceSearch("");
     }
   }, [showAddUserModal, settingsOrgLocations]);
 
@@ -3223,6 +3236,7 @@ export default function Settings() {
         .filter((l) => addMemberSelectedLocationIds.includes(l.id))
         .map((l) => l.name);
 
+      const canBook = Boolean(userFormData.canBookAppointments || addMemberSelectedServiceIds.length > 0);
       const newUser: User = {
         id: Math.max(...allUsers.map((u) => u.id), 0) + 1,
         name: userFormData.name,
@@ -3231,15 +3245,16 @@ export default function Settings() {
         organizationId: activeOrganization.id,
         role: userFormData.role,
         permissions: userFormData.permissions,
-        canBookAppointments: Boolean(userFormData.canBookAppointments),
+        canBookAppointments: canBook,
         locations: selectedLocationNames,
+        assignedServices: addMemberSelectedServiceIds,
         calendarConnected,
         connectedCalendar,
         availability,
         daysOff,
       };
 
-      if (userFormData.canBookAppointments) {
+      if (canBook) {
         try {
           const activeMap: Record<string, boolean> = {};
           settingsOrgLocations.forEach((loc) => {
@@ -3252,12 +3267,30 @@ export default function Settings() {
         } catch {}
       }
 
+      // Sync assigned services back to products & services catalogue
+      if (addMemberSelectedServiceIds.length > 0) {
+        try {
+          const allStoredServices = getStoredServices();
+          allStoredServices.forEach((s) => {
+            if (addMemberSelectedServiceIds.includes(s.id)) {
+              const existingEmps = s.assignedEmployees || [];
+              if (!existingEmps.some((eid) => String(eid) === String(newUser.id))) {
+                updateService(s.id, {
+                  assignedEmployees: [...existingEmps, newUser.id],
+                });
+              }
+            }
+          });
+        } catch {}
+      }
+
       setAllUsers([...allUsers, newUser]);
       toast.success("User added successfully");
     }
 
     setShowAddUserModal(false);
     setShowEditUserModal(false);
+    setAddMemberSelectedServiceIds([]);
     setUserFormData({
       name: "",
       email: "",
@@ -3555,116 +3588,6 @@ export default function Settings() {
                 {/* Organization Locations */}
                 <OrganizationLocationsSection isEditing={isEditingOrganization} />
 
-                {/* Contact Info */}
-                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
-                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">CONTACT INFO</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Email
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          type="email"
-                          value={editOrgData.email}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, email: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">{activeOrganization.email}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Phone
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          type="tel"
-                          value={editOrgData.phone}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, phone: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">{activeOrganization.phone || "+1 (555) 123-4567"}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Website
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          type="url"
-                          value={editOrgData.website}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, website: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">https://example.com</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Call Preferences */}
-                <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
-                  <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">
-                    CALL PREFERENCES
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Preferred Calling Time
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          type="time"
-                          value={editOrgData.preferredCallingTime}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, preferredCallingTime: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">2:00 PM</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Timezone
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          value={editOrgData.timezone}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, timezone: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">UTC-08:00 (Pacific Time)</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium flex items-center gap-1" style={TEXT_STYLES.subtext}>
-                        Default Calling Country
-                        {isEditingOrganization && <Edit className="w-3 h-3 text-blue-600" />}
-                      </label>
-                      {isEditingOrganization ? (
-                        <Input
-                          value={editOrgData.defaultCallingCountry}
-                          onChange={(e) => setEditOrgData({ ...editOrgData, defaultCallingCountry: e.target.value })}
-                          className="mt-1"
-                        />
-                      ) : (
-                        <p className="mt-1 text-foreground">United States</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
                 {/* Billing Info */}
                 <div className="bg-white/90 rounded-[20px] p-6 border border-slate-200/70 shadow-2xs space-y-4">
                   <h3 className="font-bold text-xs uppercase tracking-wider pb-3 border-b border-slate-100 font-display text-slate-500">BILLING INFO</h3>
@@ -3773,7 +3696,6 @@ export default function Settings() {
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Name</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Email</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Role</th>
-                        <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Department</th>
                         <th className="text-left px-6 py-3 text-xs font-semibold uppercase tracking-wider" style={{ color: '#FFFFFF', fontFamily: 'Outfit, sans-serif' }}>Status</th>
                       </tr>
                     </thead>
@@ -3837,19 +3759,6 @@ export default function Settings() {
                               }`}>
                               {user.role || "Agent"}
                             </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            {(() => {
-                              const dept = roles.find(r => r.name === user.role)?.department;
-                              return dept ? (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
-                                  {dept}
-                                </span>
-                              ) : (
-                                <span className="text-xs text-slate-400 italic" style={{ fontFamily: 'Outfit, sans-serif' }}>—</span>
-                              );
-                            })()}
                           </td>
                           <td className="px-6 py-4">
                             <label className="relative inline-flex items-center cursor-pointer">
@@ -7838,34 +7747,7 @@ export default function Settings() {
               />
             </div>
 
-            {/* Department (before Role) */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-500"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg>
-                  Department <span className="text-slate-400 font-normal">(optional)</span>
-                </span>
-              </label>
-              <div className="relative">
-                <select
-                  value={addUserDepartment}
-                  onChange={(e) => {
-                    setAddUserDepartment(e.target.value);
-                    // Reset role when dept changes
-                    setUserFormData({ ...userFormData, role: "Agent", permissions: createDefaultPermissions() });
-                  }}
-                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"
-                >
-                  <option value="">All departments</option>
-                  {Array.from(new Set(roles.filter(r => r.department).map(r => r.department!))).map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
-              </div>
-            </div>
-
-            {/* Role (filtered by department) */}
+            {/* Role */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
                 Role <span className="text-red-500">*</span>
@@ -7884,23 +7766,113 @@ export default function Settings() {
                   }}
                   className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white focus:outline-none focus:border-slate-400 transition-colors appearance-none"
                 >
-                  {roles
-                    .filter(r => !addUserDepartment || r.department === addUserDepartment)
-                    .map((role) => (
-                      <option key={role.id} value={role.name}>{role.name}</option>
-                    ))
-                  }
-                  {roles.filter(r => !addUserDepartment || r.department === addUserDepartment).length === 0 && (
-                    <option value="Agent" disabled>No roles in this department</option>
-                  )}
+                  {roles.map((role) => (
+                    <option key={role.id} value={role.name}>{role.name}</option>
+                  ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none w-4 h-4 text-slate-400" />
               </div>
-              {addUserDepartment && (
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Showing roles in <span className="font-semibold text-slate-600">{addUserDepartment}</span>
-                </p>
+            </div>
+
+            {/* Assigned Products / Services */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Briefcase className="w-3.5 h-3.5 text-blue-600" />
+                  Assigned Products / Services <span className="text-slate-400 font-normal">(optional)</span>
+                </span>
+              </label>
+              {addMemberSelectedServiceIds.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2 p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
+                  {addMemberSelectedServiceIds.map((sid) => {
+                    const svc = settingsServices.find((s) => s.id === sid);
+                    if (!svc) return null;
+                    return (
+                      <span
+                        key={sid}
+                        onClick={() => setAddMemberSelectedServiceIds((prev) => prev.filter((id) => id !== sid))}
+                        title="Click to remove"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-white text-slate-700 border border-slate-200 shadow-2xs cursor-pointer hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition-all"
+                      >
+                        <span>{svc.name}</span>
+                        <X className="w-3 h-3 text-slate-400 hover:text-rose-600" />
+                      </span>
+                    );
+                  })}
+                </div>
               )}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowMemberServiceDrop(!showMemberServiceDrop)}
+                  className="w-full px-3.5 py-2.5 text-sm border border-slate-200 rounded-xl bg-white flex items-center justify-between focus:outline-none focus:border-slate-400 transition-colors cursor-pointer"
+                >
+                  <span className={addMemberSelectedServiceIds.length === 0 ? "text-slate-400" : "text-slate-800 font-medium"}>
+                    {addMemberSelectedServiceIds.length === 0
+                      ? "Select products & services to assign..."
+                      : `${addMemberSelectedServiceIds.length} product${addMemberSelectedServiceIds.length > 1 ? "s" : ""} selected`}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showMemberServiceDrop ? "rotate-180" : ""}`} />
+                </button>
+                {showMemberServiceDrop && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => { setShowMemberServiceDrop(false); setMemberServiceSearch(""); }} />
+                    <div className="absolute left-0 right-0 mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100">
+                      <div className="p-2 border-b border-slate-100 bg-slate-50/70">
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="Search products & services..."
+                            value={memberServiceSearch}
+                            onChange={(e) => setMemberServiceSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs placeholder:text-slate-400 focus:outline-none focus:border-slate-400"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+                        {settingsServices
+                          .filter((s) => s.name.toLowerCase().includes(memberServiceSearch.toLowerCase()))
+                          .map((s) => {
+                            const isSelected = addMemberSelectedServiceIds.includes(s.id);
+                            return (
+                              <button
+                                key={s.id}
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isSelected) {
+                                    setAddMemberSelectedServiceIds((prev) => prev.filter((id) => id !== s.id));
+                                  } else {
+                                    setAddMemberSelectedServiceIds((prev) => [...prev, s.id]);
+                                    setUserFormData((prev) => ({ ...prev, canBookAppointments: true }));
+                                  }
+                                }}
+                                className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
+                                  isSelected ? "bg-blue-50/70" : "hover:bg-slate-50"
+                                }`}
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-xs font-semibold text-slate-800 truncate">{s.name}</p>
+                                  <p className="text-[11px] text-slate-400">${s.price} · {s.duration} min</p>
+                                </div>
+                                {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0 ml-2" />}
+                              </button>
+                            );
+                          })}
+                        {settingsServices.filter((s) => s.name.toLowerCase().includes(memberServiceSearch.toLowerCase())).length === 0 && (
+                          <p className="text-center text-xs text-slate-400 py-4">No products found</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Assigned services will immediately reflect in the Product & Services catalogue.
+              </p>
             </div>
 
             {/* Appointment Booking Option */}

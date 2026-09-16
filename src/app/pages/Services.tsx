@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import {
   Plus, Edit2, Trash2, Search, Clock,
@@ -13,10 +13,11 @@ import { useFieldRegistry, ALL_MODULES, FieldDefinition } from "../context/Field
 import { SelectFieldsModal, CreateFieldModal } from "../components/help/FieldManager";
 import { FieldInputRenderer } from "../components/fields/FieldInputRenderer";
 import {
-  Service, EMPLOYEES, CURRENCIES, INIT_FORM, getCurrencySymbol,
+  Service, CURRENCIES, INIT_FORM, getCurrencySymbol,
   getStoredServices, addService, updateService, deleteService,
   toggleServiceActive, onServicesChanged,
 } from "../../lib/servicesStore";
+import { useTeamMembers } from "../../lib/teamStore";
 
 // Re-export for any other file that imports Service from here
 export type { Service };
@@ -55,6 +56,25 @@ function saveCategoryToStore(catName: string) {
 
 export default function Services() {
   const [services, setServices] = useState<Service[]>(getStoredServices);
+  const { teamMembers } = useTeamMembers();
+
+  // Dynamic team members list
+  const allTeamEmps = useMemo(() => {
+    if (!teamMembers || teamMembers.length === 0) return [];
+    return teamMembers.map((m) => ({
+      id: m.id,
+      name: m.name,
+      role: m.role || m.department || "Staff",
+      initials: m.name
+        .split(" ")
+        .map((w) => w[0])
+        .filter(Boolean)
+        .slice(0, 2)
+        .join("")
+        .toUpperCase() || "TM",
+      email: m.email,
+    }));
+  }, [teamMembers]);
 
   // Keep in sync with changes made from other pages (e.g. ClientProfile)
   useEffect(() => {
@@ -142,8 +162,10 @@ export default function Services() {
     toast.success(`Category "${trimmed}" added and selected.`);
   };
 
-  const filteredEmps = EMPLOYEES.filter((e) =>
-    e.name.toLowerCase().includes(empSearch.toLowerCase())
+  const filteredEmps = allTeamEmps.filter(
+    (e) =>
+      e.name.toLowerCase().includes(empSearch.toLowerCase()) ||
+      e.role.toLowerCase().includes(empSearch.toLowerCase())
   );
   const filteredServices = services.filter(
     (s) =>
@@ -244,13 +266,17 @@ export default function Services() {
     setOpenMenuId(null);
   };
 
-  const toggleEmp = (id: number) =>
-    setForm((f) => ({
-      ...f,
-      assignedEmployeeIds: f.assignedEmployeeIds.includes(id)
-        ? f.assignedEmployeeIds.filter((e) => e !== id)
-        : [...f.assignedEmployeeIds, id],
-    }));
+  const toggleEmp = (id: number | string) =>
+    setForm((f) => {
+      const strId = String(id);
+      const exists = f.assignedEmployeeIds.some((e) => String(e) === strId);
+      return {
+        ...f,
+        assignedEmployeeIds: exists
+          ? f.assignedEmployeeIds.filter((e) => String(e) !== strId)
+          : [...f.assignedEmployeeIds, id],
+      };
+    });
 
   const toggleSelectAll = () => {
     if (selectedServiceIds.length === filteredServices.length) {
@@ -493,7 +519,7 @@ export default function Services() {
         {form.assignedEmployeeIds.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2.5 p-2 bg-slate-50 border border-slate-200/80 rounded-xl">
             {form.assignedEmployeeIds.map((eid) => {
-              const emp = EMPLOYEES.find((e) => e.id === eid);
+              const emp = allTeamEmps.find((e) => String(e.id) === String(eid));
               if (!emp) return null;
               return (
                 <span
@@ -542,29 +568,32 @@ export default function Services() {
                   </div>
                 </div>
                 <div className="max-h-48 overflow-y-auto">
-                  {filteredEmps.map((emp) => (
-                    <button
-                      key={emp.id}
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); toggleEmp(emp.id); }}
-                      className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
-                        form.assignedEmployeeIds.includes(emp.id) ? "bg-blue-50" : "hover:bg-gray-50"
-                      }`}
-                    >
-                      <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: "#1F2937" }}>
-                        {emp.initials}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
-                          {emp.name}
-                        </p>
-                        <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
-                          {emp.role}
-                        </p>
-                      </div>
-                      {form.assignedEmployeeIds.includes(emp.id) && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
-                    </button>
-                  ))}
+                  {filteredEmps.map((emp) => {
+                    const isSelected = form.assignedEmployeeIds.some((id) => String(id) === String(emp.id));
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggleEmp(emp.id); }}
+                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-left transition-colors cursor-pointer ${
+                          isSelected ? "bg-blue-50" : "hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0" style={{ backgroundColor: "#1F2937" }}>
+                          {emp.initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-gray-800 truncate" style={{ fontFamily: "DM Sans, sans-serif" }}>
+                            {emp.name}
+                          </p>
+                          <p className="text-[11px] text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                            {emp.role}
+                          </p>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 flex-shrink-0" />}
+                      </button>
+                    );
+                  })}
                   {filteredEmps.length === 0 && <p className="text-center text-xs text-gray-400 py-5">No employees found</p>}
                 </div>
               </div>
@@ -860,7 +889,9 @@ export default function Services() {
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {filteredServices.map((service) => {
-                    const assignedEmps = EMPLOYEES.filter((e) => service.assignedEmployees?.includes(e.id));
+                    const assignedEmps = allTeamEmps.filter((e) =>
+                      service.assignedEmployees?.some((id) => String(id) === String(e.id))
+                    );
                     const isSelected = selectedServiceIds.includes(service.id);
 
                     return (

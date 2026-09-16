@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { Building2, ChevronDown, Check, Plus, MapPin } from "lucide-react";
-import { toast } from "sonner";
+import { Building2, ChevronDown, Check, MapPin, Video, Plus } from "lucide-react";
 import { useOrganization } from "../../context/OrganizationContext";
 import { useTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import TargetUserDropdown from "./TargetUserDropdown";
+import { toast } from "sonner";
 
 export interface TargetUserLocationBarProps {
   selectedUserId: string | number;
@@ -25,8 +25,6 @@ export default function TargetUserLocationBar({
 
   const [activeLocVersion, setActiveLocVersion] = useState(0);
   const [isLocationDropdownOpen, setIsLocationDropdownOpen] = useState(false);
-  const [isAddingCustom, setIsAddingCustom] = useState(false);
-  const [customLocationName, setCustomLocationName] = useState("");
   const locationDropdownRef = useRef<HTMLDivElement>(null);
 
   // Re-read storage on external changes
@@ -40,17 +38,31 @@ export default function TargetUserLocationBar({
     };
   }, []);
 
-  // Organization Full Locations
-  const orgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
+  // Organization Full Locations ONLY (from Settings / Storage)
+  const allOrgLocations = useMemo<Array<{ id: string; name: string; isOnline?: boolean }>>(() => {
+    const list: Array<{ id: string; name: string; isOnline?: boolean }> = [];
+    const seenNames = new Set<string>();
+
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any, idx: number) => ({
-            id: l.id || `loc-${idx + 1}`,
-            name: l.name,
-          }));
+          parsed.forEach((l: any, idx: number) => {
+            const isOnline =
+              l.type === "online" ||
+              l.name.toLowerCase().includes("online") ||
+              l.name.toLowerCase().includes("telehealth") ||
+              l.name.toLowerCase().includes("virtual");
+            if (!seenNames.has(l.name.toLowerCase())) {
+              seenNames.add(l.name.toLowerCase());
+              list.push({
+                id: l.id || `loc-${idx + 1}`,
+                name: l.name,
+                isOnline,
+              });
+            }
+          });
         }
       }
     } catch {}
@@ -60,84 +72,106 @@ export default function TargetUserLocationBar({
         ? activeOrganization.locations
         : [activeOrganization.location || "California"];
 
-    return orgLocs.map((name, idx) => ({
-      id: `loc-${idx + 1}`,
-      name:
-        name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
-          ? name
-          : `${name} Branch`,
-    }));
+    orgLocs.forEach((name, idx) => {
+      const isOnline = name.toLowerCase().includes("online") || name.toLowerCase().includes("virtual");
+      const formatted = isOnline
+        ? "Online"
+        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+        ? name
+        : `${name} Branch`;
+      if (!seenNames.has(formatted.toLowerCase())) {
+        seenNames.add(formatted.toLowerCase());
+        list.push({
+          id: `loc-${idx + 1}`,
+          name: formatted,
+          isOnline,
+        });
+      }
+    });
+
+    // Guarantee "Online" is available if not in list
+    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+      list.push({ id: "loc-online", name: "Online", isOnline: true });
+    }
+
+    return list;
   }, [activeOrganization, activeLocVersion]);
 
-  // Locations currently ACTIVE for this selected team member
-  const locations = useMemo<Array<{ id: string; name: string }>>(() => {
+  // Locations currently assigned to the selected user
+  const userAssignedLocations = useMemo(() => {
     const locActiveKey = `mantra_user_loc_active_map_${selectedUserId}_${activeOrganization.id}`;
     let activeMap: Record<string, boolean> | null = null;
     try {
       const saved = localStorage.getItem(locActiveKey);
-      if (saved) {
-        activeMap = JSON.parse(saved);
-      }
+      if (saved) activeMap = JSON.parse(saved);
     } catch {}
 
     const currentMember = bookableMembers.find((m) => String(m.id) === String(selectedUserId));
     const memberLocsList = currentMember?.locations || (currentMember as any)?.availableLocations;
 
     if (activeMap && Object.keys(activeMap).length > 0) {
-      const filtered = orgLocations.filter((loc) => activeMap![loc.id] === true);
+      const filtered = allOrgLocations.filter((loc) => activeMap![loc.id] === true || activeMap![loc.name] === true);
       if (filtered.length > 0) return filtered;
     }
 
     if (Array.isArray(memberLocsList) && memberLocsList.length > 0) {
-      const filtered = orgLocations.filter(
+      const filtered = allOrgLocations.filter(
         (loc) => memberLocsList.includes(loc.name) || memberLocsList.includes(loc.id)
       );
       if (filtered.length > 0) return filtered;
     }
 
-    // Default: first location
-    return orgLocations.slice(0, 1);
-  }, [selectedUserId, activeOrganization.id, orgLocations, bookableMembers, activeLocVersion]);
+    return allOrgLocations;
+  }, [selectedUserId, activeOrganization.id, allOrgLocations, bookableMembers, activeLocVersion]);
 
-  // Other available locations that this team member can take appointments at
-  const otherAvailableLocations = useMemo(() => {
-    const unassigned = orgLocations.filter(
-      (ol) => !locations.some((l) => l.id === ol.id || l.name.toLowerCase() === ol.name.toLowerCase())
-    );
-
-    // Provide default suggested clinics if organization only has 1 branch configured
-    const suggestions = [
-      { id: "loc-ny", name: "New York Branch" },
-      { id: "loc-tx", name: "Texas Branch" },
-      { id: "loc-fl", name: "Florida Branch" },
-      { id: "loc-tele", name: "Telehealth / Virtual Clinic" },
-    ];
-
-    const extra = suggestions.filter(
-      (sug) =>
-        !locations.some((l) => l.name.toLowerCase() === sug.name.toLowerCase()) &&
-        !unassigned.some((u) => u.name.toLowerCase() === sug.name.toLowerCase())
-    );
-
-    return [...unassigned, ...extra];
-  }, [orgLocations, locations]);
+  // Unassigned organization locations for this user
+  const unassignedLocations = useMemo(() => {
+    const assignedIds = new Set(userAssignedLocations.map((l) => l.id));
+    const assignedNames = new Set(userAssignedLocations.map((l) => l.name.toLowerCase()));
+    return allOrgLocations.filter((l) => !assignedIds.has(l.id) && !assignedNames.has(l.name.toLowerCase()));
+  }, [allOrgLocations, userAssignedLocations]);
 
   // Sync selected location
   useEffect(() => {
-    if (locations.length > 0 && !locations.some((l) => l.id === selectedLocationId)) {
-      onSelectLocation(locations[0].id);
+    if (userAssignedLocations.length > 0 && !userAssignedLocations.some((l) => l.id === selectedLocationId || l.name === selectedLocationId)) {
+      onSelectLocation(userAssignedLocations[0].id);
     }
-  }, [locations, selectedLocationId, onSelectLocation]);
+  }, [userAssignedLocations, selectedLocationId, onSelectLocation]);
 
   const selectedLocation =
-    locations.find((l) => l.id === selectedLocationId) || locations[0] || orgLocations[0];
+    allOrgLocations.find((l) => l.id === selectedLocationId || l.name === selectedLocationId) ||
+    userAssignedLocations[0] ||
+    allOrgLocations[0];
+
+  // Assign an unassigned location to this user
+  const handleAssignLocationToUser = (loc: { id: string; name: string; isOnline?: boolean }) => {
+    const locActiveKey = `mantra_user_loc_active_map_${selectedUserId}_${activeOrganization.id}`;
+    let activeMap: Record<string, boolean> = {};
+    try {
+      const saved = localStorage.getItem(locActiveKey);
+      if (saved) activeMap = JSON.parse(saved);
+    } catch {}
+
+    userAssignedLocations.forEach((l) => {
+      activeMap[l.id] = true;
+    });
+    activeMap[loc.id] = true;
+
+    try {
+      localStorage.setItem(locActiveKey, JSON.stringify(activeMap));
+      window.dispatchEvent(new Event("storage"));
+    } catch {}
+
+    onSelectLocation(loc.id);
+    setIsLocationDropdownOpen(false);
+    toast.success(`Assigned location "${loc.name}" to team member`);
+  };
 
   // Close location dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (locationDropdownRef.current && !locationDropdownRef.current.contains(e.target as Node)) {
         setIsLocationDropdownOpen(false);
-        setIsAddingCustom(false);
       }
     };
     if (isLocationDropdownOpen) {
@@ -147,78 +181,6 @@ export default function TargetUserLocationBar({
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isLocationDropdownOpen]);
-
-  const selectedTeamMemberObj = useMemo(() => {
-    const fromStore = bookableMembers.find((m) => String(m.id) === String(selectedUserId));
-    if (fromStore) return fromStore;
-    return {
-      id: selectedUserId,
-      name: "Team Member",
-      email: "",
-      role: "Team Member",
-    };
-  }, [bookableMembers, selectedUserId]);
-
-  // Add an existing other location to this team member's active locations
-  const handleAddLocationForMember = (locToAdd: { id: string; name: string }) => {
-    // 1. Ensure location is registered in org locations
-    try {
-      const orgLocKey = `mantra_org_locations_${activeOrganization.id}`;
-      const saved = localStorage.getItem(orgLocKey);
-      let list: Array<{ id: string; name: string }> = saved ? JSON.parse(saved) : [...orgLocations];
-      if (!list.some((l) => l.id === locToAdd.id || l.name === locToAdd.name)) {
-        list.push({ id: locToAdd.id, name: locToAdd.name });
-        localStorage.setItem(orgLocKey, JSON.stringify(list));
-      }
-    } catch {}
-
-    // 2. Activate for this member
-    const locActiveKey = `mantra_user_loc_active_map_${selectedUserId}_${activeOrganization.id}`;
-    let activeMap: Record<string, boolean> = {};
-    try {
-      const saved = localStorage.getItem(locActiveKey);
-      if (saved) activeMap = JSON.parse(saved);
-    } catch {}
-
-    // Keep all currently active locations
-    locations.forEach((l) => {
-      activeMap[l.id] = true;
-    });
-    activeMap[locToAdd.id] = true;
-
-    try {
-      localStorage.setItem(locActiveKey, JSON.stringify(activeMap));
-    } catch {}
-
-    // 3. Notify app components
-    window.dispatchEvent(new Event(TEAM_STORE_EVENT));
-    window.dispatchEvent(new Event("storage"));
-    setActiveLocVersion((v) => v + 1);
-
-    // 4. Select newly enabled location and close
-    onSelectLocation(locToAdd.id);
-    setIsLocationDropdownOpen(false);
-    toast.success(`${locToAdd.name} added for ${selectedTeamMemberObj.name}`);
-  };
-
-  // Add a brand new custom location directly from dropdown without opening drawer
-  const handleAddCustomLocation = () => {
-    const trimmed = customLocationName.trim();
-    if (!trimmed) return;
-
-    const newLocId = `loc-${Date.now()}`;
-    const newLoc = {
-      id: newLocId,
-      name:
-        trimmed.includes("Center") || trimmed.includes("Clinic") || trimmed.includes("Branch")
-          ? trimmed
-          : `${trimmed} Branch`,
-    };
-
-    handleAddLocationForMember(newLoc);
-    setCustomLocationName("");
-    setIsAddingCustom(false);
-  };
 
   return (
     <div
@@ -245,12 +207,12 @@ export default function TargetUserLocationBar({
           <button
             type="button"
             onClick={() => setIsLocationDropdownOpen(!isLocationDropdownOpen)}
-            className="w-full sm:w-auto min-w-[190px] flex items-center justify-between gap-2.5 px-3 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-800 transition-all shadow-2xs cursor-pointer text-left"
+            className="w-full sm:w-auto min-w-[200px] flex items-center justify-between gap-2.5 px-3.5 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-800 transition-all shadow-2xs cursor-pointer text-left"
             style={{ fontFamily: "Outfit, sans-serif" }}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shrink-0">
-                <Building2 className="w-3 h-3" />
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${selectedLocation?.isOnline ? "bg-blue-50 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
+                {selectedLocation?.isOnline ? <Video className="w-3 h-3" /> : <Building2 className="w-3 h-3" />}
               </div>
               <span className="truncate">
                 {selectedLocation?.name || "Select Location"}
@@ -263,23 +225,22 @@ export default function TargetUserLocationBar({
             />
           </button>
 
-          {/* Dropdown Menu */}
+          {/* Clean Dropdown Menu */}
           {isLocationDropdownOpen && (
             <div
-              className="absolute right-0 sm:left-0 top-full mt-1.5 w-full sm:w-[300px] bg-white rounded-2xl border border-slate-200/90 shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
+              className="absolute right-0 sm:left-0 top-full mt-1.5 w-full sm:w-[260px] bg-white rounded-2xl border border-slate-200/90 shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-100"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {/* Active Locations Header */}
-              <div className="p-2.5 border-b border-slate-100 bg-slate-50/50">
+              <div className="p-2 border-b border-slate-100 bg-slate-50/60">
                 <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">
-                  Active Locations
+                  Assigned Locations
                 </div>
               </div>
 
-              {/* Active Locations List */}
-              <div className="max-h-[140px] overflow-y-auto p-1.5 space-y-0.5">
-                {locations.map((loc) => {
-                  const isSelected = loc.id === selectedLocationId;
+              {/* User's Assigned Locations List */}
+              <div className="max-h-[220px] overflow-y-auto p-1.5 space-y-0.5">
+                {userAssignedLocations.map((loc) => {
+                  const isSelected = loc.id === selectedLocationId || loc.name === selectedLocation?.name;
                   return (
                     <button
                       key={loc.id}
@@ -295,7 +256,11 @@ export default function TargetUserLocationBar({
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                        {loc.isOnline ? (
+                          <Video className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        ) : (
+                          <MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        )}
                         <span className="truncate">{loc.name}</span>
                       </div>
                       {isSelected && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
@@ -304,90 +269,28 @@ export default function TargetUserLocationBar({
                 })}
               </div>
 
-              {/* Other Available Locations Section */}
-              <div className="p-2.5 border-t border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
-                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1">
-                  Other Available Locations
-                </div>
-              </div>
-
-              <div className="max-h-[150px] overflow-y-auto p-1.5 space-y-0.5">
-                {otherAvailableLocations.length === 0 ? (
-                  <div className="px-2.5 py-2 text-[11px] text-slate-400 italic">
-                    All locations are currently active
+              {/* If there are unassigned locations in the organization */}
+              {unassignedLocations.length > 0 && (
+                <div className="p-1.5 border-t border-slate-100 bg-slate-50/40">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-2 py-1">
+                    Add Unassigned Location
                   </div>
-                ) : (
-                  otherAvailableLocations.map((otherLoc) => (
+                  {unassignedLocations.map((loc) => (
                     <button
-                      key={otherLoc.id}
+                      key={loc.id}
                       type="button"
-                      onClick={() => handleAddLocationForMember(otherLoc)}
-                      className="w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-left hover:bg-blue-50/70 text-slate-700 transition-colors cursor-pointer text-xs group"
-                      title={`Enable ${otherLoc.name} for ${selectedTeamMemberObj.name}`}
+                      onClick={() => handleAssignLocationToUser(loc)}
+                      className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs text-slate-600 hover:bg-blue-50 hover:text-primary transition-colors cursor-pointer"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Building2 className="w-3 h-3 text-slate-400 group-hover:text-primary shrink-0" />
-                        <span className="truncate">{otherLoc.name}</span>
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Plus className="w-3.5 h-3.5 text-primary shrink-0" />
+                        <span className="truncate">{loc.name}</span>
                       </div>
-                      <span className="inline-flex items-center gap-1 text-[11px] text-primary font-semibold px-2 py-0.5 rounded-full bg-blue-50 group-hover:bg-blue-100 transition-colors">
-                        <Plus className="w-3 h-3" />
-                        Add
-                      </span>
+                      <span className="text-[10px] font-semibold text-primary/80 shrink-0">Assign</span>
                     </button>
-                  ))
-                )}
-              </div>
-
-              {/* Quick Add Custom Location Option without drawer */}
-              <div className="p-2 border-t border-slate-100 bg-slate-50/40">
-                {isAddingCustom ? (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      autoFocus
-                      placeholder="e.g. Westside Clinic"
-                      value={customLocationName}
-                      onChange={(e) => setCustomLocationName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          handleAddCustomLocation();
-                        } else if (e.key === "Escape") {
-                          setIsAddingCustom(false);
-                          setCustomLocationName("");
-                        }
-                      }}
-                      className="flex-1 px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary text-slate-800"
-                    />
-                    <button
-                      type="button"
-                      onClick={handleAddCustomLocation}
-                      className="px-2.5 py-1.5 bg-[#1456f0] hover:bg-[#1044bf] text-white rounded-lg text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setIsAddingCustom(false);
-                        setCustomLocationName("");
-                      }}
-                      className="px-2 py-1.5 text-slate-400 hover:text-slate-600 text-xs"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setIsAddingCustom(true)}
-                    className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold text-primary hover:bg-primary/5 rounded-lg transition-colors cursor-pointer text-left"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add custom location...
-                  </button>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

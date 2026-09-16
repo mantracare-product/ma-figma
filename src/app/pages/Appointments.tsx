@@ -45,8 +45,8 @@ interface Appointment {
   clientName: string;
   clientEmail: string;
   clientPhone: string;
-  employeeId: number;
-  serviceId: number;
+  employeeId: number | string;
+  serviceId: number | string;
   date: string; // YYYY-MM-DD
   time: string; // HH:MM
   duration: number; // in minutes
@@ -62,9 +62,11 @@ interface Appointment {
 }
 
 interface Employee {
-  id: number;
+  id: number | string;
   name: string;
   email: string;
+  role?: string;
+  locations?: string[];
 }
 
 interface Service {
@@ -85,15 +87,18 @@ const processStages: Record<string, string[]> = {
 
 export default function Appointments() {
   const { invoices, createInvoiceFromAppointment, voidInvoice } = useInvoices();
-  const { bookableMembers } = useTeamMembers();
+  const { bookableMembers, teamMembers } = useTeamMembers();
 
   // Dynamic bookable employees list
   const employees: Employee[] = useMemo(() => {
-    if (bookableMembers && bookableMembers.length > 0) {
-      return bookableMembers.map((m) => ({
-        id: Number(m.id) || 1,
+    const list = (teamMembers && teamMembers.length > 0) ? teamMembers : bookableMembers;
+    if (list && list.length > 0) {
+      return list.map((m) => ({
+        id: m.id,
         name: m.name,
         email: m.email,
+        role: m.role || m.department || "Staff",
+        locations: m.locations || (m as any).availableLocations || [],
       }));
     }
     return [
@@ -103,7 +108,7 @@ export default function Appointments() {
       { id: 5, name: "Dr. Robert Martinez", email: "robert.m@dentalcare.com" },
       { id: 6, name: "Lisa Anderson", email: "lisa.a@dentalcare.com" },
     ];
-  }, [bookableMembers]);
+  }, [teamMembers, bookableMembers]);
 
   const services: Service[] = [
     { id: 1, name: "Initial Consultation", duration: 60, price: 150 },
@@ -190,7 +195,16 @@ export default function Appointments() {
   const [showHelp, setShowHelp] = useState(false);
   const [filterDate, setFilterDate] = useState<string>("This Week");
   const [filterStatus, setFilterStatus] = useState<string>("All");
-  const [appointmentFormData, setAppointmentFormData] = useState({
+  const [appointmentFormData, setAppointmentFormData] = useState<{
+    clientName: string;
+    clientEmail: string;
+    clientPhone: string;
+    employeeId: number | string;
+    serviceId: number | string;
+    date: string;
+    time: string;
+    notes: string;
+  }>({
     clientName: "",
     clientEmail: "",
     clientPhone: "",
@@ -375,7 +389,7 @@ export default function Appointments() {
   const getAppointmentsForDate = (date: string) => {
     return appointments.filter((apt) => {
       const matchesDate = apt.date === date;
-      const matchesEmployee = effectiveEmployeeFilter === "all" || apt.employeeId === effectiveEmployeeFilter;
+      const matchesEmployee = effectiveEmployeeFilter === "all" || String(apt.employeeId) === String(effectiveEmployeeFilter);
       return matchesDate && matchesEmployee;
     });
   };
@@ -438,7 +452,7 @@ export default function Appointments() {
     setBookingTitle(apt.title || `Appointment with ${apt.clientName}`);
     setBookingDescription(apt.description || "");
 
-    const prov = employees.find((e) => e.id === apt.employeeId) || null;
+    const prov = employees.find((e) => String(e.id) === String(apt.employeeId)) || null;
     setSelectedProvider(prov);
 
     const cl = clients.find((c) => c.name === apt.clientName || c.email === apt.clientEmail) || {
@@ -1022,7 +1036,7 @@ export default function Appointments() {
                       const topPosition = ((hours - 9) * 60) + minutes;
                       const height = Math.max(apt.duration, 40);
 
-                      const employee = employees.find((e) => e.id === apt.employeeId);
+                      const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
                       const service = services.find((s) => s.id === apt.serviceId);
                       const endHour = hours + Math.floor((minutes + apt.duration) / 60);
                       const endMinute = (minutes + apt.duration) % 60;
@@ -1235,7 +1249,7 @@ export default function Appointments() {
                               const topPosition = ((hours - 9) * 60) + minutes;
                               const height = Math.max(apt.duration, 40);
 
-                              const employee = employees.find((e) => e.id === apt.employeeId);
+                              const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
                               const service = services.find((s) => s.id === apt.serviceId);
                               const endHour = hours + Math.floor((minutes + apt.duration) / 60);
                               const endMinute = (minutes + apt.duration) % 60;
@@ -1594,7 +1608,7 @@ export default function Appointments() {
                   }}
                 >
                   {filteredAppointments.map((apt) => {
-                    const employee = employees.find((e) => e.id === apt.employeeId);
+                    const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
                     const service = services.find((s) => s.id === apt.serviceId);
 
                     return (
@@ -1681,7 +1695,7 @@ export default function Appointments() {
                     </tr>
                   ) : (
                     filteredAppointments.map((apt) => {
-                      const employee = employees.find((e) => e.id === apt.employeeId);
+                      const employee = employees.find((e) => String(e.id) === String(apt.employeeId));
                       const service = services.find((s) => s.id === apt.serviceId);
                       const isSelected = selectedRows.includes(apt.id);
                       const isEditing = isSelected && editingRows[apt.id];

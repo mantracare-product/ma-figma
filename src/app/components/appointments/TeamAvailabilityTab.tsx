@@ -180,32 +180,6 @@ export default function TeamAvailabilityTab({
   const selectedUser =
     teamList.find((u) => String(u.id) === String(effectiveUserId)) || teamList[0];
 
-  // 1. Organization Full Locations
-  const orgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
-    try {
-      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any, idx: number) => ({
-            id: l.id || `loc-${idx + 1}`,
-            name: l.name,
-          }));
-        }
-      }
-    } catch {}
-
-    const orgLocs =
-      activeOrganization.locations && activeOrganization.locations.length > 0
-        ? activeOrganization.locations
-        : [activeOrganization.location || "California"];
-
-    return orgLocs.map((name, idx) => ({
-      id: `loc-${idx + 1}`,
-      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
-    }));
-  }, [activeOrganization]);
-
   // Track location store updates
   const [activeLocVersion, setActiveLocVersion] = useState(0);
   useEffect(() => {
@@ -217,6 +191,57 @@ export default function TeamAvailabilityTab({
       window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
     };
   }, []);
+
+  // 1. Organization Full Locations + Online
+  const orgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+
+    try {
+      const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          parsed.forEach((l: any, idx: number) => {
+            if (!seen.has(l.name.toLowerCase())) {
+              seen.add(l.name.toLowerCase());
+              list.push({
+                id: l.id || `loc-${idx + 1}`,
+                name: l.name,
+              });
+            }
+          });
+        }
+      }
+    } catch {}
+
+    const orgLocs =
+      activeOrganization.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization.location || "California"];
+
+    orgLocs.forEach((name, idx) => {
+      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+      const formatted = isOnline
+        ? "Online"
+        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+        ? name
+        : `${name} Branch`;
+      if (!seen.has(formatted.toLowerCase())) {
+        seen.add(formatted.toLowerCase());
+        list.push({
+          id: `loc-${idx + 1}`,
+          name: formatted,
+        });
+      }
+    });
+
+    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+      list.push({ id: "loc-online", name: "Online" });
+    }
+
+    return list;
+  }, [activeOrganization, activeLocVersion]);
 
   // Locations available ONLY for this team member
   const locations = useMemo<Array<{ id: string; name: string }>>(() => {

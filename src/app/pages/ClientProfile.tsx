@@ -3094,12 +3094,12 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
             const filteredEmpsProduct = SVC_EMPLOYEES.filter((e) =>
               e.name.toLowerCase().includes(empSearchProduct.toLowerCase())
             );
-            const toggleEmpProduct = (id: number) =>
+            const toggleEmpProduct = (id: number | string) =>
               setNewProductForm((f) => ({
                 ...f,
-                assignedEmployeeIds: f.assignedEmployeeIds.includes(id)
+                assignedEmployeeIds: f.assignedEmployeeIds.includes(id as any)
                   ? f.assignedEmployeeIds.filter((e) => e !== id)
-                  : [...f.assignedEmployeeIds, id],
+                  : [...f.assignedEmployeeIds, id as any],
               }));
 
             return (

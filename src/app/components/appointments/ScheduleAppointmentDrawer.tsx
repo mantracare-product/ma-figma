@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { CustomSideDrawer } from "../ui/drawer";
-import { FieldDefinition } from "../../context/FieldRegistryContext";
-import { getStoredServices, EMPLOYEES } from "../../../lib/servicesStore";
+import { getStoredServices, onServicesChanged } from "../../../lib/servicesStore";
+import { useTeamMembers } from "../../../lib/teamStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
 import {
   ChevronDown,
@@ -19,6 +18,8 @@ import {
 } from "lucide-react";
 import { initialClients } from "../../pages/ClientProfile";
 import { useOrganization } from "../../context/OrganizationContext";
+import { CustomSideDrawer } from "../ui/drawer";
+import { FieldDefinition } from "../../context/FieldRegistryContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -385,6 +386,42 @@ export default function ScheduleAppointmentDrawer({
     return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [clients, values.client]);
 
+  const { teamMembers } = useTeamMembers();
+
+  // Combine employees prop with teamMembers store
+  const allEmployeesList: Employee[] = useMemo(() => {
+    const list: Employee[] = employees ? [...employees] : [];
+    const seenIds = new Set(list.map((e) => String(e.id)));
+    if (teamMembers && teamMembers.length > 0) {
+      teamMembers.forEach((m) => {
+        if (!seenIds.has(String(m.id))) {
+          seenIds.add(String(m.id));
+          list.push({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            role: m.role || m.department || "Staff",
+            locations: m.locations || (m as any).availableLocations || [],
+          } as any);
+        }
+      });
+    }
+    return list;
+  }, [employees, teamMembers]);
+
+  // Live services sync from store
+  const [storedServicesState, setStoredServicesState] = useState(getStoredServices);
+
+  useEffect(() => {
+    return onServicesChanged(() => setStoredServicesState(getStoredServices()));
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setStoredServicesState(getStoredServices());
+    }
+  }, [isOpen]);
+
   // ── Available services ──
   const allAvailableServices = useMemo(() => {
     const list: Array<{
@@ -393,11 +430,11 @@ export default function ScheduleAppointmentDrawer({
       price: number;
       duration: number;
       tax?: number;
-      assignedEmployees?: number[];
+      assignedEmployees?: (number | string)[];
     }> = [];
     const seenNames = new Set<string>();
     try {
-      const stored = getStoredServices();
+      const stored = storedServicesState;
       if (Array.isArray(stored)) {
         stored.forEach((s) => {
           if (!seenNames.has(s.name.toLowerCase())) {
@@ -415,7 +452,7 @@ export default function ScheduleAppointmentDrawer({
       }
     } catch { /* ignore */ }
     return list;
-  }, []);
+  }, [storedServicesState]);
 
   // ── Time helpers ──
   const endHour = (values.startHour + 1) % 24;
@@ -441,29 +478,56 @@ export default function ScheduleAppointmentDrawer({
   // ── Organization Locations ──
   const { activeOrganization } = useOrganization();
   const orgLocations = useMemo(() => {
+    const list: Array<{ id: string; name: string; address?: string; phone?: string; timezone?: string }> = [];
+    const seen = new Set<string>();
+
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization.id}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any) => ({
-            id: l.id,
-            name: l.name,
-            address: l.address,
-            phone: l.phone,
-            timezone: l.timezone,
-          }));
+          parsed.forEach((l: any) => {
+            if (!seen.has(l.name.toLowerCase())) {
+              seen.add(l.name.toLowerCase());
+              list.push({
+                id: l.id,
+                name: l.name,
+                address: l.address,
+                phone: l.phone,
+                timezone: l.timezone,
+              });
+            }
+          });
         }
       }
     } catch { /* ignore */ }
+
     const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
       ? activeOrganization.locations
       : [activeOrganization.location || "California"];
-    return locNames.map((name, idx) => ({
-      id: `loc-${idx + 1}`,
-      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
-      address: idx === 0 ? "123 Healthcare Ave, Suite 100" : "450 Lexington Ave, Suite 240",
-    }));
+
+    locNames.forEach((name, idx) => {
+      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+      const formatted = isOnline
+        ? "Online"
+        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+        ? name
+        : `${name} Branch`;
+      if (!seen.has(formatted.toLowerCase())) {
+        seen.add(formatted.toLowerCase());
+        list.push({
+          id: `loc-${idx + 1}`,
+          name: formatted,
+          address: isOnline ? "Virtual / Telehealth Consultation" : idx === 0 ? "123 Healthcare Ave, Suite 100" : "450 Lexington Ave, Suite 240",
+        });
+      }
+    });
+
+    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+      list.push({ id: "loc-online", name: "Online", address: "Virtual / Telehealth Consultation" });
+    }
+
+    return list;
   }, [activeOrganization]);
 
   // ── Provider Location Availability & Days Off Notice ──
@@ -493,7 +557,7 @@ export default function ScheduleAppointmentDrawer({
 
     // 2. Check Location schedule if location is selected
     const targetLoc = values.sessionType === "inPerson" ? values.location : undefined;
-    if (targetLoc) {
+    if (targetLoc && targetLoc.toLowerCase() !== "online") {
       try {
         const schedSaved = localStorage.getItem(
           `mantra_member_loc_schedules_${values.provider.id}_${activeOrganization.id}`
@@ -534,7 +598,7 @@ export default function ScheduleAppointmentDrawer({
 
     return {
       type: "success" as const,
-      message: `${values.provider.name} is available${targetLoc ? ` at ${targetLoc}` : ""}.`,
+      message: `${values.provider.name} is available${targetLoc ? ` for ${targetLoc}` : ""}.`,
     };
   }, [values.provider, values.date, values.location, values.sessionType, activeOrganization.id]);
 
@@ -543,27 +607,60 @@ export default function ScheduleAppointmentDrawer({
     return `${h % 12 === 0 ? 12 : h % 12}:${pad(mn)} ${p}`;
   };
 
-  // ── Available responsible providers for selected service ──
-  const availableEmployeesForService = useMemo(() => {
-    if (!values.serviceId) return employees;
-    const selectedSrv = allAvailableServices.find(
-      (s) => String(s.id) === String(values.serviceId)
-    );
-    if (!selectedSrv || !selectedSrv.assignedEmployees || selectedSrv.assignedEmployees.length === 0) {
-      return employees;
+  // ── Available responsible providers filtered by BOTH selected Service and Location ──
+  const availableEmployeesForServiceAndLocation = useMemo(() => {
+    let list = allEmployeesList;
+
+    // 1. Filter by selected Service
+    if (values.serviceId) {
+      const selectedSrv = allAvailableServices.find(
+        (s) => String(s.id) === String(values.serviceId)
+      );
+      if (selectedSrv?.assignedEmployees && selectedSrv.assignedEmployees.length > 0) {
+        const assignedIds = new Set(selectedSrv.assignedEmployees.map(String));
+        const serviceMatched = list.filter(
+          (emp) => assignedIds.has(String(emp.id))
+        );
+        if (serviceMatched.length > 0) {
+          list = serviceMatched;
+        }
+      }
     }
 
-    const assignedIds = new Set(selectedSrv.assignedEmployees.map(String));
-    const assignedNames = new Set(
-      EMPLOYEES.filter((emp) => selectedSrv.assignedEmployees?.includes(emp.id)).map((emp) => emp.name.toLowerCase())
-    );
+    // 2. Filter by selected Location (only if physical in-person location)
+    if (values.location && values.location.trim() && values.sessionType === "inPerson") {
+      const targetLoc = values.location.trim().toLowerCase();
+      if (targetLoc !== "online") {
+        const locationMatched = list.filter((emp) => {
+          try {
+            const locActiveKey = `mantra_user_loc_active_map_${emp.id}_${activeOrganization.id}`;
+            const savedActive = localStorage.getItem(locActiveKey);
+            if (savedActive) {
+              const activeMap = JSON.parse(savedActive);
+              const targetLocObj = orgLocations.find((ol) => ol.name.toLowerCase() === targetLoc);
+              if (targetLocObj && activeMap[targetLocObj.id] === true) {
+                return true;
+              }
+            }
+          } catch {}
 
-    const matched = employees.filter(
-      (emp) => assignedIds.has(String(emp.id)) || assignedNames.has(emp.name.toLowerCase())
-    );
+          const memberObj = emp as any;
+          const memberLocs: string[] = memberObj.locations || memberObj.availableLocations || [];
+          if (Array.isArray(memberLocs) && memberLocs.length > 0) {
+            return memberLocs.some((l) => l.toLowerCase() === targetLoc || targetLoc.includes(l.toLowerCase()));
+          }
 
-    return matched.length > 0 ? matched : employees;
-  }, [values.serviceId, allAvailableServices, employees]);
+          return true;
+        });
+
+        if (locationMatched.length > 0) {
+          list = locationMatched;
+        }
+      }
+    }
+
+    return list;
+  }, [values.serviceId, values.location, values.sessionType, allAvailableServices, allEmployeesList, orgLocations, activeOrganization.id]);
 
   // ── Handlers ──
   const handleServiceSelect = (serviceId: string) => {
@@ -575,15 +672,12 @@ export default function ScheduleAppointmentDrawer({
       };
       const patientName = values.client?.name?.trim();
 
-      // Check if current provider is valid for newly selected service
+      // Check if current provider is valid for newly selected service & location
       let nextProvider = values.provider;
       if (srv.assignedEmployees && srv.assignedEmployees.length > 0) {
         const assignedIds = new Set(srv.assignedEmployees.map(String));
-        const assignedNames = new Set(
-          EMPLOYEES.filter((emp) => srv.assignedEmployees?.includes(emp.id)).map((emp) => emp.name.toLowerCase())
-        );
-        const validEmps = employees.filter(
-          (emp) => assignedIds.has(String(emp.id)) || assignedNames.has(emp.name.toLowerCase())
+        const validEmps = allEmployeesList.filter(
+          (emp) => assignedIds.has(String(emp.id))
         );
         const isCurrentValid = values.provider && validEmps.some((e) => String(e.id) === String(values.provider?.id) || e.name.toLowerCase() === values.provider?.name?.toLowerCase());
         if (!isCurrentValid) {
@@ -600,6 +694,25 @@ export default function ScheduleAppointmentDrawer({
     } else {
       onChange({ serviceId: "", serviceName: "", lineItems: [] });
     }
+  };
+
+  const handleLocationSelect = (locName: string) => {
+    const isOnline = locName.toLowerCase() === "online";
+    const patch: Partial<BookingFormValues> = {
+      location: locName,
+      sessionType: isOnline ? "video" : "inPerson",
+    };
+
+    // Auto-adjust provider if not valid for location
+    if (locName && locName.toLowerCase() !== "online" && values.provider) {
+      const validEmps = availableEmployeesForServiceAndLocation;
+      const isValid = validEmps.some((e) => String(e.id) === String(values.provider?.id) || e.name.toLowerCase() === values.provider?.name?.toLowerCase());
+      if (!isValid && validEmps.length > 0) {
+        patch.provider = validEmps[0];
+      }
+    }
+
+    onChange(patch);
   };
 
   const handleClientSelect = (clientId: string) => {
@@ -644,14 +757,13 @@ export default function ScheduleAppointmentDrawer({
 
   // ── Validation ──
   const isServiceComplete = Boolean(values.serviceId || values.serviceName);
+  const isLocationComplete = Boolean(values.location && values.location.trim());
   const isParticipantsComplete = Boolean(values.client && values.provider);
-  const isScheduleComplete = Boolean(
-    values.date && (values.sessionType !== "inPerson" || (values.location && values.location.trim()))
-  );
-  const isFormComplete = isServiceComplete && isParticipantsComplete && isScheduleComplete;
+  const isScheduleComplete = Boolean(values.date);
+  const isFormComplete = isServiceComplete && isLocationComplete && isParticipantsComplete && isScheduleComplete;
 
   const summaryText = isFormComplete
-    ? `${values.sessionType === "video" ? "Video" : "In-Person"} · ${fmtShortDate()} · ${fmt12(values.startHour, values.startMinute)} – ${fmt12(endHour, endMin)} · ${values.client?.name} with ${values.provider?.name}`
+    ? `${values.sessionType === "video" ? "Online Video" : values.location} · ${fmtShortDate()} · ${fmt12(values.startHour, values.startMinute)} – ${fmt12(endHour, endMin)} · ${values.client?.name} with ${values.provider?.name}`
     : "";
 
   // ── Dropdown option builders ──
@@ -665,8 +777,8 @@ export default function ScheduleAppointmentDrawer({
   ];
 
   const providerOptions: DropdownOption[] = [
-    { value: "", label: values.serviceId ? "Select assigned responsible user" : "Select a user" },
-    ...availableEmployeesForService.map((e) => ({ value: String(e.id), label: e.name, meta: e.email })),
+    { value: "", label: values.serviceId || values.location ? "Select assigned doctor / provider" : "Select a user" },
+    ...availableEmployeesForServiceAndLocation.map((e) => ({ value: String(e.id), label: e.name, meta: e.email })),
   ];
 
   const serviceOptions: DropdownOption[] = [
@@ -675,6 +787,15 @@ export default function ScheduleAppointmentDrawer({
       value: String(s.id),
       label: s.name,
       meta: `$${s.price} · ${s.duration} min`,
+    })),
+  ];
+
+  const locationOptions: DropdownOption[] = [
+    { value: "", label: "Select a location" },
+    ...orgLocations.map((loc) => ({
+      value: loc.name,
+      label: loc.name,
+      meta: loc.address || undefined,
     })),
   ];
 
@@ -690,15 +811,6 @@ export default function ScheduleAppointmentDrawer({
 
   const primaryInsOpts: DropdownOption[] = INSURANCE_PROVIDERS.map((i) => ({ value: i, label: i }));
   const secondaryInsOpts: DropdownOption[] = SECONDARY_PROVIDERS.map((s) => ({ value: s, label: s }));
-
-  const locationOptions: DropdownOption[] = [
-    { value: "", label: "Select a clinic location" },
-    ...orgLocations.map((loc) => ({
-      value: loc.name,
-      label: loc.name,
-      meta: loc.address || undefined,
-    })),
-  ];
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
@@ -757,7 +869,7 @@ export default function ScheduleAppointmentDrawer({
         {/* SECTION 1 — SERVICE                                              */}
         {/* ================================================================ */}
         <SectionCard>
-          <SectionHeader title="Service" />
+          <SectionHeader title="1. Service" />
           <div className="p-3">
             <FieldRow label="Select Service" required>
               <CustomDropdown
@@ -771,10 +883,27 @@ export default function ScheduleAppointmentDrawer({
         </SectionCard>
 
         {/* ================================================================ */}
-        {/* SECTION 2 — PARTICIPANTS                                         */}
+        {/* SECTION 2 — LOCATION                                             */}
         {/* ================================================================ */}
         <SectionCard>
-          <SectionHeader title="Participants" />
+          <SectionHeader title="2. Location" />
+          <div className="p-3">
+            <FieldRow label="Select Location" required>
+              <CustomDropdown
+                value={values.location || ""}
+                options={locationOptions}
+                placeholder="Select location (Clinic branch or Online)"
+                onChange={handleLocationSelect}
+              />
+            </FieldRow>
+          </div>
+        </SectionCard>
+
+        {/* ================================================================ */}
+        {/* SECTION 3 — PARTICIPANTS                                         */}
+        {/* ================================================================ */}
+        <SectionCard>
+          <SectionHeader title="3. Participants" />
           <div className="p-3 space-y-1">
             <FieldRow label="Schedule For" required>
               <CustomDropdown
@@ -784,13 +913,17 @@ export default function ScheduleAppointmentDrawer({
                 onChange={handleClientSelect}
               />
             </FieldRow>
-            <FieldRow label="Schedule With (Responsible)" required>
+            <FieldRow label="Schedule With (Responsible Staff)" required>
               <CustomDropdown
                 value={values.provider ? String(values.provider.id) : ""}
                 options={providerOptions}
-                placeholder={values.serviceId ? "Select assigned responsible user" : "Select a user"}
+                placeholder={
+                  values.serviceId || values.location
+                    ? "Select assigned doctor / provider"
+                    : "Select a user"
+                }
                 onChange={(val) => {
-                  const emp = employees.find((x) => String(x.id) === val);
+                  const emp = allEmployeesList.find((x) => String(x.id) === val);
                   onChange({ provider: emp || null });
                 }}
               />
@@ -799,10 +932,10 @@ export default function ScheduleAppointmentDrawer({
         </SectionCard>
 
         {/* ================================================================ */}
-        {/* SECTION 3 — SCHEDULE                                             */}
+        {/* SECTION 4 — SCHEDULE                                             */}
         {/* ================================================================ */}
         <SectionCard>
-          <SectionHeader title="Schedule" />
+          <SectionHeader title="4. Schedule" />
           <div className="p-3 space-y-1">
 
             {/* Date */}
@@ -867,7 +1000,7 @@ export default function ScheduleAppointmentDrawer({
               <div className="flex rounded-lg border border-slate-200 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => onChange({ sessionType: "video" })}
+                  onClick={() => onChange({ sessionType: "video", location: "Online" })}
                   className={`flex-1 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
                     values.sessionType === "video" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
@@ -878,7 +1011,7 @@ export default function ScheduleAppointmentDrawer({
                 </button>
                 <button
                   type="button"
-                  onClick={() => onChange({ sessionType: "inPerson", location: values.location || orgLocations[0]?.name || "Main Clinic" })}
+                  onClick={() => onChange({ sessionType: "inPerson", location: values.location && values.location.toLowerCase() !== "online" ? values.location : orgLocations[0]?.name || "Main Clinic" })}
                   className={`flex-1 py-1.5 text-xs font-medium flex items-center justify-center gap-1.5 border-l border-slate-200 transition-colors ${
                     values.sessionType === "inPerson" ? "bg-slate-800 text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                   }`}
@@ -889,18 +1022,6 @@ export default function ScheduleAppointmentDrawer({
                 </button>
               </div>
             </FieldRow>
-
-            {/* Location (conditional) */}
-            {values.sessionType === "inPerson" && (
-              <FieldRow label="Clinic Location" required>
-                <CustomDropdown
-                  value={values.location || ""}
-                  options={locationOptions}
-                  placeholder="Select a clinic location"
-                  onChange={(val) => onChange({ location: val })}
-                />
-              </FieldRow>
-            )}
 
             {/* Real-time Provider Location & Day Off Notice */}
             {providerAvailabilityNotice && (
