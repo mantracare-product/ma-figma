@@ -67,30 +67,32 @@ export default function TargetUserLocationBar({
       }
     } catch {}
 
-    const orgLocs =
-      activeOrganization.locations && activeOrganization.locations.length > 0
-        ? activeOrganization.locations
-        : [activeOrganization.location || "California"];
+    if (list.length === 0) {
+      const orgLocs =
+        activeOrganization.locations && activeOrganization.locations.length > 0
+          ? activeOrganization.locations
+          : [activeOrganization.location || "California"];
 
-    orgLocs.forEach((name, idx) => {
-      const isOnline = name.toLowerCase().includes("online") || name.toLowerCase().includes("virtual");
-      const formatted = isOnline
-        ? "Online"
-        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
-        ? name
-        : `${name} Branch`;
-      if (!seenNames.has(formatted.toLowerCase())) {
-        seenNames.add(formatted.toLowerCase());
-        list.push({
-          id: `loc-${idx + 1}`,
-          name: formatted,
-          isOnline,
-        });
-      }
-    });
+      orgLocs.forEach((name, idx) => {
+        const isOnline = name.toLowerCase().includes("online") || name.toLowerCase().includes("virtual");
+        const formatted = isOnline
+          ? "Online"
+          : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+          ? name
+          : `${name} Branch`;
+        if (!seenNames.has(formatted.toLowerCase())) {
+          seenNames.add(formatted.toLowerCase());
+          list.push({
+            id: `loc-${idx + 1}`,
+            name: formatted,
+            isOnline,
+          });
+        }
+      });
+    }
 
     // Guarantee "Online" is available if not in list
-    if (!list.some((l) => l.name.toLowerCase() === "online")) {
+    if (!list.some((l) => l.name.toLowerCase() === "online" || l.isOnline)) {
       list.push({ id: "loc-online", name: "Online", isOnline: true });
     }
 

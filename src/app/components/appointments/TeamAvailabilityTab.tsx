@@ -288,26 +288,28 @@ export default function TeamAvailabilityTab({
       }
     } catch {}
 
-    const orgLocs =
-      activeOrganization.locations && activeOrganization.locations.length > 0
-        ? activeOrganization.locations
-        : [activeOrganization.location || "California"];
+    if (list.length === 0) {
+      const orgLocs =
+        activeOrganization.locations && activeOrganization.locations.length > 0
+          ? activeOrganization.locations
+          : [activeOrganization.location || "California"];
 
-    orgLocs.forEach((name, idx) => {
-      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
-      const formatted = isOnline
-        ? "Online"
-        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
-        ? name
-        : `${name} Branch`;
-      if (!seen.has(formatted.toLowerCase())) {
-        seen.add(formatted.toLowerCase());
-        list.push({
-          id: `loc-${idx + 1}`,
-          name: formatted,
-        });
-      }
-    });
+      orgLocs.forEach((name, idx) => {
+        const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+        const formatted = isOnline
+          ? "Online"
+          : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+          ? name
+          : `${name} Branch`;
+        if (!seen.has(formatted.toLowerCase())) {
+          seen.add(formatted.toLowerCase());
+          list.push({
+            id: `loc-${idx + 1}`,
+            name: formatted,
+          });
+        }
+      });
+    }
 
     if (!list.some((l) => l.name.toLowerCase() === "online")) {
       list.push({ id: "loc-online", name: "Online" });

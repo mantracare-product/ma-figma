@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { getStoredServices, onServicesChanged } from "../../../lib/servicesStore";
-import { useTeamMembers } from "../../../lib/teamStore";
+import { useTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import { InvoiceLineItem } from "../../types/invoiceTypes";
 import {
   ChevronDown,
@@ -386,28 +386,54 @@ export default function ScheduleAppointmentDrawer({
     return list.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
   }, [clients, values.client]);
 
-  const { teamMembers } = useTeamMembers();
+  const { teamMembers, bookableMembers } = useTeamMembers();
+
+  const [locVersion, setLocVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => setLocVersion((v) => v + 1);
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("mantra_locations_changed", handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("mantra_locations_changed", handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocVersion((v) => v + 1);
+      setStoredServicesState(getStoredServices());
+    }
+  }, [isOpen]);
 
   // Combine employees prop with teamMembers store
   const allEmployeesList: Employee[] = useMemo(() => {
-    const list: Employee[] = employees ? [...employees] : [];
-    const seenIds = new Set(list.map((e) => String(e.id)));
-    if (teamMembers && teamMembers.length > 0) {
-      teamMembers.forEach((m) => {
-        if (!seenIds.has(String(m.id))) {
-          seenIds.add(String(m.id));
-          list.push({
-            id: m.id,
-            name: m.name,
-            email: m.email,
-            role: m.role || m.department || "Staff",
-            locations: m.locations || (m as any).availableLocations || [],
-          } as any);
-        }
-      });
-    }
+    const list: Employee[] = [];
+    const seenIds = new Set<string>();
+
+    const sourceMembers = (teamMembers && teamMembers.length > 0)
+      ? teamMembers
+      : (bookableMembers && bookableMembers.length > 0)
+      ? bookableMembers
+      : employees || [];
+
+    sourceMembers.forEach((m: any) => {
+      if (!seenIds.has(String(m.id))) {
+        seenIds.add(String(m.id));
+        list.push({
+          id: m.id,
+          name: m.name,
+          email: m.email,
+          role: m.role || m.department || "Staff",
+          locations: m.locations || m.availableLocations || [],
+        } as any);
+      }
+    });
+
     return list;
-  }, [employees, teamMembers]);
+  }, [employees, teamMembers, bookableMembers, locVersion]);
 
   // Live services sync from store
   const [storedServicesState, setStoredServicesState] = useState(getStoredServices);
@@ -415,12 +441,6 @@ export default function ScheduleAppointmentDrawer({
   useEffect(() => {
     return onServicesChanged(() => setStoredServicesState(getStoredServices()));
   }, []);
-
-  useEffect(() => {
-    if (isOpen) {
-      setStoredServicesState(getStoredServices());
-    }
-  }, [isOpen]);
 
   // ── Available services ──
   const allAvailableServices = useMemo(() => {
@@ -478,7 +498,7 @@ export default function ScheduleAppointmentDrawer({
   // ── Organization Locations ──
   const { activeOrganization } = useOrganization();
   const orgLocations = useMemo(() => {
-    const list: Array<{ id: string; name: string; address?: string; phone?: string; timezone?: string }> = [];
+    const list: Array<{ id: string; name: string; address?: string; phone?: string; timezone?: string; type?: string }> = [];
     const seen = new Set<string>();
 
     try {
@@ -486,15 +506,24 @@ export default function ScheduleAppointmentDrawer({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          parsed.forEach((l: any) => {
+          parsed.forEach((l: any, idx: number) => {
             if (!seen.has(l.name.toLowerCase())) {
               seen.add(l.name.toLowerCase());
+              let fullAddr = l.address || "";
+              const extraParts = [l.city, l.state, l.zip].filter(Boolean).join(", ");
+              if (extraParts && !fullAddr.includes(extraParts)) {
+                fullAddr = fullAddr ? `${fullAddr}, ${extraParts}` : extraParts;
+              }
+              if (l.type === "online" || l.name.toLowerCase() === "online") {
+                fullAddr = "Virtual / Telehealth Consultation";
+              }
               list.push({
-                id: l.id,
+                id: l.id || `loc-${idx + 1}`,
                 name: l.name,
-                address: l.address,
+                address: fullAddr || (l.type === "online" ? "Virtual / Telehealth Consultation" : undefined),
                 phone: l.phone,
                 timezone: l.timezone,
+                type: l.type,
               });
             }
           });
@@ -502,33 +531,37 @@ export default function ScheduleAppointmentDrawer({
       }
     } catch { /* ignore */ }
 
-    const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
-      ? activeOrganization.locations
-      : [activeOrganization.location || "California"];
+    // Fallback only if no stored organization locations exist
+    if (list.length === 0) {
+      const locNames = activeOrganization.locations && activeOrganization.locations.length > 0
+        ? activeOrganization.locations
+        : [activeOrganization.location || "California"];
 
-    locNames.forEach((name, idx) => {
-      const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
-      const formatted = isOnline
-        ? "Online"
-        : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
-        ? name
-        : `${name} Branch`;
-      if (!seen.has(formatted.toLowerCase())) {
-        seen.add(formatted.toLowerCase());
-        list.push({
-          id: `loc-${idx + 1}`,
-          name: formatted,
-          address: isOnline ? "Virtual / Telehealth Consultation" : idx === 0 ? "123 Healthcare Ave, Suite 100" : "450 Lexington Ave, Suite 240",
-        });
-      }
-    });
+      locNames.forEach((name, idx) => {
+        const isOnline = name.toLowerCase() === "online" || name.toLowerCase().includes("virtual");
+        const formatted = isOnline
+          ? "Online"
+          : name.includes("Center") || name.includes("Clinic") || name.includes("Branch")
+          ? name
+          : `${name} Branch`;
+        if (!seen.has(formatted.toLowerCase())) {
+          seen.add(formatted.toLowerCase());
+          list.push({
+            id: `loc-${idx + 1}`,
+            name: formatted,
+            address: isOnline ? "Virtual / Telehealth Consultation" : undefined,
+            type: isOnline ? "online" : "physical",
+          });
+        }
+      });
+    }
 
-    if (!list.some((l) => l.name.toLowerCase() === "online")) {
-      list.push({ id: "loc-online", name: "Online", address: "Virtual / Telehealth Consultation" });
+    if (!list.some((l) => l.name.toLowerCase() === "online" || l.type === "online")) {
+      list.push({ id: "loc-online", name: "Online", address: "Virtual / Telehealth Consultation", type: "online" });
     }
 
     return list;
-  }, [activeOrganization]);
+  }, [activeOrganization, locVersion]);
 
   // ── Provider Location Availability & Days Off Notice ──
   const providerAvailabilityNotice = useMemo(() => {
