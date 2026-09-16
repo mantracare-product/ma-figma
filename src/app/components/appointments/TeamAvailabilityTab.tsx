@@ -72,22 +72,93 @@ const DURATION_OPTIONS = [
   { value: 60, label: "60m" },
 ];
 
-function createDefaultWeekSlots(): WeeklySlots {
-  return {
-    monday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    tuesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    wednesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    thursday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    friday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    saturday: { enabled: false, slots: [] },
-    sunday: { enabled: false, slots: [] },
-  };
-}
-
 function timeToMinutes(t: string): number {
   if (!t) return 0;
   const [h, m] = t.split(":").map(Number);
   return (h || 0) * 60 + (m || 0);
+}
+
+function minutesToTime(m: number): string {
+  const hh = String(Math.floor(m / 60)).padStart(2, "0");
+  const mm = String(m % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function getDefaultWeekSlotsForLocation(locWorkingHours?: any): WeeklySlots {
+  const result: WeeklySlots = {};
+  WEEKDAYS.forEach(({ key }) => {
+    const locDay = locWorkingHours?.[key];
+    if (locDay && locDay.enabled) {
+      result[key] = {
+        enabled: true,
+        slots: [{
+          start: locDay.start || "09:00",
+          end: locDay.end || "17:00",
+          durationMinutes: 30,
+        }],
+      };
+    } else if (locDay && !locDay.enabled) {
+      result[key] = { enabled: false, slots: [] };
+    } else {
+      const isWeekend = key === "saturday" || key === "sunday";
+      result[key] = {
+        enabled: !isWeekend,
+        slots: isWeekend ? [] : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+      };
+    }
+  });
+  return result;
+}
+
+function sanitizeSlotsWithLocationHours(slots: WeeklySlots, locWorkingHours?: any): WeeklySlots {
+  if (!locWorkingHours) return slots;
+  const result: WeeklySlots = {};
+
+  WEEKDAYS.forEach(({ key }) => {
+    const locDay = locWorkingHours[key];
+    const userDay = slots[key];
+
+    // If location is closed on this day, member must be unavailable
+    if (locDay && !locDay.enabled) {
+      result[key] = { enabled: false, slots: [] };
+      return;
+    }
+
+    if (!userDay || !userDay.enabled || !userDay.slots || userDay.slots.length === 0) {
+      result[key] = { enabled: false, slots: [] };
+      return;
+    }
+
+    const locStartMin = locDay?.start ? timeToMinutes(locDay.start) : timeToMinutes("00:00");
+    const locEndMin = locDay?.end ? timeToMinutes(locDay.end) : timeToMinutes("23:59");
+
+    const clampedSlots: DayTimeSlot[] = [];
+    userDay.slots.forEach((s) => {
+      let sMin = Math.max(timeToMinutes(s.start), locStartMin);
+      let eMin = Math.min(timeToMinutes(s.end), locEndMin);
+
+      if (sMin >= eMin) {
+        sMin = locStartMin;
+        eMin = locEndMin;
+      }
+
+      clampedSlots.push({
+        start: minutesToTime(sMin),
+        end: minutesToTime(eMin),
+        durationMinutes: s.durationMinutes || 30,
+      });
+    });
+
+    result[key] = {
+      enabled: clampedSlots.length > 0,
+      slots: clampedSlots,
+    };
+  });
+  return result;
+}
+
+function createDefaultWeekSlots(): WeeklySlots {
+  return getDefaultWeekSlotsForLocation();
 }
 
 function formatDateText(dStr: string): string {
@@ -193,8 +264,8 @@ export default function TeamAvailabilityTab({
   }, []);
 
   // 1. Organization Full Locations + Online
-  const orgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
-    const list: Array<{ id: string; name: string }> = [];
+  const orgLocations = useMemo<Array<{ id: string; name: string; workingHours?: any; daysOff?: any[] }>>(() => {
+    const list: Array<{ id: string; name: string; workingHours?: any; daysOff?: any[] }> = [];
     const seen = new Set<string>();
 
     try {
@@ -208,6 +279,8 @@ export default function TeamAvailabilityTab({
               list.push({
                 id: l.id || `loc-${idx + 1}`,
                 name: l.name,
+                workingHours: l.workingHours,
+                daysOff: l.daysOff,
               });
             }
           });
@@ -244,7 +317,7 @@ export default function TeamAvailabilityTab({
   }, [activeOrganization, activeLocVersion]);
 
   // Locations available ONLY for this team member
-  const locations = useMemo<Array<{ id: string; name: string }>>(() => {
+  const locations = useMemo<Array<{ id: string; name: string; workingHours?: any; daysOff?: any[] }>>(() => {
     const locActiveKey = `mantra_user_loc_active_map_${effectiveUserId}_${activeOrganization.id}`;
     let activeMap: Record<string, boolean> | null = null;
     try {
@@ -313,24 +386,27 @@ export default function TeamAvailabilityTab({
   const [weekSlots, setWeekSlots] = useState<WeeklySlots>(() => {
     try {
       const saved = localStorage.getItem(slotsKey);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        return sanitizeSlotsWithLocationHours(JSON.parse(saved), selectedLocation?.workingHours);
+      }
     } catch {}
-    return createDefaultWeekSlots();
+    return getDefaultWeekSlotsForLocation(selectedLocation?.workingHours);
   });
 
-  // Reload slots when user or location changes
+  // Reload slots when user or location changes, always sanitized with location operating hours
   useEffect(() => {
     try {
       const saved = localStorage.getItem(
         `mantra_user_loc_slots_${effectiveUserId}_${effectiveLocationId}_${activeOrganization.id}`
       );
       if (saved) {
-        setWeekSlots(JSON.parse(saved));
+        const sanitized = sanitizeSlotsWithLocationHours(JSON.parse(saved), selectedLocation?.workingHours);
+        setWeekSlots(sanitized);
         return;
       }
     } catch {}
-    setWeekSlots(createDefaultWeekSlots());
-  }, [effectiveUserId, effectiveLocationId, activeOrganization.id]);
+    setWeekSlots(getDefaultWeekSlotsForLocation(selectedLocation?.workingHours));
+  }, [effectiveUserId, effectiveLocationId, activeOrganization.id, selectedLocation]);
 
   // 3. Common Days Off for selected User (Universal across all locations)
   const daysOffKey = `mantra_member_common_days_off_${effectiveUserId}_${activeOrganization.id}`;
@@ -375,8 +451,14 @@ export default function TeamAvailabilityTab({
     setDraftRepeatYearly(false);
   };
 
-  // Toggle day enabled/disabled
+  // Toggle day enabled/disabled (cannot enable if location is closed on that day)
   const handleToggleDayEnabled = (dayKey: string, enabled: boolean) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    if (enabled && locDay && !locDay.enabled) {
+      toast.error(`${selectedLocation.name} is closed on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}s.`);
+      return;
+    }
+
     setWeekSlots((prev) => {
       const day = prev[dayKey] || { enabled: false, slots: [] };
       if (!enabled) {
@@ -388,11 +470,13 @@ export default function TeamAvailabilityTab({
           },
         };
       }
+      const defaultStart = locDay?.start || "09:00";
+      const defaultEnd = locDay?.end || "17:00";
       return {
         ...prev,
         [dayKey]: {
           enabled: true,
-          slots: day.slots.length > 0 ? day.slots : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+          slots: day.slots.length > 0 ? day.slots : [{ start: defaultStart, end: defaultEnd, durationMinutes: 30 }],
         },
       };
     });
@@ -400,9 +484,17 @@ export default function TeamAvailabilityTab({
 
   // Add slot for a specific day
   const handleAddSlot = (dayKey: string) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    if (locDay && !locDay.enabled) {
+      toast.error(`${selectedLocation.name} is closed on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}s.`);
+      return;
+    }
+    const defaultStart = locDay?.start || "09:00";
+    const defaultEnd = locDay?.end || "17:00";
+
     setWeekSlots((prev) => {
       const day = prev[dayKey] || { enabled: false, slots: [] };
-      const newSlot: DayTimeSlot = { start: "09:00", end: "17:00", durationMinutes: 30 };
+      const newSlot: DayTimeSlot = { start: defaultStart, end: defaultEnd, durationMinutes: 30 };
       return {
         ...prev,
         [dayKey]: {
@@ -430,15 +522,33 @@ export default function TeamAvailabilityTab({
     });
   };
 
-  // Update slot field
+  // Update slot field with location bounds clamping
   const handleUpdateSlot = (dayKey: string, slotIdx: number, field: keyof DayTimeSlot, value: any) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    let sanitizedVal = value;
+
+    if (locDay && locDay.enabled) {
+      const dayLabel = dayKey.charAt(0).toUpperCase() + dayKey.slice(1);
+      if (field === "start") {
+        if (timeToMinutes(value) < timeToMinutes(locDay.start)) {
+          sanitizedVal = locDay.start;
+          toast.info(`${dayLabel} opens at ${locDay.start} for ${selectedLocation.name}`);
+        }
+      } else if (field === "end") {
+        if (timeToMinutes(value) > timeToMinutes(locDay.end)) {
+          sanitizedVal = locDay.end;
+          toast.info(`${dayLabel} closes at ${locDay.end} for ${selectedLocation.name}`);
+        }
+      }
+    }
+
     setWeekSlots((prev) => {
       const day = prev[dayKey];
       if (!day) return prev;
       const updatedSlots = [...day.slots];
       updatedSlots[slotIdx] = {
         ...updatedSlots[slotIdx],
-        [field]: value,
+        [field]: sanitizedVal,
       };
       return {
         ...prev,
@@ -644,6 +754,8 @@ export default function TeamAvailabilityTab({
             {WEEKDAYS.map(({ key, label }) => {
               const day = weekSlots[key] || { enabled: false, slots: [] };
               const hasSlots = day.enabled && day.slots.length > 0;
+              const locDay = selectedLocation?.workingHours?.[key];
+              const isLocClosed = locDay && !locDay.enabled;
 
               return (
                 <div
@@ -652,22 +764,40 @@ export default function TeamAvailabilityTab({
                     hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
                   }`}
                 >
-                  {/* Left Column: Day Checkbox & Day Label (NO slot count badge) */}
-                  <div className="w-36 shrink-0 flex items-center gap-2.5">
-                    <input
-                      type="checkbox"
-                      id={`toggle-${key}`}
-                      checked={hasSlots}
-                      onChange={(e) => handleToggleDayEnabled(key, e.target.checked)}
-                      className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer"
-                    />
-                    <label
-                      htmlFor={`toggle-${key}`}
-                      className="text-sm font-bold text-slate-800 cursor-pointer select-none"
-                      style={{ fontFamily: "DM Sans, sans-serif" }}
-                    >
-                      {label}
-                    </label>
+                  {/* Left Column: Day Checkbox, Day Label & Location Operating Hours */}
+                  <div className="w-48 shrink-0">
+                    <div className="flex items-center gap-2.5">
+                      <input
+                        type="checkbox"
+                        id={`toggle-${key}`}
+                        checked={hasSlots}
+                        disabled={isLocClosed}
+                        onChange={(e) => handleToggleDayEnabled(key, e.target.checked)}
+                        className={`w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 ${
+                          isLocClosed ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
+                        }`}
+                      />
+                      <label
+                        htmlFor={`toggle-${key}`}
+                        className={`text-sm font-bold select-none ${
+                          isLocClosed ? "text-slate-400 cursor-not-allowed" : "text-slate-800 cursor-pointer"
+                        }`}
+                        style={{ fontFamily: "DM Sans, sans-serif" }}
+                      >
+                        {label}
+                      </label>
+                    </div>
+                    <div className="ml-6.5 mt-0.5">
+                      {isLocClosed ? (
+                        <span className="inline-block text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60">
+                          Location Closed
+                        </span>
+                      ) : locDay ? (
+                        <span className="text-[11px] text-slate-400 font-medium">
+                          Open {locDay.start}–{locDay.end}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
 
                   {/* Middle Column: In front of the day, show slots */}

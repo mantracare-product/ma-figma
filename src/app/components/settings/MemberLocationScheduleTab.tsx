@@ -73,16 +73,93 @@ const DURATION_OPTIONS = [
   { value: 60, label: "60m" },
 ];
 
+function timeToMinutes(t: string): number {
+  if (!t) return 0;
+  const [h, m] = t.split(":").map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minutesToTime(m: number): string {
+  const hh = String(Math.floor(m / 60)).padStart(2, "0");
+  const mm = String(m % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function getDefaultWeekSlotsForLocation(locWorkingHours?: any): WeeklySlots {
+  const result: WeeklySlots = {};
+  WEEKDAYS.forEach(({ key }) => {
+    const locDay = locWorkingHours?.[key];
+    if (locDay && locDay.enabled) {
+      result[key] = {
+        enabled: true,
+        slots: [{
+          start: locDay.start || "09:00",
+          end: locDay.end || "17:00",
+          durationMinutes: 30,
+        }],
+      };
+    } else if (locDay && !locDay.enabled) {
+      result[key] = { enabled: false, slots: [] };
+    } else {
+      const isWeekend = key === "saturday" || key === "sunday";
+      result[key] = {
+        enabled: !isWeekend,
+        slots: isWeekend ? [] : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+      };
+    }
+  });
+  return result;
+}
+
+function sanitizeSlotsWithLocationHours(slots: WeeklySlots, locWorkingHours?: any): WeeklySlots {
+  if (!locWorkingHours) return slots;
+  const result: WeeklySlots = {};
+
+  WEEKDAYS.forEach(({ key }) => {
+    const locDay = locWorkingHours[key];
+    const userDay = slots[key];
+
+    // If location is closed on this day, member must be unavailable
+    if (locDay && !locDay.enabled) {
+      result[key] = { enabled: false, slots: [] };
+      return;
+    }
+
+    if (!userDay || !userDay.enabled || !userDay.slots || userDay.slots.length === 0) {
+      result[key] = { enabled: false, slots: [] };
+      return;
+    }
+
+    const locStartMin = locDay?.start ? timeToMinutes(locDay.start) : timeToMinutes("00:00");
+    const locEndMin = locDay?.end ? timeToMinutes(locDay.end) : timeToMinutes("23:59");
+
+    const clampedSlots: DayTimeSlot[] = [];
+    userDay.slots.forEach((s) => {
+      let sMin = Math.max(timeToMinutes(s.start), locStartMin);
+      let eMin = Math.min(timeToMinutes(s.end), locEndMin);
+
+      if (sMin >= eMin) {
+        sMin = locStartMin;
+        eMin = locEndMin;
+      }
+
+      clampedSlots.push({
+        start: minutesToTime(sMin),
+        end: minutesToTime(eMin),
+        durationMinutes: s.durationMinutes || 30,
+      });
+    });
+
+    result[key] = {
+      enabled: clampedSlots.length > 0,
+      slots: clampedSlots,
+    };
+  });
+  return result;
+}
+
 function createDefaultWeekSlots(): WeeklySlots {
-  return {
-    monday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    tuesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    wednesday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    thursday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    friday: { enabled: true, slots: [{ start: "09:00", end: "17:00", durationMinutes: 30 }] },
-    saturday: { enabled: false, slots: [] },
-    sunday: { enabled: false, slots: [] },
-  };
+  return getDefaultWeekSlotsForLocation();
 }
 
 function formatDateText(dStr: string): string {
@@ -155,8 +232,8 @@ export default function MemberLocationScheduleTab({
   }, []);
 
   // 1. All Organization Locations (Full Clinic Catalog)
-  const allOrgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
-    const list: Array<{ id: string; name: string }> = [];
+  const allOrgLocations = useMemo<Array<{ id: string; name: string; workingHours?: any; daysOff?: any[] }>>(() => {
+    const list: Array<{ id: string; name: string; workingHours?: any; daysOff?: any[] }> = [];
     const seen = new Set<string>();
 
     try {
@@ -167,7 +244,7 @@ export default function MemberLocationScheduleTab({
           parsed.forEach((l: any) => {
             if (!seen.has(l.name.toLowerCase())) {
               seen.add(l.name.toLowerCase());
-              list.push({ id: l.id, name: l.name });
+              list.push({ id: l.id, name: l.name, workingHours: l.workingHours, daysOff: l.daysOff });
             }
           });
         }
@@ -358,9 +435,12 @@ export default function MemberLocationScheduleTab({
   const [weekSlots, setWeekSlots] = useState<WeeklySlots>(() => {
     try {
       const saved = localStorage.getItem(slotsKey);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return sanitizeSlotsWithLocationHours(parsed, selectedLocation?.workingHours);
+      }
     } catch {}
-    return createDefaultWeekSlots();
+    return getDefaultWeekSlotsForLocation(selectedLocation?.workingHours);
   });
 
   // Reload slots when user or location changes
@@ -370,12 +450,13 @@ export default function MemberLocationScheduleTab({
         `mantra_user_loc_slots_${resolvedUserId}_${selectedLocationId}_${activeOrganization.id}`
       );
       if (saved) {
-        setWeekSlots(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        setWeekSlots(sanitizeSlotsWithLocationHours(parsed, selectedLocation?.workingHours));
         return;
       }
     } catch {}
-    setWeekSlots(createDefaultWeekSlots());
-  }, [resolvedUserId, selectedLocationId, activeOrganization.id]);
+    setWeekSlots(getDefaultWeekSlotsForLocation(selectedLocation?.workingHours));
+  }, [resolvedUserId, selectedLocationId, activeOrganization.id, selectedLocation]);
 
   // 3. Days Off for selected User
   const daysOffKey = `mantra_member_common_days_off_${resolvedUserId}_${activeOrganization.id}`;
@@ -415,6 +496,12 @@ export default function MemberLocationScheduleTab({
 
   // Toggle day enabled/disabled
   const handleToggleDayEnabled = (dayKey: string, enabled: boolean) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    if (enabled && locDay && !locDay.enabled) {
+      toast.error(`${selectedLocation?.name || "Location"} is closed on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}`);
+      return;
+    }
+
     setWeekSlots((prev) => {
       const day = prev[dayKey] || { enabled: false, slots: [] };
       if (!enabled) {
@@ -426,11 +513,13 @@ export default function MemberLocationScheduleTab({
           },
         };
       }
+      const locStart = locDay?.start || "09:00";
+      const locEnd = locDay?.end || "17:00";
       return {
         ...prev,
         [dayKey]: {
           enabled: true,
-          slots: day.slots.length > 0 ? day.slots : [{ start: "09:00", end: "17:00", durationMinutes: 30 }],
+          slots: day.slots.length > 0 ? day.slots : [{ start: locStart, end: locEnd, durationMinutes: 30 }],
         },
       };
     });
@@ -438,9 +527,17 @@ export default function MemberLocationScheduleTab({
 
   // Add slot for a specific day
   const handleAddSlot = (dayKey: string) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    if (locDay && !locDay.enabled) {
+      toast.error(`${selectedLocation?.name || "Location"} is closed on ${dayKey.charAt(0).toUpperCase() + dayKey.slice(1)}`);
+      return;
+    }
+    const locStart = locDay?.start || "09:00";
+    const locEnd = locDay?.end || "17:00";
+
     setWeekSlots((prev) => {
       const day = prev[dayKey] || { enabled: false, slots: [] };
-      const newSlot: DayTimeSlot = { start: "09:00", end: "17:00", durationMinutes: 30 };
+      const newSlot: DayTimeSlot = { start: locStart, end: locEnd, durationMinutes: 30 };
       return {
         ...prev,
         [dayKey]: {
@@ -475,13 +572,38 @@ export default function MemberLocationScheduleTab({
     field: keyof DayTimeSlot,
     value: any
   ) => {
+    const locDay = selectedLocation?.workingHours?.[dayKey];
+    const locStartMin = locDay?.start ? timeToMinutes(locDay.start) : timeToMinutes("00:00");
+    const locEndMin = locDay?.end ? timeToMinutes(locDay.end) : timeToMinutes("23:59");
+
+    let finalVal = value;
+    if (field === "start") {
+      const valMin = timeToMinutes(value);
+      if (valMin < locStartMin) {
+        toast.error(`Start time cannot be before location opening time (${locDay.start})`);
+        finalVal = locDay.start;
+      } else if (valMin >= locEndMin) {
+        toast.error(`Start time must be before location closing time (${locDay.end})`);
+        return;
+      }
+    } else if (field === "end") {
+      const valMin = timeToMinutes(value);
+      if (valMin > locEndMin) {
+        toast.error(`End time cannot be after location closing time (${locDay.end})`);
+        finalVal = locDay.end;
+      } else if (valMin <= locStartMin) {
+        toast.error(`End time must be after location opening time (${locDay.start})`);
+        return;
+      }
+    }
+
     setWeekSlots((prev) => {
       const day = prev[dayKey];
       if (!day) return prev;
       const updatedSlots = [...day.slots];
       updatedSlots[slotIdx] = {
         ...updatedSlots[slotIdx],
-        [field]: value,
+        [field]: finalVal,
       };
       return {
         ...prev,
@@ -737,35 +859,57 @@ export default function MemberLocationScheduleTab({
                 {WEEKDAYS.map(({ key, label }) => {
                   const day = weekSlots[key] || { enabled: false, slots: [] };
                   const hasSlots = day.enabled && day.slots.length > 0;
+                  const locDay = selectedLocation?.workingHours?.[key];
+                  const isLocClosed = locDay ? !locDay.enabled : false;
 
                   return (
                     <div
                       key={key}
                       className={`flex flex-col md:flex-row md:items-start p-4 sm:p-4.5 gap-4 transition-colors ${
-                        hasSlots ? "bg-white hover:bg-slate-50/40" : "bg-slate-50/30 hover:bg-slate-50/60"
+                        isLocClosed
+                          ? "bg-slate-100/50 opacity-75"
+                          : hasSlots
+                          ? "bg-white hover:bg-slate-50/40"
+                          : "bg-slate-50/30 hover:bg-slate-50/60"
                       }`}
                     >
                       {/* Left Column: Day info & Checkbox (NO slot count badge) */}
-                      <div className="w-36 shrink-0 flex items-center gap-2.5">
+                      <div className="w-44 shrink-0 flex items-center gap-2.5">
                         <input
                           type="checkbox"
                           id={`drawer-toggle-${key}`}
-                          checked={hasSlots}
+                          checked={hasSlots && !isLocClosed}
+                          disabled={isLocClosed}
                           onChange={(e) => handleToggleDayEnabled(key, e.target.checked)}
-                          className="w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 cursor-pointer"
+                          className={`w-4 h-4 rounded border-slate-300 text-primary focus:ring-primary/20 ${
+                            isLocClosed ? "cursor-not-allowed opacity-40" : "cursor-pointer"
+                          }`}
                         />
-                        <label
-                          htmlFor={`drawer-toggle-${key}`}
-                          className="text-sm font-bold text-slate-800 cursor-pointer select-none"
-                          style={{ fontFamily: "DM Sans, sans-serif" }}
-                        >
-                          {label}
-                        </label>
+                        <div className="flex flex-col">
+                          <label
+                            htmlFor={`drawer-toggle-${key}`}
+                            className={`text-sm font-bold select-none ${
+                              isLocClosed ? "text-slate-400 cursor-not-allowed" : "text-slate-800 cursor-pointer"
+                            }`}
+                            style={{ fontFamily: "DM Sans, sans-serif" }}
+                          >
+                            {label}
+                          </label>
+                          {locDay && (
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              {locDay.enabled ? `Open ${locDay.start}–${locDay.end}` : "Location Closed"}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       {/* Middle Column: In front of the day, show slots */}
                       <div className="flex-1 min-w-0">
-                        {!hasSlots ? (
+                        {isLocClosed ? (
+                          <span className="text-xs font-medium text-slate-400 italic">
+                            Location Closed on this day
+                          </span>
+                        ) : !hasSlots ? (
                           <span className="text-xs font-medium text-slate-400 italic">
                             Unavailable
                           </span>
@@ -823,16 +967,18 @@ export default function MemberLocationScheduleTab({
                       </div>
 
                       {/* Right Corner: Add Slot Button */}
-                      <div className="shrink-0 flex items-center justify-end">
-                        <button
-                          type="button"
-                          onClick={() => handleAddSlot(key)}
-                          className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
-                          title={`Add slot for ${label}`}
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                      </div>
+                      {!isLocClosed && (
+                        <div className="shrink-0 flex items-center justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleAddSlot(key)}
+                            className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors cursor-pointer"
+                            title={`Add slot for ${label}`}
+                          >
+                            <Plus className="w-4 h-4" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
