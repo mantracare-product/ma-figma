@@ -157,6 +157,7 @@ export default function OrganizationLocationsSection({ isEditing = false }: Orga
     try {
       localStorage.setItem(storageKey, JSON.stringify(locations));
       window.dispatchEvent(new Event("storage"));
+      window.dispatchEvent(new Event("mantra_locations_changed"));
     } catch (e) {
       console.error("Failed to write locations to localStorage", e);
     }

@@ -1057,17 +1057,38 @@ export default function Settings() {
     permissions: createDefaultPermissions(),
   });
 
+  const [settingsLocVersion, setSettingsLocVersion] = useState(0);
+  useEffect(() => {
+    const handleUpdate = () => setSettingsLocVersion((v) => v + 1);
+    window.addEventListener("storage", handleUpdate);
+    window.addEventListener("mantra_locations_changed", handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("mantra_locations_changed", handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+    };
+  }, []);
+
   // Organization locations for Add Member drawer
   const settingsOrgLocations = useMemo(() => {
+    const list: Array<{ id: string; name: string }> = [];
+    const seen = new Set<string>();
+
     try {
       const saved = localStorage.getItem(`mantra_org_locations_${activeOrganization?.id || "1"}`);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed.map((l: any, idx: number) => ({
-            id: l.id || `loc-${idx + 1}`,
-            name: l.name,
-          }));
+          parsed.forEach((l: any, idx: number) => {
+            if (l.name && !seen.has(l.name.toLowerCase())) {
+              seen.add(l.name.toLowerCase());
+              list.push({
+                id: l.id || `loc-${idx + 1}`,
+                name: l.name,
+              });
+            }
+          });
         }
       }
     } catch {}
@@ -1077,11 +1098,19 @@ export default function Settings() {
         ? activeOrganization.locations
         : [activeOrganization?.location || "California"];
 
-    return orgLocs.map((name: string, idx: number) => ({
-      id: `loc-${idx + 1}`,
-      name: name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`,
-    }));
-  }, [activeOrganization]);
+    orgLocs.forEach((name: string, idx: number) => {
+      const formatted = name.includes("Center") || name.includes("Clinic") || name.includes("Branch") ? name : `${name} Branch`;
+      if (!seen.has(formatted.toLowerCase()) && !seen.has(name.toLowerCase())) {
+        seen.add(formatted.toLowerCase());
+        list.push({
+          id: `loc-${idx + 1}`,
+          name: formatted,
+        });
+      }
+    });
+
+    return list;
+  }, [activeOrganization, settingsLocVersion]);
 
   const [addMemberSelectedLocationIds, setAddMemberSelectedLocationIds] = useState<string[]>([]);
   const [addMemberSelectedServiceIds, setAddMemberSelectedServiceIds] = useState<number[]>([]);

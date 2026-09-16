@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
   MapPin,
   Clock,
@@ -12,11 +12,12 @@ import {
   ChevronDown,
   Save,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { Button } from "../ui/Button";
 import { toast } from "sonner";
 import { useOrganization } from "../../context/OrganizationContext";
-import { getStoredTeamMembers } from "../../../lib/teamStore";
+import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../../lib/teamStore";
 import ClockTimePicker from "../ui/ClockTimePicker";
 import SlotDurationPicker from "../ui/SlotDurationPicker";
 
@@ -144,11 +145,17 @@ export default function MemberLocationScheduleTab({
   useEffect(() => {
     const handleUpdate = () => setLocVersion((v) => v + 1);
     window.addEventListener("storage", handleUpdate);
-    return () => window.removeEventListener("storage", handleUpdate);
+    window.addEventListener("mantra_locations_changed", handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleUpdate);
+    return () => {
+      window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("mantra_locations_changed", handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleUpdate);
+    };
   }, []);
 
-  // 1. Organization Locations + Online
-  const locations = useMemo<Array<{ id: string; name: string }>>(() => {
+  // 1. All Organization Locations (Full Clinic Catalog)
+  const allOrgLocations = useMemo<Array<{ id: string; name: string }>>(() => {
     const list: Array<{ id: string; name: string }> = [];
     const seen = new Set<string>();
 
@@ -192,45 +199,158 @@ export default function MemberLocationScheduleTab({
     return list;
   }, [activeOrganization, locVersion]);
 
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(
-    () => locations[0]?.id || "loc-1"
-  );
-  const selectedLocation =
-    locations.find((l) => l.id === selectedLocationId) || locations[0];
-
-  // Sub-tabs: Manage Slots vs Days Off
-  const [activeSubTab, setActiveSubTab] = useState<"slots" | "days-off">("slots");
-
   // Location Active Availability Map: { [locId]: boolean }
   const locActiveKey = `mantra_user_loc_active_map_${resolvedUserId}_${activeOrganization.id}`;
   const [locationActiveMap, setLocationActiveMap] = useState<Record<string, boolean>>(() => {
     try {
       const saved = localStorage.getItem(locActiveKey);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Object.keys(parsed).length > 0) return parsed;
+      }
     } catch {}
-    // By default, available at the first location
+
+    // Initialize from member's assigned locations in teamStore if available
+    try {
+      const allMembers = getStoredTeamMembers();
+      const currentMember = allMembers.find(
+        (m) => String(m.id) === String(resolvedUserId) || m.email.toLowerCase() === String(memberId).toLowerCase()
+      );
+      const memberLocsList = currentMember?.locations || (currentMember as any)?.availableLocations;
+      if (Array.isArray(memberLocsList) && memberLocsList.length > 0) {
+        const init: Record<string, boolean> = {};
+        allOrgLocations.forEach((loc) => {
+          if (memberLocsList.includes(loc.name) || memberLocsList.includes(loc.id)) {
+            init[loc.id] = true;
+          }
+        });
+        if (Object.values(init).some(Boolean)) return init;
+      }
+    } catch {}
+
+    // Default: available at first location only
     const init: Record<string, boolean> = {};
-    locations.forEach((loc, idx) => {
+    allOrgLocations.forEach((loc, idx) => {
       init[loc.id] = idx === 0;
     });
     return init;
   });
 
-  const isAvailableAtLocation = locationActiveMap[selectedLocationId] ?? true;
-
-  const handleToggleLocationActive = (active: boolean) => {
-    setLocationActiveMap((prev) => {
-      const updated = { ...prev, [selectedLocationId]: active };
-      try {
-        localStorage.setItem(locActiveKey, JSON.stringify(updated));
-      } catch {}
-      return updated;
-    });
-    toast.success(
-      active
-        ? `${memberName} is now available at ${selectedLocation?.name}`
-        : `${memberName} set to unavailable at ${selectedLocation?.name}`
+  // Locations currently available / assigned to this member ONLY
+  const userAvailableLocations = useMemo(() => {
+    const list = allOrgLocations.filter(
+      (loc) => locationActiveMap[loc.id] === true || locationActiveMap[loc.name] === true
     );
+    if (list.length > 0) return list;
+    return allOrgLocations.slice(0, 1);
+  }, [allOrgLocations, locationActiveMap]);
+
+  // Other Clinic Locations not yet added to this member's schedule
+  const unassignedOrgLocations = useMemo(() => {
+    const assignedIds = new Set(userAvailableLocations.map((l) => l.id));
+    const assignedNames = new Set(userAvailableLocations.map((l) => l.name.toLowerCase()));
+    return allOrgLocations.filter(
+      (loc) => !assignedIds.has(loc.id) && !assignedNames.has(loc.name.toLowerCase())
+    );
+  }, [allOrgLocations, userAvailableLocations]);
+
+  const [selectedLocationId, setSelectedLocationId] = useState<string>(
+    () => userAvailableLocations[0]?.id || "loc-1"
+  );
+
+  // Sync selected location if selection is no longer in active locations
+  useEffect(() => {
+    if (!userAvailableLocations.some((l) => l.id === selectedLocationId)) {
+      if (userAvailableLocations.length > 0) {
+        setSelectedLocationId(userAvailableLocations[0].id);
+      }
+    }
+  }, [userAvailableLocations, selectedLocationId]);
+
+  const selectedLocation =
+    userAvailableLocations.find((l) => l.id === selectedLocationId) ||
+    allOrgLocations.find((l) => l.id === selectedLocationId) ||
+    allOrgLocations[0];
+
+  // Sub-tabs: Manage Slots vs Days Off
+  const [activeSubTab, setActiveSubTab] = useState<"slots" | "days-off">("slots");
+
+  const [showAddLocationMenu, setShowAddLocationMenu] = useState(false);
+  const addLocRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (addLocRef.current && !addLocRef.current.contains(e.target as Node)) {
+        setShowAddLocationMenu(false);
+      }
+    };
+    if (showAddLocationMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showAddLocationMenu]);
+
+  // Add an unassigned clinic location to this member's schedule
+  const handleAddLocationToMember = (loc: { id: string; name: string }) => {
+    const updatedMap = { ...locationActiveMap, [loc.id]: true, [loc.name]: true };
+    setLocationActiveMap(updatedMap);
+    try {
+      localStorage.setItem(locActiveKey, JSON.stringify(updatedMap));
+    } catch {}
+
+    // Update teamStore
+    try {
+      const all = getStoredTeamMembers();
+      const updated = all.map((m) => {
+        if (String(m.id) === String(resolvedUserId) || m.email.toLowerCase() === String(memberId).toLowerCase()) {
+          const currentLocs = m.locations || (m as any).availableLocations || [];
+          if (!currentLocs.includes(loc.name)) {
+            return { ...m, locations: [...currentLocs, loc.name] };
+          }
+        }
+        return m;
+      });
+      saveStoredTeamMembers(updated);
+    } catch {}
+
+    setSelectedLocationId(loc.id);
+    setShowAddLocationMenu(false);
+    toast.success(`Added ${loc.name} to ${memberName}'s schedule`);
+  };
+
+  // Remove a location from this member's schedule
+  const handleRemoveLocationFromMember = (locId: string) => {
+    const locToRemove = allOrgLocations.find((l) => l.id === locId);
+    const updatedMap = { ...locationActiveMap, [locId]: false };
+    if (locToRemove) {
+      updatedMap[locToRemove.name] = false;
+    }
+    setLocationActiveMap(updatedMap);
+    try {
+      localStorage.setItem(locActiveKey, JSON.stringify(updatedMap));
+    } catch {}
+
+    // Update teamStore
+    try {
+      const all = getStoredTeamMembers();
+      const updated = all.map((m) => {
+        if (String(m.id) === String(resolvedUserId) || m.email.toLowerCase() === String(memberId).toLowerCase()) {
+          const currentLocs = m.locations || (m as any).availableLocations || [];
+          return {
+            ...m,
+            locations: currentLocs.filter((ln: string) => ln !== locToRemove?.name && ln !== locId),
+          };
+        }
+        return m;
+      });
+      saveStoredTeamMembers(updated);
+    } catch {}
+
+    const remaining = userAvailableLocations.filter((l) => l.id !== locId);
+    if (remaining.length > 0) {
+      setSelectedLocationId(remaining[0].id);
+    }
+    toast.success(`Removed ${locToRemove?.name || "location"} from ${memberName}'s schedule`);
   };
 
   // 2. Weekly Availability Slots for [User + Location]
@@ -400,7 +520,7 @@ export default function MemberLocationScheduleTab({
       legacyMap[selectedLocationId] = {
         locationId: selectedLocationId,
         locationName: selectedLocation.name,
-        isAvailableAtLocation,
+        isAvailableAtLocation: true,
         workingHours: convertedWorkingHours,
         daysOff,
       };
@@ -505,8 +625,8 @@ export default function MemberLocationScheduleTab({
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          {/* Location Dropdown */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Location Dropdown - ONLY Member's Assigned Locations */}
           <div className="relative">
             <select
               value={selectedLocationId}
@@ -514,7 +634,7 @@ export default function MemberLocationScheduleTab({
               className="w-full sm:w-auto min-w-[200px] appearance-none pl-9 pr-9 py-2 text-xs font-semibold bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary text-slate-800 cursor-pointer shadow-2xs"
               style={{ fontFamily: "Outfit, sans-serif" }}
             >
-              {locations.map((loc) => (
+              {userAvailableLocations.map((loc) => (
                 <option key={loc.id} value={loc.id}>
                   {loc.name}
                 </option>
@@ -524,57 +644,62 @@ export default function MemberLocationScheduleTab({
             <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
 
-          {/* Available at this location toggle */}
-          <div className="flex items-center gap-2.5 bg-slate-50 px-3.5 py-1.5 rounded-xl border border-slate-200 self-start sm:self-auto">
-            <span
-              className="text-xs font-semibold text-slate-700 whitespace-nowrap"
-              style={{ fontFamily: "DM Sans, sans-serif" }}
+          {/* + Add Location Dropdown/Button for Other Clinic Locations */}
+          {unassignedOrgLocations.length > 0 && (
+            <div className="relative" ref={addLocRef}>
+              <button
+                type="button"
+                onClick={() => setShowAddLocationMenu(!showAddLocationMenu)}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold bg-blue-50 text-blue-600 hover:bg-blue-100/80 border border-blue-200 rounded-xl transition-all cursor-pointer shadow-2xs"
+                style={{ fontFamily: "Outfit, sans-serif" }}
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Location</span>
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAddLocationMenu ? "rotate-180" : ""}`} />
+              </button>
+
+              {showAddLocationMenu && (
+                <div className="absolute left-0 sm:right-0 sm:left-auto mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1.5 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-100">
+                  <div className="px-3 py-1.5 border-b border-slate-100 bg-slate-50/70">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Other Clinic Locations</p>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-50">
+                    {unassignedOrgLocations.map((loc) => (
+                      <button
+                        key={loc.id}
+                        type="button"
+                        onClick={() => handleAddLocationToMember(loc)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-slate-50 transition-colors cursor-pointer group"
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="text-xs font-semibold text-slate-800 group-hover:text-blue-600 truncate">{loc.name}</p>
+                          <p className="text-[10px] text-slate-400">Click to add to {memberName}</p>
+                        </div>
+                        <Plus className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Remove from Schedule button if member has multiple locations */}
+          {userAvailableLocations.length > 1 && (
+            <button
+              type="button"
+              onClick={() => handleRemoveLocationFromMember(selectedLocationId)}
+              className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl border border-transparent hover:border-rose-200 transition-all cursor-pointer"
+              title={`Remove ${selectedLocation.name} from ${memberName}'s schedule`}
             >
-              Available Here
-            </span>
-            <label className="relative inline-flex items-center cursor-pointer shrink-0">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={isAvailableAtLocation}
-                onChange={(e) => handleToggleLocationActive(e.target.checked)}
-              />
-              <div className="w-10 h-5 bg-slate-200 peer-focus:ring-2 peer-focus:ring-primary/20 rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
-            </label>
-          </div>
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
-      {/* If Inactive at Location */}
-      {!isAvailableAtLocation ? (
-        <div className="p-8 text-center bg-slate-50/70 border border-slate-200/80 rounded-2xl space-y-3">
-          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-            <Building2 className="w-6 h-6" />
-          </div>
-          <h5
-            className="text-sm font-semibold text-slate-800"
-            style={{ fontFamily: "DM Sans, sans-serif" }}
-          >
-            {memberName} is not available at {selectedLocation.name}
-          </h5>
-          <p
-            className="text-xs text-slate-500 max-w-md mx-auto"
-            style={{ fontFamily: "Outfit, sans-serif" }}
-          >
-            Toggle the &quot;Available Here&quot; switch above to configure time slots and availability for this facility.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleToggleLocationActive(true)}
-            className="text-xs font-semibold text-primary cursor-pointer"
-          >
-            Enable Availability at {selectedLocation.name}
-          </Button>
-        </div>
-      ) : (
-        /* If Available at Location: Slots & Days Off */
-        <div className="space-y-4">
+      {/* Slots & Days Off */}
+      <div className="space-y-4">
           {/* Sub-tabs: Manage Slots | Days Off */}
           <div className="flex items-center gap-2">
             <button
@@ -915,7 +1040,6 @@ export default function MemberLocationScheduleTab({
             </div>
           )}
         </div>
-      )}
     </div>
   );
 }
