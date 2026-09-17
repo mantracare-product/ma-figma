@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
+import { getStoredProcesses } from "../../lib/useProcessStore";
 
 export type FieldModule = "client" | "process" | "appointment" | "call" | "service" | "organization" | "deal" | "teamMember" | "scribe";
 
@@ -341,6 +342,71 @@ const SYSTEM_SECTION_IDS = new Set([
   "sec-process-pipeline",
 ]);
 
+/**
+ * Robustly matches an array of assigned process IDs/names against a target process ID or name.
+ * Handles bidirectional resolution using stored processes (e.g. template ID 'proc-123' <-> name 'Cardiology').
+ */
+export function isProcessMatchingAssignment(
+  assignedProcessIds?: string[],
+  targetProcessIdentifier?: string
+): boolean {
+  if (!assignedProcessIds || assignedProcessIds.length === 0 || assignedProcessIds.includes("all")) {
+    return true;
+  }
+  if (!targetProcessIdentifier) return true;
+
+  const targetClean = targetProcessIdentifier.trim().toLowerCase();
+  if (targetClean === "all" || targetClean === "*") return true;
+
+  // 1. Direct match with ID or Name
+  if (
+    assignedProcessIds.some(
+      (id) => id.trim().toLowerCase() === targetClean || id.trim().toLowerCase() === "all"
+    )
+  ) {
+    return true;
+  }
+
+  // 2. Lookup in stored processes to resolve ID <-> Name bidirectionally
+  let stored: { id: string; name: string }[] = [];
+  try {
+    stored = getStoredProcesses();
+  } catch {}
+
+  const targetProc = stored.find(
+    (p) => p.id.trim().toLowerCase() === targetClean || p.name.trim().toLowerCase() === targetClean
+  );
+
+  for (const assignedId of assignedProcessIds) {
+    const cleanAssigned = assignedId.trim().toLowerCase();
+    if (cleanAssigned === "all") return true;
+    if (cleanAssigned === targetClean) return true;
+
+    if (targetProc) {
+      if (
+        targetProc.id.trim().toLowerCase() === cleanAssigned ||
+        targetProc.name.trim().toLowerCase() === cleanAssigned
+      ) {
+        return true;
+      }
+    }
+
+    const assignedProc = stored.find(
+      (p) => p.id.trim().toLowerCase() === cleanAssigned || p.name.trim().toLowerCase() === cleanAssigned
+    );
+    if (assignedProc) {
+      if (
+        assignedProc.id.trim().toLowerCase() === targetClean ||
+        assignedProc.name.trim().toLowerCase() === targetClean
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 export function isFieldMatchingOrg(
   field: FieldDefinition | { id?: number; key?: string; source?: string; scopingRules?: any[]; industryCategory?: string; industry?: string; locations?: string[]; processIds?: string[]; module?: string },
   org?: OrgScopeFilter | null,
@@ -351,8 +417,7 @@ export function isFieldMatchingOrg(
 
   // If specific processId is evaluated and field is assigned to specific processes
   if (processId && field.processIds && field.processIds.length > 0) {
-    const matchesProcess = field.processIds.includes("all") || field.processIds.includes(processId);
-    if (!matchesProcess) return false;
+    if (!isProcessMatchingAssignment(field.processIds, processId)) return false;
   }
 
   // If multi-rule scoping is present, check against rules
@@ -457,8 +522,7 @@ export function isSectionMatchingOrg(
 
   // If specific processId is evaluated and section is assigned to specific processes
   if (processId && section.processIds && section.processIds.length > 0) {
-    const matchesProcess = section.processIds.includes("all") || section.processIds.includes(processId);
-    if (!matchesProcess) return false;
+    if (!isProcessMatchingAssignment(section.processIds, processId)) return false;
   }
 
   // If multi-rule scoping is present, check against rules
@@ -1494,6 +1558,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     tableColumns: f.tableColumns,
     sectionId: f.sectionId,
     required: f.required ?? f.isRequired ?? false,
+    requiredStages: Array.isArray(f.requiredStages) && f.requiredStages.length > 0 ? f.requiredStages : undefined,
     userVisibility: f.userVisibility !== false,
     showAlways: f.showAlways !== false,
     visibleToRecordIds: f.visibleToRecordIds,
@@ -1734,6 +1799,7 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       ? s.fieldIds
       : [],
     required: Boolean(s.required),
+    requiredStages: Array.isArray(s.requiredStages) && s.requiredStages.length > 0 ? s.requiredStages : undefined,
     userVisibility: s.userVisibility !== false,
     industryCategory: s.industryCategory,
     industry: s.industry,

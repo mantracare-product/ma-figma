@@ -2400,10 +2400,11 @@ export default function Deals() {
                             const clientObj = getClientObj(log.clientId, log.client);
 
                             const missing = getMissingRequiredProcessFields({
+                              processId: (log as any)?.processId,
                               processName: log.process,
                               currentStageName: log.currentStage,
-                              allFields: getFieldsForOrg("process", activeOrganization),
-                              allSections: getSectionsForOrg("process", activeOrganization),
+                              allFields: getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process),
+                              allSections: getSectionsForOrg("process", activeOrganization, (log as any)?.processId || log.process),
                               fieldValues: {
                                 client_name: log.client,
                                 phone: clientObj?.phone || "9667283405",

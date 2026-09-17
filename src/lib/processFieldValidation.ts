@@ -6,6 +6,7 @@
  */
 
 import type { FieldDefinition, SectionDefinition } from "../app/context/FieldRegistryContext";
+import { isProcessMatchingAssignment } from "../app/context/FieldRegistryContext";
 
 export interface MissingRequiredField {
   key: string;
@@ -45,6 +46,7 @@ export function isFieldRequiredForStage(
     return true;
   }
   if (field.requiredStages.includes("all")) return true;
+  if (!stageName) return true;
   const targetLower = stageName.trim().toLowerCase();
   return field.requiredStages.some(
     (st) => st.trim().toLowerCase() === targetLower || st.trim().toLowerCase() === "all"
@@ -63,6 +65,7 @@ export function isSectionRequiredForStage(
     return true;
   }
   if (section.requiredStages.includes("all")) return true;
+  if (!stageName) return true;
   const targetLower = stageName.trim().toLowerCase();
   return section.requiredStages.some(
     (st) => st.trim().toLowerCase() === targetLower || st.trim().toLowerCase() === "all"
@@ -92,9 +95,9 @@ export function getMissingRequiredProcessFields({
   // Filter fields applicable to this process (or global process fields)
   const processFields = allFields.filter((f) => {
     if (f.module !== "process") return false;
-    if (!f.processIds || f.processIds.length === 0) return true;
-    if (processId && f.processIds.includes(processId)) return true;
-    if (processName && f.processIds.includes(processName)) return true;
+    if (!f.processIds || f.processIds.length === 0 || f.processIds.includes("all")) return true;
+    if (processId && isProcessMatchingAssignment(f.processIds, processId)) return true;
+    if (processName && isProcessMatchingAssignment(f.processIds, processName)) return true;
     return false;
   });
 
@@ -117,9 +120,9 @@ export function getMissingRequiredProcessFields({
   // 2. Check section requirements (all fields inside a required section must be filled)
   const applicableSections = allSections.filter((s) => {
     if (s.module !== "process") return false;
-    if (!s.processIds || s.processIds.length === 0) return true;
-    if (processId && s.processIds.includes(processId)) return true;
-    if (processName && s.processIds.includes(processName)) return true;
+    if (!s.processIds || s.processIds.length === 0 || s.processIds.includes("all")) return true;
+    if (processId && isProcessMatchingAssignment(s.processIds, processId)) return true;
+    if (processName && isProcessMatchingAssignment(s.processIds, processName)) return true;
     return false;
   });
 

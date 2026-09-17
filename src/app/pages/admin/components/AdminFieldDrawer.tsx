@@ -317,7 +317,7 @@ export function AdminFieldDrawer({
   const availableStagesForProcess = useMemo(() => {
     if (form.module !== "process") return [];
     const targetProcesses = form.processIds.length > 0
-      ? availableProcesses.filter((p) => form.processIds.includes(p.id))
+      ? availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name))
       : availableProcesses;
 
     const stageMap = new Map<string, string>();
