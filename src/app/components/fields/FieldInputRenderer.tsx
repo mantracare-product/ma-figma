@@ -840,14 +840,19 @@ export function FieldInputRenderer({
     );
   }
 
-  if (effectiveType === "date" || effectiveType === "date_time") {
+  if (effectiveType === "date" || effectiveType === "date_time" || effectiveType === "time") {
+    const isTimeOnly = effectiveType === "time" || field?.dateConfig?.capture === "time" || (field as any)?.dateTimeCapture === "time";
+    const isDateOnly = effectiveType === "date" || field?.dateConfig?.capture === "date" || (field as any)?.dateTimeCapture === "date";
+    const inputHtmlType = isTimeOnly ? "time" : isDateOnly ? "date" : "datetime-local";
+
     return (
       <div className="relative flex items-center">
         <input
-          type={effectiveType === "date_time" ? "datetime-local" : "date"}
+          type={inputHtmlType}
           value={typeof value === "string" ? value : ""}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
+          placeholder={effectivePlaceholder}
           className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
         />
       </div>

@@ -40,6 +40,7 @@ export type FieldInputType =
   | "richtext"
   | "date"
   | "date_time"
+  | "time"
   | "number"
   | "money"
   | "link"
@@ -73,6 +74,7 @@ export type SubFieldInputType =
   | "money"
   | "date"
   | "date_time"
+  | "time"
   | "list_select"
   | "yes_no"
   | "link"
@@ -156,6 +158,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   if (rawType.includes("num")) inputType = "number";
   else if (rawType.includes("money") || rawType.includes("curr") || rawType.includes("price")) inputType = "money";
   else if (rawType.includes("date_time")) inputType = "date_time";
+  else if (rawType.includes("time")) inputType = "time";
   else if (rawType.includes("date")) inputType = "date";
   else if (rawType.includes("select") || rawType.includes("list") || rawType.includes("dropdown")) inputType = "list_select";
   else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
@@ -212,6 +215,7 @@ export function getSuggestedPlaceholderForType(type?: string, label?: string): s
   if (t === "tel" || t === "phone") return "e.g. +1 (555) 000-0000";
   if (t === "link" || t.includes("url")) return "e.g. https://example.com";
   if (t === "date") return "Select date...";
+  if (t === "time") return "Select time...";
   if (t === "date_time") return "Select date & time...";
   if (t === "textarea" || t.includes("long") || t === "richtext") return name ? `e.g. Enter ${name} details...` : "e.g. Enter details...";
   if (t === "crm_bind") return "Search and select record...";

@@ -20,7 +20,6 @@ import {
   Globe,
   Shield,
   Link2,
-  Layers,
   Star,
   Database,
   Type,
@@ -273,7 +272,7 @@ function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
   const t = f.inputType;
   if (t === "text" || t === "textarea" || t === "richtext") return "text";
   if (t === "number") return "number";
-  if (t === "date" || t === "date_time") return "date_time";
+  if (t === "date" || t === "date_time" || t === "time") return "date_time";
   if (t === "money") return "money";
   if (t === "tel") return "tel";
   if (t === "email") return "email";
@@ -323,11 +322,7 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     timezone: "Local",
     // Composite
     compositeDisplayMode: "table",
-    tableColumns: [
-      { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
-      { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
-      { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
-    ],
+    tableColumns: [],
     // Media
     mediaType: "document",
     acceptedFormats: ["PDF", "DOCX", "JPG", "PNG"],
@@ -443,7 +438,7 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     maxChars: f.textConfig?.maxChars,
     richText: f.textConfig?.richText ?? (f.inputType === "richtext"),
     // Date
-    dateTimeCapture: f.dateConfig?.capture || (f.inputType === "date_time" ? "both" : "date"),
+    dateTimeCapture: f.dateConfig?.capture || (f.inputType === "time" ? "time" : f.inputType === "date_time" ? "both" : "date"),
     dateFormat: f.dateConfig?.dateFormat || "DD/MM/YYYY",
     timeFormat: f.dateConfig?.timeFormat || "12h",
     timezone: f.dateConfig?.timezone || "Local",
@@ -652,27 +647,29 @@ export function AdminFieldDrawer({
     let colType = "Text";
     if (f.inputType === "number") colType = "Number";
     else if (f.inputType === "money") colType = "Money";
-    else if (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect") colType = "Select";
+    else if (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect" || f.inputType === "list") colType = "Select";
     else if (f.inputType === "date") colType = "Date";
+    else if (f.inputType === "time") colType = "Time";
     else if (f.inputType === "date_time") colType = "Date & Time";
-    else if (f.inputType === "textarea") colType = "Long Text";
+    else if (f.inputType === "textarea" || f.inputType === "richtext") colType = "Long Text";
     else if (f.inputType === "yes_no") colType = "Yes / No";
     else if (f.inputType === "email") colType = "Email";
     else if (f.inputType === "tel") colType = "Phone";
-    else if (f.inputType === "link") colType = "Link";
+    else if (f.inputType === "link" || f.inputType === "whatsapp_link") colType = "Link";
     else if (f.inputType === "rating") colType = "Rating";
     else if (f.inputType === "crm_bind") colType = "crm_bind";
 
     const newCol: TableColumnConfig = {
-      id: `col_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      id: `col_${f.key}_${Date.now()}`,
       name: f.label,
       type: colType,
       inputType: (f.inputType as SubFieldInputType) || "text",
-      placeholder: f.placeholder || "",
+      placeholder: f.placeholder || getSuggestedPlaceholderForType(f.inputType, f.label),
       options: f.options ? [...f.options] : undefined,
       currency: f.currency || (f.inputType === "money" ? "INR" : undefined),
       selectionMode: f.selectionMode || "single",
       crmBindConfig: f.crmBindConfig ? { ...f.crmBindConfig } : undefined,
+      maxRating: f.maxRating,
     };
     setForm((p) => ({
       ...p,
@@ -818,7 +815,9 @@ export function AdminFieldDrawer({
       case "number":
         return "number";
       case "date_time":
-        return form.dateTimeCapture === "date" ? "date" : "date_time";
+        if (form.dateTimeCapture === "date") return "date";
+        if (form.dateTimeCapture === "time") return "time";
+        return "date_time";
       case "money":
         return "money";
       case "tel":
@@ -1039,6 +1038,16 @@ export function AdminFieldDrawer({
   }));
   const updateColumn = (idx: number, patch: Partial<TableColumnConfig>) => setForm((p) => ({ ...p, tableColumns: p.tableColumns.map((c, i) => i === idx ? { ...c, ...patch } : c) }));
   const removeColumn = (idx: number) => setForm((p) => ({ ...p, tableColumns: p.tableColumns.filter((_, i) => i !== idx) }));
+  const moveColumn = (idx: number, dir: -1 | 1) => {
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= form.tableColumns.length) return;
+    setForm((p) => {
+      const copy = [...p.tableColumns];
+      const [item] = copy.splice(idx, 1);
+      copy.splice(targetIdx, 0, item);
+      return { ...p, tableColumns: copy };
+    });
+  };
 
   const selectedTypeItem = useMemo(() => {
     for (const grp of CONSOLIDATED_FIELD_TYPES) {
@@ -1509,75 +1518,40 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3D. Composite Field (Table + Group View) */}
+          {/* 3D. Composite Field (Group of Existing Fields) */}
           {form.primaryCategory === "composite" && (
             <div className="space-y-3.5 p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl">
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Display Mode
-                  </label>
-                  <InfoTooltip text="Choose how this composite field appears on records. Data structure is shared between Table View and Group View." size="sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, compositeDisplayMode: "table" }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      form.compositeDisplayMode === "table"
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Table View (Spreadsheet Row)
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, compositeDisplayMode: "group" }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      form.compositeDisplayMode === "group"
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Group View (Card / Repeatable)
-                  </button>
-                </div>
-              </div>
-
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-1.5">
                     <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                      Sub-Fields & Columns
+                      Grouped Fields ({form.tableColumns.length})
                     </label>
-                    <InfoTooltip text="Define the structure of this composite field using existing module fields or custom sub-fields." size="sm" />
+                    <InfoTooltip text="Group existing fields in this module into this composite structure. Each sub-field inherits its format, validation, and type rules without separate configuration." size="sm" />
                   </div>
 
                   {!isReadOnly && (
-                    <div className="flex items-center gap-2">
-                      <div className="relative" ref={existingFieldPickerRef}>
-                        <button
-                          type="button"
-                          onClick={() => setExistingFieldPickerOpen((v) => !v)}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer shadow-2xs"
-                          title="Import from an existing field in this module"
-                        >
-                          <Layers className="w-3 h-3 text-slate-500" />
-                          <span>Use Existing Field</span>
-                          <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${existingFieldPickerOpen ? "rotate-180" : ""}`} />
-                        </button>
-                        {existingFieldPickerOpen && (
-                          <div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5">
-                            <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                              Fields in {MODULE_OPTIONS.find((m) => m.value === form.module)?.label || form.module}
-                            </div>
-                            {availableFieldsForComposite.length === 0 ? (
-                              <div className="px-3 py-2 text-xs text-slate-400 italic">No existing fields found in this module</div>
-                            ) : (
-                              availableFieldsForComposite.map((f) => (
+                    <div className="relative" ref={existingFieldPickerRef}>
+                      <button
+                        type="button"
+                        onClick={() => setExistingFieldPickerOpen((v) => !v)}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer shadow-2xs"
+                        title="Add a field to this group"
+                      >
+                        <Plus className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Add Field</span>
+                        <ChevronDown className={`w-3 h-3 text-blue-500 transition-transform ${existingFieldPickerOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {existingFieldPickerOpen && (
+                        <div className="absolute right-0 top-full mt-1 w-72 max-h-72 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5">
+                          <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                            Existing Fields in {MODULE_OPTIONS.find((m) => m.value === form.module)?.label || form.module}
+                          </div>
+                          {availableFieldsForComposite.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-slate-400 italic">No existing fields found in this module</div>
+                          ) : (
+                            <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                              {availableFieldsForComposite.map((f) => (
                                 <button
                                   key={f.key}
                                   type="button"
@@ -1587,99 +1561,133 @@ export function AdminFieldDrawer({
                                   }}
                                   className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between text-xs cursor-pointer group"
                                 >
-                                  <span className="font-medium text-slate-700 group-hover:text-blue-700 truncate">{f.label}</span>
-                                  <span className="text-[10px] text-slate-400 uppercase font-mono px-1.5 py-0.5 bg-slate-100 rounded">
+                                  <div className="min-w-0 pr-2">
+                                    <div className="font-semibold text-slate-700 group-hover:text-blue-700 truncate">{f.label}</div>
+                                    <div className="text-[10px] text-slate-400 font-mono truncate">{f.key}</div>
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 font-medium px-1.5 py-0.5 bg-slate-100 rounded shrink-0">
                                     {f.inputType}
                                   </span>
                                 </button>
-                              ))
-                            )}
-                          </div>
-                        )}
-                      </div>
+                              ))}
+                            </div>
+                          )}
 
-                      <button
-                        type="button"
-                        onClick={addColumn}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200"
-                      >
-                        <Plus className="w-3 h-3" /> Add sub-field
-                      </button>
+                          <div className="pt-1 mt-1 border-t border-slate-100">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setExistingFieldPickerOpen(false);
+                                setNestedDrawerCategory("text");
+                                setNestedDrawerOpen(true);
+                              }}
+                              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 text-blue-700 flex items-center gap-1.5 text-xs font-semibold cursor-pointer transition-colors"
+                            >
+                              <Plus className="w-3.5 h-3.5 text-blue-600" />
+                              <span>Create New Field</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  {form.tableColumns.map((col, idx) => (
-                    <div key={col.id} className="space-y-2.5 p-3 border border-slate-200 rounded-xl bg-white shadow-2xs">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <input
-                          type="text"
-                          value={col.name}
-                          readOnly={isReadOnly}
-                          onChange={(e) => updateColumn(idx, { name: e.target.value })}
-                          placeholder="Sub-field name"
-                          className={`flex-1 min-w-0 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${isReadOnly ? roCls : "border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`}
-                        />
-                        <AdminSelect
-                          value={col.type}
-                          disabled={isReadOnly}
-                          onChange={(newType) => {
-                            const patch: Partial<TableColumnConfig> = { type: newType };
-                            if (newType === "Select" && (!col.options || col.options.length === 0)) {
-                              patch.options = [
-                                { id: 1, label: "Option A", value: "option_a" },
-                                { id: 2, label: "Option B", value: "option_b" },
-                              ];
-                            }
-                            if (newType === "Money" && !col.currency) patch.currency = "INR";
-                            updateColumn(idx, patch);
-                          }}
-                          size="sm"
-                          className="w-36 shrink-0 min-w-0"
-                          options={[
-                            { value: "Text", label: "Text" },
-                            { value: "Long Text", label: "Long Text" },
-                            { value: "Number", label: "Number" },
-                            { value: "Money", label: "Money" },
-                            { value: "Select", label: "Select List" },
-                            { value: "Date", label: "Date" },
-                            { value: "Date & Time", label: "Date & Time" },
-                            { value: "Yes / No", label: "Yes / No" },
-                            { value: "Email", label: "Email" },
-                            { value: "Phone", label: "Phone" },
-                            { value: "Link", label: "Link" },
-                            { value: "Rating", label: "Rating" },
-                          ]}
-                        />
+                {form.tableColumns.length === 0 ? (
+                  <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-center space-y-2">
+                    <p className="text-xs font-semibold text-slate-700">
+                      No Fields Grouped Yet
+                    </p>
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                      Select existing fields from this module to group into this composite field, or click <strong>+ Add Field</strong> to create a new one.
+                    </p>
+                    {!isReadOnly && (
+                      <div className="flex items-center justify-center pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setExistingFieldPickerOpen((v) => !v)}
+                          className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-md transition-colors cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Add Field</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {form.tableColumns.map((col, idx) => (
+                      <div key={col.id} className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            #{idx + 1}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-bold text-slate-800 truncate">{col.name}</span>
+                              <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                {col.type || col.inputType}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                              Inheriting format and validation rules
+                            </div>
+                          </div>
+                        </div>
+
                         {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => removeColumn(idx)}
-                            className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 transition-colors shrink-0"
-                            title="Delete sub-field"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => moveColumn(idx, -1)}
+                              className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                              title="Move up"
+                            >
+                              <ChevronUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === form.tableColumns.length - 1}
+                              onClick={() => moveColumn(idx, 1)}
+                              className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                              title="Move down"
+                            >
+                              <ChevronDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeColumn(idx)}
+                              className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                              title="Delete sub-field"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         )}
                       </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-                      <div className="flex items-center gap-2 pt-1 border-t border-slate-100 min-w-0">
-                        <span className="text-[11px] font-semibold text-slate-500 shrink-0">
-                          Placeholder:
-                        </span>
-                        <input
-                          type="text"
-                          value={col.placeholder || ""}
-                          readOnly={isReadOnly}
-                          onChange={(e) => updateColumn(idx, { placeholder: e.target.value })}
-                          placeholder={getSuggestedPlaceholderForType(col.type, col.name)}
-                          className="flex-1 min-w-0 px-2.5 py-1 bg-slate-50/50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:bg-white focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-                  ))}
+              {/* Display Mode (placed below Grouped Fields as a Dropdown) */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Display Mode
+                  </label>
+                  <InfoTooltip text="Choose how this composite field appears on records. Data structure is shared between Table View and Group View." size="sm" />
                 </div>
+                <AdminSelect
+                  value={form.compositeDisplayMode || "table"}
+                  disabled={isReadOnly}
+                  onChange={(val) => setForm((p) => ({ ...p, compositeDisplayMode: val as "table" | "group" }))}
+                  options={[
+                    { value: "table", label: "Table View (Spreadsheet Row)" },
+                    { value: "group", label: "Group View (Card / Repeatable)" },
+                  ]}
+                />
               </div>
             </div>
           )}
@@ -2475,6 +2483,12 @@ export function AdminFieldDrawer({
               <FieldInputRenderer
                 field={{
                   inputType: computeEffectiveInputType(),
+                  dateConfig: {
+                    capture: form.dateTimeCapture,
+                    dateFormat: form.dateFormat,
+                    timeFormat: form.timeFormat,
+                    timezone: form.timezone,
+                  },
                   options: form.options,
                   currency: form.currency || "INR",
                   selectionMode: form.primaryCategory === "list" ? form.selectionMode : (form.crmBindSelectionMode || "single"),
@@ -2778,17 +2792,21 @@ export function AdminFieldDrawer({
           field={null}
           initialModule={form.module}
           initialCategory={nestedDrawerCategory}
-          lockCategory={true}
+          lockCategory={form.primaryCategory !== "composite"}
           lockModule={true}
           sections={sections}
           zIndex={zIndex + 20}
           onClose={() => setNestedDrawerOpen(false)}
           onSaved={(createdField) => {
             setNestedDrawerOpen(false);
-            setForm((p) => ({
-              ...p,
-              inheritedFieldKey: createdField.key,
-            }));
+            if (form.primaryCategory === "composite") {
+              importExistingFieldToColumn(createdField);
+            } else {
+              setForm((p) => ({
+                ...p,
+                inheritedFieldKey: createdField.key,
+              }));
+            }
           }}
         />
       )}
