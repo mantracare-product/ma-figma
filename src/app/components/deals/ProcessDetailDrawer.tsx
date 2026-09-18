@@ -374,7 +374,7 @@ export default function ProcessDetailDrawer({
     return updatedSections;
   };
 
-  const currentProcessId = (log as any)?.processId || (log as any)?.process;
+  const currentProcessId = (log as any)?.processId || (log as any)?.process || (log as any)?.processName;
 
   const [processSections, setProcessSections] = useState<OverviewSection[]>(() => {
     const customSecs = getSectionsForOrg("process", activeOrganization, currentProcessId).filter((s) => s.source !== "system");

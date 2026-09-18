@@ -316,15 +316,17 @@ export default function DraggableOverviewSections({
     "sec-process-pipeline",
   ]), []);
 
-  // All custom field definitions filtered by organization scope
+  // All custom field definitions filtered by organization scope and process context
   const allRegistryFields = useMemo(() => {
-    return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization));
-  }, [getAllFields, customFieldsModule, activeOrganization]);
+    const procId = activeProcessObj?.id || activeProcessName;
+    return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
+  }, [getAllFields, customFieldsModule, activeOrganization, activeProcessObj, activeProcessName]);
 
-  // All custom sections registered in current module filtered by organization scope
+  // All custom sections registered in current module filtered by organization scope and process context
   const allCustomSections = useMemo(() => {
-    return getAllSections(customFieldsModule).filter((s) => isSectionMatchingOrg(s, activeOrganization));
-  }, [getAllSections, customFieldsModule, activeOrganization]);
+    const procId = activeProcessObj?.id || activeProcessName;
+    return getAllSections(customFieldsModule).filter((s) => isSectionMatchingOrg(s, activeOrganization, procId));
+  }, [getAllSections, customFieldsModule, activeOrganization, activeProcessObj, activeProcessName]);
 
   const allowedFieldKeys = useMemo(() => {
     return new Set(allRegistryFields.map((f) => f.key));
@@ -336,16 +338,17 @@ export default function DraggableOverviewSections({
 
   // Sections and their fields filtered strictly according to activeOrganization scope
   const visibleSections = useMemo(() => {
+    const procId = activeProcessObj?.id || activeProcessName;
     return sections
       .filter((sec) => {
         if (!sec.isCustom || SYSTEM_SEC_IDS.has(sec.id)) return true;
-        return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization);
+        return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization, procId);
       })
       .map((sec) => ({
         ...sec,
         fieldKeys: (sec.fieldKeys || []).filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k)),
       }));
-  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS]);
+  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessObj, activeProcessName]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -573,6 +576,7 @@ export default function DraggableOverviewSections({
       module: customFieldsModule,
       iconName: newSectionIcon || "layers",
       fieldKeys: selectedInitialFields || [],
+      processIds: (customFieldsModule === "process" && (activeProcessObj?.id || activeProcessName)) ? [activeProcessObj?.id || activeProcessName] : undefined,
       source: "custom",
       createdIn: "client",
     });

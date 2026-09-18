@@ -448,6 +448,9 @@ export function AdminCustomFields() {
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Label</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Key</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                {activeModule === "process" && (
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Process</th>
+                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -456,7 +459,7 @@ export function AdminCustomFields() {
             <tbody>
               {filteredFields.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-14 text-center">
+                  <td colSpan={activeModule === "process" ? 7 : 6} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No fields found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Field" above to define one.</p>
                   </td>
@@ -529,6 +532,11 @@ export function AdminCustomFields() {
                           <span>{typeName}</span>
                         </span>
                       </td>
+                      {activeModule === "process" && (
+                        <td className="px-5 py-3.5 text-center">
+                          {renderProcessesCell(field, allProcesses)}
+                        </td>
+                      )}
                       <td className="px-5 py-3.5 text-center">
                         {field.required ? (
                           <span className="text-xs font-semibold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200/50">Required</span>
@@ -595,6 +603,9 @@ export function AdminCustomFields() {
               <tr>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                {activeModule === "process" && (
+                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Process</th>
+                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -603,7 +614,7 @@ export function AdminCustomFields() {
             <tbody>
               {filteredSections.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-14 text-center">
+                  <td colSpan={activeModule === "process" ? 6 : 5} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No sections found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Section" above to define one.</p>
                   </td>
@@ -630,6 +641,12 @@ export function AdminCustomFields() {
                           {sec.description || <span className="text-gray-300 italic">—</span>}
                         </span>
                       </td>
+                      {/* Process */}
+                      {activeModule === "process" && (
+                        <td className="px-5 py-3.5 text-center">
+                          {renderProcessesCell(sec, allProcesses)}
+                        </td>
+                      )}
                       {/* Scope */}
                       <td className="px-5 py-3.5 text-center">
                         {renderScopeCell(sec)}

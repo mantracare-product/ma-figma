@@ -199,13 +199,28 @@ export function AdminSectionDrawer({
   onClose,
   onSaved,
 }: AdminSectionDrawerProps) {
+  const isEdit = Boolean(section);
   const { addCustomSection, updateCustomSection, getAllFields } = useFieldRegistry();
-  const isEdit = section !== null;
-
-  const [form, setForm] = useState<SectionFormState>(
-    isEdit ? sectionToForm(section!) : defaultSectionForm(initialModule),
+  const hasActiveProcessContext = Boolean(
+    activeProcessId || activeProcessName || (processStages && processStages.length > 0)
   );
+
+  const [form, setForm] = useState<SectionFormState>(() => {
+    if (isEdit) {
+      const init = sectionToForm(section!);
+      if (activeProcessId && (!init.processIds || init.processIds.length === 0)) {
+        return { ...init, processIds: [activeProcessId] };
+      }
+      return init;
+    }
+    const def = defaultSectionForm(initialModule);
+    if (activeProcessId) {
+      return { ...def, processIds: [activeProcessId] };
+    }
+    return def;
+  });
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
+  const [processPickerOpen, setProcessPickerOpen] = useState(false);
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
   const [sectionSettingsOpen, setSectionSettingsOpen] = useState(false);
   const [adminControlOpen, setAdminControlOpen] = useState(true);
@@ -214,6 +229,7 @@ export function AdminSectionDrawer({
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
   const [errors, setErrors] = useState<{ title?: string }>({});
   const modulePickerRef = useRef<HTMLDivElement>(null);
+  const processPickerRef = useRef<HTMLDivElement>(null);
   const fieldPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -294,9 +310,19 @@ export function AdminSectionDrawer({
     return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
   }, [form.module, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
 
+  const targetProcessesForRequirement = useMemo(() => {
+    if (form.module !== "process") return [];
+    if (form.processIds && form.processIds.length > 0 && !form.processIds.includes("all")) {
+      const filtered = availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name));
+      if (filtered.length > 0) return filtered;
+    }
+    return availableProcesses.length > 0 ? availableProcesses : allProcesses;
+  }, [form.module, form.processIds, availableProcesses, allProcesses]);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (modulePickerRef.current && !modulePickerRef.current.contains(e.target as Node)) setModulePickerOpen(false);
+      if (processPickerRef.current && !processPickerRef.current.contains(e.target as Node)) setProcessPickerOpen(false);
       if (fieldPickerRef.current && !fieldPickerRef.current.contains(e.target as Node)) setFieldPickerOpen(false);
     };
     document.addEventListener("mousedown", h);
@@ -313,8 +339,17 @@ export function AdminSectionDrawer({
   const modLabel = MODULE_OPTIONS.find(m => m.value === form.module)?.label ?? form.module;
 
   const eligibleFields = useMemo(() => {
-    return moduleFields.filter((f) => doesFieldMatchSectionScope(f, form.scopingRules));
-  }, [moduleFields, form.scopingRules]);
+    return moduleFields.filter((f) => {
+      if (!doesFieldMatchSectionScope(f, form.scopingRules)) return false;
+      if (form.module === "process" && hasActiveProcessContext && activeProcessId) {
+        if (f.processIds && f.processIds.length > 0) {
+          const match = f.processIds.includes(activeProcessId) || (activeProcessName && f.processIds.includes(activeProcessName));
+          if (!match) return false;
+        }
+      }
+      return true;
+    });
+  }, [moduleFields, form.scopingRules, form.module, hasActiveProcessContext, activeProcessId, activeProcessName]);
 
   const toggleFieldKey = (key: string) => {
     setForm(p => ({
@@ -434,7 +469,7 @@ export function AdminSectionDrawer({
       requiredStages: form.module === "process" && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       userVisibility: form.userVisibility,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
-      processIds: form.module === "process" && form.processIds.length > 0 ? form.processIds : undefined,
+      processIds: form.module === "process" ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
       isReusable: form.isReusable,
       reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
       permissions: form.permissions,
@@ -499,6 +534,104 @@ export function AdminSectionDrawer({
             </div>
             {isEdit && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
           </div>
+
+          {/* Process Workflow Selector (when module is 'process') */}
+          {form.module === "process" && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-xs font-semibold text-gray-700">
+                  Process Workflow
+                </label>
+                <InfoTooltip text="Choose whether this section applies to all process workflows or a specific process." size="sm" />
+              </div>
+
+              <div className="relative" ref={processPickerRef}>
+                <button
+                  type="button"
+                  onClick={() => setProcessPickerOpen((v) => !v)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-gray-200 rounded-lg text-xs font-medium flex items-center justify-between transition-all hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer shadow-2xs"
+                >
+                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                    {(!form.processIds || form.processIds.length === 0 || form.processIds.includes("all")) ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 border border-gray-200 text-gray-700 text-[11px] font-semibold">
+                        All Processes
+                      </span>
+                    ) : (
+                      form.processIds.map((pId) => {
+                        const proc = allProcesses.find((p) => p.id === pId);
+                        return (
+                          <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                            <span>{proc?.name || `Process #${pId}`}</span>
+                          </span>
+                        );
+                      })
+                    )}
+                  </div>
+                  <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${processPickerOpen ? "rotate-180" : ""}`} />
+                </button>
+
+                {processPickerOpen && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 max-h-60 overflow-y-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForm((p) => ({ ...p, processIds: [] }));
+                        setProcessPickerOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                        (!form.processIds || form.processIds.length === 0 || form.processIds.includes("all"))
+                          ? "bg-blue-50/80 text-blue-900 font-semibold"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span>All Processes</span>
+                      {(!form.processIds || form.processIds.length === 0 || form.processIds.includes("all")) && (
+                        <Check className="w-3.5 h-3.5 text-blue-600 stroke-[3]" />
+                      )}
+                    </button>
+
+                    <div className="my-1 border-t border-gray-100" />
+                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50/80 rounded-md mb-1">
+                      Specific Process Workflows
+                    </div>
+
+                    <div className="space-y-0.5">
+                      {(availableProcesses.length > 0 ? availableProcesses : allProcesses).map((proc) => {
+                        const isChecked = form.processIds && form.processIds.includes(proc.id);
+                        return (
+                          <button
+                            key={proc.id}
+                            type="button"
+                            onClick={() => {
+                              setForm((p) => {
+                                const current = p.processIds || [];
+                                const exists = current.includes(proc.id);
+                                const next = exists
+                                  ? current.filter((id) => id !== proc.id)
+                                  : [...current.filter((id) => id !== "all"), proc.id];
+                                return { ...p, processIds: next };
+                              });
+                            }}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                              isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                            }`}
+                          >
+                            <span className="truncate pr-2">{proc.name}</span>
+                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                              isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300 bg-white"
+                            }`}>
+                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Admin Control Dropdown (Scope & Permissions) */}
           {isAdmin && (
@@ -738,9 +871,6 @@ export function AdminSectionDrawer({
                           setForm((p) => ({
                             ...p,
                             required: checked,
-                            requiredStages: checked && p.requiredStages.length === 0
-                              ? [availableStagesForProcess[0]?.name || "Initial Contact"]
-                              : p.requiredStages,
                           }));
                         }}
                         className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
@@ -752,32 +882,77 @@ export function AdminSectionDrawer({
                     </label>
 
                     {form.required && form.module === "process" && (
-                      <div className="mt-2 ml-7 p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
-                        <div className="flex items-center gap-1.5">
-                          <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                            Required at Stage
-                          </label>
-                          <InfoTooltip text="Select the specific stage at which this entire section must be completed." size="sm" />
+                      <div className="mt-2.5 ml-7 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
+                            Process Stage Requirements
+                          </span>
+                          <span className="text-[10px] font-medium text-amber-800 bg-amber-100/80 px-2 py-0.5 rounded-md">
+                            {targetProcessesForRequirement.length} {targetProcessesForRequirement.length === 1 ? "Process" : "Processes"}
+                          </span>
                         </div>
-                        <AdminSelect
-                          value={form.requiredStages[0] || (availableStagesForProcess[0]?.name || "Initial Contact")}
-                          onChange={(val) => {
-                            setForm((p) => ({ ...p, requiredStages: [val] }));
-                          }}
-                          options={
-                            availableStagesForProcess.length > 0
-                              ? availableStagesForProcess.map((st) => ({ value: st.name, label: st.name }))
-                              : [
-                                  { value: "Initial Contact", label: "Initial Contact" },
-                                  { value: "Insurance Verify", label: "Insurance Verify" },
-                                  { value: "Schedule Appointment", label: "Schedule Appointment" },
-                                  { value: "last stage", label: "last stage" },
-                                ]
-                          }
-                        />
-                        <p className="text-[11px] text-amber-800/80">
-                          Mandatory when a record enters <strong>{form.requiredStages[0] || availableStagesForProcess[0]?.name || "Initial Contact"}</strong>.
-                        </p>
+
+                        <div className="space-y-2">
+                          {targetProcessesForRequirement.map((proc) => {
+                            const procStages = proc.stages && proc.stages.length > 0 ? proc.stages : [
+                              { id: "initial", name: "Initial Contact" },
+                              { id: "review", name: "Insurance Verify" },
+                              { id: "schedule", name: "Schedule Appointment" },
+                              { id: "last", name: "last stage" },
+                            ];
+                            const matchedStage = procStages.find((st) => form.requiredStages.includes(st.name))?.name;
+                            const currentVal = matchedStage || "all";
+
+                            return (
+                              <div key={proc.id} className="p-3 bg-amber-50/70 border border-amber-200/90 rounded-xl space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
+                                    <span className="text-xs font-bold text-gray-900 truncate" title={proc.name}>
+                                      {proc.name}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-semibold text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                    {currentVal === "all" ? "Always Required" : `Required at ${currentVal}`}
+                                  </span>
+                                </div>
+
+                                <div className="space-y-1">
+                                  <label className="block text-[10px] font-semibold text-gray-600 uppercase tracking-wider">
+                                    Required Stage
+                                  </label>
+                                  <AdminSelect
+                                    value={currentVal}
+                                    onChange={(val) => {
+                                      setForm((p) => {
+                                        const otherProcessStages = (p.requiredStages || []).filter(
+                                          (st) => !procStages.some((s) => s.name === st) && st !== "all"
+                                        );
+                                        const next = val === "all" ? otherProcessStages : [...otherProcessStages, val];
+                                        return { ...p, requiredStages: next };
+                                      });
+                                    }}
+                                    options={[
+                                      { value: "all", label: "All Stages (Always Required)" },
+                                      ...procStages.map((st) => ({
+                                        value: st.name,
+                                        label: `Stage: ${st.name}`,
+                                      })),
+                                    ]}
+                                  />
+                                </div>
+
+                                <p className="text-[10px] text-amber-800/80 leading-relaxed">
+                                  {currentVal === "all" ? (
+                                    <>Mandatory across <strong>all stages</strong> in {proc.name}.</>
+                                  ) : (
+                                    <>Mandatory when entering <strong>{currentVal}</strong> in {proc.name}.</>
+                                  )}
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     )}
                   </div>
