@@ -787,7 +787,7 @@ export function FieldInputRenderer({
             <p className="text-xs text-slate-400 font-medium">
               {isAdminDefault
                 ? "No default instances pre-seeded. New records will start empty."
-                : `No ${label.toLowerCase()} added yet. Click "+ Add Another ${label}" below to add one.`}
+                : `No ${label.toLowerCase()} added yet. Click "Add Entry" below to add one.`}
             </p>
           </div>
         ) : (
@@ -859,7 +859,8 @@ export function FieldInputRenderer({
             }}
             className="w-full py-2 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 rounded-xl text-xs font-semibold text-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
           >
-            <Plus className="w-3.5 h-3.5" /> {isAdminDefault && instances.length === 0 ? `+ Pre-seed a Default ${label || "Entry"}` : `+ Add Another ${label || "Entry"}`}
+            <Plus className="w-3.5 h-3.5" />
+            <span>{isAdminDefault && instances.length === 0 ? "Pre-seed a Default Entry" : "Add Entry"}</span>
           </button>
         )}
       </div>

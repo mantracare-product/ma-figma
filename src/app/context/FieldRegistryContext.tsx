@@ -1627,7 +1627,9 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     normalizedType = "list_select";
     if (!normalizedSelectionMode) normalizedSelectionMode = "single";
   } else if (rawType === "group_repeatable") {
-    normalizedType = "list_open";
+    normalizedType = "group_repeatable";
+  } else if (rawType === "list_open" && (f.listEntryType === "structured" || f.compositeDisplayMode !== undefined || (f.subFields && f.subFields.length > 0))) {
+    normalizedType = f.compositeDisplayMode === "table" ? "table" : "group_repeatable";
   }
 
   const isStructured =
@@ -2157,10 +2159,6 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   ): FieldDefinition => {
     const norm = normalizeModule(module);
     const normalizedData = { ...fieldData };
-    if (normalizedData.inputType === ("group_repeatable" as any)) {
-      normalizedData.inputType = "list_open";
-      normalizedData.listEntryType = "structured";
-    }
     const targetSource: "system" | "custom" | "template" =
       fieldData.source || (fieldData.createdIn === "admin" ? "template" : "custom");
     const targetCreatedIn: "admin" | "client" =
@@ -2190,10 +2188,6 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   const updateCustomField = (module: FieldModule, id: number, patch: Partial<FieldDefinition>) => {
     const norm = normalizeModule(module);
     const normalizedPatch = { ...patch };
-    if (normalizedPatch.inputType === ("group_repeatable" as any)) {
-      normalizedPatch.inputType = "list_open";
-      normalizedPatch.listEntryType = "structured";
-    }
     setCustomFields((prev) => {
       const updated = (prev[norm] || []).map((f) =>
         f.id === id ? { ...f, ...normalizedPatch } : f

@@ -273,6 +273,17 @@ interface FieldFormState {
 
 function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
   const t = f.inputType;
+  if (
+    f.compositeDisplayMode !== undefined ||
+    t === "table" ||
+    t === "group" ||
+    t === "group_repeatable" ||
+    (t === "list_open" && (f.listEntryType === "structured" || (f.subFields && f.subFields.length > 0))) ||
+    (f.tableColumns && f.tableColumns.length > 0 && t !== "list_select" && t !== "multiselect" && !f.listConfig) ||
+    (f.subFields && f.subFields.length > 0 && t !== "list_select" && t !== "multiselect" && !f.listConfig)
+  ) {
+    return "composite";
+  }
   if (t === "text" || t === "textarea" || t === "richtext") return "text";
   if (t === "number") return "number";
   if (t === "date" || t === "date_time" || t === "time") return "date_time";
@@ -283,7 +294,6 @@ function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
   if (t === "whatsapp_link") return "whatsapp_link";
   if (t === "yes_no") return "yes_no";
   if (t === "rating") return "rating";
-  if (t === "table" || t === "group" || t === "group_repeatable") return "composite";
   if (t === "crm_bind") return "crm_bind";
   if (t === "file") return "media";
   if (t === "signature" || t === "drawing") return "signature";
@@ -990,7 +1000,9 @@ export function AdminFieldDrawer({
         inheritedFieldKey: form.inheritedFieldKey.trim() || undefined,
         allowSearch: form.allowSearch,
         sortOrder: form.sortOrder,
-        liveLinkedFieldKey: (form.liveSync && form.inheritedFieldKey.trim()) ? form.inheritedFieldKey.trim() : undefined,
+        liveLinkedFieldKey: (form.liveSync && (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim()))
+          ? (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim())
+          : undefined,
       } : undefined,
 
       // CRM Bind
@@ -2536,15 +2548,22 @@ export function AdminFieldDrawer({
                   </div>
                 </div>
 
-                {/* 4. Live Two-Way Field Sync Toggle */}
-                <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                {/* 4. Link it with the value Toggle */}
+                <div className="p-3 bg-white border border-slate-200 rounded-xl">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5">
                       <Link2 className="w-3.5 h-3.5 text-blue-600" />
                       <span className="text-xs font-bold text-slate-800">
-                        Live Two-Way Field Sync
+                        Link it with the value
                       </span>
-                      <InfoTooltip text="When enabled, any new value entered into the inherited field on records automatically becomes selectable in this list, and selections sync back." size="sm" />
+                      <InfoTooltip
+                        text={
+                          form.inheritedFieldKey
+                            ? `When enabled, values from ${inheritedFieldDef?.label || form.inheritedFieldKey} automatically become selectable options in this list.`
+                            : "When enabled, options in this list automatically link and synchronize with values from the inherited field."
+                        }
+                        size="sm"
+                      />
                     </div>
                     <label className={`relative inline-flex items-center select-none ${(!form.inheritedFieldKey || isReadOnly) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
                       <input
@@ -2564,25 +2583,6 @@ export function AdminFieldDrawer({
                       <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
-
-                  {form.inheritedFieldKey ? (
-                    form.liveSync ? (
-                      <div className="text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 flex items-center gap-1.5">
-                        <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse shrink-0"></span>
-                        <span>
-                          Live sync active: automatically synchronizing values with <strong>{inheritedFieldDef?.label || form.inheritedFieldKey}</strong>.
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-slate-500">
-                        Toggle ON to enable two-way live discovery sync with <strong>{inheritedFieldDef?.label || form.inheritedFieldKey}</strong>.
-                      </p>
-                    )
-                  ) : (
-                    <p className="text-[11px] text-slate-400 italic">
-                      Select a field in &ldquo;Inherit Format From&rdquo; above to enable live two-way sync.
-                    </p>
-                  )}
                 </div>
               </div>
             </div>

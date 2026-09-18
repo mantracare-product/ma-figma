@@ -469,17 +469,29 @@ export function AdminCustomFields() {
                   const scribeSeed = isScribeSeed(field);
                   const systemField = isSystemField(field);
 
+                  const isCompositeField =
+                    field.compositeDisplayMode !== undefined ||
+                    field.inputType === "table" ||
+                    field.inputType === "group" ||
+                    field.inputType === "group_repeatable" ||
+                    (field.inputType === "list_open" && (field.listEntryType === "structured" || (field.subFields && field.subFields.length > 0))) ||
+                    (field.tableColumns && field.tableColumns.length > 0 && field.inputType !== "list_select" && field.inputType !== "multiselect" && !field.listConfig);
+
                   const isListField =
-                    field.inputType === "list_open" ||
+                    !isCompositeField &&
+                    (field.inputType === "list_open" ||
                     field.inputType === "list_select" ||
                     field.inputType === "select" ||
                     field.inputType === "multiselect" ||
-                    field.inputType === "list";
+                    field.inputType === "list");
+
                   const typeName =
-                    field.inputType === "list_open"
-                      ? field.listEntryType === "structured"
-                        ? "List (Open · Structured)"
-                        : "List (Open · Tags)"
+                    isCompositeField
+                      ? field.compositeDisplayMode === "table" || field.inputType === "table"
+                        ? "Composite Field (Table)"
+                        : "Composite Field (Group)"
+                      : field.inputType === "list_open"
+                      ? "List (Open · Tags)"
                       : isListField
                       ? field.selectionMode === "multiple" || field.inputType === "multiselect"
                         ? "List (Multi-Select)"
@@ -487,7 +499,10 @@ export function AdminCustomFields() {
                       : FIELD_TYPE_REVERSE_MAP[field.inputType] || field.inputType.toUpperCase();
                   let typeBadgeStyle = "bg-blue-50 text-blue-700";
                   let TypeIcon = Type;
-                  if (field.inputType === "table") { typeBadgeStyle = "bg-indigo-50 text-indigo-700"; TypeIcon = TableIcon; }
+                  if (isCompositeField) {
+                    typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                    TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
+                  }
                   else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
                   else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
                     typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
@@ -495,15 +510,9 @@ export function AdminCustomFields() {
                   }
                   else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
                   else if (field.inputType === "list_open") {
-                    if (field.listEntryType === "structured") {
-                      typeBadgeStyle = "bg-purple-50 text-purple-700";
-                      TypeIcon = Layers;
-                    } else {
-                      typeBadgeStyle = "bg-emerald-50 text-emerald-700";
-                      TypeIcon = Tag;
-                    }
+                    typeBadgeStyle = "bg-emerald-50 text-emerald-700";
+                    TypeIcon = Tag;
                   }
-                  else if (field.inputType === "group" || field.inputType === "group_repeatable") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Layers; }
                   else if (field.inputType === "crm_bind") { typeBadgeStyle = "bg-blue-50 text-blue-700"; TypeIcon = LinkIcon; }
                   else if (field.inputType === "date" || field.inputType === "date_time") { typeBadgeStyle = "bg-amber-50 text-amber-700"; TypeIcon = Calendar; }
                   else if (field.inputType === "number") { typeBadgeStyle = "bg-purple-50 text-purple-700"; TypeIcon = Hash; }

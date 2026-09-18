@@ -8,6 +8,42 @@ import { PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 
 export const RECORD_DATA_CHANGED_EVENT = "ma_record_data_changed";
 
+const SKIP_KEYS = new Set(["id", "_id", "__type", "createdAt", "updatedAt"]);
+
+/**
+ * Robustly formats any value (string, object, array, JSON string) into a clean display label.
+ */
+export function formatEntryValue(item: any): string | null {
+  if (item === undefined || item === null) return null;
+  if (typeof item === "string") {
+    const trimmed = item.trim();
+    if (!trimmed) return null;
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object") return formatEntryValue(parsed);
+      } catch {}
+    }
+    return trimmed;
+  }
+  if (Array.isArray(item)) {
+    const subParts = item.map(formatEntryValue).filter(Boolean);
+    return subParts.length > 0 ? subParts.join(", ") : null;
+  }
+  if (typeof item === "object") {
+    const parts: string[] = [];
+    for (const [k, v] of Object.entries(item)) {
+      if (SKIP_KEYS.has(k)) continue;
+      const formatted = formatEntryValue(v);
+      if (formatted && formatted !== "[object Object]") {
+        parts.push(formatted);
+      }
+    }
+    return parts.length > 0 ? parts.join(", ") : null;
+  }
+  return String(item).trim() || null;
+}
+
 function applySortOrder(options: FieldOption[], sortOrder?: ListFieldConfig["sortOrder"]): FieldOption[] {
   if (!sortOrder || sortOrder === "manual") {
     return [...options].sort((a, b) => ((a.index ?? 0) - (b.index ?? 0)));
@@ -54,55 +90,110 @@ export function useDynamicListOptions(
       window.removeEventListener("ma_services_changed", handleUpdate);
       window.removeEventListener("organizationChanged", handleUpdate);
     };
-  }, [listBindConfig?.sourceType, listConfig?.liveLinkedFieldKey]);
+  }, [listBindConfig?.sourceType, listConfig?.liveLinkedFieldKey, listConfig?.inheritedFieldKey]);
 
   const resolved = useMemo(() => {
-    let baseOptions: FieldOption[] = [...staticOptions];
+    // 1. Normalize static options so that composite object values become valid string values
+    let baseOptions: FieldOption[] = staticOptions.map((opt, i) => {
+      const stringValue =
+        typeof opt.value === "object" && opt.value !== null
+          ? (formatEntryValue(opt.value) || opt.label || String(opt.id || i + 1))
+          : String(opt.value ?? opt.label ?? `opt_${i + 1}`);
+      return {
+        ...opt,
+        value: stringValue,
+        label: opt.label || stringValue,
+      };
+    });
 
-    // Live Two-Way Discovery Link Option
-    if (listConfig?.liveLinkedFieldKey) {
-      const linkedKey = listConfig.liveLinkedFieldKey;
-      const discoveredValues = new Set<string>();
+    // 2. Live Two-Way Discovery Link Option
+    const activeLiveKey = listConfig?.liveLinkedFieldKey || (listConfig?.inheritedFieldKey && (listConfig as any)?.liveSync ? listConfig.inheritedFieldKey : undefined);
+    if (activeLiveKey) {
+      const linkedKey = activeLiveKey;
+      const discoveredValues: string[] = [];
 
-      // Scan in-memory recordData
+      const processData = (rawData: any) => {
+        if (rawData === undefined || rawData === null) return;
+        let data = rawData;
+        if (typeof data === "string" && data.trim()) {
+          if ((data.trim().startsWith("[") && data.trim().endsWith("]")) || (data.trim().startsWith("{") && data.trim().endsWith("}"))) {
+            try { data = JSON.parse(data); } catch {}
+          }
+        }
+        if (Array.isArray(data)) {
+          data.forEach((entry) => {
+            const label = formatEntryValue(entry);
+            if (label && label !== "[object Object]") discoveredValues.push(label);
+          });
+        } else if (data && typeof data === "object") {
+          const label = formatEntryValue(data);
+          if (label && label !== "[object Object]") discoveredValues.push(label);
+        } else if (typeof data === "string" || typeof data === "number") {
+          const label = String(data).trim();
+          if (label) discoveredValues.push(label);
+        }
+      };
+
+      // Scan in-memory active recordData
       if (recordData) {
-        const val = recordData[linkedKey];
-        if (val) {
-          if (Array.isArray(val)) val.forEach((v) => v && discoveredValues.add(String(v)));
-          else discoveredValues.add(String(val));
+        processData(recordData[linkedKey]);
+        for (const [k, v] of Object.entries(recordData)) {
+          if (k !== linkedKey && (k.endsWith(`_${linkedKey}`) || k.includes(linkedKey))) {
+            processData(v);
+          }
         }
       }
 
-      // Scan sessionStorage records
-      try {
-        const rawClients = sessionStorage.getItem("clients");
-        if (rawClients) {
-          const parsed = JSON.parse(rawClients);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((rec: any) => {
-              const v = rec[linkedKey];
-              if (v) {
-                if (Array.isArray(v)) v.forEach((sub) => sub && discoveredValues.add(String(sub)));
-                else discoveredValues.add(String(v));
-              }
-            });
+      // Scan sessionStorage records across common entities
+      const storageKeys = ["clients", "processes", "services", "organizations", "team_members"];
+      for (const sKey of storageKeys) {
+        try {
+          const raw = sessionStorage.getItem(sKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((rec: any) => {
+                if (rec && typeof rec === "object") {
+                  processData(rec[linkedKey]);
+                  for (const [k, v] of Object.entries(rec)) {
+                    if (k !== linkedKey && (k.endsWith(`_${linkedKey}`) || k.includes(linkedKey))) {
+                      processData(v);
+                    }
+                  }
+                }
+              });
+            }
           }
+        } catch {}
+      }
+
+      // Check linked field definition's default value
+      try {
+        const allClientFields = getAllFields("client");
+        const allProcessFields = getAllFields("process");
+        const allFieldsList = [...allClientFields, ...allProcessFields];
+        const linkedDef = allFieldsList.find((f) => f.key === linkedKey);
+        if (linkedDef?.defaultValue) {
+          processData(linkedDef.defaultValue);
         }
       } catch {}
 
-      // Add discovered values that aren't already in staticOptions
+      // Add discovered values that aren't already in baseOptions
       const existingValues = new Set(baseOptions.map((o) => String(o.value).toLowerCase()));
-      discoveredValues.forEach((disc) => {
-        const cleanVal = disc.trim();
-        if (cleanVal && !existingValues.has(cleanVal.toLowerCase())) {
+      const existingLabels = new Set(baseOptions.map((o) => String(o.label).toLowerCase()));
+
+      discoveredValues.forEach((valStr) => {
+        const cleanVal = valStr.trim();
+        if (cleanVal && !existingValues.has(cleanVal.toLowerCase()) && !existingLabels.has(cleanVal.toLowerCase())) {
           baseOptions.push({
-            id: `disc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            id: `disc_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
             label: cleanVal,
             value: cleanVal,
             valueType: "text",
             index: baseOptions.length + 1,
           });
           existingValues.add(cleanVal.toLowerCase());
+          existingLabels.add(cleanVal.toLowerCase());
         }
       });
     }
@@ -131,27 +222,7 @@ export function useDynamicListOptions(
       ) {
         const allFields = getAllFields("client");
         const targetField = allFields.find((f) => f.key === listBindConfig.targetFieldKey);
-        const SKIP_KEYS = new Set(["id", "_id", "__type"]);
         const collectedLabels: string[] = [];
-
-        const joinEntryValues = (item: any): string | null => {
-          if (!item) return null;
-          if (typeof item === "string") {
-            try {
-              const parsed = JSON.parse(item);
-              if (parsed && typeof parsed === "object") return joinEntryValues(parsed);
-            } catch {}
-            return item.trim() || null;
-          }
-          if (typeof item !== "object") return null;
-          const parts: string[] = [];
-          for (const [k, v] of Object.entries(item)) {
-            if (SKIP_KEYS.has(k)) continue;
-            const sv = String(v ?? "").trim();
-            if (sv && sv !== "[object Object]") parts.push(sv);
-          }
-          return parts.length > 0 ? parts.join(", ") : null;
-        };
 
         const processRawData = (rawData: any) => {
           if (!rawData) return;
@@ -161,11 +232,11 @@ export function useDynamicListOptions(
           }
           if (Array.isArray(data)) {
             data.forEach((entry) => {
-              const label = joinEntryValues(entry);
+              const label = formatEntryValue(entry);
               if (label) collectedLabels.push(label);
             });
           } else if (data && typeof data === "object") {
-            const label = joinEntryValues(data);
+            const label = formatEntryValue(data);
             if (label) collectedLabels.push(label);
           }
         };
