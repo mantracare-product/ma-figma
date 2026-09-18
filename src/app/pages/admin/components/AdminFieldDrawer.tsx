@@ -1217,109 +1217,134 @@ export function AdminFieldDrawer({
           </div>
 
           {/* 1B. Process Workflow Selector (shown when module includes 'process') */}
-          {(form.selectedModules.includes("process") || form.module === "process") && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Process Workflow
-                </label>
-                <InfoTooltip text="Choose whether this field applies to all process workflows or a specific process." size="sm" />
-              </div>
+          {(form.selectedModules.includes("process") || form.module === "process") && (() => {
+            const activeProcessList = availableProcesses.length > 0 ? availableProcesses : allProcesses;
+            const allSelected = activeProcessList.length > 0 && activeProcessList.every((p) => form.processIds?.includes(p.id));
+            const noneSelected = !form.processIds || form.processIds.length === 0;
 
-              <div className="relative" ref={processPickerRef}>
-                <button
-                  type="button"
-                  disabled={isReadOnly}
-                  onClick={() => !isReadOnly && setProcessPickerOpen((v) => !v)}
-                  className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium flex items-center justify-between transition-all select-none min-h-[40px] ${
-                    isReadOnly
-                      ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
-                      : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    {(!form.processIds || form.processIds.length === 0 || form.processIds.includes("all")) ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-gray-100 border border-gray-200 text-gray-700 text-[11px] font-semibold">
-                        All Processes
-                      </span>
-                    ) : (
-                      form.processIds.map((pId) => {
-                        const proc = allProcesses.find((p) => p.id === pId);
-                        return (
-                          <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
-                            <span>{proc?.name || `Process #${pId}`}</span>
-                          </span>
-                        );
-                      })
-                    )}
+            const toggleSelectAllProcesses = () => {
+              if (allSelected) {
+                setForm((p) => ({ ...p, processIds: [] }));
+              } else {
+                setForm((p) => ({ ...p, processIds: activeProcessList.map((proc) => proc.id) }));
+              }
+            };
+
+            return (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Process Workflow
+                    </label>
+                    <InfoTooltip text="Select the process workflows this field applies to." size="sm" />
                   </div>
-                  {!isReadOnly && (
-                    <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${processPickerOpen ? "rotate-180" : ""}`} />
-                  )}
-                </button>
-
-                {processPickerOpen && !isReadOnly && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 max-h-60 overflow-y-auto">
+                  {activeProcessList.length > 1 && !isReadOnly && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setForm((p) => ({ ...p, processIds: [] }));
-                        setProcessPickerOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
-                        (!form.processIds || form.processIds.length === 0 || form.processIds.includes("all"))
-                          ? "bg-blue-50/80 text-blue-900 font-semibold"
-                          : "text-slate-700 hover:bg-slate-50"
-                      }`}
+                      onClick={toggleSelectAllProcesses}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
                     >
-                      <span>All Processes</span>
-                      {(!form.processIds || form.processIds.length === 0 || form.processIds.includes("all")) && (
-                        <Check className="w-3.5 h-3.5 text-blue-600 stroke-[3]" />
-                      )}
+                      {allSelected ? "Deselect All" : "Select All"}
                     </button>
+                  )}
+                </div>
 
-                    <div className="my-1 border-t border-slate-100" />
-                    <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80 rounded-md mb-1">
-                      Specific Process Workflows
+                <div className="relative" ref={processPickerRef}>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => !isReadOnly && setProcessPickerOpen((v) => !v)}
+                    className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium flex items-center justify-between transition-all select-none min-h-[40px] ${
+                      isReadOnly
+                        ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                        : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      {noneSelected ? (
+                        <span className="text-slate-400 text-xs">
+                          Select process workflows...
+                        </span>
+                      ) : allSelected ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                          <span>All ({activeProcessList.length}) Processes Selected</span>
+                        </span>
+                      ) : (
+                        form.processIds.map((pId) => {
+                          const proc = allProcesses.find((p) => p.id === pId);
+                          return (
+                            <span key={pId} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
+                              <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />
+                              <span className="truncate max-w-[150px]">{proc?.name || `Process #${pId}`}</span>
+                            </span>
+                          );
+                        })
+                      )}
                     </div>
+                    {!isReadOnly && (
+                      <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${processPickerOpen ? "rotate-180" : ""}`} />
+                    )}
+                  </button>
 
-                    <div className="space-y-0.5">
-                      {(availableProcesses.length > 0 ? availableProcesses : allProcesses).map((proc) => {
-                        const isChecked = form.processIds && form.processIds.includes(proc.id);
-                        return (
-                          <button
-                            key={proc.id}
-                            type="button"
-                            onClick={() => {
-                              setForm((p) => {
-                                const current = p.processIds || [];
-                                const exists = current.includes(proc.id);
-                                const next = exists
-                                  ? current.filter((id) => id !== proc.id)
-                                  : [...current.filter((id) => id !== "all"), proc.id];
-                                return { ...p, processIds: next };
-                              });
-                            }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
-                              isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50"
-                            }`}
-                          >
-                            <span className="truncate pr-2">{proc.name}</span>
-                            <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
-                              isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
-                            }`}>
-                              {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
-                            </div>
-                          </button>
-                        );
-                      })}
+                  {processPickerOpen && !isReadOnly && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5 max-h-60 overflow-y-auto">
+                      {/* Select All Row */}
+                      <button
+                        type="button"
+                        onClick={toggleSelectAllProcesses}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none font-semibold ${
+                          allSelected ? "bg-blue-50 text-blue-900" : "text-slate-700 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span>Select All Processes ({activeProcessList.length})</span>
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                          allSelected ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
+                        }`}>
+                          {allSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                        </div>
+                      </button>
+
+                      <div className="my-1 border-t border-slate-100" />
+
+                      <div className="space-y-0.5">
+                        {activeProcessList.map((proc) => {
+                          const isChecked = form.processIds && form.processIds.includes(proc.id);
+                          return (
+                            <button
+                              key={proc.id}
+                              type="button"
+                              onClick={() => {
+                                setForm((p) => {
+                                  const current = p.processIds || [];
+                                  const exists = current.includes(proc.id);
+                                  const next = exists
+                                    ? current.filter((id) => id !== proc.id)
+                                    : [...current, proc.id];
+                                  return { ...p, processIds: next };
+                                });
+                              }}
+                              className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                                isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span className="truncate pr-2">{proc.name}</span>
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0 ${
+                                isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
+                              }`}>
+                                {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 2. Field Name */}
           <div>
@@ -2789,7 +2814,7 @@ export function AdminFieldDrawer({
                           </span>
                         </div>
 
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {targetProcessesForRequirement.map((proc) => {
                             const procStages = proc.stages && proc.stages.length > 0 ? proc.stages : [
                               { id: "initial", name: "Initial Contact" },
@@ -2797,11 +2822,36 @@ export function AdminFieldDrawer({
                               { id: "schedule", name: "Schedule Appointment" },
                               { id: "last", name: "last stage" },
                             ];
-                            const matchedStage = procStages.find((st) => form.requiredStages.includes(st.name))?.name;
-                            const currentVal = matchedStage || "all";
+                            const selectedStagesInProc = procStages.filter((st) => form.requiredStages.includes(st.name));
+                            const allStagesSelected = selectedStagesInProc.length === procStages.length;
+
+                            const toggleSelectAllStagesInProc = () => {
+                              setForm((p) => {
+                                const currentStages = p.requiredStages || [];
+                                if (allStagesSelected) {
+                                  const remaining = currentStages.filter((st) => !procStages.some((s) => s.name === st));
+                                  return { ...p, requiredStages: remaining };
+                                } else {
+                                  const procStageNames = procStages.map((s) => s.name);
+                                  const otherStages = currentStages.filter((st) => !procStageNames.includes(st));
+                                  return { ...p, requiredStages: [...otherStages, ...procStageNames] };
+                                }
+                              });
+                            };
+
+                            const toggleStage = (stageName: string) => {
+                              setForm((p) => {
+                                const currentStages = p.requiredStages || [];
+                                const exists = currentStages.includes(stageName);
+                                const next = exists
+                                  ? currentStages.filter((s) => s !== stageName)
+                                  : [...currentStages, stageName];
+                                return { ...p, requiredStages: next };
+                              });
+                            };
 
                             return (
-                              <div key={proc.id} className="p-3 bg-amber-50/70 border border-amber-200/90 rounded-xl space-y-2">
+                              <div key={proc.id} className="p-3 bg-amber-50/70 border border-amber-200/90 rounded-xl space-y-2.5">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5 min-w-0">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600 shrink-0" />
@@ -2809,42 +2859,56 @@ export function AdminFieldDrawer({
                                       {proc.name}
                                     </span>
                                   </div>
-                                  <span className="text-[10px] font-semibold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                    {currentVal === "all" ? "Always Required" : `Required at ${currentVal}`}
-                                  </span>
+                                  {!isReadOnly && (
+                                    <button
+                                      type="button"
+                                      onClick={toggleSelectAllStagesInProc}
+                                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                                    >
+                                      {allStagesSelected ? "Deselect All" : "Select All"}
+                                    </button>
+                                  )}
                                 </div>
 
-                                <div className="space-y-1">
-                                  <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-wider">
-                                    Required Stage
+                                <div className="space-y-1.5">
+                                  <label className="block text-[10px] font-bold text-slate-600 uppercase tracking-wider">
+                                    Required at Stages ({selectedStagesInProc.length} of {procStages.length})
                                   </label>
-                                  <AdminSelect
-                                    value={currentVal}
-                                    disabled={isReadOnly}
-                                    onChange={(val) => {
-                                      setForm((p) => {
-                                        const otherProcessStages = (p.requiredStages || []).filter(
-                                          (st) => !procStages.some((s) => s.name === st) && st !== "all"
-                                        );
-                                        const next = val === "all" ? otherProcessStages : [...otherProcessStages, val];
-                                        return { ...p, requiredStages: next };
-                                      });
-                                    }}
-                                    options={[
-                                      { value: "all", label: "All Stages (Always Required)" },
-                                      ...procStages.map((st) => ({
-                                        value: st.name,
-                                        label: `Stage: ${st.name}`,
-                                      })),
-                                    ]}
-                                  />
+                                  
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {procStages.map((st) => {
+                                      const isChecked = form.requiredStages.includes(st.name);
+                                      return (
+                                        <button
+                                          key={st.id || st.name}
+                                          type="button"
+                                          disabled={isReadOnly}
+                                          onClick={() => toggleStage(st.name)}
+                                          className={`px-2.5 py-1.5 rounded-lg border text-left text-xs flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                                            isChecked
+                                              ? "bg-amber-100/90 border-amber-300 text-amber-950 font-semibold shadow-2xs"
+                                              : "bg-white/80 border-slate-200 text-slate-700 hover:bg-white"
+                                          }`}
+                                        >
+                                          <span className="truncate">{st.name}</span>
+                                          <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                            isChecked ? "bg-amber-600 border-amber-600 text-white" : "border-slate-300 bg-white"
+                                          }`}>
+                                            {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                          </div>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
                                 </div>
 
                                 <p className="text-[10px] text-amber-800/80 leading-relaxed">
-                                  {currentVal === "all" ? (
-                                    <>Mandatory across <strong>all stages</strong> in {proc.name}.</>
+                                  {selectedStagesInProc.length === 0 ? (
+                                    <span className="text-slate-400 italic">No stages selected for this process workflow.</span>
+                                  ) : allStagesSelected ? (
+                                    <>Mandatory across <strong>all {procStages.length} stages</strong> in {proc.name}.</>
                                   ) : (
-                                    <>Mandatory when entering <strong>{currentVal}</strong> in {proc.name}.</>
+                                    <>Mandatory when entering <strong>{selectedStagesInProc.map((s) => s.name).join(", ")}</strong> in {proc.name}.</>
                                   )}
                                 </p>
                               </div>
