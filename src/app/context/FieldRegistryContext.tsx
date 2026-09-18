@@ -113,6 +113,25 @@ export interface SubFieldConfig {
   selectionMode?: "single" | "multiple"; // for list_select and crm_bind sub-fields
   maxRating?: number; // for rating sub-fields
   listBindConfig?: ListBindConfig; // for list_select sub-fields
+  phoneConfig?: {
+    countryCodeDisplay?: "name" | "code";
+    showFlags?: boolean;
+    numberFormat?: string;
+  };
+  dateConfig?: {
+    capture?: "date" | "time" | "both";
+    isRange?: boolean;
+    dateFormat?: string;
+    timeFormat?: "12h" | "24h";
+    timezone?: string;
+    minDate?: string;
+    maxDate?: string;
+  };
+  numberConfig?: {
+    numberMode?: "single" | "range" | "integer";
+    min?: number;
+    max?: number;
+  };
 }
 
 export interface TableColumnConfig {
@@ -128,6 +147,25 @@ export interface TableColumnConfig {
   selectionMode?: "single" | "multiple"; // for list_select columns
   maxRating?: number; // for rating columns
   listBindConfig?: ListBindConfig; // for list_select columns
+  phoneConfig?: {
+    countryCodeDisplay?: "name" | "code";
+    showFlags?: boolean;
+    numberFormat?: string;
+  };
+  dateConfig?: {
+    capture?: "date" | "time" | "both";
+    isRange?: boolean;
+    dateFormat?: string;
+    timeFormat?: "12h" | "24h";
+    timezone?: string;
+    minDate?: string;
+    maxDate?: string;
+  };
+  numberConfig?: {
+    numberMode?: "single" | "range" | "integer";
+    min?: number;
+    max?: number;
+  };
 }
 
 export interface DynamicDateDefault {
@@ -323,9 +361,12 @@ export interface FieldDefinition {
   };
   dateConfig?: {
     capture?: "date" | "time" | "both";
+    isRange?: boolean;
     dateFormat?: string;
     timeFormat?: "12h" | "24h";
     timezone?: string;
+    minDate?: string;
+    maxDate?: string;
   };
   compositeDisplayMode?: "table" | "group";
   mediaConfig?: {
@@ -336,14 +377,13 @@ export interface FieldDefinition {
     maxFiles?: number;
   };
   numberConfig?: {
-    numberMode?: "integer" | "range";
+    numberMode?: "single" | "range" | "integer";
     min?: number;
     max?: number;
   };
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
-    regexValidation?: string;
     numberFormat?: string;
   };
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations

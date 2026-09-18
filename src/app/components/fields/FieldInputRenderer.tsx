@@ -12,6 +12,7 @@ import {
   Layers,
   Check,
   Star,
+  Clock,
 } from "lucide-react";
 import type {
   FieldDefinition,
@@ -39,6 +40,180 @@ export interface FieldInputRendererProps {
   disabled?: boolean;
   isSubField?: boolean; // Caps recursion at 1 level
   recordData?: Record<string, any>; // Active in-memory record data for dynamic binding
+}
+
+// ─────────────────────────────────────────────────────────────
+// Country Code Options & Phone Formatting Mask
+// ─────────────────────────────────────────────────────────────
+export interface CountryCodeOption {
+  code: string;
+  iso: string;
+  name: string;
+  flag: string;
+}
+
+export const COUNTRY_CODE_OPTIONS: CountryCodeOption[] = [
+  { code: "+1", iso: "US", name: "United States", flag: "🇺🇸" },
+  { code: "+1", iso: "CA", name: "Canada", flag: "🇨🇦" },
+  { code: "+91", iso: "IN", name: "India", flag: "🇮🇳" },
+  { code: "+44", iso: "GB", name: "United Kingdom", flag: "🇬🇧" },
+  { code: "+61", iso: "AU", name: "Australia", flag: "🇦🇺" },
+  { code: "+49", iso: "DE", name: "Germany", flag: "🇩🇪" },
+  { code: "+33", iso: "FR", name: "France", flag: "🇫🇷" },
+  { code: "+971", iso: "AE", name: "United Arab Emirates", flag: "🇦🇪" },
+  { code: "+65", iso: "SG", name: "Singapore", flag: "🇸🇬" },
+  { code: "+81", iso: "JP", name: "Japan", flag: "🇯🇵" },
+  { code: "+55", iso: "BR", name: "Brazil", flag: "🇧🇷" },
+  { code: "+86", iso: "CN", name: "China", flag: "🇨🇳" },
+  { code: "+34", iso: "ES", name: "Spain", flag: "🇪🇸" },
+  { code: "+39", iso: "IT", name: "Italy", flag: "🇮🇹" },
+  { code: "+52", iso: "MX", name: "Mexico", flag: "🇲🇽" },
+  { code: "+27", iso: "ZA", name: "South Africa", flag: "🇿🇦" },
+  { code: "+966", iso: "SA", name: "Saudi Arabia", flag: "🇸🇦" },
+  { code: "+31", iso: "NL", name: "Netherlands", flag: "🇳🇱" },
+  { code: "+64", iso: "NZ", name: "New Zealand", flag: "🇳🇿" },
+];
+
+export function formatPhoneNumberByMask(rawInput: string, maskPattern: string): string {
+  const digits = rawInput.replace(/\D/g, "");
+  if (!digits) return "";
+
+  // Parentheses mask e.g. (XXX) XXX-XXXX or (555) 123-4567
+  if (maskPattern.includes("(") && maskPattern.includes(")")) {
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  // Hyphenated mask e.g. XXX-XXX-XXXX or 555-123-4567
+  if (maskPattern.includes("-")) {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+    return `${digits.slice(0, 3)}-${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+  }
+
+  // 5-5 Spaced mask e.g. XXXXX XXXXX or +91 98765 43210
+  if (maskPattern === "XXXXX XXXXX" || maskPattern.includes("98765")) {
+    if (digits.length <= 5) return digits;
+    return `${digits.slice(0, 5)} ${digits.slice(5, 10)}`;
+  }
+
+  // 3-3-4 Spaced mask e.g. XXX XXX XXXX
+  if (maskPattern === "XXX XXX XXXX") {
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)} ${digits.slice(3, 6)}`;
+    return `${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6, 10)}`;
+  }
+
+  if (maskPattern === "XXXXXXXXXX") {
+    return digits.slice(0, 15);
+  }
+
+  // Default standard formatting
+  if (digits.length <= 3) return digits.length > 0 ? `(${digits}` : "";
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6, 10)}`;
+}
+
+interface PhoneInputRendererProps {
+  config?: {
+    countryCodeDisplay?: "name" | "code";
+    showFlags?: boolean;
+    numberFormat?: string;
+  };
+  value: any;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+  isAdminDefault?: boolean;
+  borderClass?: string;
+}
+
+function PhoneInputRenderer({
+  config,
+  value,
+  onChange,
+  disabled = false,
+  placeholder,
+  isAdminDefault = false,
+  borderClass = "border-slate-200 bg-white focus:border-blue-500",
+}: PhoneInputRendererProps) {
+  const displayMode = config?.countryCodeDisplay || "name";
+  const showFlags = config?.showFlags ?? true;
+  const activeFormat = config?.numberFormat || "(XXX) XXX-XXXX";
+
+  const { initialCountryCode, initialNational } = useMemo(() => {
+    if (typeof value === "string" && value.trim()) {
+      const trimmed = value.trim();
+      if (trimmed.startsWith("+")) {
+        const found = COUNTRY_CODE_OPTIONS.find((c) => trimmed.startsWith(c.code));
+        if (found) {
+          const rest = trimmed.slice(found.code.length).trim();
+          return { initialCountryCode: found.code, initialNational: rest };
+        }
+      }
+      return { initialCountryCode: "+1", initialNational: trimmed };
+    }
+    return { initialCountryCode: "+1", initialNational: "" };
+  }, [value]);
+
+  const [countryCode, setCountryCode] = useState<string>(initialCountryCode);
+
+  useEffect(() => {
+    if (initialCountryCode) setCountryCode(initialCountryCode);
+  }, [initialCountryCode]);
+
+  const handleCountryChange = (newCode: string) => {
+    setCountryCode(newCode);
+    if (initialNational) {
+      const formatted = formatPhoneNumberByMask(initialNational, activeFormat);
+      onChange(`${newCode} ${formatted}`);
+    } else {
+      onChange(newCode);
+    }
+  };
+
+  const handleNumberChange = (rawInput: string) => {
+    const digitsOnly = rawInput.replace(/\D/g, "");
+    if (!digitsOnly) {
+      onChange("");
+      return;
+    }
+    const formatted = formatPhoneNumberByMask(digitsOnly, activeFormat);
+    onChange(`${countryCode} ${formatted}`);
+  };
+
+  return (
+    <div className={`flex items-center rounded-lg border overflow-hidden transition-all ${borderClass}`}>
+      {/* Country Code Selector */}
+      <div className="relative flex items-center bg-slate-50 border-r border-slate-200 shrink-0 max-w-[150px]">
+        <select
+          value={countryCode}
+          disabled={disabled}
+          onChange={(e) => handleCountryChange(e.target.value)}
+          className="appearance-none pl-2.5 pr-6 py-1.5 bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer truncate"
+        >
+          {COUNTRY_CODE_OPTIONS.map((c, idx) => (
+            <option key={`${c.code}_${c.iso}_${idx}`} value={c.code}>
+              {showFlags ? `${c.flag} ` : ""}
+              {displayMode === "name" ? `${c.name} (${c.code})` : c.code}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 pointer-events-none" />
+      </div>
+
+      {/* Phone Number Input with Auto-Formatting */}
+      <input
+        type="tel"
+        value={initialNational}
+        disabled={disabled}
+        onChange={(e) => handleNumberChange(e.target.value)}
+        placeholder={placeholder || (activeFormat.includes("X") ? activeFormat.replace(/X/g, "5") : activeFormat)}
+        className="w-full px-3 py-1.5 bg-transparent text-xs font-medium text-slate-800 outline-none font-mono"
+      />
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -808,15 +983,81 @@ export function FieldInputRenderer({
   }
 
   if (effectiveType === "number") {
+    const numConfig = subField?.numberConfig || field?.numberConfig;
+    const isRangeMode = numConfig?.numberMode === "range";
+
+    if (isRangeMode) {
+      const rangeVal: { min?: number | ""; max?: number | "" } =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? value
+          : Array.isArray(value)
+          ? { min: value[0] ?? "", max: value[1] ?? "" }
+          : typeof value === "string" && value.includes("-")
+          ? { min: Number(value.split("-")[0]) || "", max: Number(value.split("-")[1]) || "" }
+          : {};
+
+      return (
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <input
+                type="number"
+                value={rangeVal.min ?? ""}
+                disabled={disabled}
+                min={numConfig?.min}
+                max={numConfig?.max}
+                onChange={(e) => {
+                  const newMin = e.target.value === "" ? "" : Number(e.target.value);
+                  onChange({ ...rangeVal, min: newMin });
+                }}
+                placeholder={numConfig?.min !== undefined ? `Min (${numConfig.min})` : "From (Min)"}
+                className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+              />
+            </div>
+            <span className="text-xs font-bold text-slate-400">to</span>
+            <div className="flex-1 min-w-0">
+              <input
+                type="number"
+                value={rangeVal.max ?? ""}
+                disabled={disabled}
+                min={numConfig?.min}
+                max={numConfig?.max}
+                onChange={(e) => {
+                  const newMax = e.target.value === "" ? "" : Number(e.target.value);
+                  onChange({ ...rangeVal, max: newMax });
+                }}
+                placeholder={numConfig?.max !== undefined ? `Max (${numConfig.max})` : "To (Max)"}
+                className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+              />
+            </div>
+          </div>
+          {(numConfig?.min !== undefined || numConfig?.max !== undefined) && (
+            <p className="text-[10px] text-slate-400">
+              Allowed bounds: {numConfig?.min ?? "–"} to {numConfig?.max ?? "–"}
+            </p>
+          )}
+        </div>
+      );
+    }
+
     return (
-      <input
-        type="number"
-        value={value ?? ""}
-        disabled={disabled}
-        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-        placeholder={effectivePlaceholder}
-        className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-      />
+      <div className="space-y-1">
+        <input
+          type="number"
+          value={typeof value === "number" ? value : value ?? ""}
+          disabled={disabled}
+          min={numConfig?.min}
+          max={numConfig?.max}
+          onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
+          placeholder={effectivePlaceholder || (numConfig?.min !== undefined && numConfig?.max !== undefined ? `${numConfig.min} - ${numConfig.max}` : "Enter number")}
+          className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+        />
+        {(numConfig?.min !== undefined || numConfig?.max !== undefined) && (
+          <p className="text-[10px] text-slate-400">
+            Allowed range: {numConfig?.min ?? "–"} to {numConfig?.max ?? "–"}
+          </p>
+        )}
+      </div>
     );
   }
 
@@ -841,20 +1082,95 @@ export function FieldInputRenderer({
   }
 
   if (effectiveType === "date" || effectiveType === "date_time" || effectiveType === "time") {
-    const isTimeOnly = effectiveType === "time" || field?.dateConfig?.capture === "time" || (field as any)?.dateTimeCapture === "time";
-    const isDateOnly = effectiveType === "date" || field?.dateConfig?.capture === "date" || (field as any)?.dateTimeCapture === "date";
+    const isTimeOnly = effectiveType === "time" || field?.dateConfig?.capture === "time" || subField?.dateConfig?.capture === "time" || (field as any)?.dateTimeCapture === "time";
+    const isDateOnly = effectiveType === "date" || field?.dateConfig?.capture === "date" || subField?.dateConfig?.capture === "date" || (field as any)?.dateTimeCapture === "date";
+    const isRangeMode = Boolean(field?.dateConfig?.isRange || subField?.dateConfig?.isRange || (field as any)?.dateTimeIsRange);
+    const minDate = field?.dateConfig?.minDate || subField?.dateConfig?.minDate;
+    const maxDate = field?.dateConfig?.maxDate || subField?.dateConfig?.maxDate;
     const inputHtmlType = isTimeOnly ? "time" : isDateOnly ? "date" : "datetime-local";
 
+    if (isRangeMode) {
+      const rangeVal: { start?: string; end?: string } =
+        value && typeof value === "object" && !Array.isArray(value)
+          ? value
+          : Array.isArray(value)
+          ? { start: value[0] || "", end: value[1] || "" }
+          : typeof value === "string" && value.includes(" - ")
+          ? { start: value.split(" - ")[0], end: value.split(" - ")[1] }
+          : {};
+
+      return (
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
+              {isTimeOnly ? (
+                <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              ) : (
+                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              )}
+              <input
+                type={inputHtmlType}
+                value={rangeVal.start ?? ""}
+                disabled={disabled}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => onChange({ ...rangeVal, start: e.target.value })}
+                placeholder="From"
+                className={`w-full pl-8 pr-2.5 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+              />
+            </div>
+            <span className="text-xs font-bold text-slate-400">to</span>
+            <div className="relative flex-1 min-w-0">
+              {isTimeOnly ? (
+                <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              ) : (
+                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              )}
+              <input
+                type={inputHtmlType}
+                value={rangeVal.end ?? ""}
+                disabled={disabled}
+                min={minDate}
+                max={maxDate}
+                onChange={(e) => onChange({ ...rangeVal, end: e.target.value })}
+                placeholder="To"
+                className={`w-full pl-8 pr-2.5 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+              />
+            </div>
+          </div>
+          {(minDate || maxDate) && (
+            <p className="text-[10px] text-slate-400">
+              Allowed bounds: {minDate ?? "–"} to {maxDate ?? "–"}
+            </p>
+          )}
+        </div>
+      );
+    }
+
     return (
-      <div className="relative flex items-center">
-        <input
-          type={inputHtmlType}
-          value={typeof value === "string" ? value : ""}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={effectivePlaceholder}
-          className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-        />
+      <div className="space-y-1.5">
+        <div className="relative flex items-center">
+          {isTimeOnly ? (
+            <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+          ) : (
+            <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
+          )}
+          <input
+            type={inputHtmlType}
+            value={typeof value === "string" ? value : ""}
+            disabled={disabled}
+            min={minDate}
+            max={maxDate}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder={effectivePlaceholder}
+            className={`w-full pl-8 pr-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+          />
+        </div>
+        {(minDate || maxDate) && (
+          <p className="text-[10px] text-slate-400">
+            Allowed bounds: {minDate ?? "–"} to {maxDate ?? "–"}
+          </p>
+        )}
       </div>
     );
   }
@@ -892,18 +1208,17 @@ export function FieldInputRenderer({
   }
 
   if (effectiveType === "tel") {
+    const effectivePhoneConfig = subField?.phoneConfig || field?.phoneConfig;
     return (
-      <div className="relative flex items-center">
-        <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 pointer-events-none" />
-        <input
-          type="tel"
-          value={value ?? ""}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={effectivePlaceholder || "+1 (555) 000-0000"}
-          className={`w-full pl-7 pr-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-        />
-      </div>
+      <PhoneInputRenderer
+        config={effectivePhoneConfig}
+        value={value}
+        onChange={onChange}
+        disabled={disabled}
+        placeholder={effectivePlaceholder}
+        isAdminDefault={isAdminDefault}
+        borderClass={borderClass}
+      />
     );
   }
 
