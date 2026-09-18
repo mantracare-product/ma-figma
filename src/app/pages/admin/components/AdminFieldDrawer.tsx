@@ -64,7 +64,6 @@ import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../li
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
-import { StageMultiSelect } from "./StageMultiSelect";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
@@ -425,7 +424,7 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     selectedModules: selectedModules.length > 0 ? selectedModules : [f.module as Exclude<FieldModule, "deal">],
     primaryCategory,
     placeholder: f.placeholder ?? "",
-    tooltip: f.tooltip ?? "",
+    tooltip: f.tooltip || (f as any).helpText || "",
     required: Boolean(f.required),
     requiredStages: f.requiredStages ? [...f.requiredStages] : [],
     showAlways: f.showAlways !== false,
@@ -498,6 +497,9 @@ export interface AdminFieldDrawerProps {
   lockCategory?: boolean;
   initialCategory?: PrimaryFieldTypeCategory;
   zIndex?: number;
+  activeProcessId?: string;
+  activeProcessName?: string;
+  processStages?: Array<{ id: string; name: string; color?: string }>;
   onClose: () => void;
   onSaved?: (field: FieldDefinition) => void;
 }
@@ -512,6 +514,9 @@ export function AdminFieldDrawer({
   lockCategory = false,
   initialCategory,
   zIndex = 10001,
+  activeProcessId,
+  activeProcessName,
+  processStages,
   onClose,
   onSaved,
 }: AdminFieldDrawerProps) {
@@ -575,7 +580,27 @@ export function AdminFieldDrawer({
   }, [allProcesses, form.scopingRules]);
 
   const availableStagesForProcess = useMemo(() => {
-    if (!form.selectedModules.includes("process")) return [];
+    if (!form.selectedModules.includes("process") && form.module !== "process") return [];
+
+    // 1. Explicit processStages passed directly
+    if (processStages && processStages.length > 0) {
+      return processStages.map((s) => ({ id: s.name, name: s.name, color: s.color }));
+    }
+
+    // 2. Explicit active process context (by ID or name)
+    if (activeProcessId || activeProcessName) {
+      const targetProc = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (targetProc && targetProc.stages && targetProc.stages.length > 0) {
+        return targetProc.stages.map((st) => ({ id: st.name, name: st.name, color: st.color }));
+      }
+    }
+
+    // 3. Fallback to scoped processIds if selected
     const targetProcesses = form.processIds.length > 0
       ? availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name))
       : availableProcesses;
@@ -589,7 +614,7 @@ export function AdminFieldDrawer({
       });
     });
     return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
-  }, [form.selectedModules, form.processIds, availableProcesses]);
+  }, [form.selectedModules, form.module, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
 
   // Existing fields in current primary module
   const allFieldsInPrimaryModule = useMemo(() => {
@@ -851,7 +876,7 @@ export function AdminFieldDrawer({
       placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(effectiveInputType, form.label),
       tooltip: form.tooltip.trim() || undefined,
       required: form.required,
-      requiredStages: form.selectedModules.includes("process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
       sectionId: form.sectionId || undefined,
@@ -2509,14 +2534,23 @@ export function AdminFieldDrawer({
               {fieldSettingsOpen && (
                 <div className="p-4 space-y-3.5 border-t border-slate-100 bg-white">
                   {/* Required Checkbox */}
-                  <div>
+                  <div className="space-y-2">
                     <div className="flex items-center">
                       <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
                         <input
                           type="checkbox"
                           checked={form.required}
                           disabled={isReadOnly}
-                          onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setForm((p) => ({
+                              ...p,
+                              required: checked,
+                              requiredStages: checked && p.requiredStages.length === 0
+                                ? [availableStagesForProcess[0]?.name || "Initial Contact"]
+                                : p.requiredStages,
+                            }));
+                          }}
                           className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         />
                         <span className="text-xs font-semibold text-slate-800">Required field</span>
@@ -2524,14 +2558,34 @@ export function AdminFieldDrawer({
                       <InfoTooltip text="Users must provide a value before saving records." size="sm" />
                     </div>
 
-                    {form.required && form.selectedModules.includes("process") && (
-                      <div className="ml-6 pt-2">
-                        <StageMultiSelect
-                          selectedStages={form.requiredStages}
-                          onChange={(requiredStages) => setForm((p) => ({ ...p, requiredStages }))}
-                          availableStages={availableStagesForProcess}
-                          isReadOnly={isReadOnly}
+                    {form.required && (form.selectedModules.includes("process") || form.module === "process") && (
+                      <div className="mt-2 ml-6 p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                            Required at Stage
+                          </label>
+                          <InfoTooltip text="Select the specific stage at which this field is mandatory. Once filled at this stage, it does not need to be re-entered at subsequent stages." size="sm" />
+                        </div>
+                        <AdminSelect
+                          value={form.requiredStages[0] || (availableStagesForProcess[0]?.name || "Initial Contact")}
+                          disabled={isReadOnly}
+                          onChange={(val) => {
+                            setForm((p) => ({ ...p, requiredStages: [val] }));
+                          }}
+                          options={
+                            availableStagesForProcess.length > 0
+                              ? availableStagesForProcess.map((st) => ({ value: st.name, label: st.name }))
+                              : [
+                                  { value: "Initial Contact", label: "Initial Contact" },
+                                  { value: "Insurance Verify", label: "Insurance Verify" },
+                                  { value: "Schedule Appointment", label: "Schedule Appointment" },
+                                  { value: "last stage", label: "last stage" },
+                                ]
+                          }
                         />
+                        <p className="text-[11px] text-amber-800/80">
+                          Mandatory when a record enters <strong>{form.requiredStages[0] || availableStagesForProcess[0]?.name || "Initial Contact"}</strong>.
+                        </p>
                       </div>
                     )}
                   </div>

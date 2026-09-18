@@ -450,16 +450,13 @@ export function AdminCustomFields() {
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Type</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Required</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
-                {activeModule === "process" && (
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Processes</th>
-                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredFields.length === 0 ? (
                 <tr>
-                  <td colSpan={activeModule === "process" ? 7 : 6} className="py-14 text-center">
+                  <td colSpan={6} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No fields found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Field" above to define one.</p>
                   </td>
@@ -543,12 +540,6 @@ export function AdminCustomFields() {
                       <td className="px-5 py-3.5 text-center">
                         {renderScopeCell(field)}
                       </td>
-                      {/* Processes (Only in Process module) */}
-                      {activeModule === "process" && (
-                        <td className="px-5 py-3.5 text-center">
-                          {renderProcessesCell(field, allProcesses)}
-                        </td>
-                      )}
                       <td className="px-5 py-3.5 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
@@ -605,9 +596,6 @@ export function AdminCustomFields() {
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Section</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Description</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Scope</th>
-                {activeModule === "process" && (
-                  <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Processes</th>
-                )}
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Fields</th>
                 <th className="text-center px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -615,7 +603,7 @@ export function AdminCustomFields() {
             <tbody>
               {filteredSections.length === 0 ? (
                 <tr>
-                  <td colSpan={activeModule === "process" ? 6 : 5} className="py-14 text-center">
+                  <td colSpan={5} className="py-14 text-center">
                     <p className="text-sm text-gray-500">No sections found for this module.</p>
                     <p className="text-xs text-gray-400 mt-1">Click "Add Section" above to define one.</p>
                   </td>
@@ -646,12 +634,6 @@ export function AdminCustomFields() {
                       <td className="px-5 py-3.5 text-center">
                         {renderScopeCell(sec)}
                       </td>
-                      {/* Processes (Only in Process module) */}
-                      {activeModule === "process" && (
-                        <td className="px-5 py-3.5 text-center">
-                          {renderProcessesCell(sec, allProcesses)}
-                        </td>
-                      )}
                       <td className="px-5 py-3.5 text-center">
                         <span className="text-xs text-gray-500 font-medium">
                           {assignedFieldCount} {assignedFieldCount === 1 ? "field" : "fields"}

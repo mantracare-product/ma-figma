@@ -1,7 +1,8 @@
-import React, { useState } from "react";
-import { Search, X, ChevronDown, Plus } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Search, X, ChevronDown, Plus, Asterisk, Check, ChevronRight } from "lucide-react";
 import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { toast } from "sonner";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
 
@@ -30,9 +31,12 @@ const MODULE_NOUN: Record<Exclude<FieldModule, "deal">, { singular: string; plur
   scribe: { singular: "AI Scribe field", plural: "AI Scribe fields" },
 };
 
-interface CreateFieldModalProps {
+export interface CreateFieldModalProps {
   lockModule?: FieldModule;
   sourceFormId?: number;
+  activeProcessId?: string;
+  activeProcessName?: string;
+  processStages?: Array<{ id: string; name: string; color?: string }>;
   onClose: () => void;
   onCreated?: (field: FieldDefinition) => void;
 }
@@ -40,6 +44,9 @@ interface CreateFieldModalProps {
 export function CreateFieldModal({
   lockModule,
   sourceFormId,
+  activeProcessId,
+  activeProcessName,
+  processStages,
   onClose,
   onCreated,
 }: CreateFieldModalProps) {
@@ -52,6 +59,9 @@ export function CreateFieldModal({
       field={null}
       initialModule={normModule}
       lockModule={Boolean(lockModule)}
+      activeProcessId={activeProcessId}
+      activeProcessName={activeProcessName}
+      processStages={processStages}
       isAdmin={false}
       onClose={onClose}
       onSaved={(newField) => {
@@ -61,11 +71,14 @@ export function CreateFieldModal({
   );
 }
 
-interface SelectFieldsModalProps {
+export interface SelectFieldsModalProps {
   initiallySelected: string[];
   onClose: () => void;
   onApply: (keys: string[]) => void;
   onlyModules?: FieldModule[];
+  activeProcessId?: string;
+  activeProcessName?: string;
+  processStages?: Array<{ id: string; name: string; color?: string }>;
 }
 
 export function SelectFieldsModal({
@@ -73,12 +86,46 @@ export function SelectFieldsModal({
   onClose,
   onApply,
   onlyModules,
+  activeProcessId,
+  activeProcessName,
+  processStages,
 }: SelectFieldsModalProps) {
-  const { getAllFields } = useFieldRegistry();
+  const { getAllFields, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
   const [fieldSearchQuery, setFieldSearchQuery] = useState("");
   const [selectedFieldsForModal, setSelectedFieldsForModal] = useState<string[]>(() => initiallySelected);
   const [createFieldModalOpenFor, setCreateFieldModalOpenFor] = useState<FieldModule | null>(null);
+
+  const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handleUpdate = () => setAllProcesses(getStoredProcesses());
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  // Compute strictly the stages belonging to the active process
+  const resolvedProcessStages = useMemo(() => {
+    if (processStages && processStages.length > 0) {
+      return processStages.map((s) => ({ id: s.name, name: s.name, color: s.color }));
+    }
+    if (activeProcessId || activeProcessName) {
+      const targetProc = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (targetProc && targetProc.stages && targetProc.stages.length > 0) {
+        return targetProc.stages.map((st) => ({ id: st.name, name: st.name, color: st.color }));
+      }
+    }
+    return [];
+  }, [processStages, activeProcessId, activeProcessName, allProcesses]);
 
   // Determine which modules to render
   const targetModules: Exclude<FieldModule, "deal">[] = (onlyModules
@@ -137,6 +184,7 @@ export function SelectFieldsModal({
         style={{
           zIndex: 10000,
           width: "500px",
+          maxWidth: "92vw",
           maxHeight: "80vh",
           top: "50%",
           left: "50%",
@@ -173,6 +221,7 @@ export function SelectFieldsModal({
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {groupedFieldsList.map(group => {
             const isCollapsed = collapsedSections[group.module];
+
             return (
               <div key={group.module} className="border border-gray-100 rounded-xl overflow-hidden shadow-sm bg-white">
                 <button
@@ -210,7 +259,14 @@ export function SelectFieldsModal({
                               style={{ accentColor: "#1E88E5" }}
                             />
                             <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-semibold text-gray-700 truncate">{f.label}</span>
+                              <div className="flex items-center gap-1">
+                                <span className="text-xs font-semibold text-gray-700 truncate">{f.label}</span>
+                                {f.required && (
+                                  <span className="text-[10px] text-red-500 font-bold leading-none" title="Required field">
+                                    *
+                                  </span>
+                                )}
+                              </div>
                               <span className="text-[9px] text-gray-400 truncate capitalize">
                                 {f.source === "system" ? "system" : f.inputType}
                               </span>
@@ -219,6 +275,7 @@ export function SelectFieldsModal({
                         );
                       })}
                     </div>
+
                     <div className="pt-2 border-t border-gray-100 flex justify-end">
                       <button
                         type="button"
@@ -251,13 +308,13 @@ export function SelectFieldsModal({
           <div className="flex gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-semibold text-gray-600 transition-colors"
+              className="px-4 py-2 border border-gray-200 hover:bg-gray-100 rounded-lg text-xs font-semibold text-gray-600 transition-colors cursor-pointer"
             >
               CANCEL
             </button>
             <button
               onClick={handleSelectApply}
-              className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-colors"
+              className="px-4 py-2 rounded-lg text-xs font-bold text-white transition-colors cursor-pointer"
               style={{ backgroundColor: "#1E88E5" }}
             >
               APPLY
@@ -269,6 +326,9 @@ export function SelectFieldsModal({
       {createFieldModalOpenFor && (
         <CreateFieldModal
           lockModule={createFieldModalOpenFor}
+          activeProcessId={activeProcessId}
+          activeProcessName={activeProcessName}
+          processStages={resolvedProcessStages}
           onClose={() => setCreateFieldModalOpenFor(null)}
           onCreated={(newField) => {
             setSelectedFieldsForModal(prev => [...prev, newField.key]);
@@ -279,3 +339,4 @@ export function SelectFieldsModal({
     </>
   );
 }
+

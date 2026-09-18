@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Eye } from "lucide-react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
 import { Modal } from "../../components/ui/Modal";
@@ -28,6 +28,8 @@ import StepDetailDrawer from "../../components/process/StepDetailDrawer";
 import { assignNumberToStage } from "../../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../../components/process/CallTriggerDrawer";
+import ProcessDetailDrawer, { ProcessDetailHistoryFilterState, ActivityLogEntry } from "../../components/deals/ProcessDetailDrawer";
+import { useFieldRegistry } from "../../context/FieldRegistryContext";
 import { useProcessTemplates } from "../../context/ProcessTemplateContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { AdminScopingRulesEditor } from "./components/AdminScopingRulesEditor";
@@ -600,7 +602,145 @@ export default function AdminProcessTemplates() {
   const [modalPermissionsDropdownOpen, setModalPermissionsDropdownOpen] = useState(true);
 
 
+  const { getAllFields } = useFieldRegistry();
+
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
+  const [showProcessPreviewDrawer, setShowProcessPreviewDrawer] = useState(false);
+  const [previewProcess, setPreviewProcess] = useState<Process | null>(null);
+  const [previewDrawerTab, setPreviewDrawerTab] = useState<"general" | "activity" | "history" | "documents">("general");
+  const [previewStageIdx, setPreviewStageIdx] = useState<number>(1);
+  const [previewVisibleFieldKeys, setPreviewVisibleFieldKeys] = useState<string[]>([]);
+  const [previewEditedValues, setPreviewEditedValues] = useState<Record<string, string>>({});
+  const [previewEditingField, setPreviewEditingField] = useState<string | null>(null);
+  const [previewShowResponsibleDropdown, setPreviewShowResponsibleDropdown] = useState(false);
+  const [previewFieldManagerOpen, setPreviewFieldManagerOpen] = useState(false);
+  const [previewFieldManagerMode, setPreviewFieldManagerMode] = useState<"select" | "create">("select");
+  const [previewShowTeamMemberDrawer, setPreviewShowTeamMemberDrawer] = useState(false);
+  const [previewSelectedTeamMember, setPreviewSelectedTeamMember] = useState<any>(null);
+
+  const [previewHistoryFilters, setPreviewHistoryFilters] = useState<ProcessDetailHistoryFilterState>({
+    showPopup: false,
+    quickFilter: "all",
+    eventTypeFilter: "all",
+    createdByFilter: "all",
+    dateFilter: "all",
+    filtersActive: false,
+    showAddFieldPopup: false,
+    activeFilterFields: ["client", "channel", "action", "responsible"],
+    selectedAddFields: [],
+  });
+
+  const previewTeamMembers = useMemo(() => [
+    { id: "1", name: "John Smith", role: "Care Coordinator", email: "john.s@mantracare.com", phone: "+1 (555) 019-2834" },
+    { id: "2", name: "Emily Watson", role: "Intake Specialist", email: "emily.w@mantracare.com", phone: "+1 (555) 019-5829" },
+    { id: "3", name: "Dr. Sarah Chen", role: "Physician", email: "sarah.c@mantracare.com", phone: "+1 (555) 019-9182" },
+  ], []);
+
+  const previewClient = useMemo(() => {
+    if (!previewProcess) return undefined;
+    return {
+      id: "preview-client-sarah",
+      name: "Sarah Johnson",
+      email: "sarah.j@email.com",
+      phone: "5551234567",
+      country: "United States",
+      countryCode: "US",
+      countryFlag: "🇺🇸",
+      processes: [previewProcess.name],
+      responsible: "John Smith",
+      source: "Inbound Web / WhatsApp",
+    } as any;
+  }, [previewProcess]);
+
+  const previewLog = useMemo(() => {
+    if (!previewProcess) return null;
+    const stages = previewProcess.stages || [];
+    const currentStageName = stages[previewStageIdx - 1]?.name || stages[0]?.name || "Initial Contact";
+    return {
+      id: `preview-log-${previewProcess.id}`,
+      client: "Sarah Johnson",
+      clientId: "preview-client-sarah",
+      type: "Outbound Call",
+      status: "Completed",
+      process: previewProcess.name,
+      currentStage: currentStageName,
+      duration: "4m 12s",
+      date: "Apr 13, 2024, 2:50 PM",
+      hasRecording: true,
+      hasTranscript: true,
+      hasScheduledCall: false,
+      relationshipReason: "Stage Change" as const,
+      phone: "5551234567",
+    };
+  }, [previewProcess, previewStageIdx]);
+
+  const previewActivity: ActivityLogEntry[] = useMemo(() => {
+    if (!previewProcess || !previewLog) return [];
+    return [
+      {
+        id: `act-completed-${previewLog.id}`,
+        type: "process_completed",
+        timestamp: "Apr 13, 2024, 2:50 PM",
+        status: "success",
+        sourceStepName: "Deal Closed",
+        refId: previewLog.id,
+        details: {
+          primary: `Final Stage: ${previewLog.currentStage}`,
+          secondary: `Process: ${previewProcess.name}`,
+        },
+      },
+      {
+        id: `act-apt-${previewLog.id}`,
+        type: "appointment_booked",
+        timestamp: "Apr 12, 2024, 3:00 PM",
+        status: "success",
+        sourceStepName: "Schedule Appointment Step",
+        refId: `apt-${previewLog.id}`,
+        details: {
+          primary: "Slot: 10:00 AM – 10:30 AM",
+          secondary: "Location: Main Clinic",
+        },
+      },
+      {
+        id: `act-email-${previewLog.id}`,
+        type: "email",
+        timestamp: "Apr 12, 2024, 9:30 AM",
+        status: "success",
+        sourceStepName: "Welcome Email Campaign",
+        refId: `msg-${previewLog.id}`,
+        details: {
+          primary: "Template: welcome_onboarding",
+          secondary: "Sent to sarah.j@email.com",
+        },
+      },
+      {
+        id: `act-stage-1-${previewLog.id}`,
+        type: "stage_update",
+        timestamp: "Apr 11, 2024, 2:00 PM",
+        status: "success",
+        sourceStepName: "Pipeline Automation",
+        refId: previewLog.id,
+        details: {
+          primary: `Moved to ${previewLog.currentStage}`,
+          secondary: `Process: ${previewProcess.name}`,
+        },
+      },
+      {
+        id: `act-call-${previewLog.id}`,
+        type: "call",
+        direction: "outbound",
+        timestamp: "Apr 10, 2024, 11:30 AM",
+        status: "success",
+        sourceStepName: "Outbound Call Step",
+        refId: previewLog.id,
+        details: {
+          primary: "Duration 4m 12s",
+          secondary: "Status: Completed",
+        },
+      },
+    ];
+  }, [previewProcess, previewLog]);
+
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
   const [draftProcessName, setDraftProcessName] = useState("");
   const [draftProcessDescription, setDraftProcessDescription] = useState("");
@@ -2307,6 +2447,7 @@ export default function AdminProcessTemplates() {
                       {/* Process Row */}
                       <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setExpandedProcesses((prev) =>
@@ -2315,12 +2456,15 @@ export default function AdminProcessTemplates() {
                                 : [...prev, process.id]
                             );
                           }}
-                          className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                          className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-800 shrink-0"
                         >
-                          <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
-                            }`} />
+                          <ChevronRight
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              isExpanded ? "rotate-90" : ""
+                            }`}
+                          />
                         </button>
-                        <button
+                        <div
                           onClick={() => {
                             setSelectedProcess(process.id);
                             setExpandedStage(null);
@@ -2329,23 +2473,48 @@ export default function AdminProcessTemplates() {
                               setExpandedProcesses((prev) => [...prev, process.id]);
                             }
                           }}
-                          className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
-                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                            : isProcessActive
+                          className={`flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all cursor-pointer select-none ${
+                            isProcessSelected
+                              ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
+                              : isProcessActive
                               ? "bg-blue-50 text-blue-700 border border-blue-200"
-                              : "hover:bg-gray-50 border border-transparent"
-                            }`}
+                              : "hover:bg-gray-50 border border-transparent text-gray-700"
+                          }`}
                         >
-                          <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
-                          <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
-                            ? "bg-white/20 text-white"
-                            : isProcessActive
-                              ? "bg-blue-200 text-blue-700"
-                              : "bg-gray-100 text-gray-600"
-                            }`}>
+                          <span
+                            className="flex-1 text-left font-semibold text-sm truncate"
+                            style={{ fontFamily: 'DM Sans, sans-serif' }}
+                          >
+                            {process.name}
+                          </span>
+                          <span
+                            className={`text-xs px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                              isProcessSelected
+                                ? "bg-white/20 text-white"
+                                : isProcessActive
+                                ? "bg-blue-200 text-blue-700"
+                                : "bg-gray-100 text-gray-600"
+                            }`}
+                          >
                             {process.stages.length}
                           </span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewProcess(process);
+                              setShowProcessPreviewDrawer(true);
+                            }}
+                            className={`p-1 rounded-lg transition-colors cursor-pointer shrink-0 ${
+                              isProcessSelected
+                                ? "text-white/90 hover:text-white hover:bg-white/20"
+                                : "text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                            }`}
+                            title="Preview Process View"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Stages (when expanded) */}
@@ -2432,6 +2601,18 @@ export default function AdminProcessTemplates() {
                             <span className="text-sm px-4 py-1.5 bg-blue-100 text-blue-700 rounded-full font-semibold whitespace-nowrap">
                               Process
                             </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPreviewProcess(selectedProcessData);
+                                setShowProcessPreviewDrawer(true);
+                              }}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer shadow-2xs"
+                              title="Preview Process Layout & Required Fields"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>Preview Process View</span>
+                            </button>
                           </div>
                           <p
                             className="text-base whitespace-pre-wrap mt-1"
@@ -7553,6 +7734,65 @@ export default function AdminProcessTemplates() {
           onClose={() => setShowTestProcessDrawer(false)}
           processes={processes}
           getWorkflowStepsForStage={(processId, stageId) => getStoreWorkflowSteps(processId, stageId)}
+        />
+
+        <ProcessDetailDrawer
+          isOpen={showProcessPreviewDrawer && previewLog !== null}
+          onClose={() => setShowProcessPreviewDrawer(false)}
+          log={previewLog}
+          client={previewClient}
+          activeTab={previewDrawerTab}
+          onTabChange={(tab) => setPreviewDrawerTab(tab)}
+          activity={previewActivity}
+          onOpenActivity={(entry) => {
+            if (entry.type === "whatsapp" || entry.type === "sms" || entry.type === "email") {
+              navigate("/chats");
+            } else if (entry.type === "appointment_booked") {
+              navigate("/appointments");
+            } else {
+              setPreviewDrawerTab("history");
+            }
+          }}
+          stageIdx={previewStageIdx}
+          onStageChange={(idx) => {
+            setPreviewStageIdx(idx);
+            const stages = previewProcess?.stages || [];
+            const newStage = stages[idx - 1]?.name || stages[0]?.name || "Stage Updated";
+            toast.success(`Stage updated to ${newStage} ✓`);
+          }}
+          visibleFieldKeys={previewVisibleFieldKeys}
+          onVisibleFieldKeysChange={(keys) => setPreviewVisibleFieldKeys(keys)}
+          editedValues={previewEditedValues}
+          editingField={previewEditingField}
+          onStartEditingField={(key) => setPreviewEditingField(key)}
+          onFieldSave={(key, val) => {
+            setPreviewEditingField(null);
+            setPreviewEditedValues((prev) => ({ ...prev, [key]: val }));
+            toast.success("Saved ✓", { duration: 2000 });
+          }}
+          showResponsibleDropdown={previewShowResponsibleDropdown}
+          onToggleResponsibleDropdown={(open) => setPreviewShowResponsibleDropdown(open)}
+          onOpenTeamMember={(personName) => {
+            const member = previewTeamMembers.find((m) => m.name === personName);
+            setPreviewSelectedTeamMember(
+              member || { id: "0", name: personName, role: "Team Member", email: "", phone: "" }
+            );
+            setPreviewShowTeamMemberDrawer(true);
+          }}
+          isTeamMemberDrawerOpen={previewShowTeamMemberDrawer}
+          fieldManagerOpen={previewFieldManagerOpen}
+          fieldManagerMode={previewFieldManagerMode}
+          onOpenFieldManager={(mode) => {
+            setPreviewFieldManagerMode(mode);
+            setPreviewFieldManagerOpen(true);
+          }}
+          onCloseFieldManager={() => setPreviewFieldManagerOpen(false)}
+          teamMembersData={previewTeamMembers}
+          dealFields={getAllFields("deal")}
+          historyFilters={previewHistoryFilters}
+          onHistoryFiltersChange={(patch) => {
+            setPreviewHistoryFilters((prev) => ({ ...prev, ...patch }));
+          }}
         />
 
         <CallTriggerDrawer

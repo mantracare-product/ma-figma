@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import {
   GripVertical,
   Plus,
@@ -39,6 +39,7 @@ import {
 import { toast } from "sonner";
 import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
+import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
 import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
@@ -264,6 +265,42 @@ export default function DraggableOverviewSections({
 }: DraggableOverviewSectionsProps) {
   const { getAllFields, getAllSections, addCustomSection, updateCustomSection, deleteCustomSection, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
+
+  const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
+
+  useEffect(() => {
+    const handleUpdate = () => setAllProcesses(getStoredProcesses());
+    window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener("storage", handleUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener("storage", handleUpdate);
+    };
+  }, []);
+
+  const activeProcessName = useMemo(() => {
+    return (
+      log?.process ||
+      log?.processName ||
+      (selectedProcesses && selectedProcesses[0]) ||
+      (client?.processes && client.processes[0]) ||
+      ""
+    );
+  }, [log, selectedProcesses, client]);
+
+  const activeProcessObj = useMemo(() => {
+    if (!activeProcessName) return undefined;
+    return allProcesses.find(
+      (p) =>
+        p.name.toLowerCase() === activeProcessName.toLowerCase() ||
+        p.id === activeProcessName
+    );
+  }, [allProcesses, activeProcessName]);
+
+  const activeProcessStages = useMemo(() => {
+    if (!activeProcessObj || !activeProcessObj.stages) return undefined;
+    return activeProcessObj.stages.map((st) => ({ id: st.name, name: st.name, color: st.color }));
+  }, [activeProcessObj]);
 
   const SYSTEM_FIELD_KEYS = useMemo(() => new Set([
     "name", "email", "phone", "location", "country",
@@ -1581,6 +1618,9 @@ export default function DraggableOverviewSections({
           initiallySelected={
             sections.find((s) => s.id === targetSectionIdForField)?.fieldKeys || []
           }
+          activeProcessId={activeProcessObj?.id}
+          activeProcessName={activeProcessName}
+          processStages={activeProcessStages}
           onClose={() => {
             setFieldModalOpen(false);
             setTargetSectionIdForField(null);
@@ -1593,6 +1633,9 @@ export default function DraggableOverviewSections({
       {createFieldModalOpen && (
         <CreateFieldModal
           lockModule={customFieldsModule}
+          activeProcessId={activeProcessObj?.id}
+          activeProcessName={activeProcessName}
+          processStages={activeProcessStages}
           onClose={() => setCreateFieldModalOpen(false)}
           onCreated={(newField) => {
             if (targetSectionIdForField) {
@@ -1607,6 +1650,9 @@ export default function DraggableOverviewSections({
         <AdminSectionDrawer
           section={null}
           initialModule={customFieldsModule as Exclude<FieldModule, "deal">}
+          activeProcessId={activeProcessObj?.id}
+          activeProcessName={activeProcessName}
+          processStages={activeProcessStages}
           isAdmin={false}
           onClose={() => setAddSectionModalOpen(false)}
           onSaved={(savedSection) => {
@@ -1631,6 +1677,9 @@ export default function DraggableOverviewSections({
         <AdminFieldDrawer
           field={editingFieldDef}
           initialModule={(editingFieldDef.module as Exclude<FieldModule, "deal">) || (customFieldsModule === "deal" ? "process" : customFieldsModule)}
+          activeProcessId={activeProcessObj?.id}
+          activeProcessName={activeProcessName}
+          processStages={activeProcessStages}
           isAdmin={false}
           onClose={() => setEditingFieldDef(null)}
           onSaved={(savedField) => {

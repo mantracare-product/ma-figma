@@ -19,10 +19,9 @@ import type {
 import { useFieldRegistry } from "../../../context/FieldRegistryContext";
 import { MODULE_OPTIONS } from "./AdminFieldDrawer";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
-import { ProcessMultiSelect } from "./ProcessMultiSelect";
-import { StageMultiSelect } from "./StageMultiSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
+import { AdminSelect } from "../../../components/ui/AdminSelect";
 
 /**
  * Checks whether a field definition matches the section's scoping rules.
@@ -181,11 +180,25 @@ export interface AdminSectionDrawerProps {
   section: SectionDefinition | null;
   initialModule: Exclude<FieldModule, "deal">;
   isAdmin?: boolean;
+  zIndex?: number;
+  activeProcessId?: string;
+  activeProcessName?: string;
+  processStages?: Array<{ id: string; name: string; color?: string }>;
   onClose: () => void;
   onSaved?: (section: SectionDefinition) => void;
 }
 
-export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onClose, onSaved }: AdminSectionDrawerProps) {
+export function AdminSectionDrawer({
+  section,
+  initialModule,
+  isAdmin = true,
+  zIndex = 500,
+  activeProcessId,
+  activeProcessName,
+  processStages,
+  onClose,
+  onSaved,
+}: AdminSectionDrawerProps) {
   const { addCustomSection, updateCustomSection, getAllFields } = useFieldRegistry();
   const isEdit = section !== null;
 
@@ -247,6 +260,25 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
 
   const availableStagesForProcess = useMemo(() => {
     if (form.module !== "process") return [];
+
+    // 1. Explicit processStages passed directly
+    if (processStages && processStages.length > 0) {
+      return processStages.map((s) => ({ id: s.name, name: s.name, color: s.color }));
+    }
+
+    // 2. Explicit active process context (by ID or name)
+    if (activeProcessId || activeProcessName) {
+      const targetProc = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (targetProc && targetProc.stages && targetProc.stages.length > 0) {
+        return targetProc.stages.map((st) => ({ id: st.name, name: st.name, color: st.color }));
+      }
+    }
+
     const targetProcesses = form.processIds.length > 0
       ? availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name))
       : availableProcesses;
@@ -260,7 +292,7 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
       });
     });
     return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
-  }, [form.module, form.processIds, availableProcesses]);
+  }, [form.module, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -421,7 +453,7 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex" style={{ pointerEvents: "none" }}>
+    <div className="fixed inset-0 flex" style={{ zIndex, pointerEvents: "none" }}>
       <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
       <div className="flex-1 bg-black/30 backdrop-blur-[1px]" style={{ pointerEvents: "auto" }} onClick={onClose} />
       <div className="flex flex-col bg-white" style={{ width: 540, maxWidth: "100%", height: "100vh", boxShadow: "-4px 0 40px rgba(0,0,0,0.14)", animation: "slideInFromRight 220ms cubic-bezier(0.16,1,0.3,1)", pointerEvents: "auto" }}>
@@ -632,16 +664,6 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
             </div>
           )}
 
-          {/* Processes Selection (Applicable when Module is Process - rendered as simple multi-select dropdown below Admin Control) */}
-          {form.module === "process" && (
-            <ProcessMultiSelect
-              selectedProcessIds={form.processIds}
-              onChange={(processIds) => setForm((p) => ({ ...p, processIds }))}
-              availableProcesses={availableProcesses}
-              hasScopeRules={Boolean(isAdmin && form.scopingRules && form.scopingRules.length > 0)}
-            />
-          )}
-
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Section Name <span className="text-red-500">*</span></label>
@@ -711,7 +733,16 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                       <input
                         type="checkbox"
                         checked={form.required}
-                        onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm((p) => ({
+                            ...p,
+                            required: checked,
+                            requiredStages: checked && p.requiredStages.length === 0
+                              ? [availableStagesForProcess[0]?.name || "Initial Contact"]
+                              : p.requiredStages,
+                          }));
+                        }}
                         className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
                       <div>
@@ -721,12 +752,32 @@ export function AdminSectionDrawer({ section, initialModule, isAdmin = true, onC
                     </label>
 
                     {form.required && form.module === "process" && (
-                      <div className="ml-7 pt-1">
-                        <StageMultiSelect
-                          selectedStages={form.requiredStages}
-                          onChange={(requiredStages) => setForm((p) => ({ ...p, requiredStages }))}
-                          availableStages={availableStagesForProcess}
+                      <div className="mt-2 ml-7 p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <label className="text-xs font-bold text-amber-900 uppercase tracking-wider">
+                            Required at Stage
+                          </label>
+                          <InfoTooltip text="Select the specific stage at which this entire section must be completed." size="sm" />
+                        </div>
+                        <AdminSelect
+                          value={form.requiredStages[0] || (availableStagesForProcess[0]?.name || "Initial Contact")}
+                          onChange={(val) => {
+                            setForm((p) => ({ ...p, requiredStages: [val] }));
+                          }}
+                          options={
+                            availableStagesForProcess.length > 0
+                              ? availableStagesForProcess.map((st) => ({ value: st.name, label: st.name }))
+                              : [
+                                  { value: "Initial Contact", label: "Initial Contact" },
+                                  { value: "Insurance Verify", label: "Insurance Verify" },
+                                  { value: "Schedule Appointment", label: "Schedule Appointment" },
+                                  { value: "last stage", label: "last stage" },
+                                ]
+                          }
                         />
+                        <p className="text-[11px] text-amber-800/80">
+                          Mandatory when a record enters <strong>{form.requiredStages[0] || availableStagesForProcess[0]?.name || "Initial Contact"}</strong>.
+                        </p>
                       </div>
                     )}
                   </div>

@@ -20,6 +20,7 @@ import { initialClients } from "../../pages/ClientProfile";
 import { useOrganization } from "../../context/OrganizationContext";
 import { CustomSideDrawer } from "../ui/drawer";
 import { FieldDefinition } from "../../context/FieldRegistryContext";
+import { InfoTooltip } from "../help/InfoTooltip";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -298,18 +299,21 @@ const SectionHeader = ({ title }: { title: string }) => (
 const FieldRow = ({
   label,
   required,
+  tooltip,
   children,
 }: {
   label: string;
   required?: boolean;
+  tooltip?: string;
   children: React.ReactNode;
 }) => (
   <div className="p-2 rounded-lg hover:bg-slate-50/60 transition-colors">
     <label
-      className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5"
+      className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5"
       style={{ fontFamily: "Outfit, sans-serif" }}
     >
-      {label}
+      <span>{label}</span>
+      {tooltip && <InfoTooltip text={tooltip} size="sm" />}
       {required && <span className="text-red-400 ml-0.5">*</span>}
     </label>
     {children}

@@ -1613,6 +1613,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     createdIn: f.createdIn || (f.source === "custom" && f.createdIn === "client" ? "client" : "admin"),
     inputType: normalizedType,
     placeholder: f.placeholder || "",
+    tooltip: f.tooltip || f.helpText || undefined,
     validation: f.validation || "",
     options: Array.isArray(f.options)
       ? f.options.map((opt: any, idx: number) =>
@@ -1662,6 +1663,13 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
       ...f.listBindConfig,
       sourceType: f.listBindConfig.sourceType === "group" ? "open_list" : f.listBindConfig.sourceType,
     } : undefined,
+    listConfig: f.listConfig ?? undefined,
+    textConfig: f.textConfig ?? undefined,
+    dateConfig: f.dateConfig ?? undefined,
+    phoneConfig: f.phoneConfig ?? undefined,
+    mediaConfig: f.mediaConfig ?? undefined,
+    numberConfig: f.numberConfig ?? undefined,
+    compositeDisplayMode: f.compositeDisplayMode ?? undefined,
     maxRating: f.maxRating ?? undefined,
     currency: f.currency ?? undefined,
   };

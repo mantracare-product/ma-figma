@@ -462,6 +462,7 @@ export default function ProcessDetailDrawer({
 
   const processFieldValues = React.useMemo(() => {
     const vals: Record<string, any> = {
+      ...(log as any),
       client_name: clientName,
       phone: client?.phone || (log as any)?.phone || "9667283405",
       email: client?.email || "anshul@mantracare.com",
@@ -477,11 +478,21 @@ export default function ProcessDetailDrawer({
     };
     if (fields && Array.isArray(fields)) {
       fields.forEach((f) => {
-        vals[f.key] = f.value;
+        if (f.value !== undefined && f.value !== "") {
+          vals[f.key] = f.value;
+        }
+      });
+    }
+    // Directly merge all editedValues so ANY field (custom or standard) immediately updates and preserves its typed value
+    if (editedValues && typeof editedValues === "object") {
+      Object.entries(editedValues).forEach(([k, v]) => {
+        if (v !== undefined) {
+          vals[k] = v;
+        }
       });
     }
     return vals;
-  }, [client, log, clientName, fields]);
+  }, [client, log, clientName, fields, editedValues]);
 
   // Compute active stages
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
@@ -946,6 +957,13 @@ export default function ProcessDetailDrawer({
                 {fieldManagerOpen && fieldManagerMode === "select" && (
                   <SelectFieldsModal
                     initiallySelected={visibleFieldKeys}
+                    activeProcessId={matchedProc?.id}
+                    activeProcessName={log?.process || matchedProc?.name}
+                    processStages={
+                      matchedProc?.stages
+                        ? matchedProc.stages.map((s) => ({ id: s.name, name: s.name, color: s.color }))
+                        : undefined
+                    }
                     onClose={onCloseFieldManager}
                     onApply={(keys) => onVisibleFieldKeysChange(keys)}
                   />
@@ -954,6 +972,13 @@ export default function ProcessDetailDrawer({
                 {fieldManagerOpen && fieldManagerMode === "create" && (
                   <CreateFieldModal
                     lockModule="process"
+                    activeProcessId={matchedProc?.id}
+                    activeProcessName={log?.process || matchedProc?.name}
+                    processStages={
+                      matchedProc?.stages
+                        ? matchedProc.stages.map((s) => ({ id: s.name, name: s.name, color: s.color }))
+                        : undefined
+                    }
                     onClose={onCloseFieldManager}
                     onCreated={(newField) => {
                       onVisibleFieldKeysChange([...visibleFieldKeys, newField.key]);
