@@ -1666,10 +1666,10 @@ export default function StepParametersFields({
                     onChange={e => {
                       const selectedProcId = e.target.value;
                       const targetProc = processes.find(p => p.id === selectedProcId);
-                      const initialStage = targetProc?.stages?.find((s: any) => s.isInitial) || targetProc?.stages?.[0];
+                      const defaultStage = targetProc?.stages?.[0];
                       onChange({
                         stepDetailProcess: selectedProcId,
-                        stepDetailStage: initialStage?.name || initialStage?.id || ""
+                        stepDetailStage: defaultStage?.id || defaultStage?.name || ""
                       });
                     }}
                     className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
@@ -1679,33 +1679,43 @@ export default function StepParametersFields({
                   </select>
                 )}
 
-                {stepDetailProcess && (() => {
-                  const targetProc = processes.find(p => p.id === stepDetailProcess);
-                  const initialStage = targetProc?.stages?.find((s: any) => s.isInitial) || targetProc?.stages?.[0];
-                  return (
-                    <div className="p-4 bg-gradient-to-r from-blue-50/90 to-indigo-50/70 border border-blue-200/80 rounded-xl space-y-2.5">
-                      <div className="flex items-center gap-2 text-blue-900 font-semibold text-xs">
-                        <Sparkles className="w-4 h-4 text-blue-600 shrink-0" />
-                        <span>Automatic Initial Stage Assignment</span>
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        When this final stage completes, the contact will automatically transition to <strong className="text-slate-900">{targetProc?.name || "the target process"}</strong> starting at its initial stage so that the pipeline seamlessly continues:
-                      </p>
-                      <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white border border-blue-200 rounded-lg shadow-2xs">
-                        <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: (initialStage as any)?.color || "#3B82F6" }}
-                        />
+                {stepDetailProcess && (
+                  <>
+                    {renderField("Target Stage",
+                      <select
+                        value={stepDetailStage}
+                        onChange={e => onChange({ stepDetailStage: e.target.value })}
+                        className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium"
+                      >
+                        <option value="">Default (First Stage)</option>
+                        {(processes.find(p => p.id === stepDetailProcess)?.stages || []).map(s => (
+                          <option key={s.id} value={s.id || s.name}>{s.name}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    {/* Optional Toggle to End Current Process */}
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between gap-4">
+                      <div>
                         <span className="text-xs font-bold text-slate-800">
-                          {initialStage?.name || "Initial Stage"}
+                          End current process before moving
                         </span>
-                        <span className="text-[10px] font-semibold uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                          Initial Stage
-                        </span>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          Terminate the active process when transitioning the contact to the new process stage.
+                        </p>
                       </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(params.stepEndCurrentProcess)}
+                          onChange={e => onChange({ stepEndCurrentProcess: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
                     </div>
-                  );
-                })()}
+                  </>
+                )}
               </div>
             )}
 

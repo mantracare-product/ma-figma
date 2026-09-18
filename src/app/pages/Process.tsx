@@ -238,12 +238,16 @@ const FORM_TEMPLATES = [
 interface DraggableStageProps {
   stage: Stage;
   index: number;
+  totalStages?: number;
   moveStage: (dragIndex: number, hoverIndex: number) => void;
   onRemove: (stageId: string) => void;
   onEdit: (stage: Stage) => void;
 }
 
-const DraggableStage = ({ stage, index, moveStage, onRemove, onEdit }: DraggableStageProps) => {
+const DraggableStage = ({ stage, index, totalStages = 1, moveStage, onRemove, onEdit }: DraggableStageProps) => {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isLocalDragging, setIsLocalDragging] = useState(false);
+
   const [{ isDragging }, drag] = useDrag({
     type: "STAGE",
     item: { index },
@@ -263,29 +267,61 @@ const DraggableStage = ({ stage, index, moveStage, onRemove, onEdit }: Draggable
   });
 
   return (
-    <div className="relative flex-shrink-0">
+    <div
+      className="relative flex-shrink-0 group"
+      draggable={true}
+      onDragStart={(e) => {
+        setIsLocalDragging(true);
+        e.dataTransfer.setData("text/plain", String(index));
+        e.dataTransfer.effectAllowed = "move";
+      }}
+      onDragEnd={() => {
+        setIsLocalDragging(false);
+        setIsDragOver(false);
+      }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!isDragOver) setIsDragOver(true);
+      }}
+      onDragLeave={() => setIsDragOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const fromIdx = parseInt(e.dataTransfer.getData("text/plain"), 10);
+        if (!isNaN(fromIdx) && fromIdx !== index) {
+          moveStage(fromIdx, index);
+        }
+      }}
+    >
       <div
         ref={(node) => { drag(drop(node)); }}
-        className="relative flex items-center gap-2 px-5 py-3 cursor-pointer transition-all shadow-md hover:shadow-lg"
+        className={`relative flex items-center gap-2 px-4 py-3 cursor-grab active:cursor-grabbing transition-all shadow-md hover:shadow-lg select-none ${
+          isDragOver ? "ring-2 ring-white scale-105" : ""
+        }`}
         style={{
           backgroundColor: stage.color || "#22D3EE",
-          opacity: isDragging ? 0.5 : 1,
-          minWidth: "160px",
+          opacity: isDragging || isLocalDragging ? 0.4 : 1,
+          minWidth: "165px",
           clipPath: "polygon(0 0, calc(100% - 14px) 0, 100% 50%, calc(100% - 14px) 100%, 0 100%)",
         }}
         onDoubleClick={() => onEdit(stage)}
+        title="Drag to reorder stage, or click edit"
       >
-        <span className="text-sm font-semibold text-white pr-3 flex-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+        <GripVertical className="w-3.5 h-3.5 text-white/70 group-hover:text-white shrink-0" />
+        <span className="text-sm font-semibold text-white pr-2 flex-1 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
           {stage.name}
         </span>
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onEdit(stage);
           }}
-          className="text-white/90 hover:text-white transition-colors hover:scale-110"
+          className="text-white/90 hover:text-white transition-colors hover:scale-110 p-0.5"
+          title="Edit Stage"
         >
-          <Edit className="w-4 h-4" />
+          <Edit className="w-3.5 h-3.5" />
         </button>
       </div>
     </div>
@@ -856,6 +892,7 @@ export default function Process() {
   const [intentInput, setIntentInput] = useState("");
   const [stepDetailProcess, setStepDetailProcess] = useState<string>("Select process...");
   const [stepDetailStage, setStepDetailStage] = useState<string>("Select stage...");
+  const [stepEndCurrentProcess, setStepEndCurrentProcess] = useState<boolean>(false);
   const [movementTargetExpanded, setMovementTargetExpanded] = useState(true);
   const [actionConfigExpanded, setActionConfigExpanded] = useState(true);
   const [parametersExpanded, setParametersExpanded] = useState(true);
@@ -1103,7 +1140,7 @@ export default function Process() {
     fetchfieldvalue: ["fetchFieldSource", "fetchFieldSelected", "fetchFieldReason", ...CONDITION_FIELDS],
     managecalendar: ["calendarMode", "calendarMeetingId", "calendarConnected", "calendarDate", "calendarTime", ...CONDITION_FIELDS],
     processmovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
-    movetonewprocess: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
+    movetonewprocess: ["stepDetailProcess", "stepDetailStage", "stepEndCurrentProcess", ...CONDITION_FIELDS],
     stagemovement: ["stepDetailProcess", "stepDetailStage", ...CONDITION_FIELDS],
     greetingphrase: ["greetingPhrase", ...CONDITION_FIELDS],
     bypasstohuman: ["bypassStepNumbers", ...CONDITION_FIELDS],
@@ -1175,6 +1212,7 @@ export default function Process() {
     calendarTime: () => calendarTime,
     stepDetailProcess: () => stepDetailProcess,
     stepDetailStage: () => stepDetailStage,
+    stepEndCurrentProcess: () => stepEndCurrentProcess,
     greetingPhrase: () => greetingPhrase,
     bypassStepNumbers: () => bypassStepNumbers,
     ticketEntries: () => ticketEntries,
@@ -1256,6 +1294,7 @@ export default function Process() {
     calendarTime: setCalendarTime,
     stepDetailProcess: setStepDetailProcess,
     stepDetailStage: setStepDetailStage,
+    stepEndCurrentProcess: setStepEndCurrentProcess,
     greetingPhrase: setGreetingPhrase,
     bypassStepNumbers: setBypassStepNumbers,
     ticketEntries: setTicketEntries,
@@ -1319,6 +1358,7 @@ export default function Process() {
     setIntentInput("");
     setStepDetailProcess("Select process...");
     setStepDetailStage("Select stage...");
+    setStepEndCurrentProcess(false);
     setFieldUpdateBlocks([
       { fieldType: "System Fields", fieldToEdit: "Select field...", valueSource: "static", updateValue: "" }
     ]);
@@ -1990,31 +2030,11 @@ export default function Process() {
       description: newStage.description.trim(),
       color: newStage.color || STAGE_PRESET_COLORS[0],
       stageType: newStage.type || "Receive Inbound Calls",
-      isInitial: newStagePosition === "initial",
-      isFinal: newStagePosition === "final",
-      stagePosition: newStagePosition,
       status: "active",
       callTriggerSettings: getDefaultCallTriggerSettings(),
     };
 
-    let updatedStages: Stage[];
-    if (newStagePosition === "initial") {
-      // First in sequence
-      updatedStages = [stage, ...selectedProc.stages.map(s => ({ ...s, isInitial: false }))];
-    } else if (newStagePosition === "final") {
-      // Last in sequence
-      updatedStages = [...selectedProc.stages.map(s => ({ ...s, isFinal: false })), stage];
-    } else {
-      // Middle stage: if existing stages end with a final stage, insert before it
-      const existingFinalIndex = selectedProc.stages.findIndex(s => s.isFinal);
-      if (existingFinalIndex !== -1) {
-        const before = selectedProc.stages.slice(0, existingFinalIndex);
-        const after = selectedProc.stages.slice(existingFinalIndex);
-        updatedStages = [...before, stage, ...after];
-      } else {
-        updatedStages = [...selectedProc.stages, stage];
-      }
-    }
+    const updatedStages = [...selectedProc.stages, stage];
 
     setProcesses(
       processes.map((p) =>
@@ -5604,9 +5624,7 @@ export default function Process() {
 
                                   const allSteps = [
                                     { key: "processmovement", name: "Assign Process / Stage", desc: "Move the contact to a specific process and stage.", iconKey: "zap", cats: ["all", "workflow"], popular: false },
-                                    ...(isCurrentStageLast ? [
-                                      { key: "movetonewprocess", name: "Move to New Process", desc: "Move user to a new process and start at its initial stage so the pipeline continues.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true }
-                                    ] : []),
+                                    { key: "movetonewprocess", name: "Move to New Process", desc: "Move user to a new process and stage to continue the pipeline.", iconKey: "gitbranch", cats: ["all", "workflow"], popular: true },
                                     { key: "endworkflow", name: "End Workflow", desc: "Terminate the workflow after this step runs and mark the contact as done.", iconKey: "x", cats: ["all", "workflow"], popular: false },
                                     { key: "callhangup", name: "Auto Hangup", desc: "Automatically end the call after the AI completes its interaction, with an optional closing message.", iconKey: "phoneoff", cats: ["all", "callerengagement"], popular: false },
                                     { key: "callaction", name: "Transfer Call", desc: "Transfer the active AI call to a human agent or another AI agent.", iconKey: "phonecall", cats: ["all", "callerengagement"], popular: false },
@@ -5988,46 +6006,6 @@ export default function Process() {
                     </button>
                   );
                 })}
-              </div>
-            </div>
-
-            {/* Stage Position Buttons */}
-            <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-2">
-                Stage Position <span className="text-[11px] font-normal text-slate-400">(Optional)</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setNewStagePosition(newStagePosition === "initial" ? null : "initial")}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                    newStagePosition === "initial"
-                      ? "bg-blue-50/80 border-blue-500 text-blue-700 shadow-2xs font-semibold ring-1 ring-blue-500/30"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <Play className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Initial Stage</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">First in sequence</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setNewStagePosition(newStagePosition === "final" ? null : "final")}
-                  className={`flex flex-col items-center justify-center p-3 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-                    newStagePosition === "final"
-                      ? "bg-emerald-50/80 border-emerald-500 text-emerald-700 shadow-2xs font-semibold ring-1 ring-emerald-500/30"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-50 hover:border-slate-300"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 mb-0.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Final Stage</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">Last in sequence</span>
-                </button>
               </div>
             </div>
           </div>
