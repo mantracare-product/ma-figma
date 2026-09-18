@@ -117,6 +117,7 @@ export function formatPhoneNumberByMask(rawInput: string, maskPattern: string): 
 
 interface PhoneInputRendererProps {
   config?: {
+    showCountryCode?: boolean;
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
     numberFormat?: string;
@@ -138,7 +139,7 @@ function PhoneInputRenderer({
   isAdminDefault = false,
   borderClass = "border-slate-200 bg-white focus:border-blue-500",
 }: PhoneInputRendererProps) {
-  const displayMode = config?.countryCodeDisplay || "name";
+  const showCountryCode = config?.showCountryCode !== false;
   const showFlags = config?.showFlags ?? true;
   const activeFormat = config?.numberFormat || "(XXX) XXX-XXXX";
 
@@ -180,28 +181,29 @@ function PhoneInputRenderer({
       return;
     }
     const formatted = formatPhoneNumberByMask(digitsOnly, activeFormat);
-    onChange(`${countryCode} ${formatted}`);
+    onChange(showCountryCode ? `${countryCode} ${formatted}` : formatted);
   };
 
   return (
     <div className={`flex items-center rounded-lg border overflow-hidden transition-all ${borderClass}`}>
-      {/* Country Code Selector */}
-      <div className="relative flex items-center bg-slate-50 border-r border-slate-200 shrink-0 max-w-[150px]">
-        <select
-          value={countryCode}
-          disabled={disabled}
-          onChange={(e) => handleCountryChange(e.target.value)}
-          className="appearance-none pl-2.5 pr-6 py-1.5 bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer truncate"
-        >
-          {COUNTRY_CODE_OPTIONS.map((c, idx) => (
-            <option key={`${c.code}_${c.iso}_${idx}`} value={c.code}>
-              {showFlags ? `${c.flag} ` : ""}
-              {displayMode === "name" ? `${c.name} (${c.code})` : c.code}
-            </option>
-          ))}
-        </select>
-        <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 pointer-events-none" />
-      </div>
+      {/* Country Code Selector formatted like US +1 */}
+      {showCountryCode && (
+        <div className="relative flex items-center bg-slate-50 border-r border-slate-200 shrink-0 max-w-[130px]">
+          <select
+            value={countryCode}
+            disabled={disabled}
+            onChange={(e) => handleCountryChange(e.target.value)}
+            className="appearance-none pl-2.5 pr-6 py-1.5 bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer truncate"
+          >
+            {COUNTRY_CODE_OPTIONS.map((c, idx) => (
+              <option key={`${c.code}_${c.iso}_${idx}`} value={c.code}>
+                {showFlags ? `${c.flag} ` : ""}{c.iso} {c.code}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="w-3 h-3 text-slate-400 absolute right-1.5 pointer-events-none" />
+        </div>
+      )}
 
       {/* Phone Number Input with Auto-Formatting */}
       <input
@@ -985,61 +987,6 @@ export function FieldInputRenderer({
 
   if (effectiveType === "number") {
     const numConfig = subField?.numberConfig || field?.numberConfig;
-    const isRangeMode = numConfig?.numberMode === "range";
-
-    if (isRangeMode) {
-      const rangeVal: { min?: number | ""; max?: number | "" } =
-        value && typeof value === "object" && !Array.isArray(value)
-          ? value
-          : Array.isArray(value)
-          ? { min: value[0] ?? "", max: value[1] ?? "" }
-          : typeof value === "string" && value.includes("-")
-          ? { min: Number(value.split("-")[0]) || "", max: Number(value.split("-")[1]) || "" }
-          : {};
-
-      return (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <input
-                type="number"
-                value={rangeVal.min ?? ""}
-                disabled={disabled}
-                min={numConfig?.min}
-                max={numConfig?.max}
-                onChange={(e) => {
-                  const newMin = e.target.value === "" ? "" : Number(e.target.value);
-                  onChange({ ...rangeVal, min: newMin });
-                }}
-                placeholder={numConfig?.min !== undefined ? `Min (${numConfig.min})` : "From (Min)"}
-                className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-              />
-            </div>
-            <span className="text-xs font-bold text-slate-400">to</span>
-            <div className="flex-1 min-w-0">
-              <input
-                type="number"
-                value={rangeVal.max ?? ""}
-                disabled={disabled}
-                min={numConfig?.min}
-                max={numConfig?.max}
-                onChange={(e) => {
-                  const newMax = e.target.value === "" ? "" : Number(e.target.value);
-                  onChange({ ...rangeVal, max: newMax });
-                }}
-                placeholder={numConfig?.max !== undefined ? `Max (${numConfig.max})` : "To (Max)"}
-                className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-              />
-            </div>
-          </div>
-          {(numConfig?.min !== undefined || numConfig?.max !== undefined) && (
-            <p className="text-[10px] text-slate-400">
-              Allowed bounds: {numConfig?.min ?? "–"} to {numConfig?.max ?? "–"}
-            </p>
-          )}
-        </div>
-      );
-    }
 
     return (
       <div className="space-y-1">
@@ -1085,68 +1032,9 @@ export function FieldInputRenderer({
   if (effectiveType === "date" || effectiveType === "date_time" || effectiveType === "time") {
     const isTimeOnly = effectiveType === "time" || field?.dateConfig?.capture === "time" || subField?.dateConfig?.capture === "time" || (field as any)?.dateTimeCapture === "time";
     const isDateOnly = effectiveType === "date" || field?.dateConfig?.capture === "date" || subField?.dateConfig?.capture === "date" || (field as any)?.dateTimeCapture === "date";
-    const isRangeMode = Boolean(field?.dateConfig?.isRange || subField?.dateConfig?.isRange || (field as any)?.dateTimeIsRange);
     const minDate = field?.dateConfig?.minDate || subField?.dateConfig?.minDate;
     const maxDate = field?.dateConfig?.maxDate || subField?.dateConfig?.maxDate;
     const inputHtmlType = isTimeOnly ? "time" : isDateOnly ? "date" : "datetime-local";
-
-    if (isRangeMode) {
-      const rangeVal: { start?: string; end?: string } =
-        value && typeof value === "object" && !Array.isArray(value)
-          ? value
-          : Array.isArray(value)
-          ? { start: value[0] || "", end: value[1] || "" }
-          : typeof value === "string" && value.includes(" - ")
-          ? { start: value.split(" - ")[0], end: value.split(" - ")[1] }
-          : {};
-
-      return (
-        <div className="space-y-1.5">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1 min-w-0">
-              {isTimeOnly ? (
-                <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              ) : (
-                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              )}
-              <input
-                type={inputHtmlType}
-                value={rangeVal.start ?? ""}
-                disabled={disabled}
-                min={minDate}
-                max={maxDate}
-                onChange={(e) => onChange({ ...rangeVal, start: e.target.value })}
-                placeholder="From"
-                className={`w-full pl-8 pr-2.5 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-              />
-            </div>
-            <span className="text-xs font-bold text-slate-400">to</span>
-            <div className="relative flex-1 min-w-0">
-              {isTimeOnly ? (
-                <Clock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              ) : (
-                <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              )}
-              <input
-                type={inputHtmlType}
-                value={rangeVal.end ?? ""}
-                disabled={disabled}
-                min={minDate}
-                max={maxDate}
-                onChange={(e) => onChange({ ...rangeVal, end: e.target.value })}
-                placeholder="To"
-                className={`w-full pl-8 pr-2.5 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
-              />
-            </div>
-          </div>
-          {(minDate || maxDate) && (
-            <p className="text-[10px] text-slate-400">
-              Allowed bounds: {minDate ?? "–"} to {maxDate ?? "–"}
-            </p>
-          )}
-        </div>
-      );
-    }
 
     return (
       <div className="space-y-1.5">

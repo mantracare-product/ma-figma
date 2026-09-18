@@ -383,6 +383,7 @@ export interface FieldDefinition {
     max?: number;
   };
   phoneConfig?: {
+    showCountryCode?: boolean;
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
     numberFormat?: string;

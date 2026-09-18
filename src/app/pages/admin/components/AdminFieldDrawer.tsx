@@ -243,13 +243,14 @@ interface FieldFormState {
   maxFiles?: number;
 
   // Number configuration
-  numberMode: "single" | "range";
+  numberMode?: "single" | "range";
   maxCap?: number;
   minRange?: number;
   maxRange?: number;
 
   // Phone configuration
-  phoneCountryDisplay: "name" | "code";
+  phoneShowCountryCode: boolean;
+  phoneCountryDisplay?: "name" | "code";
   phoneShowFlags: boolean;
   phoneFormat: string;
 
@@ -356,7 +357,8 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     minRange: undefined,
     maxRange: undefined,
     // Phone
-    phoneCountryDisplay: "name",
+    phoneShowCountryCode: true,
+    phoneCountryDisplay: "code",
     phoneShowFlags: true,
     phoneFormat: "(XXX) XXX-XXXX",
     // Rating / Currency
@@ -481,7 +483,8 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     minRange: f.numberConfig?.min,
     maxRange: f.numberConfig?.max,
     // Phone
-    phoneCountryDisplay: f.phoneConfig?.countryCodeDisplay || "name",
+    phoneShowCountryCode: f.phoneConfig?.showCountryCode !== false,
+    phoneCountryDisplay: f.phoneConfig?.countryCodeDisplay || "code",
     phoneShowFlags: f.phoneConfig?.showFlags ?? true,
     phoneFormat: f.phoneConfig?.numberFormat || "(XXX) XXX-XXXX",
     // Rating / Currency
@@ -808,7 +811,7 @@ export function AdminFieldDrawer({
       dateFormat: form.dateFormat,
       timeFormat: form.timeFormat,
       phoneConfig: {
-        countryCodeDisplay: form.phoneCountryDisplay,
+        showCountryCode: form.phoneShowCountryCode,
         showFlags: form.phoneShowFlags,
         numberFormat: form.phoneFormat,
       },
@@ -833,7 +836,8 @@ export function AdminFieldDrawer({
     form.dateFormat,
     form.timeFormat,
     form.phoneFormat,
-    form.phoneCountryDisplay,
+    form.phoneShowCountryCode,
+    form.phoneShowFlags,
     form.tableColumns,
     form.crmBindModule,
     form.crmBindSelectionMode,
@@ -994,7 +998,7 @@ export function AdminFieldDrawer({
       // Date Config
       dateConfig: form.primaryCategory === "date_time" ? {
         capture: form.dateTimeCapture,
-        isRange: form.dateTimeIsRange,
+        isRange: false,
         dateFormat: form.dateTimeCapture !== "time" ? form.dateFormat : undefined,
         timeFormat: form.dateTimeCapture !== "date" ? form.timeFormat : undefined,
         timezone: form.dateTimeCapture !== "date" ? form.timezone : undefined,
@@ -1020,14 +1024,14 @@ export function AdminFieldDrawer({
 
       // Number Config
       numberConfig: form.primaryCategory === "number" ? {
-        numberMode: form.numberMode,
+        numberMode: "single",
         min: form.minRange !== undefined && !isNaN(form.minRange) ? form.minRange : undefined,
         max: form.maxRange !== undefined && !isNaN(form.maxRange) ? form.maxRange : (form.maxCap !== undefined && !isNaN(form.maxCap) ? form.maxCap : undefined),
       } : undefined,
 
       // Phone Config
       phoneConfig: form.primaryCategory === "tel" ? {
-        countryCodeDisplay: form.phoneCountryDisplay,
+        showCountryCode: form.phoneShowCountryCode,
         showFlags: form.phoneShowFlags,
         numberFormat: form.phoneFormat,
       } : undefined,
@@ -1573,52 +1577,17 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 3B. Number Configuration (Single Number vs Number Range) */}
+          {/* 3B. Number Configuration */}
           {form.primaryCategory === "number" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Number Mode
-                  </label>
-                  <InfoTooltip text="Choose whether to capture a Single Number value or a Number Range (From – To) interval." size="sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, numberMode: "single" }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      form.numberMode !== "range"
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Single Number
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, numberMode: "range" }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      form.numberMode === "range"
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Number Range (From – To)
-                  </button>
-                </div>
-              </div>
-
               {/* Min & Max Bounds Configuration */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <label className="block text-xs font-semibold text-slate-700">
-                      {form.numberMode === "range" ? "Allowed Min Bound" : "Min Value (Optional)"}
+                      Min Value (Optional)
                     </label>
-                    <InfoTooltip text={form.numberMode === "range" ? "Minimum allowable value for the range start." : "Optional minimum allowed number."} size="sm" />
+                    <InfoTooltip text="Optional minimum allowed number." size="sm" />
                   </div>
                   <input
                     type="number"
@@ -1632,9 +1601,9 @@ export function AdminFieldDrawer({
                 <div>
                   <div className="flex items-center gap-1.5 mb-1.5">
                     <label className="block text-xs font-semibold text-slate-700">
-                      {form.numberMode === "range" ? "Allowed Max Bound" : "Max Value (Optional)"}
+                      Max Value (Optional)
                     </label>
-                    <InfoTooltip text={form.numberMode === "range" ? "Maximum allowable value for the range end." : "Optional maximum allowed number."} size="sm" />
+                    <InfoTooltip text="Optional maximum allowed number." size="sm" />
                   </div>
                   <input
                     type="number"
@@ -1652,42 +1621,6 @@ export function AdminFieldDrawer({
           {/* 3C. Date & Time Configuration */}
           {form.primaryCategory === "date_time" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              {/* Single vs Range Entry Mode */}
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Entry Mode
-                  </label>
-                  <InfoTooltip text="Choose whether to capture a Single Date / Time or a Date & Time Range (From – To)." size="sm" />
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, dateTimeIsRange: false }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      !form.dateTimeIsRange
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Single Date / Time
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => setForm((p) => ({ ...p, dateTimeIsRange: true }))}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      form.dateTimeIsRange
-                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
-                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
-                    }`}
-                  >
-                    Date & Time Range (From – To)
-                  </button>
-                </div>
-              </div>
-
               {/* Capture Format */}
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
@@ -2116,39 +2049,36 @@ export function AdminFieldDrawer({
           {/* 3F. Phone Number Configuration */}
           {form.primaryCategory === "tel" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Country Picker Label
-                    </label>
-                    <InfoTooltip text="Choose whether country selector displays country names or short country codes." size="sm" />
-                  </div>
-                  <AdminSelect
-                    value={form.phoneCountryDisplay}
-                    disabled={isReadOnly}
-                    onChange={(val) => setForm((p) => ({ ...p, phoneCountryDisplay: val as "name" | "code" }))}
-                    options={[
-                      { value: "name", label: "Country Name (United States (+1))" },
-                      { value: "code", label: "Country Code (+1)" },
-                    ]}
-                  />
+              <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-slate-800">Show country code separately</span>
+                  <InfoTooltip text="When enabled, a separate country code selector box (e.g. US +1) is shown before the phone input." size="sm" />
                 </div>
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.phoneShowCountryCode}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, phoneShowCountryCode: e.target.checked }))}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                </label>
+              </div>
 
-                <div>
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <label className="block text-xs font-semibold text-slate-700">
-                      Number Format Mask
-                    </label>
-                    <InfoTooltip text="Auto-formatting pattern applied as digits are typed." size="sm" />
-                  </div>
-                  <AdminSelect
-                    value={form.phoneFormat}
-                    disabled={isReadOnly}
-                    onChange={(val) => setForm((p) => ({ ...p, phoneFormat: val }))}
-                    options={COMMON_PHONE_FORMATS}
-                  />
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Number Format Mask
+                  </label>
+                  <InfoTooltip text="Auto-formatting pattern applied as digits are typed." size="sm" />
                 </div>
+                <AdminSelect
+                  value={form.phoneFormat}
+                  disabled={isReadOnly}
+                  onChange={(val) => setForm((p) => ({ ...p, phoneFormat: val }))}
+                  options={COMMON_PHONE_FORMATS}
+                />
               </div>
             </div>
           )}
@@ -2707,11 +2637,11 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* 4. Client-Facing Help Text / Tooltip */}
+          {/* 4. Tool tip */}
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
               <label className="block text-xs font-semibold text-slate-700">
-                Client-Facing Help Text
+                Tool tip
               </label>
               <InfoTooltip text="Shown as a tooltip next to this field's name when users fill it in." size="sm" />
             </div>
@@ -2750,7 +2680,7 @@ export function AdminFieldDrawer({
                   inputType: computeEffectiveInputType(),
                   dateConfig: {
                     capture: form.dateTimeCapture,
-                    isRange: form.dateTimeIsRange,
+                    isRange: false,
                     dateFormat: form.dateFormat,
                     timeFormat: form.timeFormat,
                     timezone: form.timezone,
@@ -2758,12 +2688,12 @@ export function AdminFieldDrawer({
                     maxDate: form.maxDate,
                   },
                   numberConfig: {
-                    numberMode: form.numberMode,
+                    numberMode: "single",
                     min: form.minRange,
                     max: form.maxRange,
                   },
                   phoneConfig: {
-                    countryCodeDisplay: form.phoneCountryDisplay,
+                    showCountryCode: form.phoneShowCountryCode,
                     showFlags: form.phoneShowFlags,
                     numberFormat: form.phoneFormat,
                   },
