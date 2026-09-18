@@ -57,6 +57,7 @@ import {
   normalizeLegacyColumn,
   CURRENCY_SYMBOLS,
   getSuggestedPlaceholderForType,
+  resolveColumnsOrSubFields,
 } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
@@ -753,6 +754,11 @@ export function AdminFieldDrawer({
     form.allowMultipleFiles,
   ]);
 
+  const inheritedCompositeSubFields = useMemo(() => {
+    if (!inheritedFieldDef) return [];
+    return resolveColumnsOrSubFields(inheritedFieldDef);
+  }, [inheritedFieldDef]);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) setTypePickerOpen(false);
@@ -833,7 +839,7 @@ export function AdminFieldDrawer({
       case "rating":
         return "rating";
       case "composite":
-        return form.compositeDisplayMode === "table" ? "table" : "group";
+        return form.compositeDisplayMode === "table" ? "table" : "group_repeatable";
       case "crm_bind":
         return "crm_bind";
       case "media":
@@ -975,6 +981,7 @@ export function AdminFieldDrawer({
   const addOption = () => {
     if (!form.inheritedFieldKey) return;
     const newIdx = form.options.length + 1;
+    const initialVal = form.listValueType === "composite" ? {} : "";
     setForm((p) => ({
       ...p,
       options: [
@@ -982,7 +989,7 @@ export function AdminFieldDrawer({
         {
           id: Date.now(),
           label: "",
-          value: "",
+          value: initialVal,
           index: newIdx,
         },
       ],
@@ -2102,143 +2109,149 @@ export function AdminFieldDrawer({
                     form.options.map((opt, idx) => (
                       <div
                         key={opt.id || idx}
-                        className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
+                        className="p-3 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2.5 hover:border-slate-300 transition-colors"
                       >
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
-                            #{idx + 1}
-                          </span>
-
-                          {/* Value Input only (Requirement 1: NO separate display label input) */}
-                          <div className="flex-1 min-w-0">
-                            {form.listValueType === "date_time" ? (
-                              <input
-                                type="date"
-                                value={typeof opt.value === "string" ? opt.value : ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
-                              />
-                            ) : form.listValueType === "tel" ? (
-                              <input
-                                type="tel"
-                                value={opt.value ?? ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                placeholder={inheritedFieldDef?.phoneConfig?.numberFormat || "+1 (555) 123-4567"}
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
-                              />
-                            ) : form.listValueType === "money" ? (
-                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-blue-500">
-                                <span className="px-2.5 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 border-r border-slate-200 select-none">
-                                  {CURRENCY_SYMBOLS[inheritedFieldDef?.currency || form.currency || "INR"] || "₹"}
+                        {form.listValueType === "composite" ? (
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                  #{idx + 1}
                                 </span>
-                                <input
-                                  type="number"
-                                  value={opt.value ?? ""}
-                                  readOnly={isReadOnly}
-                                  onChange={(e) => updateOption(idx, { value: e.target.value !== "" ? Number(e.target.value) : "" })}
-                                  placeholder="0.00"
-                                  className="w-full px-2.5 py-1.5 bg-transparent text-xs font-medium text-slate-800 outline-none"
-                                />
+                                <span className="text-xs font-bold text-slate-800">
+                                  Option #{idx + 1}
+                                </span>
+                                {inheritedFieldDef?.label && (
+                                  <span className="text-[10px] font-medium text-slate-500 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/80">
+                                    {inheritedFieldDef.label}
+                                  </span>
+                                )}
                               </div>
-                            ) : form.listValueType === "number" ? (
-                              <input
-                                type="number"
-                                value={opt.value ?? ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value !== "" ? Number(e.target.value) : "" })}
-                                placeholder="e.g. 100"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
-                              />
-                            ) : form.listValueType === "email" ? (
-                              <input
-                                type="email"
-                                value={opt.value ?? ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                placeholder="e.g. user@example.com"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
-                              />
-                            ) : form.listValueType === "link" || form.listValueType === "whatsapp_link" ? (
-                              <input
-                                type="url"
-                                value={opt.value ?? ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                placeholder="e.g. https://example.com"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
-                              />
-                            ) : form.listValueType === "yes_no" ? (
-                              <select
-                                value={String(opt.value)}
-                                disabled={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value === "true" })}
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 cursor-pointer"
-                              >
-                                <option value="true">Yes / True</option>
-                                <option value="false">No / False</option>
-                              </select>
-                            ) : form.listValueType === "composite" ? (
-                              <input
-                                type="text"
-                                value={typeof opt.value === "string" ? opt.value : Array.isArray(opt.value) ? opt.value.join(", ") : formatCompositePreview(opt.value)}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                placeholder="e.g. John, Mumbai (comma-separated parts)"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
-                              />
-                            ) : (
-                              <input
-                                type="text"
-                                value={opt.value ?? ""}
-                                readOnly={isReadOnly}
-                                onChange={(e) => updateOption(idx, { value: e.target.value })}
-                                placeholder="e.g. Option value"
-                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
-                              />
-                            )}
-                          </div>
 
-                          {!isReadOnly && (
-                            <div className="flex items-center gap-0.5 shrink-0">
-                              <button
-                                type="button"
-                                disabled={idx === 0}
-                                onClick={() => moveOption(idx, -1)}
-                                className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                title="Move up"
-                              >
-                                <ChevronUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                disabled={idx === form.options.length - 1}
-                                onClick={() => moveOption(idx, 1)}
-                                className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                title="Move down"
-                              >
-                                <ChevronDown className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => removeOption(idx)}
-                                className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
-                                title="Delete option"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {!isReadOnly && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveOption(idx, -1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move up"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === form.options.length - 1}
+                                    onClick={() => moveOption(idx, 1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move down"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOption(idx)}
+                                    className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                                    title="Delete option"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
 
-                        {/* Composite preview banner */}
-                        {form.listValueType === "composite" && (
-                          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-200/70 rounded-md text-[11px]">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Display Preview:</span>
-                            <span className="font-semibold text-slate-700 truncate">
-                              {formatCompositePreview(opt.value) || <span className="text-slate-400 italic">No parts entered</span>}
+                            {inheritedCompositeSubFields.length === 0 ? (
+                              <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 italic">
+                                No sub-fields configured on inherited composite field.
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-2 gap-2.5 p-2.5 bg-slate-50/70 border border-slate-200/80 rounded-lg">
+                                {inheritedCompositeSubFields.map((sub) => {
+                                  const optObj: Record<string, any> =
+                                    opt.value && typeof opt.value === "object" && !Array.isArray(opt.value)
+                                      ? opt.value
+                                      : {};
+                                  return (
+                                    <div key={sub.id} className="space-y-1">
+                                      <label className="block text-[10px] font-semibold text-slate-600 uppercase tracking-wider truncate">
+                                        {sub.name} {sub.required && <span className="text-red-500">*</span>}
+                                      </label>
+                                      <FieldInputRenderer
+                                        subField={sub}
+                                        value={optObj[sub.id] ?? ""}
+                                        onChange={(subVal) => {
+                                          const updatedObj = { ...optObj, [sub.id]: subVal };
+                                          const preview = formatCompositePreview(updatedObj);
+                                          updateOption(idx, {
+                                            value: updatedObj,
+                                            label: preview || `Option #${idx + 1}`,
+                                          });
+                                        }}
+                                        isSubField={true}
+                                        disabled={isReadOnly}
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Composite preview banner */}
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-50 border border-slate-200/70 rounded-md text-[11px]">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Display Preview:</span>
+                              <span className="font-semibold text-slate-700 truncate">
+                                {formatCompositePreview(opt.value) || <span className="text-slate-400 italic">No sub-field values entered</span>}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                              #{idx + 1}
                             </span>
+
+                            <div className="flex-1 min-w-0">
+                              <FieldInputRenderer
+                                field={inheritedFieldDef}
+                                value={opt.value}
+                                onChange={(val) => updateOption(idx, {
+                                  value: val,
+                                  label: typeof val === "string" ? val : String(val ?? ""),
+                                })}
+                                disabled={isReadOnly}
+                              />
+                            </div>
+
+                            {!isReadOnly && (
+                              <div className="flex items-center gap-0.5 shrink-0">
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => moveOption(idx, -1)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                  title="Move up"
+                                >
+                                  <ChevronUp className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === form.options.length - 1}
+                                  onClick={() => moveOption(idx, 1)}
+                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                  title="Move down"
+                                >
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => removeOption(idx)}
+                                  className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                                  title="Delete option"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
