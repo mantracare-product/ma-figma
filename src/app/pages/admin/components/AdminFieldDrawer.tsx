@@ -34,6 +34,7 @@ import {
   Search,
   Copy,
   ChevronUp,
+  EyeOff,
 } from "lucide-react";
 import type {
   FieldDefinition,
@@ -61,9 +62,11 @@ import {
 } from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
+import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../lib/teamStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
+import { toast } from "sonner";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
 export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
@@ -208,6 +211,7 @@ interface FieldFormState {
   requiredStages: string[];
   showAlways: boolean;
   userVisibility: boolean;
+  visibleToUserIds: string[];
   sectionId: string;
   scopingRules: ScopingRule[];
   processIds: string[];
@@ -231,15 +235,15 @@ interface FieldFormState {
   compositeDisplayMode: "table" | "group";
   tableColumns: TableColumnConfig[];
 
-  // Media Attach configuration
-  mediaType: "image" | "document" | "audio";
+  // Media configuration
+  mediaType: "document" | "image" | "audio" | "video" | "any";
   acceptedFormats: string[];
   maxFileSizeMB: number;
   allowMultipleFiles: boolean;
   maxFiles?: number;
 
   // Number configuration
-  numberMode: "single" | "range" | "integer";
+  numberMode: "single" | "range";
   maxCap?: number;
   minRange?: number;
   maxRange?: number;
@@ -249,21 +253,21 @@ interface FieldFormState {
   phoneShowFlags: boolean;
   phoneFormat: string;
 
-  // Currency & Rating
+  // Rating / Currency
   currency: string;
   maxRating: number;
 
-  // Options & List Redesign
+  // List Redesign configuration
   listValueType: ListValueType;
   inheritedFieldKey: string;
   liveSync: boolean;
   options: FieldOption[];
   selectionMode: "single" | "multiple";
   allowSearch: boolean;
-  sortOrder: "alphabetical_asc" | "alphabetical_desc" | "manual" | "recent";
+  sortOrder: "manual" | "alphabetical_asc" | "alphabetical_desc" | "recent";
   liveLinkedFieldKey: string;
 
-  // CRM Bind / Link to Mantra Entities
+  // CRM Bind configuration
   crmBindModule: CrmBindModule;
   crmBindSelectionMode: "single" | "multiple";
 
@@ -315,6 +319,7 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     requiredStages: [],
     showAlways: true,
     userVisibility: true,
+    visibleToUserIds: [],
     sectionId: "",
     scopingRules: [],
     processIds: [],
@@ -439,6 +444,7 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     requiredStages: f.requiredStages ? [...f.requiredStages] : [],
     showAlways: f.showAlways !== false,
     userVisibility: f.userVisibility !== false,
+    visibleToUserIds: f.visibleToUserIds ? f.visibleToUserIds.map(String) : [],
     sectionId: f.sectionId ?? "",
     scopingRules: rules,
     processIds: f.processIds ? [...f.processIds] : [],
@@ -514,6 +520,7 @@ export interface AdminFieldDrawerProps {
   processStages?: Array<{ id: string; name: string; color?: string }>;
   onClose: () => void;
   onSaved?: (field: FieldDefinition) => void;
+  onHide?: (field: FieldDefinition) => void;
 }
 
 export function AdminFieldDrawer({
@@ -531,10 +538,19 @@ export function AdminFieldDrawer({
   processStages,
   onClose,
   onSaved,
+  onHide,
 }: AdminFieldDrawerProps) {
-  const { addCustomField, updateCustomField, getAllFields } = useFieldRegistry();
+  const { addCustomField, updateCustomField, deleteCustomField, getAllFields } = useFieldRegistry();
   const isEdit = field !== null;
-  const isReadOnly = isScribeSeed;
+  const isClientReadOnly = !isAdmin && isEdit && field?.permissions?.canEdit === false;
+  const isReadOnly = isScribeSeed || isClientReadOnly;
+  const canClientDelete = isEdit && field && (isAdmin || field.permissions?.canDelete !== false);
+  const canClientHide = isEdit && field && (isAdmin || field.permissions?.canHide !== false);
+  const canClientAddOptions = isAdmin || field?.permissions?.canAddOptions !== false;
+
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+  const teamPickerRef = useRef<HTMLDivElement>(null);
 
   const hasActiveProcessContext = Boolean(
     activeProcessId || activeProcessName || (processStages && processStages.length > 0)
@@ -572,12 +588,39 @@ export function AdminFieldDrawer({
 
   useEffect(() => {
     const handleUpdate = () => setAllProcesses(getStoredProcesses());
+    const handleTeamUpdate = () => setTeamMembers(getStoredTeamMembers());
     window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleTeamUpdate);
     window.addEventListener("storage", handleUpdate);
+    window.addEventListener("storage", handleTeamUpdate);
     return () => {
       window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleTeamUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("storage", handleTeamUpdate);
     };
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) {
+        setTypePickerOpen(false);
+      }
+      if (modulePickerRef.current && !modulePickerRef.current.contains(e.target as Node)) {
+        setModulePickerOpen(false);
+      }
+      if (processPickerRef.current && !processPickerRef.current.contains(e.target as Node)) {
+        setProcessPickerOpen(false);
+      }
+      if (existingFieldPickerRef.current && !existingFieldPickerRef.current.contains(e.target as Node)) {
+        setExistingFieldPickerOpen(false);
+      }
+      if (teamPickerRef.current && !teamPickerRef.current.contains(e.target as Node)) {
+        setTeamPickerOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
   const availableProcesses = useMemo(() => {
@@ -930,6 +973,7 @@ export function AdminFieldDrawer({
       requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
+      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
       processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
@@ -2280,7 +2324,7 @@ export function AdminFieldDrawer({
                     <InfoTooltip text={`Each option has its own typed value under ${LIST_OPTION_VALUE_TYPES.find((t) => t.value === form.listValueType)?.label || form.listValueType}.`} size="sm" />
                   </div>
 
-                  {!isReadOnly && (
+                  {!isReadOnly && canClientAddOptions && (
                     <button
                       type="button"
                       onClick={form.inheritedFieldKey ? addOption : undefined}
@@ -2934,19 +2978,147 @@ export function AdminFieldDrawer({
                     <InfoTooltip text="Display the field in the form even if it is not filled in." size="sm" />
                   </div>
 
-                  {/* User Visibility Checkbox */}
-                  <div className="flex items-center">
-                    <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                      <input
-                        type="checkbox"
-                        checked={form.userVisibility !== false}
-                        disabled={isReadOnly}
-                        onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                      <span className="text-xs font-semibold text-slate-800">User Visibility</span>
-                    </label>
-                    <InfoTooltip text="Configure whether this field is visible to standard tenant users." size="sm" />
+                  {/* User Visibility Section & Responsible Persons */}
+                  <div className="space-y-2.5 p-3 rounded-xl bg-slate-50/70 border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      {isAdmin ? (
+                        <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                          <input
+                            type="checkbox"
+                            checked={form.userVisibility !== false}
+                            disabled={isReadOnly}
+                            onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                          />
+                          <span className="text-xs font-semibold text-slate-800">User Visibility</span>
+                        </label>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-slate-800">User Visibility</span>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${
+                            form.userVisibility !== false ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-500 border border-slate-200"
+                          }`}>
+                            {form.userVisibility !== false ? "Enabled" : "Disabled by Admin"}
+                          </span>
+                        </div>
+                      )}
+                      <InfoTooltip text="Configure which responsible team members are permitted to view/edit this field." size="sm" />
+                    </div>
+
+                    {form.userVisibility !== false && (
+                      <div className="pt-2 border-t border-slate-200/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-600">
+                            Responsible Persons / Permitted Viewers
+                          </span>
+                          {/* + Add Person Button */}
+                          {!isReadOnly && (
+                            <div className="relative" ref={teamPickerRef}>
+                              <button
+                                type="button"
+                                onClick={() => setTeamPickerOpen((v) => !v)}
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                                <span>Add Person</span>
+                              </button>
+
+                              {teamPickerOpen && (
+                                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-slate-100">
+                                  <div className="p-2 bg-slate-50 flex items-center justify-between">
+                                    <span className="text-[11px] font-bold text-slate-700">Team Members</span>
+                                    <span className="text-[10px] text-slate-400">Select to assign</span>
+                                  </div>
+                                  <div className="max-h-48 overflow-y-auto p-1 space-y-0.5">
+                                    {teamMembers.map((member) => {
+                                      const isAssigned = form.visibleToUserIds.includes(String(member.id));
+                                      return (
+                                        <button
+                                          key={member.id}
+                                          type="button"
+                                          onClick={() => {
+                                            const idStr = String(member.id);
+                                            if (isAssigned) {
+                                              setForm((p) => ({
+                                                ...p,
+                                                visibleToUserIds: p.visibleToUserIds.filter((id) => id !== idStr),
+                                              }));
+                                            } else {
+                                              setForm((p) => ({
+                                                ...p,
+                                                visibleToUserIds: [...p.visibleToUserIds, idStr],
+                                              }));
+                                            }
+                                          }}
+                                          className={`w-full px-2.5 py-1.5 rounded-lg text-left text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                            isAssigned ? "bg-blue-50 text-blue-800 font-semibold" : "hover:bg-slate-50 text-slate-700"
+                                          }`}
+                                        >
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                              {member.name.charAt(0)}
+                                            </div>
+                                            <div className="truncate">
+                                              <span className="block truncate">{member.name}</span>
+                                              {member.role && (
+                                                <span className="text-[10px] text-slate-400 font-normal block truncate">
+                                                  {member.role}
+                                                </span>
+                                              )}
+                                            </div>
+                                          </div>
+                                          {isAssigned && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Selected Members Display */}
+                        {form.visibleToUserIds.length === 0 ? (
+                          <p className="text-[11px] text-slate-400 italic">
+                            Visible to all team members. Click &ldquo;+ Add Person&rdquo; to restrict access.
+                          </p>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            {form.visibleToUserIds.map((userId) => {
+                              const member = teamMembers.find((m) => String(m.id) === String(userId));
+                              const memberName = member?.name || `User #${userId}`;
+                              return (
+                                <div
+                                  key={userId}
+                                  className="inline-flex items-center gap-1.5 px-2 py-1 bg-white border border-slate-200 text-slate-800 text-xs font-medium rounded-lg shadow-2xs"
+                                >
+                                  <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[9px]">
+                                    {memberName.charAt(0)}
+                                  </div>
+                                  <span className="text-xs truncate max-w-[130px]">{memberName}</span>
+                                  {!isReadOnly && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setForm((p) => ({
+                                          ...p,
+                                          visibleToUserIds: p.visibleToUserIds.filter((id) => id !== userId),
+                                        }))
+                                      }
+                                      className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                                      title="Remove permission"
+                                    >
+                                      <X className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Admin Control (Scope Rules + Permissions) */}
@@ -3083,14 +3255,55 @@ export function AdminFieldDrawer({
 
         {/* 7. Footer */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-          >
-            {isReadOnly ? "Close" : "Cancel"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            >
+              {isReadOnly ? "Close" : "Cancel"}
+            </button>
+
+            {/* Client / Admin Hide Button */}
+            {canClientHide && onHide && isEdit && !isScribeSeed && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (field) {
+                    onHide(field);
+                  }
+                }}
+                className="px-3 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/70 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Hide this field from view"
+              >
+                <EyeOff className="w-3.5 h-3.5" />
+                <span>Hide</span>
+              </button>
+            )}
+
+            {/* Client / Admin Delete Button */}
+            {canClientDelete && isEdit && !isScribeSeed && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (field && window.confirm(`Are you sure you want to delete "${field.label}"?`)) {
+                    deleteCustomField(form.module, field.id);
+                    toast.success(`Field "${field.label}" deleted`);
+                    onClose();
+                  }
+                }}
+                className="px-3 py-2 text-sm font-semibold text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors flex items-center gap-1.5 cursor-pointer"
+                title="Delete this field"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete</span>
+              </button>
+            )}
+          </div>
+
           {!isReadOnly && (
             <button
+              type="button"
               onClick={handleSave}
               disabled={!form.label.trim()}
               className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"

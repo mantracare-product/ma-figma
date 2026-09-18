@@ -336,7 +336,10 @@ export default function DraggableOverviewSections({
     return new Set(allCustomSections.map((s) => s.id));
   }, [allCustomSections]);
 
-  // Sections and their fields filtered strictly according to activeOrganization scope
+  // User explicitly added field keys in this record view
+  const [userAddedFieldKeys, setUserAddedFieldKeys] = useState<Set<string>>(new Set());
+
+  // Sections and their fields filtered strictly according to activeOrganization scope and showAlways settings
   const visibleSections = useMemo(() => {
     const procId = activeProcessObj?.id || activeProcessName;
     return sections
@@ -346,9 +349,25 @@ export default function DraggableOverviewSections({
       })
       .map((sec) => ({
         ...sec,
-        fieldKeys: (sec.fieldKeys || []).filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k)),
+        fieldKeys: (sec.fieldKeys || []).filter((k) => {
+          if (SYSTEM_FIELD_KEYS.has(k)) return true;
+          if (!allowedFieldKeys.has(k)) return false;
+
+          // If showAlways is false (turned off), do NOT show in section unless it has a value on this record or was added via + Add Field popup
+          const regField = allRegistryFields.find((f) => f.key === k);
+          if (regField && regField.showAlways === false) {
+            const scopedKey = `${sec.id}_${k}`;
+            const val = fieldValues[scopedKey] !== undefined ? fieldValues[scopedKey] : fieldValues[k];
+            const hasVal = val !== undefined && val !== null && val !== "" && (!Array.isArray(val) || val.length > 0);
+            if (!hasVal && !userAddedFieldKeys.has(k)) {
+              return false;
+            }
+          }
+
+          return true;
+        }),
       }));
-  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessObj, activeProcessName]);
+  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessObj, activeProcessName, allRegistryFields, fieldValues, userAddedFieldKeys]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -502,6 +521,12 @@ export default function DraggableOverviewSections({
 
   const handleApplySelectedFields = (selectedKeys: string[]) => {
     if (!targetSectionIdForField) return;
+    setUserAddedFieldKeys((prev) => {
+      const next = new Set(prev);
+      selectedKeys.forEach((k) => next.add(k));
+      return next;
+    });
+
     const targetSec = sections.find((s) => s.id === targetSectionIdForField);
     const existingSet = new Set(targetSec?.fieldKeys || []);
     const newKeys = [...(targetSec?.fieldKeys || [])];
@@ -525,6 +550,11 @@ export default function DraggableOverviewSections({
   };
 
   const handleRemoveFieldFromSection = (sectionId: string, fieldKey: string) => {
+    setUserAddedFieldKeys((prev) => {
+      const next = new Set(prev);
+      next.delete(fieldKey);
+      return next;
+    });
     const targetSec = sections.find((s) => s.id === sectionId);
     const updatedKeys = (targetSec?.fieldKeys || []).filter((k) => k !== fieldKey);
     const updated = sections.map((sec) => {
@@ -1620,7 +1650,7 @@ export default function DraggableOverviewSections({
         <SelectFieldsModal
           onlyModules={[customFieldsModule]}
           initiallySelected={
-            sections.find((s) => s.id === targetSectionIdForField)?.fieldKeys || []
+            visibleSections.find((s) => s.id === targetSectionIdForField)?.fieldKeys || []
           }
           activeProcessId={activeProcessObj?.id}
           activeProcessName={activeProcessName}
@@ -1686,6 +1716,13 @@ export default function DraggableOverviewSections({
           processStages={activeProcessStages}
           isAdmin={false}
           onClose={() => setEditingFieldDef(null)}
+          onHide={(f) => {
+            const targetSec = sections.find((s) => s.fieldKeys?.includes(f.key));
+            if (targetSec) {
+              handleRemoveFieldFromSection(targetSec.id, f.key);
+            }
+            setEditingFieldDef(null);
+          }}
           onSaved={(savedField) => {
             setEditingFieldDef(null);
             toast.success(`Field "${savedField.label}" updated`);

@@ -346,6 +346,7 @@ export interface FieldDefinition {
   sectionId?: string;        // assigned section id
   required?: boolean;
   userVisibility?: boolean;   // Setting for user visibility
+  visibleToUserIds?: string[]; // Specific user/team member IDs permitted to view/edit this field
   showAlways?: boolean;       // legacy — kept for backward compat, do not write for new fields
   /** Record IDs this field is auto-shown on. If empty or undefined, it defaults to showing for all records. */
   visibleToRecordIds?: string[];
@@ -370,7 +371,7 @@ export interface FieldDefinition {
   };
   compositeDisplayMode?: "table" | "group";
   mediaConfig?: {
-    mediaType?: "image" | "document" | "audio";
+    mediaType?: "image" | "document" | "audio" | "video" | "any";
     acceptedFormats?: string[];
     maxFileSizeMB?: number;
     allowMultiple?: boolean;
@@ -1671,6 +1672,7 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     required: f.required ?? f.isRequired ?? false,
     requiredStages: Array.isArray(f.requiredStages) && f.requiredStages.length > 0 ? f.requiredStages : undefined,
     userVisibility: f.userVisibility !== false,
+    visibleToUserIds: Array.isArray(f.visibleToUserIds) ? f.visibleToUserIds : undefined,
     showAlways: f.showAlways !== false,
     visibleToRecordIds: f.visibleToRecordIds,
     sourceFormId: f.sourceFormId,
