@@ -223,7 +223,39 @@ export function getSuggestedPlaceholderForType(type?: string, label?: string): s
   return name ? `e.g. Enter ${name}...` : "e.g. Enter value...";
 }
 
-export interface FieldOption { id: number; label: string; value: string; }
+export type OptionValueType = "text" | "number" | "date" | "boolean" | "money" | "tel" | "email";
+export type ListValueType =
+  | "text"
+  | "tel"
+  | "email"
+  | "link"
+  | "whatsapp_link"
+  | "number"
+  | "money"
+  | "date_time"
+  | "rating"
+  | "yes_no"
+  | "composite"
+  | "crm_bind"
+  | "media"
+  | "signature"
+  | "user";
+
+export interface FieldOption {
+  id: number | string;
+  label: string;
+  value: any;
+  valueType?: OptionValueType;
+  index?: number;
+}
+
+export interface ListFieldConfig {
+  valueType?: ListValueType; // Single value type applied to all options in this list
+  inheritedFieldKey?: string; // Key of field in this module to inherit formatting/validation from
+  allowSearch?: boolean;
+  sortOrder?: "alphabetical_asc" | "alphabetical_desc" | "manual" | "recent";
+  liveLinkedFieldKey?: string; // Live 2-way sync with another List field in the module
+}
 
 export interface ScopingRule {
   id?: string;
@@ -259,6 +291,7 @@ export interface FieldDefinition {
   placeholder?: string;
   validation?: string;
   options?: FieldOption[];    // for select/dropdown/list types
+  listConfig?: ListFieldConfig; // Search, sort order, and live 2-way linking
   tableColumns?: TableColumnConfig[]; // for table type (legacy)
   subFields?: SubFieldConfig[];       // canonical sub-fields for table, group, group_repeatable, structured list_open
   crmBindConfig?: CrmBindConfig;      // for crm_bind
@@ -278,6 +311,37 @@ export interface FieldDefinition {
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
+  tooltip?: string;           // Client-facing help text shown in tooltip on hover next to field name
+  textConfig?: {
+    textMode?: "short" | "paragraph";
+    maxChars?: number;
+    richText?: boolean;
+  };
+  dateConfig?: {
+    capture?: "date" | "time" | "both";
+    dateFormat?: string;
+    timeFormat?: "12h" | "24h";
+    timezone?: string;
+  };
+  compositeDisplayMode?: "table" | "group";
+  mediaConfig?: {
+    mediaType?: "image" | "document" | "audio";
+    acceptedFormats?: string[];
+    maxFileSizeMB?: number;
+    allowMultiple?: boolean;
+    maxFiles?: number;
+  };
+  numberConfig?: {
+    numberMode?: "integer" | "range";
+    min?: number;
+    max?: number;
+  };
+  phoneConfig?: {
+    countryCodeDisplay?: "name" | "code";
+    showFlags?: boolean;
+    regexValidation?: string;
+    numberFormat?: string;
+  };
   scopingRules?: ScopingRule[]; // Multi-rule scoping: industry categories, industries, and locations
   processIds?: string[];      // Assigned process template IDs (for module="process")
   requiredStages?: string[];  // Specific stage names/IDs this field is required for (for module="process" when required=true)

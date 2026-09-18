@@ -132,6 +132,7 @@ interface MultiSelectDropdownProps {
   placeholder?: string;
   isAdminDefault?: boolean;
   borderClass?: string;
+  allowSearch?: boolean;
 }
 
 function MultiSelectDropdown({
@@ -142,8 +143,10 @@ function MultiSelectDropdown({
   placeholder,
   isAdminDefault = false,
   borderClass = "",
+  allowSearch = false,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const selected: string[] = Array.isArray(value)
     ? value
@@ -171,8 +174,20 @@ function MultiSelectDropdown({
       ? selectedLabels.join(", ")
       : `${selectedLabels.slice(0, 2).join(", ")} (+${selectedLabels.length - 2} more)`;
 
+  const showSearch = allowSearch || options.length > 7;
+
+  const filteredOptions = searchQuery.trim()
+    ? options.filter((o) =>
+        o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(o.value).toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : options;
+
   return (
-    <Popover open={isOpen} onOpenChange={setIsOpen}>
+    <Popover open={isOpen} onOpenChange={(open) => {
+      setIsOpen(open);
+      if (!open) setSearchQuery("");
+    }}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -201,11 +216,25 @@ function MultiSelectDropdown({
         sideOffset={4}
         className="w-[var(--radix-popover-trigger-width)] min-w-[220px] p-0 z-[100005] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
       >
-        {options.length > 3 && (
+        {showSearch && (
+          <div className="p-1.5 border-b border-slate-100 bg-slate-50/50">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search options..."
+              className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-md outline-none focus:border-blue-500 text-slate-800 placeholder:text-slate-400"
+              onClick={(e) => e.stopPropagation()}
+              autoFocus
+            />
+          </div>
+        )}
+
+        {filteredOptions.length > 3 && (
           <div className="flex items-center justify-between px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[11px]">
             <button
               type="button"
-              onClick={() => onChange(options.map((o) => o.value))}
+              onClick={() => onChange(filteredOptions.map((o) => o.value))}
               className="text-blue-600 hover:text-blue-700 font-semibold cursor-pointer"
             >
               Select All
@@ -223,12 +252,12 @@ function MultiSelectDropdown({
         )}
 
         <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
-          {options.length === 0 ? (
+          {filteredOptions.length === 0 ? (
             <div className="px-3 py-2 text-xs text-slate-400 italic">
-              No options configured
+              {searchQuery ? "No matching options" : "No options configured"}
             </div>
           ) : (
-            options.map((opt) => {
+            filteredOptions.map((opt) => {
               const isSelected = selected.includes(opt.value);
               return (
                 <label
@@ -427,7 +456,8 @@ export function FieldInputRenderer({
   const effectiveType: FieldInputType = (rawType === "group_repeatable" ? "list_open" : rawType) as FieldInputType;
   const effectiveOptions: FieldOption[] = subField?.options || field?.options || [];
   const effectiveListBindConfig = subField?.listBindConfig || field?.listBindConfig;
-  const { options: dynamicOptions } = useDynamicListOptions(effectiveListBindConfig, effectiveOptions, recordData);
+  const effectiveListConfig = field?.listConfig;
+  const { options: dynamicOptions } = useDynamicListOptions(effectiveListBindConfig, effectiveOptions, recordData, effectiveListConfig);
   const effectiveCrmConfig: CrmBindConfig | undefined = subField?.crmBindConfig || field?.crmBindConfig;
   const label: string = subField?.name || field?.label || "Field";
   const effectivePlaceholder: string =
@@ -473,6 +503,7 @@ export function FieldInputRenderer({
           placeholder={effectivePlaceholder}
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
+          allowSearch={effectiveListConfig?.allowSearch}
         />
       );
     }
@@ -492,6 +523,7 @@ export function FieldInputRenderer({
         }))}
         size="sm"
         triggerClassName={borderClass}
+        allowSearch={effectiveListConfig?.allowSearch}
       />
     );
   }

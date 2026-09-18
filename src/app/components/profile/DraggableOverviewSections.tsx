@@ -41,6 +41,8 @@ import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isS
 import { useOrganization } from "../../context/OrganizationContext";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
 import { AdminSectionDrawer } from "../../pages/admin/components/AdminSectionDrawer";
+import { AdminFieldDrawer } from "../../pages/admin/components/AdminFieldDrawer";
+import { InfoTooltip } from "../help/InfoTooltip";
 import { FieldInputRenderer } from "../fields/FieldInputRenderer";
 import { RichTextEditor } from "../fields/RichTextEditor";
 import {
@@ -349,6 +351,9 @@ export default function DraggableOverviewSections({
   // Create field modal state
   const [createFieldModalOpen, setCreateFieldModalOpen] = useState(false);
 
+  // Edit field modal state
+  const [editingFieldDef, setEditingFieldDef] = useState<FieldDefinition | null>(null);
+
   // Add section modal state
   const [addSectionModalOpen, setAddSectionModalOpen] = useState(false);
   const [newSectionTitle, setNewSectionTitle] = useState("");
@@ -623,6 +628,9 @@ export default function DraggableOverviewSections({
             </span>
             <label className="text-[11px] font-semibold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
               <span>{label}</span>
+              {regField?.tooltip && (
+                <InfoTooltip text={regField.tooltip} size="sm" />
+              )}
               {regField?.required && <span className="text-red-500 font-bold">*</span>}
               {isRequiredMissing && (
                 <span className="text-[9px] font-bold text-amber-800 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs tracking-normal">
@@ -633,6 +641,16 @@ export default function DraggableOverviewSections({
           </div>
 
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {regField && regField.permissions?.canEdit !== false && (
+              <button
+                type="button"
+                onClick={() => setEditingFieldDef(regField)}
+                className="p-0.5 text-slate-300 hover:text-blue-600 hover:rotate-45 rounded transition-all cursor-pointer"
+                title="Edit field configuration"
+              >
+                <SettingsIcon className="w-3 h-3" />
+              </button>
+            )}
             {regField?.permissions?.canHide !== false && (
               <button
                 type="button"
@@ -1604,6 +1622,20 @@ export default function DraggableOverviewSections({
             onSectionsChange([...sections, newSection]);
             setAddSectionModalOpen(false);
             toast.success(`Section "${savedSection.title}" created`);
+          }}
+        />
+      )}
+
+      {/* ── Edit Custom Field Drawer ────────────────────────────────────────── */}
+      {editingFieldDef && (
+        <AdminFieldDrawer
+          field={editingFieldDef}
+          initialModule={(editingFieldDef.module as Exclude<FieldModule, "deal">) || (customFieldsModule === "deal" ? "process" : customFieldsModule)}
+          isAdmin={false}
+          onClose={() => setEditingFieldDef(null)}
+          onSaved={(savedField) => {
+            setEditingFieldDef(null);
+            toast.success(`Field "${savedField.label}" updated`);
           }}
         />
       )}

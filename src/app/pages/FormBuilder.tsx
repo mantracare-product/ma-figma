@@ -174,7 +174,7 @@ export default function FormBuilder() {
       const sf = systemFields.find(f => f.key === sysKey);
       return {
         type: "select",
-        options: sf?.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) ?? [],
+        options: sf?.options?.map((o, idx) => ({ id: typeof o.id === "number" ? o.id : idx + 1, label: o.label, value: String(o.value ?? "") })) ?? [],
       };
     }
     return { type: "text" };
@@ -233,7 +233,7 @@ export default function FormBuilder() {
       label: sf.label,
       helpText: "",
       validation: sf.validation || "",
-      options: sf.options?.map(o => ({ id: o.id, label: o.label, value: o.value })) ||
+      options: sf.options?.map((o, idx) => ({ id: typeof o.id === "number" ? o.id : idx + 1, label: o.label, value: String(o.value ?? "") })) ||
         (sf.inputType === "yes_no" ? [{ id: 1, label: "Yes", value: "yes" }, { id: 2, label: "No", value: "no" }] : undefined),
       allowOther: false,
       defaultValue: "",

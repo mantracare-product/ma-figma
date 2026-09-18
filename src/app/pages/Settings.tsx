@@ -1406,7 +1406,7 @@ export default function Settings() {
     type: string;
     sectionId?: string;
     required?: boolean;
-    options?: { id: number; label: string; value: string }[];
+    options?: { id: number | string; label: string; value: any }[];
     tableColumns?: { id: string; name: string; type: string }[];
   }>({
     label: "",

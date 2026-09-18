@@ -4,39 +4,69 @@
  *
  * Slide-in right-panel for creating or editing a custom FieldDefinition.
  * Rendered by AdminCustomFields.tsx, reachable at /admin/custom-fields.
- * This is a standalone admin module — NOT part of Settings.tsx.
- *
- * Key design decisions:
- * 1. MODULE_OPTIONS values EXACTLY match normalizeModuleKey() recognised strings.
- *    Unrecognised values silently fall back to "client" with no error.
- * 2. isScribeSeed=true → full read-only mode + amber "System · Non-deletable" badge.
- *    (Option B: scribe seeds are non-deletable because ensureScribeSeeds()
- *    re-injects them on every page load regardless.)
- * 3. Machine key auto-generated in create mode, LOCKED in edit mode
- *    to preserve {{key}} variable references.
- * 4. Delete button is NOT in this drawer; it lives in AdminCustomFields row actions.
+ * Also rendered in edit mode on client records via DraggableOverviewSections.
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { X, ChevronDown, Check, Plus, Trash2, Lock, AlertCircle, Settings2, Globe, Shield, Link2, Layers, Tag, Info, Star, Database, GitBranch, Sparkles, CheckCircle2 } from "lucide-react";
+import {
+  X,
+  ChevronDown,
+  Check,
+  Plus,
+  Trash2,
+  Lock,
+  AlertCircle,
+  Settings2,
+  Globe,
+  Shield,
+  Link2,
+  Layers,
+  Star,
+  Database,
+  Type,
+  Calendar,
+  Hash,
+  Paperclip,
+  Phone,
+  FileText,
+  AlignLeft,
+  Sparkles,
+  ArrowUpDown,
+  Search,
+  Copy,
+  ChevronUp,
+} from "lucide-react";
 import type {
-  FieldDefinition, FieldInputType, FieldModule,
-  FieldOption, SectionDefinition, TableColumnConfig,
-  ScopingRule, FieldPermissions, CrmBindModule, SubFieldConfig,
-  SubFieldInputType, ListBindConfig,
+  FieldDefinition,
+  FieldInputType,
+  FieldModule,
+  FieldOption,
+  OptionValueType,
+  ListValueType,
+  SectionDefinition,
+  TableColumnConfig,
+  ScopingRule,
+  FieldPermissions,
+  CrmBindModule,
+  SubFieldConfig,
+  SubFieldInputType,
+  ListBindConfig,
+  ListFieldConfig,
 } from "../../../context/FieldRegistryContext";
-import { useFieldRegistry, normalizeLegacyColumn, CURRENCY_SYMBOLS, getSuggestedPlaceholderForType } from "../../../context/FieldRegistryContext";
+import {
+  useFieldRegistry,
+  normalizeLegacyColumn,
+  CURRENCY_SYMBOLS,
+  getSuggestedPlaceholderForType,
+} from "../../../context/FieldRegistryContext";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
-import { useDynamicListOptions } from "../../../components/fields/useDynamicListOptions";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
-import { ProcessMultiSelect } from "./ProcessMultiSelect";
 import { StageMultiSelect } from "./StageMultiSelect";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
-// Unrecognised values silently fall back to "client" — no error thrown.
 export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"> }[] = [
   { label: "Client",       value: "client" },
   { label: "Process",      value: "process" },
@@ -48,117 +78,294 @@ export const MODULE_OPTIONS: { label: string; value: Exclude<FieldModule, "deal"
   { label: "AI Scribe",    value: "scribe" },
 ];
 
-const FIELD_TYPE_GROUPS: { group: string; items: { label: string; value: FieldInputType }[] }[] = [
-  { group: "Text", items: [
-    { label: "Short Text", value: "text" },
-    { label: "Long Text / Textarea", value: "textarea" },
-    { label: "Rich Text", value: "richtext" },
-    { label: "Email", value: "email" },
-    { label: "Phone Number", value: "tel" },
-    { label: "Link / URL", value: "link" },
-    { label: "WhatsApp Link", value: "whatsapp_link" },
-  ]},
-  { group: "Numbers", items: [
-    { label: "Number", value: "number" },
-    { label: "Money / Currency", value: "money" },
-    { label: "Rating / Score", value: "rating" },
-  ]},
-  { group: "Date & Time", items: [
-    { label: "Date", value: "date" },
-    { label: "Date & Time", value: "date_time" },
-  ]},
-  { group: "Options", items: [
-    { label: "List", value: "list_select" },
-    { label: "Yes / No", value: "yes_no" },
-  ]},
-  { group: "Advanced & Composite", items: [
-    { label: "Table / Matrix", value: "table" },
-    { label: "Group / Composite", value: "group" },
-    { label: "CRM Bind", value: "crm_bind" },
-    { label: "Digital Signature", value: "signature" },
-    { label: "File / Attachment", value: "file" },
-    { label: "User / Member", value: "user" },
-  ]},
+export type PrimaryFieldTypeCategory =
+  | "text"
+  | "number"
+  | "date_time"
+  | "money"
+  | "tel"
+  | "email"
+  | "link"
+  | "whatsapp_link"
+  | "list"
+  | "yes_no"
+  | "rating"
+  | "composite"
+  | "crm_bind"
+  | "media"
+  | "signature"
+  | "user";
+
+const CONSOLIDATED_FIELD_TYPES: {
+  category: string;
+  items: {
+    id: PrimaryFieldTypeCategory;
+    label: string;
+    description: string;
+  }[];
+}[] = [
+  {
+    category: "Text & Content",
+    items: [
+      { id: "text", label: "Text", description: "Short text inputs or formatted multiline paragraphs" },
+      { id: "tel", label: "Phone Number", description: "Phone number with country codes and formatting" },
+      { id: "email", label: "Email", description: "Standard email address input" },
+      { id: "link", label: "Link / URL", description: "Web links and external URLs" },
+      { id: "whatsapp_link", label: "WhatsApp Link", description: "Direct WhatsApp chat link" },
+    ],
+  },
+  {
+    category: "Numbers & Dates",
+    items: [
+      { id: "number", label: "Number", description: "Integer counts or bounded numeric range sliders" },
+      { id: "money", label: "Money / Currency", description: "Financial values with currency denomination" },
+      { id: "date_time", label: "Date & Time", description: "Date capture, time capture, or combined timestamp" },
+      { id: "rating", label: "Rating / Score", description: "Star ratings and score assessments" },
+    ],
+  },
+  {
+    category: "Options & Logic",
+    items: [
+      { id: "list", label: "List", description: "Typed options, search filters, sorting, and 2-way sync" },
+      { id: "yes_no", label: "Yes / No", description: "Binary boolean toggle" },
+    ],
+  },
+  {
+    category: "Advanced & Media",
+    items: [
+      { id: "composite", label: "Composite Field", description: "Multi-field records presented as Table View or Group View" },
+      { id: "crm_bind", label: "Link to Mantra Entities", description: "Dynamically link to team members, clients, or services" },
+      { id: "media", label: "Media Attach", description: "Image, document, or audio upload attachments" },
+      { id: "signature", label: "Digital Signature", description: "Interactive touchscreen drawing signature pad" },
+      { id: "user", label: "User / Member", description: "Assign staff or team members" },
+    ],
+  },
 ];
 
-function getLabelForInputType(t: FieldInputType): string {
-  if (t === "list_select" || t === "list_open" || t === "select" || t === "multiselect" || t === "list" || (t as any) === "group_repeatable") {
-    return "List";
+const COMMON_DATE_FORMATS = [
+  { value: "DD/MM/YYYY", label: "DD/MM/YYYY (e.g. 24/08/2026)" },
+  { value: "MM/DD/YYYY", label: "MM/DD/YYYY (e.g. 08/24/2026)" },
+  { value: "YYYY-MM-DD", label: "YYYY-MM-DD (e.g. 2026-08-24)" },
+  { value: "D MMMM YYYY", label: "D MMMM YYYY (e.g. 24 August 2026)" },
+  { value: "MMM D, YYYY", label: "MMM D, YYYY (e.g. Aug 24, 2026)" },
+];
+
+const COMMON_PHONE_FORMATS = [
+  { value: "+1 (555) 123-4567", label: "+1 (555) 123-4567 (US / Canada)" },
+  { value: "555-123-4567", label: "555-123-4567 (National Hyphenated)" },
+  { value: "+91 98765 43210", label: "+91 98765 43210 (India Spaced)" },
+  { value: "international", label: "International E.164 (+XX XXXXXXXXXX)" },
+  { value: "(XXX) XXX-XXXX", label: "(XXX) XXX-XXXX (Generic Parentheses)" },
+];
+
+const COMMON_TIMEZONES = [
+  { value: "Local", label: "Local User Timezone" },
+  { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+  { value: "Asia/Kolkata", label: "Asia/Kolkata (IST +5:30)" },
+  { value: "America/New_York", label: "America/New_York (EST/EDT)" },
+  { value: "America/Los_Angeles", label: "America/Los_Angeles (PST/PDT)" },
+  { value: "Europe/London", label: "Europe/London (GMT/BST)" },
+  { value: "Asia/Dubai", label: "Asia/Dubai (GST +4:00)" },
+  { value: "Asia/Singapore", label: "Asia/Singapore (SGT +8:00)" },
+];
+
+const MEDIA_PRESET_FORMATS: Record<"image" | "document" | "audio", string[]> = {
+  image: ["JPG", "PNG", "WEBP", "SVG", "GIF"],
+  document: ["PDF", "DOCX", "XLSX", "TXT", "CSV"],
+  audio: ["MP3", "WAV", "AAC", "M4A", "OGG"],
+};
+
+const LIST_OPTION_VALUE_TYPES: { value: ListValueType; label: string; category: string }[] = CONSOLIDATED_FIELD_TYPES.flatMap((grp) =>
+  grp.items
+    .filter((i) => i.id !== "list")
+    .map((i) => ({
+      value: i.id as ListValueType,
+      label: i.label,
+      category: grp.category,
+    }))
+);
+
+export function formatCompositePreview(val: any): string {
+  if (val === undefined || val === null || val === "") return "";
+  if (Array.isArray(val)) {
+    return val.filter((v) => v !== undefined && v !== null && String(v).trim() !== "").join(", ");
   }
-  for (const g of FIELD_TYPE_GROUPS) {
-    const f = g.items.find(i => i.value === t);
-    if (f) return f.label;
+  if (typeof val === "object") {
+    return Object.values(val).filter((v) => v !== undefined && v !== null && String(v).trim() !== "").join(", ");
   }
-  return t;
-}
-function needsOptions(t: FieldInputType): boolean {
-  if (t === "list_open") return false;
-  return t === "list_select" || t === "select" || t === "multiselect" || t === "list";
+  const str = String(val);
+  return str.split(",").map((s) => s.trim()).filter(Boolean).join(", ");
 }
 
 interface FieldFormState {
-  label: string; key: string; module: Exclude<FieldModule, "deal">;
-  inputType: FieldInputType; placeholder: string;
+  label: string;
+  key: string;
+  module: Exclude<FieldModule, "deal">;
+  selectedModules: Exclude<FieldModule, "deal">[];
+  primaryCategory: PrimaryFieldTypeCategory;
+  placeholder: string;
+  tooltip: string;
   required: boolean;
   requiredStages: string[];
-  showAlways: boolean; userVisibility: boolean; sectionId: string;
+  showAlways: boolean;
+  userVisibility: boolean;
+  sectionId: string;
   scopingRules: ScopingRule[];
   processIds: string[];
-  options: FieldOption[]; tableColumns: TableColumnConfig[];
-  isReusable: boolean;
-  reusableModules: Exclude<FieldModule, "deal">[];
   permissions: FieldPermissions;
-  crmBindModule?: CrmBindModule;
-  crmBindSelectionMode?: "single" | "multiple";
-  selectionMode?: "single" | "multiple";
-  listEntryType?: "plain_text" | "structured";
+
+  // Text configuration
+  textMode: "short" | "paragraph";
+  maxChars?: number;
+  richText: boolean;
+
+  // Date & Time configuration
+  dateTimeCapture: "date" | "time" | "both";
+  dateFormat: string;
+  timeFormat: "12h" | "24h";
+  timezone: string;
+
+  // Composite field configuration
+  compositeDisplayMode: "table" | "group";
+  tableColumns: TableColumnConfig[];
+
+  // Media Attach configuration
+  mediaType: "image" | "document" | "audio";
+  acceptedFormats: string[];
+  maxFileSizeMB: number;
+  allowMultipleFiles: boolean;
+  maxFiles?: number;
+
+  // Number configuration
+  numberMode: "integer" | "range";
+  maxCap?: number;
+  minRange?: number;
+  maxRange?: number;
+
+  // Phone configuration
+  phoneCountryDisplay: "name" | "code";
+  phoneShowFlags: boolean;
+  phoneRegex: string;
+  phoneFormat: string;
+
+  // Currency & Rating
+  currency: string;
+  maxRating: number;
+
+  // Options & List Redesign
+  listValueType: ListValueType;
+  inheritedFieldKey: string;
+  liveSync: boolean;
+  options: FieldOption[];
+  selectionMode: "single" | "multiple";
+  allowSearch: boolean;
+  sortOrder: "alphabetical_asc" | "alphabetical_desc" | "manual" | "recent";
+  liveLinkedFieldKey: string;
+
+  // CRM Bind / Link to Mantra Entities
+  crmBindModule: CrmBindModule;
+  crmBindSelectionMode: "single" | "multiple";
+
+  // Default value
   defaultValue?: any;
-  currency?: string;
-  maxRating?: number;
-  listBindConfig?: ListBindConfig;
-  optionSourceMode?: "manual" | "bind";
 }
 
-function defaultForm(module: Exclude<FieldModule, "deal">): FieldFormState {
+function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
+  const t = f.inputType;
+  if (t === "text" || t === "textarea" || t === "richtext") return "text";
+  if (t === "number") return "number";
+  if (t === "date" || t === "date_time") return "date_time";
+  if (t === "money") return "money";
+  if (t === "tel") return "tel";
+  if (t === "email") return "email";
+  if (t === "link") return "link";
+  if (t === "whatsapp_link") return "whatsapp_link";
+  if (t === "yes_no") return "yes_no";
+  if (t === "rating") return "rating";
+  if (t === "table" || t === "group" || t === "group_repeatable") return "composite";
+  if (t === "crm_bind") return "crm_bind";
+  if (t === "file") return "media";
+  if (t === "signature" || t === "drawing") return "signature";
+  if (t === "user") return "user";
+  if (t === "list_select" || t === "list_open" || t === "select" || t === "multiselect" || t === "list") return "list";
+  return "text";
+}
+
+function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: PrimaryFieldTypeCategory = "text"): FieldFormState {
   return {
-    label: "", key: "", module, inputType: "text", placeholder: "",
+    label: "",
+    key: "",
+    module,
+    selectedModules: [module],
+    primaryCategory: initialCategory,
+    placeholder: "",
+    tooltip: "",
     required: false,
     requiredStages: [],
-    showAlways: true, userVisibility: true, sectionId: "",
+    showAlways: true,
+    userVisibility: true,
+    sectionId: "",
     scopingRules: [],
     processIds: [],
-    isReusable: false,
-    reusableModules: [],
     permissions: {
       canHide: true,
       canEdit: true,
       canAddOptions: true,
       canDelete: true,
     },
-    options: [
-      { id: 1, label: "Option 1", value: "option_1" },
-      { id: 2, label: "Option 2", value: "option_2" },
-    ],
+    // Text
+    textMode: "short",
+    maxChars: undefined,
+    richText: false,
+    // Date
+    dateTimeCapture: "date",
+    dateFormat: "DD/MM/YYYY",
+    timeFormat: "12h",
+    timezone: "Local",
+    // Composite
+    compositeDisplayMode: "table",
     tableColumns: [
       { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
       { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
       { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
     ],
-    crmBindModule: "teamMember",
-    crmBindSelectionMode: "single",
-    selectionMode: "single",
-    listEntryType: "plain_text",
-    defaultValue: undefined,
+    // Media
+    mediaType: "document",
+    acceptedFormats: ["PDF", "DOCX", "JPG", "PNG"],
+    maxFileSizeMB: 10,
+    allowMultipleFiles: false,
+    maxFiles: undefined,
+    // Number
+    numberMode: "integer",
+    maxCap: undefined,
+    minRange: 0,
+    maxRange: 100,
+    // Phone
+    phoneCountryDisplay: "name",
+    phoneShowFlags: true,
+    phoneRegex: "",
+    phoneFormat: "+1 (555) 123-4567",
+    // Rating / Currency
     currency: "INR",
     maxRating: 5,
-    listBindConfig: undefined,
-    optionSourceMode: "manual",
+    // List Redesign
+    listValueType: "text",
+    inheritedFieldKey: "",
+    liveSync: false,
+    options: [],
+    selectionMode: "single",
+    allowSearch: true,
+    sortOrder: "manual",
+    liveLinkedFieldKey: "",
+    // CRM Bind
+    crmBindModule: "teamMember",
+    crmBindSelectionMode: "single",
+    defaultValue: undefined,
   };
 }
 
 export function initFormFromField(f: FieldDefinition): FieldFormState {
   let rules: ScopingRule[] = f.scopingRules ? [...f.scopingRules] : [];
-  // Backward compat: if legacy industry/location properties exist but no scopingRules
   if (rules.length === 0 && (f.industryCategory || f.industry || (f.locations && f.locations.length > 0))) {
     rules = [
       {
@@ -170,72 +377,115 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     ];
   }
 
-  const isGroupRepeatable = f.inputType === ("group_repeatable" as any);
-  const effectiveInputType = isGroupRepeatable ? "list_open" : f.inputType;
-  const effectiveListEntryType = (isGroupRepeatable || f.listEntryType === "structured" || (f as any).entryType === "structured")
-    ? "structured"
-    : (f.listEntryType || "plain_text");
+  const primaryCategory = resolvePrimaryCategory(f);
+  const rawModules: Exclude<FieldModule, "deal">[] = [
+    f.module as Exclude<FieldModule, "deal">,
+    ...((f.reusableModules as Exclude<FieldModule, "deal">[]) || []),
+  ];
+  const selectedModules = Array.from(new Set(rawModules)).filter(Boolean);
+
+  const isMultiSelect = f.inputType === "multiselect" || f.selectionMode === "multiple";
+
+  const rawOptions = f.options ?? [];
+
+  const typedOptions: FieldOption[] = rawOptions.map((opt, idx) => ({
+    id: opt.id || idx + 1,
+    label: opt.label,
+    value: opt.value,
+    index: opt.index ?? idx + 1,
+  }));
+
+  const tableColumns: TableColumnConfig[] = f.tableColumns
+    ? f.tableColumns.map((col) => ({ ...col, placeholder: col.placeholder ?? "" }))
+    : f.subFields
+    ? f.subFields.map((sf) => ({
+        id: sf.id,
+        name: sf.name,
+        type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
+        inputType: sf.inputType,
+        placeholder: sf.placeholder ?? "",
+        options: sf.options,
+        currency: sf.currency,
+        selectionMode: sf.selectionMode || "single",
+        crmBindConfig: sf.crmBindConfig,
+        maxRating: sf.maxRating || 5,
+        listBindConfig: sf.listBindConfig,
+        defaultValue: sf.defaultValue,
+      }))
+    : [
+        { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
+        { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
+        { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
+      ];
 
   return {
-    label: f.label, key: f.key,
+    label: f.label,
+    key: f.key,
     module: f.module as Exclude<FieldModule, "deal">,
-    inputType: effectiveInputType, placeholder: f.placeholder ?? "",
-    required: f.required ?? false,
+    selectedModules: selectedModules.length > 0 ? selectedModules : [f.module as Exclude<FieldModule, "deal">],
+    primaryCategory,
+    placeholder: f.placeholder ?? "",
+    tooltip: f.tooltip ?? "",
+    required: Boolean(f.required),
     requiredStages: f.requiredStages ? [...f.requiredStages] : [],
     showAlways: f.showAlways !== false,
     userVisibility: f.userVisibility !== false,
     sectionId: f.sectionId ?? "",
     scopingRules: rules,
     processIds: f.processIds ? [...f.processIds] : [],
-    isReusable: Boolean(f.isReusable),
-    reusableModules: (f.reusableModules as Exclude<FieldModule, "deal">[]) || [],
     permissions: {
       canHide: f.permissions?.canHide !== false,
       canEdit: f.permissions?.canEdit !== false,
       canAddOptions: f.permissions?.canAddOptions !== false,
       canDelete: f.permissions?.canDelete !== false,
     },
-    options: f.options ?? [
-      { id: 1, label: "Option 1", value: "option_1" },
-      { id: 2, label: "Option 2", value: "option_2" },
-    ],
-    tableColumns: f.tableColumns
-      ? f.tableColumns.map(col => ({
-          ...col,
-          placeholder: col.placeholder ?? "",
-        }))
-      : (f.subFields ? f.subFields.map(sf => ({
-          id: sf.id,
-          name: sf.name,
-          type: sf.inputType === "list_select" ? "Select" : sf.inputType === "money" ? "Money" : sf.inputType === "number" ? "Number" : sf.inputType === "date" ? "Date" : sf.inputType === "date_time" ? "Date & Time" : sf.inputType === "textarea" ? "Long Text" : sf.inputType === "yes_no" ? "Yes / No" : sf.inputType === "email" ? "Email" : sf.inputType === "tel" ? "Phone" : sf.inputType === "link" ? "Link" : sf.inputType === "rating" ? "Rating" : sf.inputType === "crm_bind" ? "crm_bind" : "Text",
-          inputType: sf.inputType,
-          placeholder: sf.placeholder ?? "",
-          options: sf.options,
-          currency: sf.currency,
-          selectionMode: sf.selectionMode || "single",
-          crmBindConfig: sf.crmBindConfig,
-          maxRating: sf.maxRating || 5,
-          listBindConfig: sf.listBindConfig,
-          defaultValue: sf.defaultValue,
-        })) : [
-          { id: "col_1", name: "Item Name", type: "Text", placeholder: "e.g. Consulting Hours" },
-          { id: "col_2", name: "Quantity", type: "Number", placeholder: "e.g. 1" },
-          { id: "col_3", name: "Unit Price", type: "Money", currency: "INR", placeholder: "e.g. 500.00" },
-        ]),
-    crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
-    crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
-    selectionMode: f.inputType === "multiselect" ? "multiple" : f.selectionMode || f.crmBindConfig?.selectionMode || "single",
-    listEntryType: effectiveListEntryType,
-    defaultValue: f.defaultValue,
+    // Text
+    textMode: f.textConfig?.textMode || (f.inputType === "textarea" || f.inputType === "richtext" ? "paragraph" : "short"),
+    maxChars: f.textConfig?.maxChars,
+    richText: f.textConfig?.richText ?? (f.inputType === "richtext"),
+    // Date
+    dateTimeCapture: f.dateConfig?.capture || (f.inputType === "date_time" ? "both" : "date"),
+    dateFormat: f.dateConfig?.dateFormat || "DD/MM/YYYY",
+    timeFormat: f.dateConfig?.timeFormat || "12h",
+    timezone: f.dateConfig?.timezone || "Local",
+    // Composite
+    compositeDisplayMode: f.compositeDisplayMode || (f.inputType === "group" || f.inputType === "group_repeatable" ? "group" : "table"),
+    tableColumns,
+    // Media
+    mediaType: f.mediaConfig?.mediaType || "document",
+    acceptedFormats: f.mediaConfig?.acceptedFormats || MEDIA_PRESET_FORMATS[f.mediaConfig?.mediaType || "document"],
+    maxFileSizeMB: f.mediaConfig?.maxFileSizeMB || 10,
+    allowMultipleFiles: Boolean(f.mediaConfig?.allowMultiple),
+    maxFiles: f.mediaConfig?.maxFiles,
+    // Number
+    numberMode: f.numberConfig?.numberMode || "integer",
+    maxCap: f.numberConfig?.numberMode === "integer" ? f.numberConfig?.max : undefined,
+    minRange: f.numberConfig?.min ?? 0,
+    maxRange: f.numberConfig?.max ?? 100,
+    // Phone
+    phoneCountryDisplay: f.phoneConfig?.countryCodeDisplay || "name",
+    phoneShowFlags: f.phoneConfig?.showFlags ?? true,
+    phoneRegex: f.phoneConfig?.regexValidation || "",
+    phoneFormat: f.phoneConfig?.numberFormat || "+1 (555) 123-4567",
+    // Rating / Currency
     currency: f.currency || "INR",
     maxRating: f.maxRating || 5,
-    listBindConfig: f.listBindConfig ? {
-      ...f.listBindConfig,
-      sourceType: f.listBindConfig.sourceType === "group" ? "open_list" : f.listBindConfig.sourceType,
-    } : undefined,
-    optionSourceMode: f.listBindConfig?.sourceType ? "bind" : "manual",
+    // List Redesign
+    listValueType: (f.listConfig?.valueType as ListValueType) || "text",
+    inheritedFieldKey: f.listConfig?.inheritedFieldKey || "",
+    liveSync: Boolean(f.listConfig?.liveLinkedFieldKey),
+    options: typedOptions,
+    selectionMode: isMultiSelect ? "multiple" : "single",
+    allowSearch: f.listConfig?.allowSearch !== false,
+    sortOrder: f.listConfig?.sortOrder || "manual",
+    liveLinkedFieldKey: f.listConfig?.liveLinkedFieldKey || "",
+    // CRM Bind
+    crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
+    crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
+    defaultValue: f.defaultValue,
   };
 }
+
 export const fieldToForm = initFormFromField;
 
 export interface AdminFieldDrawerProps {
@@ -245,37 +495,49 @@ export interface AdminFieldDrawerProps {
   isScribeSeed?: boolean;
   isAdmin?: boolean;
   lockModule?: boolean;
+  lockCategory?: boolean;
+  initialCategory?: PrimaryFieldTypeCategory;
+  zIndex?: number;
   onClose: () => void;
   onSaved?: (field: FieldDefinition) => void;
 }
 
 export function AdminFieldDrawer({
-  field, initialModule, sections = [], isScribeSeed = false, isAdmin = true, lockModule = false, onClose, onSaved,
+  field,
+  initialModule,
+  sections = [],
+  isScribeSeed = false,
+  isAdmin = true,
+  lockModule = false,
+  lockCategory = false,
+  initialCategory,
+  zIndex = 10001,
+  onClose,
+  onSaved,
 }: AdminFieldDrawerProps) {
   const { addCustomField, updateCustomField, getAllFields } = useFieldRegistry();
   const isEdit = field !== null;
   const isReadOnly = isScribeSeed;
 
   const [form, setForm] = useState<FieldFormState>(
-    isEdit ? initFormFromField(field!) : defaultForm(initialModule),
+    isEdit ? initFormFromField(field!) : defaultForm(initialModule, initialCategory || "text")
   );
+
   const [typePickerOpen, setTypePickerOpen] = useState(false);
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
   const [existingFieldPickerOpen, setExistingFieldPickerOpen] = useState(false);
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false);
-  const [adminControlOpen, setAdminControlOpen] = useState(true);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
   const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
-  const [errors, setErrors] = useState<{ label?: string; key?: string }>({});
+  const [errors, setErrors] = useState<{ label?: string }>({});
+
   const typePickerRef = useRef<HTMLDivElement>(null);
   const modulePickerRef = useRef<HTMLDivElement>(null);
   const existingFieldPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleUpdate = () => {
-      setAllProcesses(getStoredProcesses());
-    };
+    const handleUpdate = () => setAllProcesses(getStoredProcesses());
     window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
     window.addEventListener("storage", handleUpdate);
     return () => {
@@ -285,9 +547,7 @@ export function AdminFieldDrawer({
   }, []);
 
   const availableProcesses = useMemo(() => {
-    if (!form.scopingRules || form.scopingRules.length === 0) {
-      return allProcesses;
-    }
+    if (!form.scopingRules || form.scopingRules.length === 0) return allProcesses;
     return allProcesses.filter((proc) => {
       return form.scopingRules.some((rule) => {
         const rCat = rule.industryCategory?.trim();
@@ -315,7 +575,7 @@ export function AdminFieldDrawer({
   }, [allProcesses, form.scopingRules]);
 
   const availableStagesForProcess = useMemo(() => {
-    if (form.module !== "process") return [];
+    if (!form.selectedModules.includes("process")) return [];
     const targetProcesses = form.processIds.length > 0
       ? availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name))
       : availableProcesses;
@@ -329,9 +589,10 @@ export function AdminFieldDrawer({
       });
     });
     return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
-  }, [form.module, form.processIds, availableProcesses]);
+  }, [form.selectedModules, form.processIds, availableProcesses]);
 
-  const allFieldsInModule = useMemo(() => {
+  // Existing fields in current primary module
+  const allFieldsInPrimaryModule = useMemo(() => {
     try {
       return getAllFields(form.module);
     } catch {
@@ -339,36 +600,28 @@ export function AdminFieldDrawer({
     }
   }, [getAllFields, form.module]);
 
-  const allAvailableFields = useMemo(() => {
-    return allFieldsInModule.filter(
+  const availableFieldsForComposite = useMemo(() => {
+    return allFieldsInPrimaryModule.filter(
       (f) =>
         f.key !== form.key &&
         f.inputType !== "table" &&
         f.inputType !== "group" &&
-        f.inputType !== "group_repeatable" &&
-        f.inputType !== "list_open"
+        f.inputType !== "group_repeatable"
     );
-  }, [allFieldsInModule, form.key]);
+  }, [allFieldsInPrimaryModule, form.key]);
 
-  const availableTableFields = useMemo(() => {
-    return allFieldsInModule.filter((f) => f.inputType === "table");
-  }, [allFieldsInModule]);
-
-  const availableOpenListFields = useMemo(() => {
-    return allFieldsInModule.filter(
+  // Existing List fields in this module for Mode 2 (Copy options) and Live Link Option
+  const availableListFieldsInModule = useMemo(() => {
+    return allFieldsInPrimaryModule.filter(
       (f) =>
         f.key !== form.key &&
-        ((f.inputType === "list_open" && (f.listEntryType === "structured" || (f as any).entryType === "structured")) ||
-          f.inputType === "group_repeatable" ||
-          f.inputType === "group")
+        (f.inputType === "list_select" ||
+          f.inputType === "select" ||
+          f.inputType === "multiselect" ||
+          f.inputType === "list" ||
+          (f.options && f.options.length > 0))
     );
-  }, [allFieldsInModule, form.key]);
-
-  const availableListFields = useMemo(() => {
-    return allFieldsInModule.filter(
-      (f) => f.key !== form.key && (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect" || f.inputType === "list")
-    );
-  }, [allFieldsInModule, form.key]);
+  }, [allFieldsInPrimaryModule, form.key]);
 
   const importExistingFieldToColumn = (f: FieldDefinition) => {
     let colType = "Text";
@@ -402,6 +655,82 @@ export function AdminFieldDrawer({
     }));
   };
 
+  const [nestedDrawerOpen, setNestedDrawerOpen] = useState(false);
+  const [nestedDrawerCategory, setNestedDrawerCategory] = useState<PrimaryFieldTypeCategory>("text");
+
+  // Matching fields in this module for type inheritance
+  const matchingFieldsInModule = useMemo(() => {
+    return allFieldsInPrimaryModule.filter((f) => {
+      if (f.key === form.key) return false;
+      const cat = resolvePrimaryCategory(f);
+      return cat === form.listValueType;
+    });
+  }, [allFieldsInPrimaryModule, form.key, form.listValueType]);
+
+  // Inherited Field definition used for rendering option value inputs
+  const inheritedFieldDef = useMemo(() => {
+    if (form.inheritedFieldKey) {
+      const found = allFieldsInPrimaryModule.find((f) => f.key === form.inheritedFieldKey);
+      if (found) return found;
+    }
+    // Fallback synthetic FieldDefinition
+    return {
+      id: "synthetic_opt_field",
+      key: "option_val",
+      label: "Option Value",
+      module: form.module,
+      source: "custom",
+      createdAt: new Date().toISOString(),
+      inputType: form.listValueType === "date_time" ? "date_time" :
+                 form.listValueType === "composite" ? "table" :
+                 form.listValueType === "tel" ? "tel" :
+                 form.listValueType === "money" ? "money" :
+                 form.listValueType === "number" ? "number" :
+                 form.listValueType === "yes_no" ? "yes_no" :
+                 form.listValueType === "link" ? "link" :
+                 form.listValueType === "whatsapp_link" ? "whatsapp_link" :
+                 form.listValueType === "email" ? "email" :
+                 form.listValueType === "rating" ? "rating" :
+                 form.listValueType === "signature" ? "signature" :
+                 form.listValueType === "media" ? "file" :
+                 form.listValueType === "user" ? "user" :
+                 form.listValueType === "crm_bind" ? "crm_bind" :
+                 "text",
+      currency: form.currency || "INR",
+      dateFormat: form.dateFormat,
+      timeFormat: form.timeFormat,
+      phoneFormat: form.phoneFormat,
+      phoneCountryDisplay: form.phoneCountryDisplay,
+      tableColumns: form.tableColumns,
+      crmBindConfig: {
+        sourceModule: form.crmBindModule || "teamMember",
+        displayField: "name",
+        selectionMode: form.crmBindSelectionMode || "single",
+      },
+      mediaConfig: {
+        mediaType: form.mediaType,
+        maxFileSizeMB: form.maxFileSizeMB,
+        allowMultiple: form.allowMultipleFiles,
+      },
+    } as unknown as FieldDefinition;
+  }, [
+    form.inheritedFieldKey,
+    form.listValueType,
+    form.module,
+    allFieldsInPrimaryModule,
+    form.currency,
+    form.dateFormat,
+    form.timeFormat,
+    form.phoneFormat,
+    form.phoneCountryDisplay,
+    form.tableColumns,
+    form.crmBindModule,
+    form.crmBindSelectionMode,
+    form.mediaType,
+    form.maxFileSizeMB,
+    form.allowMultipleFiles,
+  ]);
+
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (typePickerRef.current && !typePickerRef.current.contains(e.target as Node)) setTypePickerOpen(false);
@@ -419,166 +748,306 @@ export function AdminFieldDrawer({
   }, [onClose]);
 
   const handleLabelChange = useCallback((value: string) => {
-    setForm(prev => ({
-      ...prev, label: value,
+    setForm((prev) => ({
+      ...prev,
+      label: value,
       key: isEdit ? prev.key : value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
     }));
   }, [isEdit]);
 
+  const toggleModuleSelection = (modVal: Exclude<FieldModule, "deal">) => {
+    if (isReadOnly || lockModule) return;
+    setForm((p) => {
+      const isAlreadySelected = p.selectedModules.includes(modVal);
+      if (isAlreadySelected) {
+        if (p.selectedModules.length === 1) return p;
+        const nextSelected = p.selectedModules.filter((m) => m !== modVal);
+        return {
+          ...p,
+          selectedModules: nextSelected,
+          module: p.module === modVal ? nextSelected[0] : p.module,
+        };
+      } else {
+        return {
+          ...p,
+          selectedModules: [...p.selectedModules, modVal],
+        };
+      }
+    });
+  };
+
   const validate = (): boolean => {
-    const errs: { label?: string; key?: string } = {};
+    const errs: { label?: string } = {};
     if (!form.label.trim()) errs.label = "Field name is required";
-    if (!form.key.trim()) errs.key = "Field key is required";
-    else if (!/^[a-z0-9_]+$/.test(form.key)) errs.key = "Only lowercase letters, numbers, and underscores";
     setErrors(errs);
     return Object.keys(errs).length === 0;
+  };
+
+  const computeEffectiveInputType = (): FieldInputType => {
+    switch (form.primaryCategory) {
+      case "text":
+        if (form.textMode === "paragraph") {
+          return form.richText ? "richtext" : "textarea";
+        }
+        return "text";
+      case "number":
+        return "number";
+      case "date_time":
+        return form.dateTimeCapture === "date" ? "date" : "date_time";
+      case "money":
+        return "money";
+      case "tel":
+        return "tel";
+      case "email":
+        return "email";
+      case "link":
+        return "link";
+      case "whatsapp_link":
+        return "whatsapp_link";
+      case "yes_no":
+        return "yes_no";
+      case "rating":
+        return "rating";
+      case "composite":
+        return form.compositeDisplayMode === "table" ? "table" : "group";
+      case "crm_bind":
+        return "crm_bind";
+      case "media":
+        return "file";
+      case "signature":
+        return "signature";
+      case "user":
+        return "user";
+      case "list":
+        return form.selectionMode === "multiple" ? "multiselect" : "list_select";
+      default:
+        return "text";
+    }
   };
 
   const handleSave = () => {
     if (isReadOnly || !validate()) return;
 
-    // Populate legacy single-value fields from first rule for backward compat
+    const primaryModule = form.selectedModules[0] || form.module;
+    const additionalModules = form.selectedModules.filter((m) => m !== primaryModule);
+    const effectiveInputType = computeEffectiveInputType();
+    const targetKey = form.key.trim() || form.label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+
     const firstRule = form.scopingRules[0];
-    const legacyCategory = firstRule?.industryCategory && firstRule.industryCategory !== "All"
-      ? firstRule.industryCategory
-      : undefined;
-    const legacyIndustry = firstRule?.industries && firstRule.industries.length > 0
-      ? firstRule.industries[0]
-      : undefined;
-    const legacyLocations = firstRule?.locations && firstRule.locations.length > 0
-      ? firstRule.locations
-      : undefined;
+    const legacyCategory = firstRule?.industryCategory && firstRule.industryCategory !== "All" ? firstRule.industryCategory : undefined;
+    const legacyIndustry = firstRule?.industries && firstRule.industries.length > 0 ? firstRule.industries[0] : undefined;
+    const legacyLocations = firstRule?.locations && firstRule.locations.length > 0 ? firstRule.locations : undefined;
 
     const targetSource: "template" | "custom" = isAdmin ? "template" : "custom";
     const targetCreatedIn: "admin" | "client" = isAdmin ? "admin" : "client";
 
     const payload: Omit<FieldDefinition, "id" | "createdAt"> & { source: "system" | "custom" | "template"; createdIn?: "admin" | "client" } = {
-      label: form.label.trim(), key: form.key.trim(), module: form.module,
+      label: form.label.trim(),
+      key: targetKey,
+      module: primaryModule,
       source: isEdit && field ? field.source : targetSource,
       createdIn: isEdit && field ? field.createdIn : targetCreatedIn,
-      inputType: form.inputType,
-      placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(form.inputType, form.label),
+      inputType: effectiveInputType,
+      placeholder: form.placeholder.trim() || getSuggestedPlaceholderForType(effectiveInputType, form.label),
+      tooltip: form.tooltip.trim() || undefined,
       required: form.required,
-      requiredStages: form.module === "process" && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      requiredStages: form.selectedModules.includes("process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
       showAlways: form.showAlways,
       userVisibility: form.userVisibility,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
-      processIds: form.module === "process" && form.processIds.length > 0 ? form.processIds : undefined,
-      isReusable: form.isReusable,
-      reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
+      processIds: form.selectedModules.includes("process") && form.processIds.length > 0 ? form.processIds : undefined,
+      isReusable: additionalModules.length > 0,
+      reusableModules: additionalModules.length > 0 ? additionalModules : undefined,
       permissions: form.permissions,
       industryCategory: legacyCategory,
       industry: legacyIndustry,
       locations: legacyLocations,
-      options: isList && activeListType !== "open" ? form.options : undefined,
-      tableColumns: form.inputType === "table" ? form.tableColumns : undefined,
-      crmBindConfig: form.inputType === "crm_bind" ? {
+
+      // Text Config
+      textConfig: form.primaryCategory === "text" ? {
+        textMode: form.textMode,
+        maxChars: form.textMode === "short" ? form.maxChars : undefined,
+        richText: form.textMode === "paragraph" ? form.richText : undefined,
+      } : undefined,
+
+      // Date Config
+      dateConfig: form.primaryCategory === "date_time" ? {
+        capture: form.dateTimeCapture,
+        dateFormat: form.dateTimeCapture !== "time" ? form.dateFormat : undefined,
+        timeFormat: form.dateTimeCapture !== "date" ? form.timeFormat : undefined,
+        timezone: form.dateTimeCapture !== "date" ? form.timezone : undefined,
+      } : undefined,
+
+      // Composite Field Config
+      compositeDisplayMode: form.primaryCategory === "composite" ? form.compositeDisplayMode : undefined,
+      tableColumns: form.primaryCategory === "composite" ? form.tableColumns : undefined,
+      subFields: form.primaryCategory === "composite" && form.tableColumns.length > 0
+        ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
+        : undefined,
+
+      // Media Config
+      mediaConfig: form.primaryCategory === "media" ? {
+        mediaType: form.mediaType,
+        acceptedFormats: form.acceptedFormats,
+        maxFileSizeMB: form.maxFileSizeMB,
+        allowMultiple: form.allowMultipleFiles,
+        maxFiles: form.allowMultipleFiles ? form.maxFiles : undefined,
+      } : undefined,
+
+      // Number Config
+      numberConfig: form.primaryCategory === "number" ? {
+        numberMode: form.numberMode,
+        min: form.numberMode === "range" ? form.minRange : undefined,
+        max: form.numberMode === "range" ? form.maxRange : form.maxCap,
+      } : undefined,
+
+      // Phone Config
+      phoneConfig: form.primaryCategory === "tel" ? {
+        countryCodeDisplay: form.phoneCountryDisplay,
+        showFlags: form.phoneShowFlags,
+        regexValidation: form.phoneRegex.trim() || undefined,
+        numberFormat: form.phoneFormat,
+      } : undefined,
+
+      // List Redesign Config
+      options: form.primaryCategory === "list" ? form.options.map((opt, i) => ({ ...opt, index: i + 1 })) : undefined,
+      selectionMode: form.primaryCategory === "crm_bind"
+        ? form.crmBindSelectionMode
+        : form.primaryCategory === "list"
+        ? form.selectionMode
+        : undefined,
+      listConfig: form.primaryCategory === "list" ? {
+        valueType: form.listValueType,
+        inheritedFieldKey: form.inheritedFieldKey.trim() || undefined,
+        allowSearch: form.allowSearch,
+        sortOrder: form.sortOrder,
+        liveLinkedFieldKey: (form.liveSync && form.inheritedFieldKey.trim()) ? form.inheritedFieldKey.trim() : undefined,
+      } : undefined,
+
+      // CRM Bind
+      crmBindConfig: form.primaryCategory === "crm_bind" ? {
         sourceModule: form.crmBindModule || "teamMember",
         displayField: "name",
         selectionMode: form.crmBindSelectionMode || "single",
       } : undefined,
-      selectionMode: form.inputType === "crm_bind"
-        ? form.crmBindSelectionMode
-        : isList && activeListType !== "open"
-        ? (activeListType === "multi_select" ? "multiple" : "single")
-        : undefined,
-      listEntryType: isList && activeListType === "open" ? (form.listEntryType || "plain_text") : undefined,
-      subFields: (form.inputType === "group" || form.inputType === "table" || (isList && activeListType === "open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && form.tableColumns.length > 0
-        ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
-        : undefined,
+
+      currency: form.primaryCategory === "money" ? (form.currency || "INR") : undefined,
+      maxRating: form.primaryCategory === "rating" ? (form.maxRating || 5) : undefined,
       defaultValue: form.defaultValue !== undefined && form.defaultValue !== "" ? form.defaultValue : undefined,
-      currency: form.inputType === "money" ? (form.currency || "INR") : undefined,
-      maxRating: form.inputType === "rating" ? (form.maxRating || 5) : undefined,
-      listBindConfig: isList && activeListType !== "open" && form.optionSourceMode === "bind" && form.listBindConfig ? {
-        ...form.listBindConfig,
-        sourceType: (form.listBindConfig.sourceType === "group" || form.listBindConfig.sourceType === "field") ? "open_list" : form.listBindConfig.sourceType,
-      } : undefined,
     };
+
     if (isEdit && field) {
       updateCustomField(form.module, field.id, payload);
       onSaved?.({ ...field, ...payload });
     } else {
-      const created = addCustomField(form.module, payload);
+      const created = addCustomField(primaryModule, payload);
       onSaved?.(created);
     }
     onClose();
   };
 
-  const addOption = () => setForm(p => ({ ...p, options: [...p.options, { id: Date.now(), label: `Option ${p.options.length + 1}`, value: `option_${p.options.length + 1}` }] }));
-  const updateOption = (idx: number, label: string) => setForm(p => ({ ...p, options: p.options.map((o, i) => i === idx ? { ...o, label, value: label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") } : o) }));
-  const removeOption = (idx: number) => setForm(p => ({ ...p, options: p.options.filter((_, i) => i !== idx) }));
-  const addColumn = () => setForm(p => ({
+  // Add option (starts blank without pre-seeded placeholder values)
+  const addOption = () => {
+    if (!form.inheritedFieldKey) return;
+    const newIdx = form.options.length + 1;
+    setForm((p) => ({
+      ...p,
+      options: [
+        ...p.options,
+        {
+          id: Date.now(),
+          label: "",
+          value: "",
+          index: newIdx,
+        },
+      ],
+    }));
+  };
+
+  const updateOption = (idx: number, patch: Partial<FieldOption>) => {
+    setForm((p) => ({
+      ...p,
+      options: p.options.map((o, i) => {
+        if (i !== idx) return o;
+        const updated = { ...o, ...patch };
+        if (p.listValueType !== "composite" && patch.label !== undefined && patch.value === undefined && (!o.value || o.value === o.label.toLowerCase().replace(/\s+/g, "_"))) {
+          updated.value = patch.label.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+        }
+        return updated;
+      }),
+    }));
+  };
+
+  const moveOption = (idx: number, dir: -1 | 1) => {
+    const targetIdx = idx + dir;
+    if (targetIdx < 0 || targetIdx >= form.options.length) return;
+    setForm((p) => {
+      const copy = [...p.options];
+      const [item] = copy.splice(idx, 1);
+      copy.splice(targetIdx, 0, item);
+      return {
+        ...p,
+        options: copy.map((o, i) => ({ ...o, index: i + 1 })),
+      };
+    });
+  };
+
+  const removeOption = (idx: number) => {
+    setForm((p) => ({
+      ...p,
+      options: p.options.filter((_, i) => i !== idx).map((o, i) => ({ ...o, index: i + 1 })),
+    }));
+  };
+
+  const addColumn = () => setForm((p) => ({
     ...p,
     tableColumns: [
       ...p.tableColumns,
       {
         id: `col_${Date.now()}`,
-        name: form.inputType === "table" ? `Column ${p.tableColumns.length + 1}` : `Sub-field ${p.tableColumns.length + 1}`,
+        name: `Sub-field ${p.tableColumns.length + 1}`,
         type: "Text",
         placeholder: "",
       },
     ],
   }));
-  const updateColumn = (idx: number, patch: Partial<TableColumnConfig>) => setForm(p => ({ ...p, tableColumns: p.tableColumns.map((c, i) => i === idx ? { ...c, ...patch } : c) }));
-  const removeColumn = (idx: number) => setForm(p => ({ ...p, tableColumns: p.tableColumns.filter((_, i) => i !== idx) }));
+  const updateColumn = (idx: number, patch: Partial<TableColumnConfig>) => setForm((p) => ({ ...p, tableColumns: p.tableColumns.map((c, i) => i === idx ? { ...c, ...patch } : c) }));
+  const removeColumn = (idx: number) => setForm((p) => ({ ...p, tableColumns: p.tableColumns.filter((_, i) => i !== idx) }));
 
-  const isList =
-    form.inputType === "list_select" ||
-    form.inputType === "list_open" ||
-    form.inputType === "select" ||
-    form.inputType === "multiselect" ||
-    form.inputType === "list" ||
-    (form.inputType as any) === "group_repeatable";
+  const selectedTypeItem = useMemo(() => {
+    for (const grp of CONSOLIDATED_FIELD_TYPES) {
+      const found = grp.items.find((i) => i.id === form.primaryCategory);
+      if (found) return found;
+    }
+    return CONSOLIDATED_FIELD_TYPES[0].items[0];
+  }, [form.primaryCategory]);
 
-  const isComposite =
-    form.inputType === "table" ||
-    form.inputType === "group" ||
-    (form.inputType === "list_open" && form.listEntryType === "structured") ||
-    (form.inputType as any) === "group_repeatable";
-
-  const activeListType: "open" | "select" | "multi_select" =
-    form.inputType === "list_open" || (form.inputType as any) === "group_repeatable"
-      ? "open"
-      : form.inputType === "multiselect" || form.selectionMode === "multiple"
-      ? "multi_select"
-      : "select";
-
-  const typeLabel = getLabelForInputType(form.inputType);
-  const modLabel = MODULE_OPTIONS.find(m => m.value === form.module)?.label ?? form.module;
-  const modSections = sections.filter(s => s.module === form.module);
-
-  const inputCls = (err?: string) => `w-full px-3.5 py-2.5 border rounded-lg text-sm transition-all ${err ? "border-red-300 focus:ring-red-500/20 focus:border-red-500 focus:outline-none focus:ring-2" : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`;
-  const roCls = "border-gray-100 bg-gray-50 text-gray-500 cursor-not-allowed";
+  const inputCls = (err?: string) => `w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 transition-all ${err ? "border-red-300 focus:ring-2 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`;
+  const roCls = "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed";
 
   return (
-    <div className="fixed inset-0 z-[10001] flex" style={{ pointerEvents: "none", zIndex: 10001 }}>
+    <div className="fixed inset-0 flex" style={{ pointerEvents: "none", zIndex }}>
       <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
-      <div className="flex-1 bg-black/30 backdrop-blur-[1px]" style={{ pointerEvents: "auto" }} onClick={onClose} />
+      <div className="flex-1 bg-black/40 backdrop-blur-[1px]" style={{ pointerEvents: "auto" }} onClick={onClose} />
       <div className="flex flex-col bg-white" style={{ width: 540, maxWidth: "100%", height: "100vh", boxShadow: "-4px 0 40px rgba(0,0,0,0.14)", animation: "slideInFromRight 220ms cubic-bezier(0.16,1,0.3,1)", pointerEvents: "auto" }}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-bold text-[#111827]">
-                {isReadOnly ? "System Field" : isEdit ? "Edit Field" : "New Custom Field"}
-              </h2>
-              {isReadOnly && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-700">
-                  <Lock className="w-2.5 h-2.5" />System · Non-deletable
-                </span>
-              )}
-              {!isReadOnly && isEdit && (
-                <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-semibold text-blue-700">Custom</span>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mt-0.5">
-              {isReadOnly ? "Scribe seed fields are managed by the system and re-injected on every load."
-                : `${isEdit ? "Editing" : "Creating"} a field for the ${modLabel} module`}
-            </p>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-base font-bold text-[#111827]">
+              {isReadOnly ? "System Field" : isEdit ? "Edit Field" : "New Custom Field"}
+            </h2>
+            {isReadOnly && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-[10px] font-semibold text-amber-700">
+                <Lock className="w-2.5 h-2.5" />System · Non-deletable
+              </span>
+            )}
+            {!isReadOnly && isEdit && (
+              <span className="px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-[10px] font-semibold text-blue-700">Custom</span>
+            )}
           </div>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer text-gray-500" aria-label="Close">
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors cursor-pointer text-slate-400 hover:text-slate-700" aria-label="Close">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -588,288 +1057,159 @@ export function AdminFieldDrawer({
           <div className="mx-6 mt-4 flex items-start gap-2.5 px-3.5 py-3 bg-amber-50 border border-amber-200 rounded-xl flex-shrink-0">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800 leading-relaxed">
-              <strong>Why can this not be deleted?</strong>{" "}
-              This field is part of <code className="bg-amber-100 px-1 rounded text-[10px]">INITIAL_SCRIBE_CUSTOM_FIELDS</code>.
-              Even if removed, <code className="bg-amber-100 px-1 rounded text-[10px]">ensureScribeSeeds()</code> re-adds it on the next page load.
-              Deletion is disabled to prevent silent data loss.
+              <strong>System Protected Field:</strong> Scribe seed fields are required by default workflows and re-injected automatically. Deletion is disabled to prevent silent data loss.
             </p>
           </div>
         )}
 
-        {/* Body */}
+        {/* Body — Vertical hierarchy */}
         <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-5">
 
-          {/* Module */}
+          {/* 1. Module Multi-Select Dropdown */}
           <div>
             <div className="flex items-center gap-1.5 mb-1.5">
               <label className="block text-xs font-semibold text-slate-700">
                 Module <span className="text-red-500">*</span>
               </label>
-              <InfoTooltip text="The CRM entity module this custom field belongs to." size="sm" />
+              <InfoTooltip text="Select the CRM entity modules this field belongs to. Selecting multiple modules shares this field across them." size="sm" />
             </div>
-            <AdminSelect
-              value={form.module}
-              disabled={isEdit || isReadOnly || lockModule}
-              onChange={(val) => setForm((p) => ({ ...p, module: val as Exclude<FieldModule, "deal"> }))}
-              options={MODULE_OPTIONS.map((mod) => ({
-                value: mod.value,
-                label: mod.label,
-              }))}
-            />
-            {(isEdit || lockModule) && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
-          </div>
 
-          {/* Admin Control Dropdown (Scope & Permissions) */}
-          {isAdmin && (
-            <div>
-              <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
-                {/* Admin Control Main Dropdown Header */}
-                <button
-                  type="button"
-                  onClick={() => setAdminControlOpen((v) => !v)}
-                  className="w-full px-3.5 py-2.5 bg-gray-50/80 hover:bg-gray-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Shield className="w-4 h-4 text-gray-600 shrink-0" />
-                    <span className="text-xs font-semibold text-gray-800 uppercase tracking-wider" title="Configure scope rules and permissions">
-                      Admin Control
-                    </span>
-                  </div>
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${adminControlOpen ? "rotate-180" : ""}`} />
-                </button>
-
-                {adminControlOpen && (
-                  <div className="p-3 space-y-2.5 border-t border-gray-100 bg-gray-50/30">
-                    {/* 1. Scope Option Dropdown */}
-                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setScopeDropdownOpen((v) => !v)}
-                        className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Globe className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                          <span className="text-xs font-semibold text-gray-800">
-                            Scope Rules
-                          </span>
-                          <span onClick={(e) => e.stopPropagation()}>
-                            <InfoTooltip text="Define which tenant organizations have visibility to this field." size="sm" />
-                          </span>
-                        </div>
-                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${scopeDropdownOpen ? "rotate-180" : ""}`} />
-                      </button>
-
-                      {scopeDropdownOpen && (
-                        <div className="p-3 border-t border-gray-100 bg-white">
-                          <AdminScopingRulesEditor
-                            rules={form.scopingRules}
-                            onChange={(rules) => setForm((p) => ({ ...p, scopingRules: rules }))}
-                            isReadOnly={isReadOnly}
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 2. Permissions Dropdown */}
-                    <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-2xs">
-                      <button
-                        type="button"
-                        onClick={() => setPermissionsDropdownOpen((v) => !v)}
-                        className="w-full px-3 py-2 bg-gray-50/70 hover:bg-gray-100/60 flex items-center justify-between text-left transition-colors cursor-pointer"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Lock className="w-3.5 h-3.5 text-gray-600 shrink-0" />
-                          <span className="text-xs font-semibold text-gray-800">
-                            Permissions
-                          </span>
-                          <span onClick={(e) => e.stopPropagation()}>
-                            <InfoTooltip text="Configure what tenant users are permitted to do with this field." size="sm" />
-                          </span>
-                        </div>
-                        <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${permissionsDropdownOpen ? "rotate-180" : ""}`} />
-                      </button>
-
-                      {permissionsDropdownOpen && (
-                        <div className="p-3 border-t border-gray-100 bg-white">
-                          <div className="flex items-center gap-6">
-                            {/* 1. Hide permission */}
-                            <div className="flex items-center">
-                              <label
-                                className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissions.canHide !== false}
-                                  disabled={isReadOnly}
-                                  onChange={(e) => setForm((p) => ({
-                                    ...p,
-                                    permissions: { ...p.permissions, canHide: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                                <span className="text-xs font-medium text-gray-800">Hide</span>
-                              </label>
-                              <InfoTooltip text="Tenant users can choose to show or hide this field in their workspace views." size="sm" />
-                            </div>
-
-                            {/* 2. Edit permission */}
-                            <div className="flex items-center">
-                              <label
-                                className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissions.canEdit !== false}
-                                  disabled={isReadOnly}
-                                  onChange={(e) => setForm((p) => ({
-                                    ...p,
-                                    permissions: { ...p.permissions, canEdit: e.target.checked }
-                                  }))}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                                <span className="text-xs font-medium text-gray-800">Edit</span>
-                              </label>
-                              <InfoTooltip text="Tenant users can customize the label, placeholder, and configuration of this field." size="sm" />
-                            </div>
-
-                            {/* 3. Add permission */}
-                            <div className="flex items-center">
-                              <label
-                                className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissions.canAdd !== false && form.permissions.canAddOptions !== false}
-                                  disabled={isReadOnly}
-                                  onChange={(e) => setForm((p) => ({
-                                    ...p,
-                                    permissions: {
-                                      ...p.permissions,
-                                      canAdd: e.target.checked,
-                                      canAddOptions: e.target.checked,
-                                    }
-                                  }))}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                                <span className="text-xs font-medium text-gray-800">Add</span>
-                              </label>
-                              <InfoTooltip text="Tenant users can add custom options on top of admin-configured options (for lists, dropdowns, etc.)." size="sm" />
-                            </div>
-
-                            {/* 4. Delete permission */}
-                            <div className="flex items-center">
-                              <label
-                                className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissions.canDelete !== false}
-                                  disabled={isReadOnly}
-                                  onChange={(e) => setForm((p) => ({
-                                    ...p,
-                                    permissions: {
-                                      ...p.permissions,
-                                      canDelete: e.target.checked,
-                                    }
-                                  }))}
-                                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                                />
-                                <span className="text-xs font-medium text-gray-800">Delete</span>
-                              </label>
-                              <InfoTooltip text="Field will be deleted from the user only, not admin." size="sm" />
-                            </div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Processes Selection (Applicable when Module is Process - rendered as simple multi-select dropdown below Admin Control) */}
-          {form.module === "process" && (
-            <ProcessMultiSelect
-              selectedProcessIds={form.processIds}
-              onChange={(processIds) => setForm((p) => ({ ...p, processIds }))}
-              availableProcesses={availableProcesses}
-              isReadOnly={isReadOnly}
-              hasScopeRules={Boolean(isAdmin && form.scopingRules && form.scopingRules.length > 0)}
-            />
-          )}
-
-          {/* Field Name */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Field Name <span className="text-red-500">*</span></label>
-              <InfoTooltip text="User-facing label displayed across client records, tables, and forms." size="sm" />
-            </div>
-            <input type="text" value={form.label} readOnly={isReadOnly}
-              onChange={e => handleLabelChange(e.target.value)} placeholder="e.g. Policy Coverage"
-              className={`${isReadOnly ? `${inputCls()} ${roCls}` : inputCls(errors.label)}`}
-            />
-            {errors.label && <p className="text-[11px] text-red-500 mt-1">{errors.label}</p>}
-          </div>
-
-          {/* Machine Key */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700">
-                Machine Key <span className="text-red-500">*</span>
-              </label>
-              <InfoTooltip text="Auto-generated unique identifier used in document templates and workflows. Locked after creation to preserve references." size="sm" />
-            </div>
-            <input type="text" value={form.key} readOnly={isReadOnly || isEdit}
-              onChange={e => !isEdit && !isReadOnly && setForm(p => ({ ...p, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") }))}
-              placeholder="policy_coverage"
-              className={`${isEdit || isReadOnly ? `${inputCls()} ${roCls} font-mono` : `${inputCls(errors.key)} font-mono`}`}
-            />
-            {errors.key && <p className="text-[11px] text-red-500 mt-1">{errors.key}</p>}
-          </div>
-
-          {/* Field Type */}
-          <div>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <label className="block text-xs font-semibold text-slate-700">Field Type</label>
-              <InfoTooltip text="Select the data type and user input format for this field." size="sm" />
-            </div>
-            <div className="relative" ref={typePickerRef}>
-              <button type="button" disabled={isReadOnly}
-                onClick={() => !isReadOnly && setTypePickerOpen(v => !v)}
-                className={`w-full px-3.5 py-2 bg-white border rounded-lg text-xs font-medium flex items-center justify-between transition-all select-none min-h-[38px] ${
-                  isReadOnly
+            <div className="relative" ref={modulePickerRef}>
+              <button
+                type="button"
+                disabled={isReadOnly || lockModule}
+                onClick={() => !isReadOnly && !lockModule && setModulePickerOpen((v) => !v)}
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium flex items-center justify-between transition-all select-none min-h-[40px] ${
+                  isReadOnly || lockModule
                     ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
                     : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs"
                 }`}
               >
-                <span className={`font-medium ${isReadOnly ? "text-slate-400" : "text-slate-800"}`}>{typeLabel}</span>
-                {!isReadOnly && <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${typePickerOpen ? "rotate-180" : ""}`} />}
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  {form.selectedModules.map((m) => {
+                    const opt = MODULE_OPTIONS.find((o) => o.value === m);
+                    return (
+                      <span key={m} className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
+                        {opt?.label || m}
+                      </span>
+                    );
+                  })}
+                  {form.selectedModules.length > 1 && (
+                    <span className="text-[10px] text-slate-400 font-medium ml-1">
+                      (Shared across {form.selectedModules.length} modules)
+                    </span>
+                  )}
+                </div>
+                {!isReadOnly && !lockModule && (
+                  <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${modulePickerOpen ? "rotate-180" : ""}`} />
+                )}
               </button>
+
+              {modulePickerOpen && !isReadOnly && !lockModule && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5">
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80 rounded-md mb-1">
+                    Select Target Modules
+                  </div>
+                  <div className="space-y-0.5">
+                    {MODULE_OPTIONS.map((opt) => {
+                      const isChecked = form.selectedModules.includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => toggleModuleSelection(opt.value)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                            isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50"
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-slate-300 bg-white"
+                          }`}>
+                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 2. Field Name */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Field Name <span className="text-red-500">*</span>
+              </label>
+              <InfoTooltip text="User-facing label displayed across client records, tables, and forms." size="sm" />
+            </div>
+            <input
+              type="text"
+              value={form.label}
+              readOnly={isReadOnly}
+              onChange={(e) => handleLabelChange(e.target.value)}
+              placeholder="e.g. Policy Coverage"
+              className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls(errors.label)}
+            />
+            {errors.label && <p className="text-[11px] text-red-500 mt-1">{errors.label}</p>}
+          </div>
+
+          {/* 3. Field Type Picker */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Field Type <span className="text-red-500">*</span>
+              </label>
+              <InfoTooltip text="Select the data type and format for this field." size="sm" />
+            </div>
+
+            <div className="relative" ref={typePickerRef}>
+              <button
+                type="button"
+                disabled={isReadOnly || lockCategory}
+                onClick={() => !isReadOnly && !lockCategory && setTypePickerOpen((v) => !v)}
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium flex items-center justify-between transition-all select-none min-h-[40px] ${
+                  isReadOnly || lockCategory
+                    ? "border-slate-200 bg-slate-50 text-slate-400 cursor-not-allowed"
+                    : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 cursor-pointer shadow-2xs"
+                }`}
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="font-semibold text-slate-900">{selectedTypeItem.label}</span>
+                </div>
+                {!isReadOnly && !lockCategory && <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${typePickerOpen ? "rotate-180" : ""}`} />}
+              </button>
+
               {typePickerOpen && !isReadOnly && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-y-auto p-1" style={{ maxHeight: 300 }}>
-                  {FIELD_TYPE_GROUPS.map(grp => (
-                    <div key={grp.group} className="mb-1 last:mb-0">
-                      <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80 rounded-md mb-0.5">{grp.group}</div>
-                      {grp.items.map(item => {
-                        const isItemActive = item.value === "list_select" ? isList : form.inputType === item.value;
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-50 overflow-y-auto p-1.5" style={{ maxHeight: 320 }}>
+                  {CONSOLIDATED_FIELD_TYPES.map((grp) => (
+                    <div key={grp.category} className="mb-1.5 last:mb-0">
+                      <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50/80 rounded-md mb-0.5">
+                        {grp.category}
+                      </div>
+                      {grp.items.map((item) => {
+                        const isItemActive = form.primaryCategory === item.id;
                         return (
-                          <button key={item.value} type="button"
+                          <button
+                            key={item.id}
+                            type="button"
                             onClick={() => {
-                              if (item.value === "list_select") {
-                                if (!isList) {
-                                  setForm(p => ({ ...p, inputType: "list_select", selectionMode: "single", crmBindSelectionMode: "single" }));
-                                }
-                              } else {
-                                setForm(p => ({ ...p, inputType: item.value }));
-                              }
+                              setForm((p) => ({
+                                ...p,
+                                primaryCategory: item.id,
+                                placeholder: p.placeholder || getSuggestedPlaceholderForType(item.id, p.label),
+                              }));
                               setTypePickerOpen(false);
                             }}
-                            className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                            className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
                               isItemActive ? "bg-blue-50/90 text-blue-900 font-semibold" : "text-slate-700 hover:bg-slate-50 hover:text-slate-900"
                             }`}
                           >
-                            <span>{item.label}</span>
+                            <div>
+                              <div className="font-semibold">{item.label}</div>
+                            </div>
                             {isItemActive && <Check className="w-3.5 h-3.5 text-blue-600 stroke-[2.5]" />}
                           </button>
                         );
@@ -881,471 +1221,652 @@ export function AdminFieldDrawer({
             </div>
           </div>
 
-          {/* List Type Dropdown */}
-          {isList && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  List Type <span className="text-red-500">*</span>
-                </label>
-                <InfoTooltip text="Select whether the list is single-choice, multiple-choice, or open for user-added entries." size="sm" />
-              </div>
-              <AdminSelect
-                value={activeListType}
-                disabled={isReadOnly}
-                onChange={(val) => {
-                  if (val === "open") {
-                    setForm((p) => ({
-                      ...p,
-                      inputType: "list_open",
-                      listEntryType: p.listEntryType || "plain_text",
-                    }));
-                  } else if (val === "select") {
-                    setForm((p) => ({
-                      ...p,
-                      inputType: "list_select",
-                      selectionMode: "single",
-                      crmBindSelectionMode: "single",
-                      defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue[0] || "" : p.defaultValue || "",
-                    }));
-                  } else if (val === "multi_select") {
-                    setForm((p) => ({
-                      ...p,
-                      inputType: "list_select",
-                      selectionMode: "multiple",
-                      crmBindSelectionMode: "multiple",
-                      defaultValue: Array.isArray(p.defaultValue) ? p.defaultValue : p.defaultValue ? [p.defaultValue] : [],
-                    }));
-                  }
-                }}
-                options={[
-                  { value: "select", label: "Select (Single Choice Dropdown)", tooltip: "Users pick a single value from options" },
-                  { value: "multi_select", label: "Multi-Select (Multiple Choice)", tooltip: "Users can choose multiple options" },
-                  { value: "open", label: "Open List (User Added Entries)", tooltip: "Users add chips or repeatable records" },
-                ]}
-              />
-            </div>
-          )}
+          {/* ═══════════════════════════════════════════════════════════ */}
+          {/* TYPE-SPECIFIC FIELD CONFIGURATION PANELS */}
+          {/* ═══════════════════════════════════════════════════════════ */}
 
-          {/* Placeholder for non-composite fields */}
-          {!isComposite && form.inputType !== "signature" && form.inputType !== "file" && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">
-                  Placeholder <span className="text-[10px] font-normal text-slate-400">(optional)</span>
-                </label>
-                <InfoTooltip text="Hint or example text displayed inside the field when empty to guide user input." size="sm" />
-              </div>
-              <input
-                type="text"
-                value={form.placeholder}
-                readOnly={isReadOnly}
-                onChange={e => setForm(p => ({ ...p, placeholder: e.target.value }))}
-                placeholder={getSuggestedPlaceholderForType(form.inputType, form.label)}
-                className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls()}
-              />
-            </div>
-          )}
-
-          {/* Composite Placeholder Notice */}
-          {isComposite && (
-            <div className="p-3 bg-slate-50/80 border border-slate-200 rounded-xl flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-slate-600">
-                <span className="font-semibold text-slate-700">Placeholders:</span>
-                <span>Configured individually for each column / sub-field below.</span>
-              </div>
-              <InfoTooltip text="Because this is a composite field, each column or sub-field has its own contextual placeholder matching its specific data type." size="sm" />
-            </div>
-          )}
-
-          {/* Currency picker for money fields */}
-          {form.inputType === "money" && (
-            <div>
-              <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="block text-xs font-semibold text-slate-700">Currency</label>
-                <InfoTooltip text="Select the currency denomination displayed alongside monetary amounts." size="sm" />
-              </div>
-              <AdminSelect
-                value={form.currency || "INR"}
-                disabled={isReadOnly}
-                onChange={(val) => setForm((p) => ({ ...p, currency: val }))}
-                options={Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => ({
-                  value: code,
-                  label: `${code} (${symbol})`,
-                  badge: symbol,
-                }))}
-              />
-            </div>
-          )}
-
-          {/* Rating max stars configuration */}
-          {form.inputType === "rating" && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Star className="w-4 h-4 text-blue-600 fill-blue-500/20" />
-                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                    Maximum Rating (Stars)
-                  </label>
-                  <InfoTooltip text="Choose the maximum rating score users can select for this rating field." size="sm" />
-                </div>
-                <span className="text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-md">
-                  {form.maxRating || 5} Stars
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {[3, 5, 10].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    disabled={isReadOnly}
-                    onClick={() => {
-                      setForm((p) => ({
-                        ...p,
-                        maxRating: num,
-                        defaultValue: p.defaultValue && Number(p.defaultValue) > num ? num : p.defaultValue,
-                      }));
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                      (form.maxRating || 5) === num
-                        ? "bg-primary text-white border-primary shadow-2xs"
-                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                    }`}
-                  >
-                    {num} Stars
-                  </button>
-                ))}
-                <div className="flex items-center gap-1.5 ml-auto">
-                  <span className="text-xs text-slate-500 font-medium">Custom:</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    value={form.maxRating || 5}
-                    disabled={isReadOnly}
-                    onChange={(e) => {
-                      const val = Math.max(1, Math.min(20, Number(e.target.value) || 5));
-                      setForm((p) => ({
-                        ...p,
-                        maxRating: val,
-                        defaultValue: p.defaultValue && Number(p.defaultValue) > val ? val : p.defaultValue,
-                      }));
-                    }}
-                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 text-center"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Options & List Bind Configuration (for Select and Multi-Select) */}
-          {isList && activeListType !== "open" && (
-            <div className="space-y-3.5 p-4 bg-slate-50/70 border border-slate-200 rounded-xl">
-              {/* Option Source Dropdown */}
+          {/* 3A. Text Configuration (Short Text vs Paragraph) */}
+          {form.primaryCategory === "text" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Option Source
+                    Text Format
                   </label>
-                  <InfoTooltip text="Choose whether options are entered manually or dynamically bound from CRM records, tables, or open lists." size="sm" />
+                  <InfoTooltip text="Choose between single-line short text or multiline paragraph." size="sm" />
                 </div>
-                <AdminSelect
-                  value={form.optionSourceMode === "bind" ? "bind" : "manual"}
-                  disabled={isReadOnly}
-                  onChange={(val) => {
-                    const mode = val as "manual" | "bind";
-                    if (mode === "bind") {
-                      setForm((p) => ({
-                        ...p,
-                        optionSourceMode: "bind",
-                        listBindConfig: p.listBindConfig || {
-                          sourceType: availableTableFields.length > 0 ? "table" : "crm",
-                          targetFieldKey: availableTableFields[0]?.key || "",
-                          targetColumnOrSubFieldId: availableTableFields[0]?.tableColumns?.[0]?.id || availableTableFields[0]?.subFields?.[0]?.id || "",
-                          crmModule: "teamMember",
-                        },
-                      }));
-                    } else {
-                      setForm((p) => ({ ...p, optionSourceMode: "manual" }));
-                    }
-                  }}
-                  options={[
-                    { value: "manual", label: "Manual Options", tooltip: "Define custom static choices for this field" },
-                    { value: "bind", label: "Dynamic List Bind (Data Source)", tooltip: "Dynamically populate options from CRM records, tables, or open lists" },
-                  ]}
-                />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, textMode: "short" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.textMode === "short"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Short Text (Single Line)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, textMode: "paragraph" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.textMode === "paragraph"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Paragraph (Multiline)
+                  </button>
+                </div>
               </div>
 
-              {/* Dynamic List Bind Configuration Panel */}
-              {form.optionSourceMode === "bind" ? (
-                <div className="space-y-3 bg-white p-3.5 rounded-xl border border-slate-200 shadow-2xs">
-                  <div className="flex items-center justify-between pb-0.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600">
-                        <Database className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Dynamic Data Binding Source</span>
-                    </div>
-                    <InfoTooltip text="Options for this list will be dynamically bound from the selected source at runtime on client records and forms." size="sm" />
+              {form.textMode === "short" && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Max Characters (Optional)
+                    </label>
+                    <InfoTooltip text="Limit the maximum number of characters allowed in this text field. Leave blank for unlimited." size="sm" />
                   </div>
-
-                  {/* 1. Source Type Selector */}
-                  <div>
-                    <div className="flex items-center gap-1.5 mb-1.5">
-                      <label className="block text-xs font-semibold text-slate-700">
-                        Data Source Type
-                      </label>
-                      <InfoTooltip text="Choose whether to bind to an open list, table field column, or CRM entity." size="sm" />
-                    </div>
-                    <AdminSelect
-                      value={form.listBindConfig?.sourceType === "field" ? "open_list" : (form.listBindConfig?.sourceType || "open_list")}
-                      disabled={isReadOnly}
-                      onChange={(val) => {
-                        const newSourceType = val as "open_list" | "table" | "crm";
-                        let defaultTargetKey = "";
-                        let defaultColId = "";
-                        if (newSourceType === "open_list" && availableOpenListFields.length > 0) {
-                          defaultTargetKey = availableOpenListFields[0].key;
-                          defaultColId = availableOpenListFields[0].subFields?.[0]?.id || availableOpenListFields[0].tableColumns?.[0]?.id || "";
-                        } else if (newSourceType === "table" && availableTableFields.length > 0) {
-                          defaultTargetKey = availableTableFields[0].key;
-                          defaultColId = availableTableFields[0].tableColumns?.[0]?.id || availableTableFields[0].subFields?.[0]?.id || "";
-                        }
-
-                        setForm((p) => ({
-                          ...p,
-                          listBindConfig: {
-                            sourceType: newSourceType,
-                            targetFieldKey: defaultTargetKey,
-                            targetColumnOrSubFieldId: defaultColId,
-                            crmModule: "teamMember",
-                          },
-                        }));
-                      }}
-                      options={[
-                        { value: "open_list", label: "Bind to Open List", tooltip: "Extract values from structured open list" },
-                        { value: "table", label: "Table Field Column", tooltip: "Extract distinct values from table" },
-                        { value: "crm", label: "CRM Entity", tooltip: "Team Members, Clients, Services, Processes, Orgs" },
-                      ]}
-                    />
-                  </div>
-
-                  {/* 2. Target Field and Sub-field for Open List Source */}
-                  {(form.listBindConfig?.sourceType === "open_list" || form.listBindConfig?.sourceType === ("group" as any)) && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <label className="block text-[11px] font-semibold text-slate-600">
-                          Select Structured Open List
-                        </label>
-                        <InfoTooltip text="Select which structured open list in this module to pull options from." size="sm" />
-                      </div>
-                      {availableOpenListFields.length === 0 ? (
-                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
-                          No structured Open List fields exist in this module yet.
-                        </div>
-                      ) : (
-                        <AdminSelect
-                          value={form.listBindConfig?.targetFieldKey || availableOpenListFields[0]?.key}
-                          disabled={isReadOnly}
-                          onChange={(val) => {
-                            setForm((p) => ({
-                              ...p,
-                              listBindConfig: {
-                                ...p.listBindConfig!,
-                                sourceType: "open_list",
-                                targetFieldKey: val,
-                                targetColumnOrSubFieldId: undefined,
-                              },
-                            }));
-                          }}
-                          options={availableOpenListFields.map((f) => ({
-                            value: f.key,
-                            label: f.label,
-                            badge: f.key,
-                          }))}
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* 3. Target Field and Column for Table Source */}
-                  {form.listBindConfig?.sourceType === "table" && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <label className="block text-[11px] font-semibold text-slate-600">
-                          Select Table Field
-                        </label>
-                        <InfoTooltip text="Select the table field in this module to extract unique column values from." size="sm" />
-                      </div>
-                      {availableTableFields.length === 0 ? (
-                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
-                          No Table fields exist in this module yet.
-                        </div>
-                      ) : (
-                        <AdminSelect
-                          value={form.listBindConfig.targetFieldKey || availableTableFields[0]?.key}
-                          disabled={isReadOnly}
-                          onChange={(val) => {
-                            const targetTbl = availableTableFields.find((f) => f.key === val);
-                            const targetColId = targetTbl?.tableColumns?.[0]?.id || targetTbl?.subFields?.[0]?.id || "";
-                            setForm((p) => ({
-                              ...p,
-                              listBindConfig: {
-                                ...p.listBindConfig!,
-                                targetFieldKey: val,
-                                targetColumnOrSubFieldId: targetColId,
-                              },
-                            }));
-                          }}
-                          options={availableTableFields.map((t) => ({
-                            value: t.key,
-                            label: t.label,
-                            badge: t.key,
-                          }))}
-                        />
-                      )}
-                    </div>
-                  )}
-
-                  {/* 4. Target CRM Module */}
-                  {form.listBindConfig?.sourceType === "crm" && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <label className="block text-[11px] font-semibold text-slate-600">
-                          CRM Entity Module
-                        </label>
-                        <InfoTooltip text="Select which CRM entity records to pull dynamically into this list." size="sm" />
-                      </div>
-                      <AdminSelect
-                        value={form.listBindConfig.crmModule || "teamMember"}
-                        disabled={isReadOnly}
-                        onChange={(val) => {
-                          setForm((p) => ({
-                            ...p,
-                            listBindConfig: {
-                              ...p.listBindConfig!,
-                              crmModule: val as CrmBindModule,
-                              displayField: "name",
-                            },
-                          }));
-                        }}
-                        options={[
-                          { value: "teamMember", label: "Team Members", tooltip: "Staff & doctors directory" },
-                          { value: "client", label: "Clients", tooltip: "Client profiles & contacts" },
-                          { value: "organization", label: "Organizations", tooltip: "Companies & organizations" },
-                          { value: "service", label: "Services / Catalog", tooltip: "Treatments, procedures & services" },
-                          { value: "process", label: "Processes", tooltip: "Workflows & pipeline stages" },
-                        ]}
-                      />
-                    </div>
-                  )}
-
-                  {/* 5. Target Existing Custom Field */}
-                  {form.listBindConfig?.sourceType === "field" && (
-                    <div>
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <label className="block text-[11px] font-semibold text-slate-600">
-                          Mirror From Field
-                        </label>
-                        <InfoTooltip text="Select another List field in this module to mirror options from." size="sm" />
-                      </div>
-                      {availableListFields.length === 0 ? (
-                        <div className="text-xs text-amber-700 bg-amber-50/80 p-2.5 rounded-lg border border-amber-200">
-                          No other List fields found in this module.
-                        </div>
-                      ) : (
-                        <AdminSelect
-                          value={form.listBindConfig.targetFieldKey || availableListFields[0]?.key}
-                          disabled={isReadOnly}
-                          onChange={(val) => {
-                            setForm((p) => ({
-                              ...p,
-                              listBindConfig: {
-                                ...p.listBindConfig!,
-                                targetFieldKey: val,
-                              },
-                            }));
-                          }}
-                          options={availableListFields.map((f) => ({
-                            value: f.key,
-                            label: f.label,
-                            badge: `${f.options?.length || 0} options`,
-                          }))}
-                        />
-                      )}
-                    </div>
-                  )}
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.maxChars || ""}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, maxChars: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="e.g. 255"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                  />
                 </div>
-              ) : (
-                /* Manual Options List */
-                <div className="space-y-2">
+              )}
+
+              {form.textMode === "paragraph" && (
+                <div className="pt-2 border-t border-slate-200/80">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-semibold text-slate-600">Manual Options:</span>
-                    {!isReadOnly && (
-                      <button
-                        type="button"
-                        onClick={addOption}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                      >
-                        <Plus className="w-3 h-3" /> Add option
-                      </button>
-                    )}
-                  </div>
-                  {form.options.map((opt, idx) => (
-                    <div key={opt.id} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        value={opt.label}
-                        readOnly={isReadOnly}
-                        onChange={(e) => updateOption(idx, e.target.value)}
-                        className={`flex-1 px-3 py-2 border rounded-lg text-sm transition-all ${
-                          isReadOnly ? roCls + " border-gray-100" : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                        }`}
-                      />
-                      {!isReadOnly && (
-                        <button
-                          type="button"
-                          onClick={() => removeOption(idx)}
-                          className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Rich Text Editor
+                      </label>
+                      <InfoTooltip text="Enable rich text formatting toolbar (bold, lists, links) on client-facing records." size="sm" />
                     </div>
-                  ))}
+                    <label className="relative inline-flex items-center cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={form.richText}
+                        disabled={isReadOnly}
+                        onChange={(e) => setForm((p) => ({ ...p, richText: e.target.checked }))}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* CRM Bind configuration card */}
-          {form.inputType === "crm_bind" && (
-            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3.5">
-              <div className="flex items-center justify-between pb-0.5">
-                <div className="flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-slate-100 border border-slate-200/80 flex items-center justify-center text-slate-600">
-                    <Link2 className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">CRM Bind Configuration</span>
+          {/* 3B. Number Configuration (Integer vs Range) */}
+          {form.primaryCategory === "number" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Number Mode
+                  </label>
+                  <InfoTooltip text="Select standard integer input or bounded numeric range slider." size="sm" />
                 </div>
-                <InfoTooltip text="CRM Bind fields dynamically pull records at runtime on client records. Client records and live data are not loaded in Admin." size="sm" />
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, numberMode: "integer" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.numberMode === "integer"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Integer (Standard)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, numberMode: "range" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.numberMode === "range"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Range (Min / Max Bound)
+                  </button>
+                </div>
+              </div>
+
+              {form.numberMode === "integer" ? (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Max Value Cap (Optional)
+                    </label>
+                    <InfoTooltip text="Limit how high the number value can go. Leave blank for no limit." size="sm" />
+                  </div>
+                  <input
+                    type="number"
+                    value={form.maxCap ?? ""}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, maxCap: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="e.g. 1000"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Min Bound
+                      </label>
+                      <InfoTooltip text="Minimum boundary for the range input." size="sm" />
+                    </div>
+                    <input
+                      type="number"
+                      value={form.minRange ?? 0}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, minRange: Number(e.target.value) || 0 }))}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Max Bound
+                      </label>
+                      <InfoTooltip text="Maximum boundary for the range input." size="sm" />
+                    </div>
+                    <input
+                      type="number"
+                      value={form.maxRange ?? 100}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, maxRange: Number(e.target.value) || 100 }))}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3C. Date & Time Configuration */}
+          {form.primaryCategory === "date_time" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Capture Format
+                  </label>
+                  <InfoTooltip text="Choose whether to capture Date only, Time only, or Both." size="sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["date", "time", "both"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => setForm((p) => ({ ...p, dateTimeCapture: mode }))}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                        form.dateTimeCapture === mode
+                          ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                          : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                      }`}
+                    >
+                      {mode === "date" ? "Date only" : mode === "time" ? "Time only" : "Both"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {form.dateTimeCapture !== "time" && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Date Format
+                    </label>
+                    <InfoTooltip text="Standard date display format on client records and views." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={form.dateFormat}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, dateFormat: val }))}
+                    options={COMMON_DATE_FORMATS}
+                  />
+                </div>
+              )}
+
+              {form.dateTimeCapture !== "date" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Time Format
+                      </label>
+                      <InfoTooltip text="Choose 12-hour or 24-hour clock display." size="sm" />
+                    </div>
+                    <AdminSelect
+                      value={form.timeFormat}
+                      disabled={isReadOnly}
+                      onChange={(val) => setForm((p) => ({ ...p, timeFormat: val as "12h" | "24h" }))}
+                      options={[
+                        { value: "12h", label: "12-hour (1:30 PM)" },
+                        { value: "24h", label: "24-hour (13:30)" },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Timezone
+                      </label>
+                      <InfoTooltip text="Reference timezone for time formatting." size="sm" />
+                    </div>
+                    <AdminSelect
+                      value={form.timezone}
+                      disabled={isReadOnly}
+                      onChange={(val) => setForm((p) => ({ ...p, timezone: val }))}
+                      options={COMMON_TIMEZONES}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3D. Composite Field (Table + Group View) */}
+          {form.primaryCategory === "composite" && (
+            <div className="space-y-3.5 p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Display Mode
+                  </label>
+                  <InfoTooltip text="Choose how this composite field appears on records. Data structure is shared between Table View and Group View." size="sm" />
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, compositeDisplayMode: "table" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.compositeDisplayMode === "table"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Table View (Spreadsheet Row)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, compositeDisplayMode: "group" }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      form.compositeDisplayMode === "group"
+                        ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                        : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                    }`}
+                  >
+                    Group View (Card / Repeatable)
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Sub-Fields & Columns
+                    </label>
+                    <InfoTooltip text="Define the structure of this composite field using existing module fields or custom sub-fields." size="sm" />
+                  </div>
+
+                  {!isReadOnly && (
+                    <div className="flex items-center gap-2">
+                      <div className="relative" ref={existingFieldPickerRef}>
+                        <button
+                          type="button"
+                          onClick={() => setExistingFieldPickerOpen((v) => !v)}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-white border border-slate-200 px-2.5 py-1 rounded-md transition-colors cursor-pointer shadow-2xs"
+                          title="Import from an existing field in this module"
+                        >
+                          <Layers className="w-3 h-3 text-slate-500" />
+                          <span>Use Existing Field</span>
+                          <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${existingFieldPickerOpen ? "rotate-180" : ""}`} />
+                        </button>
+                        {existingFieldPickerOpen && (
+                          <div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5">
+                            <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              Fields in {MODULE_OPTIONS.find((m) => m.value === form.module)?.label || form.module}
+                            </div>
+                            {availableFieldsForComposite.length === 0 ? (
+                              <div className="px-3 py-2 text-xs text-slate-400 italic">No existing fields found in this module</div>
+                            ) : (
+                              availableFieldsForComposite.map((f) => (
+                                <button
+                                  key={f.key}
+                                  type="button"
+                                  onClick={() => {
+                                    importExistingFieldToColumn(f);
+                                    setExistingFieldPickerOpen(false);
+                                  }}
+                                  className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between text-xs cursor-pointer group"
+                                >
+                                  <span className="font-medium text-slate-700 group-hover:text-blue-700 truncate">{f.label}</span>
+                                  <span className="text-[10px] text-slate-400 uppercase font-mono px-1.5 py-0.5 bg-slate-100 rounded">
+                                    {f.inputType}
+                                  </span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={addColumn}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200"
+                      >
+                        <Plus className="w-3 h-3" /> Add sub-field
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  {form.tableColumns.map((col, idx) => (
+                    <div key={col.id} className="space-y-2.5 p-3 border border-slate-200 rounded-xl bg-white shadow-2xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <input
+                          type="text"
+                          value={col.name}
+                          readOnly={isReadOnly}
+                          onChange={(e) => updateColumn(idx, { name: e.target.value })}
+                          placeholder="Sub-field name"
+                          className={`flex-1 min-w-0 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${isReadOnly ? roCls : "border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`}
+                        />
+                        <AdminSelect
+                          value={col.type}
+                          disabled={isReadOnly}
+                          onChange={(newType) => {
+                            const patch: Partial<TableColumnConfig> = { type: newType };
+                            if (newType === "Select" && (!col.options || col.options.length === 0)) {
+                              patch.options = [
+                                { id: 1, label: "Option A", value: "option_a" },
+                                { id: 2, label: "Option B", value: "option_b" },
+                              ];
+                            }
+                            if (newType === "Money" && !col.currency) patch.currency = "INR";
+                            updateColumn(idx, patch);
+                          }}
+                          size="sm"
+                          className="w-36 shrink-0 min-w-0"
+                          options={[
+                            { value: "Text", label: "Text" },
+                            { value: "Long Text", label: "Long Text" },
+                            { value: "Number", label: "Number" },
+                            { value: "Money", label: "Money" },
+                            { value: "Select", label: "Select List" },
+                            { value: "Date", label: "Date" },
+                            { value: "Date & Time", label: "Date & Time" },
+                            { value: "Yes / No", label: "Yes / No" },
+                            { value: "Email", label: "Email" },
+                            { value: "Phone", label: "Phone" },
+                            { value: "Link", label: "Link" },
+                            { value: "Rating", label: "Rating" },
+                          ]}
+                        />
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => removeColumn(idx)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                            title="Delete sub-field"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1 border-t border-slate-100 min-w-0">
+                        <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                          Placeholder:
+                        </span>
+                        <input
+                          type="text"
+                          value={col.placeholder || ""}
+                          readOnly={isReadOnly}
+                          onChange={(e) => updateColumn(idx, { placeholder: e.target.value })}
+                          placeholder={getSuggestedPlaceholderForType(col.type, col.name)}
+                          className="flex-1 min-w-0 px-2.5 py-1 bg-slate-50/50 border border-slate-200 rounded-lg text-xs text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3E. Media Attach Configuration (replaces File) */}
+          {form.primaryCategory === "media" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Media Category
+                  </label>
+                  <InfoTooltip text="Select whether this field accepts Image, Document, or Audio uploads." size="sm" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(["image", "document", "audio"] as const).map((mType) => (
+                    <button
+                      key={mType}
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={() => setForm((p) => ({
+                        ...p,
+                        mediaType: mType,
+                        acceptedFormats: MEDIA_PRESET_FORMATS[mType],
+                      }))}
+                      className={`py-2 px-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer capitalize ${
+                        form.mediaType === mType
+                          ? "bg-white border-blue-500 text-blue-700 shadow-2xs"
+                          : "bg-white/60 border-slate-200 text-slate-600 hover:bg-white"
+                      }`}
+                    >
+                      {mType}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="text-xs font-semibold text-slate-700">Bind to Module</label>
-                  <InfoTooltip text="Values will dynamically pull from the selected module with real-time sync." size="sm" />
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Accepted Formats
+                  </label>
+                  <InfoTooltip text="Allowed file formats for upload." size="sm" />
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {MEDIA_PRESET_FORMATS[form.mediaType].map((fmt) => {
+                    const isFmtActive = form.acceptedFormats.includes(fmt);
+                    return (
+                      <button
+                        key={fmt}
+                        type="button"
+                        disabled={isReadOnly}
+                        onClick={() => {
+                          setForm((p) => {
+                            const exists = p.acceptedFormats.includes(fmt);
+                            const next = exists
+                              ? p.acceptedFormats.filter((f) => f !== fmt)
+                              : [...p.acceptedFormats, fmt];
+                            return { ...p, acceptedFormats: next.length > 0 ? next : [fmt] };
+                          });
+                        }}
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
+                          isFmtActive
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        {fmt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Max File Size (MB)
+                    </label>
+                    <InfoTooltip text="Maximum allowed file size per upload." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={String(form.maxFileSizeMB)}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, maxFileSizeMB: Number(val) || 10 }))}
+                    options={[
+                      { value: "5", label: "5 MB" },
+                      { value: "10", label: "10 MB" },
+                      { value: "25", label: "25 MB" },
+                      { value: "50", label: "50 MB" },
+                      { value: "100", label: "100 MB" },
+                    ]}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Upload Mode
+                    </label>
+                    <InfoTooltip text="Allow uploading single file or multiple attachments." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={form.allowMultipleFiles ? "multiple" : "single"}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, allowMultipleFiles: val === "multiple" }))}
+                    options={[
+                      { value: "single", label: "Single File" },
+                      { value: "multiple", label: "Multiple Files" },
+                    ]}
+                  />
+                </div>
+              </div>
+
+              {form.allowMultipleFiles && (
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Max File Count (Optional)
+                    </label>
+                    <InfoTooltip text="Maximum number of files users can attach. Leave blank for unlimited." size="sm" />
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.maxFiles || ""}
+                    disabled={isReadOnly}
+                    onChange={(e) => setForm((p) => ({ ...p, maxFiles: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="Unlimited"
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500"
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 3F. Phone Number Configuration */}
+          {form.primaryCategory === "tel" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Country Picker Label
+                    </label>
+                    <InfoTooltip text="Choose how country selector displays options." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={form.phoneCountryDisplay}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, phoneCountryDisplay: val as "name" | "code" }))}
+                    options={[
+                      { value: "name", label: "Country Name (United States (+1))" },
+                      { value: "code", label: "Country Code (+1)" },
+                    ]}
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">
+                      Number Format
+                    </label>
+                    <InfoTooltip text="Masking and formatting template for telephone inputs." size="sm" />
+                  </div>
+                  <AdminSelect
+                    value={form.phoneFormat}
+                    disabled={isReadOnly}
+                    onChange={(val) => setForm((p) => ({ ...p, phoneFormat: val }))}
+                    options={COMMON_PHONE_FORMATS}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Regex Validation (Optional)
+                  </label>
+                  <InfoTooltip text="Custom regular expression to enforce phone number patterns." size="sm" />
+                </div>
+                <input
+                  type="text"
+                  value={form.phoneRegex}
+                  disabled={isReadOnly}
+                  onChange={(e) => setForm((p) => ({ ...p, phoneRegex: e.target.value }))}
+                  placeholder="e.g. ^\+?[1-9]\d{1,14}$"
+                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 font-mono"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 3G. Link to Mantra Entities (formerly CRM Bind) */}
+          {form.primaryCategory === "crm_bind" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-3">
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700">Link to Entity</label>
+                  <InfoTooltip text="Select CRM entity records to dynamically link with real-time sync." size="sm" />
                 </div>
                 <AdminSelect
-                  value={form.crmBindModule || "teamMember"}
+                  value={form.crmBindModule}
                   disabled={isReadOnly}
                   onChange={(val) => setForm((p) => ({ ...p, crmBindModule: val as CrmBindModule }))}
                   options={[
-                    { value: "teamMember", label: "Team Member", tooltip: "Staff / Doctors" },
-                    { value: "client", label: "Client", tooltip: "Link to Client Record" },
-                    { value: "organization", label: "Organization", tooltip: "Companies / Accounts" },
-                    { value: "service", label: "Service", tooltip: "Treatments / Catalog" },
-                    { value: "process", label: "Process", tooltip: "Workflows / Pipelines" },
+                    { value: "teamMember", label: "Team Members (Staff & Doctors)" },
+                    { value: "client", label: "Clients (Profiles & Contacts)" },
+                    { value: "organization", label: "Organizations (Companies / Accounts)" },
+                    { value: "service", label: "Services (Treatments & Catalog)" },
+                    { value: "process", label: "Processes (Workflows & Pipelines)" },
                   ]}
                 />
               </div>
@@ -1383,354 +1904,536 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-          {/* Open List Entry Format Dropdown */}
-          {isList && activeListType === "open" && (
-            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2">
+          {/* 3H. REDESIGNED LIST FIELD CONFIGURATION */}
+          {form.primaryCategory === "list" && (
+            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-4">
+              {/* 1. Value Type Selector (Applies to all options in this list) */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    List Option Value Type <span className="text-red-500">*</span>
+                  </label>
+                  <InfoTooltip text="Choose the data type for every option in this list (Text, Phone Number, Money, Date & Time, Composite, etc.)." size="sm" />
+                </div>
+                <AdminSelect
+                  value={form.listValueType}
+                  disabled={isReadOnly}
+                  onChange={(val) => {
+                    setForm((p) => ({
+                      ...p,
+                      listValueType: val as ListValueType,
+                      inheritedFieldKey: "", // reset inherited field when value type changes
+                    }));
+                  }}
+                  options={LIST_OPTION_VALUE_TYPES.map((t) => ({
+                    value: t.value,
+                    label: t.label,
+                    subtitle: t.category,
+                  }))}
+                />
+              </div>
+
+              {/* 2. Type Inheritance: "Inherit Format From" */}
+              <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <label className="text-xs font-semibold text-slate-800">
+                      Inherit Format From
+                    </label>
+                    <InfoTooltip text="Inherit input formatting, validation rules, and configuration (e.g. phone masking, currency, date format) from an existing field of the same type in this module." size="sm" />
+                  </div>
+
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setNestedDrawerCategory(form.listValueType as PrimaryFieldTypeCategory);
+                        setNestedDrawerOpen(true);
+                      }}
+                      className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/80 cursor-pointer transition-colors"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Field</span>
+                    </button>
+                  )}
+                </div>
+
+                {matchingFieldsInModule.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <AdminSelect
+                      value={form.inheritedFieldKey}
+                      disabled={isReadOnly}
+                      onChange={(val) => setForm((p) => ({
+                        ...p,
+                        inheritedFieldKey: val,
+                        liveLinkedFieldKey: p.liveSync ? val : "",
+                      }))}
+                      placeholder="— Select an existing field to inherit format —"
+                      options={[
+                        { value: "", label: "— Select an existing field to inherit format —" },
+                        ...matchingFieldsInModule.map((f) => ({
+                          value: f.key,
+                          label: `${f.label} (${f.key})`,
+                          subtitle: f.module ? `Module: ${f.module}` : undefined,
+                        })),
+                      ]}
+                    />
+                    {form.inheritedFieldKey ? (
+                      <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                        <span>Inheriting rules and format from <strong>{inheritedFieldDef?.label || form.inheritedFieldKey}</strong></span>
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-amber-600 font-medium">
+                        Please select an existing field or click &ldquo;+ Add Field&rdquo; above to inherit its configuration.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-lg flex items-center justify-between gap-3">
+                    <p className="text-xs text-slate-500">
+                      No existing <strong>{LIST_OPTION_VALUE_TYPES.find((t) => t.value === form.listValueType)?.label || form.listValueType}</strong> fields found in this module.
+                    </p>
+                    {!isReadOnly && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNestedDrawerCategory(form.listValueType as PrimaryFieldTypeCategory);
+                          setNestedDrawerOpen(true);
+                        }}
+                        className="px-2.5 py-1 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors cursor-pointer shrink-0"
+                      >
+                        + Add Field
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Defined Options List (Value-only, no separate label field) */}
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      Defined Options ({form.options.length})
+                    </span>
+                    <InfoTooltip text={`Each option has its own typed value under ${LIST_OPTION_VALUE_TYPES.find((t) => t.value === form.listValueType)?.label || form.listValueType}.`} size="sm" />
+                  </div>
+
+                  {!isReadOnly && (
+                    <button
+                      type="button"
+                      onClick={form.inheritedFieldKey ? addOption : undefined}
+                      disabled={!form.inheritedFieldKey}
+                      title={!form.inheritedFieldKey ? "Select an existing field or click '+ Add Field' above first" : undefined}
+                      className={`flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border transition-colors ${
+                        form.inheritedFieldKey
+                          ? "text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200"
+                          : "text-slate-400 bg-slate-100 border-slate-200 cursor-not-allowed opacity-60"
+                      }`}
+                    >
+                      <Plus className="w-3 h-3" /> Add Option
+                    </button>
+                  )}
+                </div>
+
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                  {!form.inheritedFieldKey ? (
+                    <div className="p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2">
+                      <p className="text-xs font-semibold text-slate-700">
+                        Inherited Field Required
+                      </p>
+                      <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                        Please select an existing field or click <strong>+ Add Field</strong> in &ldquo;Inherit Format From&rdquo; above to enable adding options.
+                      </p>
+                      {matchingFieldsInModule.length === 0 && !isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNestedDrawerCategory(form.listValueType as PrimaryFieldTypeCategory);
+                            setNestedDrawerOpen(true);
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow-2xs cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Create New {LIST_OPTION_VALUE_TYPES.find((t) => t.value === form.listValueType)?.label || "Field"}</span>
+                        </button>
+                      )}
+                    </div>
+                  ) : form.options.length === 0 ? (
+                    <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center space-y-1">
+                      <p className="font-semibold text-slate-600">No options defined yet</p>
+                      <p className="text-[11px] text-slate-400">Click &ldquo;+ Add Option&rdquo; above to define your first option value.</p>
+                    </div>
+                  ) : (
+                    form.options.map((opt, idx) => (
+                      <div
+                        key={opt.id || idx}
+                        className="p-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-2 hover:border-slate-300 transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                            #{idx + 1}
+                          </span>
+
+                          {/* Value Input only (Requirement 1: NO separate display label input) */}
+                          <div className="flex-1 min-w-0">
+                            {form.listValueType === "date_time" ? (
+                              <input
+                                type="date"
+                                value={typeof opt.value === "string" ? opt.value : ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                              />
+                            ) : form.listValueType === "tel" ? (
+                              <input
+                                type="tel"
+                                value={opt.value ?? ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                placeholder={inheritedFieldDef?.phoneConfig?.numberFormat || "+1 (555) 123-4567"}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
+                              />
+                            ) : form.listValueType === "money" ? (
+                              <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden focus-within:bg-white focus-within:border-blue-500">
+                                <span className="px-2.5 py-1.5 text-xs font-bold text-slate-500 bg-slate-100 border-r border-slate-200 select-none">
+                                  {CURRENCY_SYMBOLS[inheritedFieldDef?.currency || form.currency || "INR"] || "₹"}
+                                </span>
+                                <input
+                                  type="number"
+                                  value={opt.value ?? ""}
+                                  readOnly={isReadOnly}
+                                  onChange={(e) => updateOption(idx, { value: e.target.value !== "" ? Number(e.target.value) : "" })}
+                                  placeholder="0.00"
+                                  className="w-full px-2.5 py-1.5 bg-transparent text-xs font-medium text-slate-800 outline-none"
+                                />
+                              </div>
+                            ) : form.listValueType === "number" ? (
+                              <input
+                                type="number"
+                                value={opt.value ?? ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value !== "" ? Number(e.target.value) : "" })}
+                                placeholder="e.g. 100"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                              />
+                            ) : form.listValueType === "email" ? (
+                              <input
+                                type="email"
+                                value={opt.value ?? ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                placeholder="e.g. user@example.com"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                              />
+                            ) : form.listValueType === "link" || form.listValueType === "whatsapp_link" ? (
+                              <input
+                                type="url"
+                                value={opt.value ?? ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                placeholder="e.g. https://example.com"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
+                              />
+                            ) : form.listValueType === "yes_no" ? (
+                              <select
+                                value={String(opt.value)}
+                                disabled={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value === "true" })}
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 cursor-pointer"
+                              >
+                                <option value="true">Yes / True</option>
+                                <option value="false">No / False</option>
+                              </select>
+                            ) : form.listValueType === "composite" ? (
+                              <input
+                                type="text"
+                                value={typeof opt.value === "string" ? opt.value : Array.isArray(opt.value) ? opt.value.join(", ") : formatCompositePreview(opt.value)}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                placeholder="e.g. John, Mumbai (comma-separated parts)"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500"
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={opt.value ?? ""}
+                                readOnly={isReadOnly}
+                                onChange={(e) => updateOption(idx, { value: e.target.value })}
+                                placeholder="e.g. Option value"
+                                className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:bg-white focus:border-blue-500 font-mono"
+                              />
+                            )}
+                          </div>
+
+                          {!isReadOnly && (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => moveOption(idx, -1)}
+                                className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                title="Move up"
+                              >
+                                <ChevronUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === form.options.length - 1}
+                                onClick={() => moveOption(idx, 1)}
+                                className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                title="Move down"
+                              >
+                                <ChevronDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeOption(idx)}
+                                className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                                title="Delete option"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Composite preview banner */}
+                        {form.listValueType === "composite" && (
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 border border-slate-200/70 rounded-md text-[11px]">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Display Preview:</span>
+                            <span className="font-semibold text-slate-700 truncate">
+                              {formatCompositePreview(opt.value) || <span className="text-slate-400 italic">No parts entered</span>}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* 4. LIST BEHAVIOR CONFIGURATION (Applicable to all modes) */}
+              <div className="pt-3 border-t border-slate-200/80 space-y-3">
+                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  List Render & Behavior Configuration
+                </div>
+
+                {/* 1. Allow Search Bar Toggle */}
+                <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                  <div className="flex items-center gap-1.5">
+                    <Search className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="text-xs font-semibold text-slate-800">Allow Search Bar</span>
+                    <InfoTooltip text="Show a search and filter input at the top of the option dropdown." size="sm" />
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={form.allowSearch}
+                      disabled={isReadOnly}
+                      onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* 2. Sorting Order Dropdown */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Sorting Order
+                      </label>
+                      <InfoTooltip text="Order in which options are presented in client dropdowns." size="sm" />
+                    </div>
+                    <AdminSelect
+                      value={form.sortOrder}
+                      disabled={isReadOnly}
+                      onChange={(val) => setForm((p) => ({ ...p, sortOrder: val as any }))}
+                      options={[
+                        { value: "manual", label: "Manual Order (Admin Defined)" },
+                        { value: "alphabetical_asc", label: "Alphabetical (A - Z)" },
+                        { value: "alphabetical_desc", label: "Alphabetical (Z - A)" },
+                        { value: "recent", label: "Most Recently Added First" },
+                      ]}
+                    />
+                  </div>
+
+                  {/* 3. Selection Mode */}
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <label className="block text-xs font-semibold text-slate-700">
+                        Selection Mode
+                      </label>
+                      <InfoTooltip text="Allow picking a single choice or multiple options." size="sm" />
+                    </div>
+                    <AdminSelect
+                      value={form.selectionMode}
+                      disabled={isReadOnly}
+                      onChange={(val) => setForm((p) => ({ ...p, selectionMode: val as "single" | "multiple" }))}
+                      options={[
+                        { value: "single", label: "Single Selection" },
+                        { value: "multiple", label: "Multiple (Multiselect)" },
+                      ]}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Live Two-Way Field Sync Toggle */}
+                <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Link2 className="w-3.5 h-3.5 text-blue-600" />
+                      <span className="text-xs font-bold text-slate-800">
+                        Live Two-Way Field Sync
+                      </span>
+                      <InfoTooltip text="When enabled, any new value entered into the inherited field on records automatically becomes selectable in this list, and selections sync back." size="sm" />
+                    </div>
+                    <label className={`relative inline-flex items-center select-none ${(!form.inheritedFieldKey || isReadOnly) ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}>
+                      <input
+                        type="checkbox"
+                        checked={Boolean(form.liveSync && form.inheritedFieldKey)}
+                        disabled={isReadOnly || !form.inheritedFieldKey}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm((p) => ({
+                            ...p,
+                            liveSync: checked,
+                            liveLinkedFieldKey: checked ? p.inheritedFieldKey : "",
+                          }));
+                        }}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  {form.inheritedFieldKey ? (
+                    form.liveSync ? (
+                      <div className="text-[11px] text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-200 flex items-center gap-1.5">
+                        <span className="inline-block w-2 h-2 rounded-full bg-blue-600 animate-pulse shrink-0"></span>
+                        <span>
+                          Live sync active: automatically synchronizing values with <strong>{inheritedFieldDef?.label || form.inheritedFieldKey}</strong>.
+                        </span>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-slate-500">
+                        Toggle ON to enable two-way live discovery sync with <strong>{inheritedFieldDef?.label || form.inheritedFieldKey}</strong>.
+                      </p>
+                    )
+                  ) : (
+                    <p className="text-[11px] text-slate-400 italic">
+                      Select a field in &ldquo;Inherit Format From&rdquo; above to enable live two-way sync.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3I. Currency Picker for Money fields */}
+          {form.primaryCategory === "money" && (
+            <div>
               <div className="flex items-center gap-1.5 mb-1.5">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Open List Format
-                </label>
-                <InfoTooltip text="Plain Text Tags allows users to type chips/tags. Structured Sub-Fields allows repeatable mini-records with custom sub-fields." size="sm" />
+                <label className="block text-xs font-semibold text-slate-700">Currency</label>
+                <InfoTooltip text="Select the currency denomination displayed alongside monetary amounts." size="sm" />
               </div>
               <AdminSelect
-                value={form.listEntryType || "plain_text"}
+                value={form.currency || "INR"}
                 disabled={isReadOnly}
-                onChange={(val) => setForm((p) => ({ ...p, listEntryType: val as "plain_text" | "structured" }))}
-                options={[
-                  { value: "plain_text", label: "Plain Text Tags", tooltip: "Users type simple chips or tags" },
-                  { value: "structured", label: "Structured Sub-Fields", tooltip: "Repeatable mini-records with sub-fields" },
-                ]}
+                onChange={(val) => setForm((p) => ({ ...p, currency: val }))}
+                options={Object.entries(CURRENCY_SYMBOLS).map(([code, symbol]) => ({
+                  value: code,
+                  label: `${code} (${symbol})`,
+                  badge: symbol,
+                }))}
               />
             </div>
           )}
 
-          {/* Table columns & Group subfields */}
-          {(form.inputType === "table" || form.inputType === "group" || (form.inputType === "list_open" && form.listEntryType === "structured") || form.inputType === "group_repeatable") && (
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="text-xs font-semibold text-gray-700">
-                  {form.inputType === "table"
-                    ? "Table Columns"
-                    : form.inputType === "group"
-                    ? "Group Sub-Fields"
-                    : "Repeatable Sub-Fields"}
-                </label>
-                {!isReadOnly && (
-                  <div className="flex items-center gap-2">
-                    {/* Existing Field Picker Dropdown */}
-                    <div className="relative" ref={existingFieldPickerRef}>
-                      <button
-                        type="button"
-                        onClick={() => setExistingFieldPickerOpen((v) => !v)}
-                        className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-2.5 py-1 rounded-md transition-colors cursor-pointer"
-                        title="Import schema from an existing field"
-                      >
-                        <Layers className="w-3 h-3 text-slate-500" />
-                        <span>Use Existing Field</span>
-                        <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${existingFieldPickerOpen ? "rotate-180" : ""}`} />
-                      </button>
-                      {existingFieldPickerOpen && (
-                        <div className="absolute right-0 top-full mt-1 w-64 max-h-60 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1 space-y-0.5">
-                          <div className="px-2.5 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                            Choose field to import
-                          </div>
-                          {allAvailableFields.length === 0 ? (
-                            <div className="px-3 py-2 text-xs text-slate-400 italic">No other fields found</div>
-                          ) : (
-                            allAvailableFields.map((f) => (
-                              <button
-                                key={f.key}
-                                type="button"
-                                onClick={() => {
-                                  importExistingFieldToColumn(f);
-                                  setExistingFieldPickerOpen(false);
-                                }}
-                                className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-blue-50 flex items-center justify-between text-xs cursor-pointer group"
-                              >
-                                <span className="font-medium text-slate-700 group-hover:text-blue-700 truncate">{f.label}</span>
-                                <span className="text-[10px] text-slate-400 uppercase font-mono px-1.5 py-0.5 bg-slate-100 rounded">
-                                  {f.inputType === "list_select" ? "List" : f.inputType}
-                                </span>
-                              </button>
-                            ))
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={addColumn}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                    >
-                      <Plus className="w-3 h-3" />
-                      {form.inputType === "table" ? "Add column" : "Add sub-field"}
-                    </button>
-                  </div>
-                )}
+          {/* 3J. Rating Max Stars */}
+          {form.primaryCategory === "rating" && (
+            <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Star className="w-4 h-4 text-amber-500 fill-amber-500/20" />
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Maximum Rating
+                  </label>
+                  <InfoTooltip text="Choose the maximum rating stars for this field." size="sm" />
+                </div>
+                <span className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-md">
+                  {form.maxRating || 5} Stars
+                </span>
               </div>
-              <div className="space-y-2">
-                {form.tableColumns.map((col, idx) => (
-                  <div key={col.id} className="space-y-2.5 p-3 border border-slate-200 rounded-xl bg-slate-50/60 shadow-2xs overflow-hidden">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <input
-                        type="text"
-                        value={col.name}
-                        readOnly={isReadOnly}
-                        onChange={(e) => updateColumn(idx, { name: e.target.value })}
-                        placeholder={form.inputType === "table" ? "Column name" : "Sub-field name"}
-                        className={`flex-1 min-w-0 px-3 py-1.5 border rounded-lg text-xs font-medium transition-all ${isReadOnly ? roCls + " border-gray-100" : "border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`}
-                      />
-                      <AdminSelect
-                        value={col.type}
-                        disabled={isReadOnly}
-                        onChange={(newType) => {
-                          const patch: Partial<TableColumnConfig> = { type: newType };
-                          if (newType === "Select" && (!col.options || col.options.length === 0)) {
-                            patch.options = [
-                              { id: 1, label: "Option A", value: "option_a" },
-                              { id: 2, label: "Option B", value: "option_b" },
-                            ];
-                            patch.selectionMode = col.selectionMode || "single";
-                          }
-                          if (newType === "Money" && !col.currency) {
-                            patch.currency = "INR";
-                          }
-                          if (newType === "crm_bind" && !col.crmBindConfig) {
-                            patch.crmBindConfig = {
-                              sourceModule: "teamMember",
-                              displayField: "name",
-                              selectionMode: col.selectionMode || "single",
-                            };
-                          }
-                          updateColumn(idx, patch);
-                        }}
-                        size="sm"
-                        className="w-40 shrink-0 min-w-0"
-                        options={[
-                          { value: "Text", label: "Text (Single Line)" },
-                          { value: "Long Text", label: "Long Text (Textarea)" },
-                          { value: "Select", label: "Selection List" },
-                          { value: "Number", label: "Number" },
-                          { value: "Money", label: "Money / Currency" },
-                          { value: "Date", label: "Date" },
-                          { value: "Date & Time", label: "Date & Time" },
-                          { value: "Yes / No", label: "Yes / No" },
-                          { value: "Email", label: "Email" },
-                          { value: "Phone", label: "Phone" },
-                          { value: "Link", label: "Link / URL" },
-                          { value: "Rating", label: "Rating (1-5)" },
-                          { value: "crm_bind", label: "CRM Bind" },
-                        ]}
-                      />
-                      {!isReadOnly && (
-                        <button
-                          type="button"
-                          onClick={() => removeColumn(idx)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 transition-colors shrink-0"
-                          title="Delete column"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Individual Column Placeholder */}
-                    <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60 min-w-0">
-                      <span className="text-[11px] font-semibold text-slate-500 shrink-0 flex items-center gap-1">
-                        Placeholder:
-                      </span>
-                      <input
-                        type="text"
-                        value={col.placeholder || ""}
-                        readOnly={isReadOnly}
-                        onChange={(e) => updateColumn(idx, { placeholder: e.target.value })}
-                        placeholder={getSuggestedPlaceholderForType(col.type, col.name)}
-                        className={`flex-1 min-w-0 px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all ${isReadOnly ? "cursor-not-allowed bg-slate-50 text-slate-400" : ""}`}
-                      />
-                      <InfoTooltip text={`Type-specific placeholder for ${col.name || 'this column'} (${col.type}). Shown inside cell inputs.`} size="sm" />
-                    </div>
-
-                    {/* Inline options editor & selection mode when column type is Select */}
-                    {col.type === "Select" && (
-                      <div className="ml-2 pl-3 border-l-2 border-blue-300 py-1 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-slate-700">Column Options:</span>
-                          {!isReadOnly && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const curOpts = col.options && col.options.length > 0 ? col.options : [
-                                  { id: 1, label: "Option A", value: "option_a" },
-                                  { id: 2, label: "Option B", value: "option_b" },
-                                ];
-                                updateColumn(idx, {
-                                  options: [
-                                    ...curOpts,
-                                    {
-                                      id: Date.now(),
-                                      label: `Option ${curOpts.length + 1}`,
-                                      value: `option_${curOpts.length + 1}`,
-                                    },
-                                  ],
-                                });
-                              }}
-                              className="text-[11px] font-medium text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                            >
-                              <Plus className="w-3 h-3" /> Add
-                            </button>
-                          )}
-                        </div>
-                        <div className="space-y-1.5">
-                          {(col.options && col.options.length > 0 ? col.options : [
-                            { id: 1, label: "Option A", value: "option_a" },
-                            { id: 2, label: "Option B", value: "option_b" },
-                          ]).map((opt, optIdx) => (
-                            <div key={opt.id || optIdx} className="flex items-center gap-1.5">
-                              <input
-                                type="text"
-                                value={opt.label}
-                                readOnly={isReadOnly}
-                                onChange={(e) => {
-                                  const curOpts = col.options && col.options.length > 0 ? [...col.options] : [
-                                    { id: 1, label: "Option A", value: "option_a" },
-                                    { id: 2, label: "Option B", value: "option_b" },
-                                  ];
-                                  curOpts[optIdx] = {
-                                    ...opt,
-                                    label: e.target.value,
-                                    value: e.target.value.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
-                                  };
-                                  updateColumn(idx, { options: curOpts });
-                                }}
-                                className="flex-1 px-2.5 py-1 text-xs bg-white border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              />
-                              {!isReadOnly && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const curOpts = (col.options && col.options.length > 0 ? col.options : [
-                                      { id: 1, label: "Option A", value: "option_a" },
-                                      { id: 2, label: "Option B", value: "option_b" },
-                                    ]).filter((_, i) => i !== optIdx);
-                                    updateColumn(idx, { options: curOpts });
-                                  }}
-                                  className="p-1 text-gray-300 hover:text-red-500 rounded cursor-pointer"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Selection Mode toggle for column Selection List */}
-                        <div className="flex items-center gap-3 pt-1 border-t border-blue-100">
-                          <span className="text-[11px] font-semibold text-slate-600">Selection:</span>
-                          <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`col_mode_${col.id}_${idx}`}
-                              disabled={isReadOnly}
-                              checked={col.selectionMode !== "multiple"}
-                              onChange={() => updateColumn(idx, { selectionMode: "single" })}
-                              className="text-blue-600 cursor-pointer"
-                            />
-                            <span>Single</span>
-                          </label>
-                          <label className="flex items-center gap-1 text-[11px] text-gray-700 cursor-pointer">
-                            <input
-                              type="radio"
-                              name={`col_mode_${col.id}_${idx}`}
-                              disabled={isReadOnly}
-                              checked={col.selectionMode === "multiple"}
-                              onChange={() => updateColumn(idx, { selectionMode: "multiple" })}
-                              className="text-blue-600 cursor-pointer"
-                            />
-                            <span>Multiple (Multiselect)</span>
-                          </label>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Inline max stars selector when column type is Rating */}
-                    {col.type === "Rating" && (
-                      <div className="ml-2 pl-3 border-l-2 border-amber-300 py-1 flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-slate-700">Max Stars:</span>
-                        <AdminSelect
-                          value={String(col.maxRating || 5)}
-                          disabled={isReadOnly}
-                          onChange={(val) => updateColumn(idx, { maxRating: Number(val) || 5 })}
-                          size="sm"
-                          className="w-28"
-                          options={[
-                            { value: "3", label: "3 Stars" },
-                            { value: "5", label: "5 Stars" },
-                            { value: "10", label: "10 Stars" },
-                          ]}
-                        />
-                      </div>
-                    )}
-
-                    {/* Inline currency selector when column type is Money */}
-                    {col.type === "Money" && (
-                      <div className="ml-2 pl-3 border-l-2 border-emerald-300 py-1 flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-slate-700">Currency:</span>
-                        <AdminSelect
-                          value={col.currency || "INR"}
-                          disabled={isReadOnly}
-                          onChange={(val) => updateColumn(idx, { currency: val })}
-                          size="sm"
-                          className="w-32"
-                          options={Object.entries(CURRENCY_SYMBOLS).map(([cCode, cSym]) => ({
-                            value: cCode,
-                            label: `${cCode} (${cSym})`,
-                          }))}
-                        />
-                      </div>
-                    )}
-
-                    {/* Inline CRM Bind module selector when column type is CRM Bind */}
-                    {col.type === "crm_bind" && (
-                      <div className="ml-2 pl-3 border-l-2 border-purple-300 py-1 space-y-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-slate-700">Bind Module:</span>
-                          <AdminSelect
-                            value={col.crmBindConfig?.sourceModule || "teamMember"}
-                            disabled={isReadOnly}
-                            onChange={(val) => updateColumn(idx, {
-                              crmBindConfig: {
-                                sourceModule: val as CrmBindModule,
-                                displayField: "name",
-                                selectionMode: col.selectionMode || "single",
-                              },
-                            })}
-                            size="sm"
-                            className="w-40"
-                            options={[
-                              { value: "teamMember", label: "Team Member" },
-                              { value: "client", label: "Client" },
-                              { value: "organization", label: "Organization" },
-                              { value: "service", label: "Service" },
-                              { value: "process", label: "Process" },
-                            ]}
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+              <div className="flex items-center gap-2">
+                {[3, 5, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    disabled={isReadOnly}
+                    onClick={() => setForm((p) => ({ ...p, maxRating: num }))}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                      (form.maxRating || 5) === num
+                        ? "bg-[#111827] text-white border-[#111827] shadow-2xs"
+                        : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {num} Stars
+                  </button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Default Value Configurator */}
-          {!isReadOnly && form.inputType !== "signature" && form.inputType !== "file" && (
+          {/* Placeholder for standard non-composite fields */}
+          {form.primaryCategory !== "composite" && form.primaryCategory !== "signature" && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Placeholder
+                </label>
+                <InfoTooltip text="Hint or example text displayed inside the field when empty to guide user input." size="sm" />
+              </div>
+              <input
+                type="text"
+                value={form.placeholder}
+                readOnly={isReadOnly}
+                onChange={(e) => setForm((p) => ({ ...p, placeholder: e.target.value }))}
+                placeholder={getSuggestedPlaceholderForType(form.primaryCategory, form.label)}
+                className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls()}
+              />
+            </div>
+          )}
+
+          {/* 4. Client-Facing Help Text / Tooltip */}
+          <div>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-700">
+                Client-Facing Help Text
+              </label>
+              <InfoTooltip text="Shown as a tooltip next to this field's name when users fill it in." size="sm" />
+            </div>
+            <input
+              type="text"
+              value={form.tooltip}
+              readOnly={isReadOnly}
+              onChange={(e) => setForm((p) => ({ ...p, tooltip: e.target.value }))}
+              placeholder="e.g. Enter the client's official registered legal name"
+              className={isReadOnly ? `${inputCls()} ${roCls}` : inputCls()}
+            />
+          </div>
+
+          {/* 5. Default Value Configurator */}
+          {!isReadOnly && form.primaryCategory !== "signature" && form.primaryCategory !== "media" && (
             <div className="p-3.5 bg-slate-50/70 border border-slate-200 rounded-xl space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
                   <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Default Value (Optional)
+                    Default Value
                   </label>
                   <InfoTooltip text="Pre-fill new client records with this default value. Leave blank for no default." size="sm" />
                 </div>
@@ -1746,20 +2449,23 @@ export function AdminFieldDrawer({
               </div>
               <FieldInputRenderer
                 field={{
-                  inputType: form.inputType,
+                  inputType: computeEffectiveInputType(),
                   options: form.options,
                   currency: form.currency || "INR",
-                  selectionMode: form.selectionMode || form.crmBindSelectionMode || "single",
-                  crmBindConfig: form.inputType === "crm_bind" ? {
+                  selectionMode: form.primaryCategory === "list" ? form.selectionMode : (form.crmBindSelectionMode || "single"),
+                  listConfig: form.primaryCategory === "list" ? {
+                    allowSearch: form.allowSearch,
+                    sortOrder: form.sortOrder,
+                    liveLinkedFieldKey: form.liveLinkedFieldKey || undefined,
+                  } : undefined,
+                  crmBindConfig: form.primaryCategory === "crm_bind" ? {
                     sourceModule: form.crmBindModule || "teamMember",
                     displayField: "name",
-                    selectionMode: form.selectionMode || form.crmBindSelectionMode || "single",
+                    selectionMode: form.crmBindSelectionMode || "single",
                   } : undefined,
                   maxRating: form.maxRating || 5,
-                  listEntryType: form.inputType === "list_open" ? form.listEntryType : undefined,
-                  listBindConfig: form.optionSourceMode === "bind" ? form.listBindConfig : undefined,
                   subFields: form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null),
-                  placeholder: form.placeholder || getSuggestedPlaceholderForType(form.inputType, form.label),
+                  placeholder: form.placeholder || getSuggestedPlaceholderForType(form.primaryCategory, form.label),
                 }}
                 value={form.defaultValue}
                 onChange={(val) => setForm((p) => ({ ...p, defaultValue: val }))}
@@ -1768,71 +2474,58 @@ export function AdminFieldDrawer({
             </div>
           )}
 
-
-          {/* Field Settings Dropdown */}
-          <div className="pt-2 border-t border-gray-100">
-            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
+          {/* 6. Field Settings & Admin Control */}
+          <div className="pt-2 border-t border-slate-100">
+            <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
               <button
                 type="button"
                 onClick={() => setFieldSettingsOpen((v) => !v)}
-                className="w-full px-4 py-3 bg-gray-50/80 hover:bg-gray-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
+                className="w-full px-4 py-3 bg-slate-50/80 hover:bg-slate-100/70 flex items-center justify-between text-left transition-colors cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <Settings2 className="w-4 h-4 text-gray-500 shrink-0" />
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">Field Settings</span>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {form.required && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-                            Required
-                          </span>
-                        )}
-                        {form.showAlways && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                            Visible
-                          </span>
-                        )}
-                        {form.userVisibility !== false && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            User Visible
-                          </span>
-                        )}
-                        {form.isReusable && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            Reusable
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-                      Configure required status, visibility, and cross-module reuse
-                    </p>
+                  <Settings2 className="w-4 h-4 text-slate-500 shrink-0" />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Field Settings</span>
+                    {form.required && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                        Required
+                      </span>
+                    )}
+                    {form.showAlways && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                        Show always
+                      </span>
+                    )}
+                    {form.selectedModules.length > 1 && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                        Shared ({form.selectedModules.length})
+                      </span>
+                    )}
                   </div>
                 </div>
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${fieldSettingsOpen ? "rotate-180" : ""}`} />
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${fieldSettingsOpen ? "rotate-180" : ""}`} />
               </button>
 
               {fieldSettingsOpen && (
-                <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
-                  {/* 1. Required */}
-                  <div className="space-y-2">
-                    <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                      <input
-                        type="checkbox"
-                        checked={form.required}
-                        disabled={isReadOnly}
-                        onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                      <div>
-                        <span className="text-sm font-semibold text-gray-800">Required field</span>
-                        <p className="text-xs text-gray-500">Users must provide a value before saving records</p>
-                      </div>
-                    </label>
+                <div className="p-4 space-y-3.5 border-t border-slate-100 bg-white">
+                  {/* Required Checkbox */}
+                  <div>
+                    <div className="flex items-center">
+                      <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                        <input
+                          type="checkbox"
+                          checked={form.required}
+                          disabled={isReadOnly}
+                          onChange={(e) => setForm((p) => ({ ...p, required: e.target.checked }))}
+                          className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-slate-800">Required field</span>
+                      </label>
+                      <InfoTooltip text="Users must provide a value before saving records." size="sm" />
+                    </div>
 
-                    {form.required && form.module === "process" && (
-                      <div className="ml-7 pt-1">
+                    {form.required && form.selectedModules.includes("process") && (
+                      <div className="ml-6 pt-2">
                         <StageMultiSelect
                           selectedStages={form.requiredStages}
                           onChange={(requiredStages) => setForm((p) => ({ ...p, requiredStages }))}
@@ -1843,69 +2536,180 @@ export function AdminFieldDrawer({
                     )}
                   </div>
 
-                  {/* 2. Visible */}
-                  <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                    <input
-                      type="checkbox"
-                      checked={form.showAlways}
-                      disabled={isReadOnly}
-                      onChange={(e) => setForm((p) => ({ ...p, showAlways: e.target.checked }))}
-                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-800">Always visible in profile view</span>
-                      <p className="text-xs text-gray-500">Ensure this field is always displayed in profile and overview cards</p>
-                    </div>
-                  </label>
-
-                  {/* 3. User Visibility */}
-                  <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
-                    <input
-                      type="checkbox"
-                      checked={form.userVisibility !== false}
-                      disabled={isReadOnly}
-                      onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
-                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-800">User Visibility</span>
-                      <p className="text-xs text-gray-500">Configure whether this field is visible to end users</p>
-                    </div>
-                  </label>
-
-                  {/* 3. Make reusable across other modules */}
-                  <div className="pt-3 border-t border-gray-100">
-                    <label className={`flex items-start gap-3 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                  {/* Show Always Checkbox */}
+                  <div className="flex items-center">
+                    <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
                       <input
                         type="checkbox"
-                        checked={form.isReusable}
+                        checked={form.showAlways}
                         disabled={isReadOnly}
-                        onChange={(e) => setForm((p) => ({ ...p, isReusable: e.target.checked }))}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        onChange={(e) => setForm((p) => ({ ...p, showAlways: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
-                      <div>
-                        <span className="text-sm font-semibold text-gray-800">Make reusable across other modules</span>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Enables this field to be used in other modules as well (e.g. Clients, Processes, Appointments, Call Logs, Services, Organizations, AI Scribe).
-                        </p>
-                      </div>
+                      <span className="text-xs font-semibold text-slate-800">Show always</span>
                     </label>
-
-
+                    <InfoTooltip text="Display the field in the form even if it is not filled in." size="sm" />
                   </div>
+
+                  {/* User Visibility Checkbox */}
+                  <div className="flex items-center">
+                    <label className={`flex items-center gap-2 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                      <input
+                        type="checkbox"
+                        checked={form.userVisibility !== false}
+                        disabled={isReadOnly}
+                        onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                        className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="text-xs font-semibold text-slate-800">User Visibility</span>
+                    </label>
+                    <InfoTooltip text="Configure whether this field is visible to standard tenant users." size="sm" />
+                  </div>
+
+                  {/* Admin Control (Scope Rules + Permissions) */}
+                  {isAdmin && (
+                    <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                      <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                        Admin Controls
+                      </div>
+
+                      {/* Scope Rules Accordion */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
+                        <button
+                          type="button"
+                          onClick={() => setScopeDropdownOpen((v) => !v)}
+                          className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-left transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Globe className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800">Scope Rules</span>
+                            <span onClick={(e) => e.stopPropagation()}>
+                              <InfoTooltip text="Define which tenant organizations have visibility to this field." size="sm" />
+                            </span>
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${scopeDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
+                        {scopeDropdownOpen && (
+                          <div className="p-3 border-t border-slate-200 bg-white">
+                            <AdminScopingRulesEditor
+                              rules={form.scopingRules}
+                              onChange={(rules) => setForm((p) => ({ ...p, scopingRules: rules }))}
+                              isReadOnly={isReadOnly}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Permissions Accordion */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden bg-slate-50/50">
+                        <button
+                          type="button"
+                          onClick={() => setPermissionsDropdownOpen((v) => !v)}
+                          className="w-full px-3 py-2 bg-slate-50 hover:bg-slate-100/80 flex items-center justify-between text-left transition-colors cursor-pointer"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Lock className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-800">Permissions</span>
+                            <span onClick={(e) => e.stopPropagation()}>
+                              <InfoTooltip text="Configure what tenant users are permitted to do with this field." size="sm" />
+                            </span>
+                          </div>
+                          <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 shrink-0 ml-2 ${permissionsDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
+                        {permissionsDropdownOpen && (
+                          <div className="p-3 border-t border-slate-200 bg-white">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="flex items-center">
+                                <label className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.canHide !== false}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setForm((p) => ({
+                                      ...p,
+                                      permissions: { ...p.permissions, canHide: e.target.checked }
+                                    }))}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-slate-800">Hide</span>
+                                </label>
+                                <InfoTooltip text="Tenant users can choose to show or hide this field in workspace views." size="sm" />
+                              </div>
+
+                              <div className="flex items-center">
+                                <label className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.canEdit !== false}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setForm((p) => ({
+                                      ...p,
+                                      permissions: { ...p.permissions, canEdit: e.target.checked }
+                                    }))}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-slate-800">Edit</span>
+                                </label>
+                                <InfoTooltip text="Tenant users can customize the label, placeholder, and configuration of this field." size="sm" />
+                              </div>
+
+                              <div className="flex items-center">
+                                <label className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.canAddOptions !== false}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setForm((p) => ({
+                                      ...p,
+                                      permissions: { ...p.permissions, canAdd: e.target.checked, canAddOptions: e.target.checked }
+                                    }))}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-slate-800">Add Options</span>
+                                </label>
+                                <InfoTooltip text="Tenant users can add custom options on top of admin-configured choices." size="sm" />
+                              </div>
+
+                              <div className="flex items-center">
+                                <label className={`flex items-center gap-1.5 select-none ${isReadOnly ? "opacity-60" : "cursor-pointer"}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.canDelete !== false}
+                                    disabled={isReadOnly}
+                                    onChange={(e) => setForm((p) => ({
+                                      ...p,
+                                      permissions: { ...p.permissions, canDelete: e.target.checked }
+                                    }))}
+                                    className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                                  />
+                                  <span className="text-xs font-medium text-slate-800">Delete</span>
+                                </label>
+                                <InfoTooltip text="Field can be deleted by the user from workspace views (retained in Admin)." size="sm" />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer">
+        {/* 7. Footer */}
+        <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+          >
             {isReadOnly ? "Close" : "Cancel"}
           </button>
           {!isReadOnly && (
-            <button onClick={handleSave} disabled={!form.label.trim()}
+            <button
+              onClick={handleSave}
+              disabled={!form.label.trim()}
               className="px-5 py-2 bg-[#111827] text-white text-sm font-semibold rounded-lg hover:bg-[#1f2937] transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               {isEdit ? "Save Changes" : "Create Field"}
@@ -1913,6 +2717,27 @@ export function AdminFieldDrawer({
           )}
         </div>
       </div>
+
+      {/* Stacked Nested Field Drawer (creates new field of chosen type and inherits it) */}
+      {nestedDrawerOpen && (
+        <AdminFieldDrawer
+          field={null}
+          initialModule={form.module}
+          initialCategory={nestedDrawerCategory}
+          lockCategory={true}
+          lockModule={true}
+          sections={sections}
+          zIndex={zIndex + 20}
+          onClose={() => setNestedDrawerOpen(false)}
+          onSaved={(createdField) => {
+            setNestedDrawerOpen(false);
+            setForm((p) => ({
+              ...p,
+              inheritedFieldKey: createdField.key,
+            }));
+          }}
+        />
+      )}
     </div>
   );
 }

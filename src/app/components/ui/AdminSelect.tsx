@@ -24,6 +24,7 @@ export interface AdminSelectProps {
   triggerClassName?: string;
   dropdownWidth?: string | number;
   emptyText?: string;
+  allowSearch?: boolean;
 }
 
 export function AdminSelect({
@@ -37,8 +38,10 @@ export function AdminSelect({
   triggerClassName = "",
   dropdownWidth,
   emptyText = "No options available",
+  allowSearch = false,
 }: AdminSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const selectedOption = options.find((opt) => opt.value === value);
 
@@ -48,9 +51,22 @@ export function AdminSelect({
 
   const hasWidth = /\bw-\S+/.test(className);
 
+  const showSearch = allowSearch || options.length > 7;
+
+  const filteredOptions = searchQuery.trim()
+    ? options.filter((o) =>
+        o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        String(o.value).toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (o.badge && o.badge.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+    : options;
+
   return (
     <div className={`relative ${hasWidth ? "" : "w-full"} ${className}`.trim()}>
-      <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <Popover open={isOpen} onOpenChange={(open) => {
+        setIsOpen(open);
+        if (!open) setSearchQuery("");
+      }}>
         <PopoverTrigger asChild>
           <button
             type="button"
@@ -88,13 +104,26 @@ export function AdminSelect({
           style={dropdownWidth ? { width: dropdownWidth } : undefined}
           className="w-[var(--radix-popover-trigger-width)] min-w-[260px] max-w-[460px] p-1 z-[100005] bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden"
         >
+          {showSearch && (
+            <div className="p-1.5 border-b border-slate-100 mb-1">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search options..."
+                className="w-full px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-md outline-none focus:bg-white focus:border-blue-500 text-slate-800 placeholder:text-slate-400"
+                onClick={(e) => e.stopPropagation()}
+                autoFocus
+              />
+            </div>
+          )}
           <div className="max-h-60 overflow-y-auto space-y-0.5 pr-0.5">
-            {options.length === 0 ? (
+            {filteredOptions.length === 0 ? (
               <div className="px-3 py-2 text-xs text-slate-400 italic">
-                {emptyText}
+                {searchQuery ? "No matching options" : emptyText}
               </div>
             ) : (
-              options.map((opt) => {
+              filteredOptions.map((opt) => {
                 const isSelected = opt.value === value;
                 const tooltipText = opt.tooltip || opt.subtitle;
 
@@ -106,6 +135,7 @@ export function AdminSelect({
                     onClick={() => {
                       onChange(opt.value);
                       setIsOpen(false);
+                      setSearchQuery("");
                     }}
                     className={`w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center justify-between cursor-pointer select-none group ${
                       isSelected

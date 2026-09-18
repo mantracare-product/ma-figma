@@ -1,5 +1,5 @@
 import React, { type ReactNode } from "react";
-import { useFieldRegistry, isFieldMatchingOrg } from "./FieldRegistryContext";
+import { useFieldRegistry, isFieldMatchingOrg, type FieldOption } from "./FieldRegistryContext";
 import { useOrganization } from "./OrganizationContext";
 
 export interface CustomField {
@@ -18,7 +18,7 @@ export interface SystemField {
   inputType: "text" | "email" | "tel" | "select" | "textarea";
   placeholder: string;
   validation?: string;
-  options?: { id: number; label: string; value: string }[];
+  options?: FieldOption[];
 }
 
 export const CANONICAL_SYSTEM_FIELDS: SystemField[] = [
