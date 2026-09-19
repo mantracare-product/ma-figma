@@ -461,7 +461,9 @@ export interface SectionDefinition {
   fieldKeys: string[];
   required?: boolean;         // Required section
   requiredStages?: string[];  // Specific stage names/IDs this section is required for (for module="process" when required=true)
+  showAlways?: boolean;       // Show always setting
   userVisibility?: boolean;   // Setting for user visibility
+  visibleToUserIds?: string[]; // Specific team member IDs visible to this section
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty/All = global
   industry?: string;          // Scoped to industry e.g. "Cardiologist", empty/All = global
   locations?: string[];       // Scoped to locations e.g. ["California"], empty/All = global
@@ -1977,7 +1979,9 @@ function sanitizeSectionDefinition(s: any, fallbackModule: Exclude<FieldModule, 
       : [],
     required: Boolean(s.required),
     requiredStages: Array.isArray(s.requiredStages) && s.requiredStages.length > 0 ? s.requiredStages : undefined,
+    showAlways: s.showAlways !== false,
     userVisibility: s.userVisibility !== false,
+    visibleToUserIds: Array.isArray(s.visibleToUserIds) ? s.visibleToUserIds.map(String) : undefined,
     industryCategory: s.industryCategory,
     industry: s.industry,
     locations: Array.isArray(s.locations) ? s.locations : undefined,

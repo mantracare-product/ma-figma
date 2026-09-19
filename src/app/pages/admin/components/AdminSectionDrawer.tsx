@@ -20,6 +20,7 @@ import { useFieldRegistry } from "../../../context/FieldRegistryContext";
 import { MODULE_OPTIONS } from "./AdminFieldDrawer";
 import { AdminScopingRulesEditor } from "./AdminScopingRulesEditor";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../../lib/useProcessStore";
+import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../lib/teamStore";
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
 
@@ -108,14 +109,15 @@ interface SectionFormState {
   description: string;
   iconName: SectionDefinition["iconName"];
   module: Exclude<FieldModule, "deal">;
+  selectedModules: Exclude<FieldModule, "deal">[];
   fieldKeys: string[];
   required: boolean;
   requiredStages: string[];
+  showAlways: boolean;
   userVisibility: boolean;
+  visibleToUserIds: string[];
   scopingRules: ScopingRule[];
   processIds: string[];
-  isReusable: boolean;
-  reusableModules: Exclude<FieldModule, "deal">[];
   permissions: SectionPermissions;
 }
 
@@ -125,14 +127,15 @@ function defaultSectionForm(module: Exclude<FieldModule, "deal">): SectionFormSt
     description: "",
     iconName: "layers",
     module,
+    selectedModules: [module],
     fieldKeys: [],
     required: false,
     requiredStages: [],
+    showAlways: true,
     userVisibility: true,
+    visibleToUserIds: [],
     scopingRules: [],
     processIds: [],
-    isReusable: false,
-    reusableModules: [],
     permissions: {
       canHide: true,
       canEdit: true,
@@ -155,18 +158,24 @@ function sectionToForm(s: SectionDefinition): SectionFormState {
     ];
   }
 
+  const primaryMod = (s.module || "client") as Exclude<FieldModule, "deal">;
+  const extraMods = ((s.reusableModules || []) as Exclude<FieldModule, "deal">[]).filter((m) => m !== primaryMod);
+  const selectedModules: Exclude<FieldModule, "deal">[] = [primaryMod, ...extraMods];
+
   return {
-    title: s.title, description: s.description ?? "",
+    title: s.title,
+    description: s.description ?? "",
     iconName: s.iconName ?? "layers",
-    module: s.module as Exclude<FieldModule, "deal">,
+    module: primaryMod,
+    selectedModules,
     fieldKeys: s.fieldKeys ?? [],
     required: Boolean(s.required),
     requiredStages: s.requiredStages ? [...s.requiredStages] : [],
+    showAlways: s.showAlways !== false,
     userVisibility: s.userVisibility !== false,
+    visibleToUserIds: s.visibleToUserIds ? s.visibleToUserIds.map(String) : [],
     scopingRules: rules,
     processIds: s.processIds ? [...s.processIds] : [],
-    isReusable: Boolean(s.isReusable),
-    reusableModules: (s.reusableModules as Exclude<FieldModule, "deal">[]) || [],
     permissions: {
       canHide: s.permissions?.canHide !== false,
       canEdit: s.permissions?.canEdit !== false,
@@ -219,6 +228,10 @@ export function AdminSectionDrawer({
     }
     return def;
   });
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
+  const [teamPickerOpen, setTeamPickerOpen] = useState(false);
+  const teamPickerRef = useRef<HTMLDivElement>(null);
+
   const [modulePickerOpen, setModulePickerOpen] = useState(false);
   const [processPickerOpen, setProcessPickerOpen] = useState(false);
   const [fieldPickerOpen, setFieldPickerOpen] = useState(false);
@@ -232,17 +245,47 @@ export function AdminSectionDrawer({
   const processPickerRef = useRef<HTMLDivElement>(null);
   const fieldPickerRef = useRef<HTMLDivElement>(null);
 
+  const isProcessActive = form.selectedModules.includes("process") || form.module === "process";
+
   useEffect(() => {
     const handleUpdate = () => {
       setAllProcesses(getStoredProcesses());
     };
+    const handleTeamUpdate = () => {
+      setTeamMembers(getStoredTeamMembers());
+    };
     window.addEventListener(PROCESS_STORE_EVENT, handleUpdate);
+    window.addEventListener(TEAM_STORE_EVENT, handleTeamUpdate);
     window.addEventListener("storage", handleUpdate);
+    window.addEventListener("storage", handleTeamUpdate);
     return () => {
       window.removeEventListener(PROCESS_STORE_EVENT, handleUpdate);
+      window.removeEventListener(TEAM_STORE_EVENT, handleTeamUpdate);
       window.removeEventListener("storage", handleUpdate);
+      window.removeEventListener("storage", handleTeamUpdate);
     };
   }, []);
+
+  const toggleModuleSelection = (modVal: Exclude<FieldModule, "deal">) => {
+    setForm((p) => {
+      const exists = p.selectedModules.includes(modVal);
+      if (exists) {
+        if (p.selectedModules.length <= 1) return p;
+        const next = p.selectedModules.filter((m) => m !== modVal);
+        return {
+          ...p,
+          selectedModules: next,
+          module: next[0],
+        };
+      } else {
+        const next = [...p.selectedModules, modVal];
+        return {
+          ...p,
+          selectedModules: next,
+        };
+      }
+    });
+  };
 
   const availableProcesses = useMemo(() => {
     if (!form.scopingRules || form.scopingRules.length === 0) {
@@ -275,7 +318,7 @@ export function AdminSectionDrawer({
   }, [allProcesses, form.scopingRules]);
 
   const availableStagesForProcess = useMemo(() => {
-    if (form.module !== "process") return [];
+    if (!isProcessActive) return [];
 
     // 1. Explicit processStages passed directly
     if (processStages && processStages.length > 0) {
@@ -308,22 +351,23 @@ export function AdminSectionDrawer({
       });
     });
     return Array.from(stageMap.keys()).map((name) => ({ id: name, name }));
-  }, [form.module, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
+  }, [isProcessActive, form.processIds, availableProcesses, processStages, activeProcessId, activeProcessName, allProcesses]);
 
   const targetProcessesForRequirement = useMemo(() => {
-    if (form.module !== "process") return [];
+    if (!isProcessActive) return [];
     if (form.processIds && form.processIds.length > 0 && !form.processIds.includes("all")) {
       const filtered = availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name));
       if (filtered.length > 0) return filtered;
     }
     return availableProcesses.length > 0 ? availableProcesses : allProcesses;
-  }, [form.module, form.processIds, availableProcesses, allProcesses]);
+  }, [isProcessActive, form.processIds, availableProcesses, allProcesses]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (modulePickerRef.current && !modulePickerRef.current.contains(e.target as Node)) setModulePickerOpen(false);
       if (processPickerRef.current && !processPickerRef.current.contains(e.target as Node)) setProcessPickerOpen(false);
       if (fieldPickerRef.current && !fieldPickerRef.current.contains(e.target as Node)) setFieldPickerOpen(false);
+      if (teamPickerRef.current && !teamPickerRef.current.contains(e.target as Node)) setTeamPickerOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -335,13 +379,22 @@ export function AdminSectionDrawer({
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
 
-  const moduleFields: FieldDefinition[] = getAllFields(form.module);
-  const modLabel = MODULE_OPTIONS.find(m => m.value === form.module)?.label ?? form.module;
+  const moduleFields: FieldDefinition[] = useMemo(() => {
+    const fieldsMap = new Map<string, FieldDefinition>();
+    form.selectedModules.forEach((mod) => {
+      getAllFields(mod).forEach((f) => {
+        if (!fieldsMap.has(f.key)) {
+          fieldsMap.set(f.key, f);
+        }
+      });
+    });
+    return Array.from(fieldsMap.values());
+  }, [form.selectedModules, getAllFields]);
 
   const eligibleFields = useMemo(() => {
     return moduleFields.filter((f) => {
       if (!doesFieldMatchSectionScope(f, form.scopingRules)) return false;
-      if (form.module === "process" && hasActiveProcessContext && activeProcessId) {
+      if (isProcessActive && hasActiveProcessContext && activeProcessId) {
         if (f.processIds && f.processIds.length > 0) {
           const match = f.processIds.includes(activeProcessId) || (activeProcessName && f.processIds.includes(activeProcessName));
           if (!match) return false;
@@ -349,7 +402,7 @@ export function AdminSectionDrawer({
       }
       return true;
     });
-  }, [moduleFields, form.scopingRules, form.module, hasActiveProcessContext, activeProcessId, activeProcessName]);
+  }, [moduleFields, form.scopingRules, isProcessActive, hasActiveProcessContext, activeProcessId, activeProcessName]);
 
   const toggleFieldKey = (key: string) => {
     setForm(p => ({
@@ -443,6 +496,9 @@ export function AdminSectionDrawer({
   const handleSave = () => {
     if (!validate()) return;
 
+    const primaryModule = form.selectedModules[0] || form.module;
+    const additionalModules = form.selectedModules.filter((m) => m !== primaryModule);
+
     const firstRule = form.scopingRules[0];
     const legacyCategory = firstRule?.industryCategory && firstRule.industryCategory !== "All"
       ? firstRule.industryCategory
@@ -461,27 +517,29 @@ export function AdminSectionDrawer({
       title: form.title.trim(),
       description: form.description.trim(),
       iconName: form.iconName || "layers",
-      module: form.module,
+      module: primaryModule,
       source: isEdit && section ? section.source : targetSource,
       createdIn: isEdit && section ? section.createdIn : targetCreatedIn,
       fieldKeys: form.fieldKeys,
       required: form.required,
-      requiredStages: form.module === "process" && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      requiredStages: (form.selectedModules.includes("process") || form.module === "process") && form.required && form.requiredStages.length > 0 ? form.requiredStages : undefined,
+      showAlways: form.showAlways,
       userVisibility: form.userVisibility,
+      visibleToUserIds: form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
-      processIds: form.module === "process" ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
-      isReusable: form.isReusable,
-      reusableModules: form.isReusable && form.reusableModules.length > 0 ? form.reusableModules : undefined,
+      processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
+      isReusable: additionalModules.length > 0,
+      reusableModules: additionalModules.length > 0 ? additionalModules : undefined,
       permissions: form.permissions,
       industryCategory: legacyCategory,
       industry: legacyIndustry,
       locations: legacyLocations,
     };
     if (isEdit && section) {
-      updateCustomSection(form.module, section.id, payload);
+      updateCustomSection(primaryModule, section.id, payload);
       onSaved?.({ ...section, ...payload });
     } else {
-      const created = addCustomSection(form.module, payload);
+      const created = addCustomSection(primaryModule, payload);
       onSaved?.(created);
     }
     onClose();
@@ -497,7 +555,7 @@ export function AdminSectionDrawer({
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 flex-shrink-0">
           <div>
             <h2 className="text-base font-bold text-[#111827]">{isEdit ? "Edit Section" : "New Custom Section"}</h2>
-            <p className="text-xs text-gray-400 mt-0.5">Sections group fields in the {modLabel} profile view</p>
+            <p className="text-xs text-gray-400 mt-0.5">Sections group fields in record overview profiles</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors cursor-pointer text-gray-500" aria-label="Close">
             <X className="w-4 h-4" />
@@ -507,36 +565,73 @@ export function AdminSectionDrawer({
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-          {/* Module */}
+          {/* Module Multi-Select Dropdown */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Module <span className="text-red-500">*</span></label>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <label className="block text-xs font-semibold text-gray-700">
+                Module <span className="text-red-500">*</span>
+              </label>
+              <InfoTooltip text="Select the CRM entity modules this section belongs to. Selecting multiple modules shares this section across them." size="sm" />
+            </div>
+
             <div className="relative" ref={modulePickerRef}>
-              <button type="button" disabled={isEdit}
-                onClick={() => !isEdit && setModulePickerOpen(v => !v)}
-                className={`w-full px-3.5 py-2.5 border rounded-lg text-sm bg-white flex items-center justify-between transition-all ${isEdit ? "border-gray-100 bg-gray-50 cursor-not-allowed" : "border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"}`}
+              <button
+                type="button"
+                onClick={() => setModulePickerOpen((v) => !v)}
+                className="w-full px-3.5 py-2.5 bg-white border border-gray-200 hover:border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 rounded-xl text-xs font-medium flex items-center justify-between transition-all select-none min-h-[40px] cursor-pointer shadow-2xs"
               >
-                <span className={`font-medium ${isEdit ? "text-gray-400" : "text-[#111827]"}`}>{modLabel}</span>
-                {!isEdit && <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${modulePickerOpen ? "rotate-180" : ""}`} />}
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  {form.selectedModules.map((m) => {
+                    const opt = MODULE_OPTIONS.find((o) => o.value === m);
+                    return (
+                      <span key={m} className="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200/80 text-blue-700 text-[11px] font-semibold">
+                        {opt?.label || m}
+                      </span>
+                    );
+                  })}
+                  {form.selectedModules.length > 1 && (
+                    <span className="text-[10px] text-gray-400 font-medium ml-1">
+                      (Shared across {form.selectedModules.length} modules)
+                    </span>
+                  )}
+                </div>
+                <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform duration-200 shrink-0 ml-2 ${modulePickerOpen ? "rotate-180" : ""}`} />
               </button>
-              {modulePickerOpen && !isEdit && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
-                  {MODULE_OPTIONS.map(mod => (
-                    <button key={mod.value} type="button"
-                      onClick={() => { setForm(p => ({ ...p, module: mod.value, fieldKeys: [] })); setModulePickerOpen(false); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm flex items-center justify-between hover:bg-blue-50 cursor-pointer ${form.module === mod.value ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
-                    >
-                      <span>{mod.label}</span>
-                      {form.module === mod.value && <Check className="w-3.5 h-3.5 text-blue-600" />}
-                    </button>
-                  ))}
+
+              {modulePickerOpen && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden p-1.5">
+                  <div className="px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-gray-400 bg-gray-50/80 rounded-md mb-1">
+                    Select Target Modules
+                  </div>
+                  <div className="space-y-0.5">
+                    {MODULE_OPTIONS.map((opt) => {
+                      const isChecked = form.selectedModules.includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => toggleModuleSelection(opt.value)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-colors cursor-pointer select-none ${
+                            isChecked ? "bg-blue-50/80 text-blue-900 font-semibold" : "text-gray-700 hover:bg-gray-50"
+                          }`}
+                        >
+                          <span>{opt.label}</span>
+                          <div className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                            isChecked ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300 bg-white"
+                          }`}>
+                            {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
             </div>
-            {isEdit && <p className="text-[11px] text-gray-400 mt-1">Module cannot be changed after creation.</p>}
           </div>
 
-          {/* Process Workflow Selector (when module is 'process') */}
-          {form.module === "process" && (() => {
+          {/* Process Workflow Selector (when module includes 'process') */}
+          {isProcessActive && (() => {
             const activeProcessList = availableProcesses.length > 0 ? availableProcesses : allProcesses;
             const allSelected = activeProcessList.length > 0 && activeProcessList.every((p) => form.processIds?.includes(p.id));
             const noneSelected = !form.processIds || form.processIds.length === 0;
@@ -844,9 +939,111 @@ export function AdminSectionDrawer({
             />
           </div>
 
-          {/* Section Settings Dropdown (Global Rule) */}
+          {/* Field assignment */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-semibold text-gray-700">
+                Fields in this section
+                <span className="ml-1.5 text-[10px] font-normal text-gray-400">({form.fieldKeys.length} selected)</span>
+              </label>
+              <div className="relative" ref={fieldPickerRef}>
+                <button type="button" onClick={() => setFieldPickerOpen(v => !v)}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                >
+                  <Plus className="w-3 h-3" />Add fields
+                </button>
+                {fieldPickerOpen && (
+                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col" style={{ width: 300, maxHeight: 300 }}>
+                    <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
+                      <span className="font-semibold text-gray-700">Available Fields</span>
+                      <span className="text-[10px] text-gray-500 font-medium">
+                        {form.scopingRules.length > 0 ? "Filtered by scope" : "All fields"}
+                      </span>
+                    </div>
+                    <div className="overflow-y-auto p-1 divide-y divide-gray-50">
+                      {eligibleFields.length === 0 ? (
+                        <p className="px-4 py-4 text-xs text-gray-400 italic text-center">
+                          No fields match this section's scope.
+                        </p>
+                      ) : (
+                        eligibleFields.map(f => (
+                          <button key={f.key} type="button"
+                            onClick={() => toggleFieldKey(f.key)}
+                            className={`w-full text-left px-3.5 py-2 text-xs flex items-center justify-between rounded-lg hover:bg-blue-50 cursor-pointer transition-colors ${form.fieldKeys.includes(f.key) ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="truncate block font-medium">{f.label}</span>
+                              <span className="text-[10px] text-gray-400 font-mono">{f.key}</span>
+                            </div>
+                            {form.fieldKeys.includes(f.key) && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {form.fieldKeys.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl">
+                <Layers className="w-4 h-4 text-gray-300" />
+                <p className="text-sm text-gray-400">No fields added yet. Click "Add fields" above.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5">
+                {form.fieldKeys.map((key, idx) => {
+                  const fieldDef = moduleFields.find(f => f.key === key);
+                  return (
+                    <div
+                      key={key}
+                      draggable
+                      onDragStart={(e) => handleFieldDragStart(e, idx)}
+                      onDragOver={(e) => handleFieldDragOver(e, idx)}
+                      onDragEnter={(e) => handleFieldDragEnter(e, idx)}
+                      onDrop={(e) => handleFieldDrop(e, idx)}
+                      onDragEnd={handleFieldDragEnd}
+                      className={`group flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-lg border transition-all select-none cursor-grab active:cursor-grabbing ${
+                        dragOverKeyIdx === idx
+                          ? "border-blue-500 bg-blue-50/80 ring-2 ring-blue-400/20 shadow-xs"
+                          : draggedKeyIdx === idx
+                          ? "opacity-30 border-dashed border-blue-400 bg-white"
+                          : "border-gray-100 hover:border-gray-200 hover:bg-white"
+                      }`}
+                    >
+                      <div
+                        className="text-gray-400 group-hover:text-gray-600 p-0.5 pointer-events-none flex items-center justify-center shrink-0"
+                        title="Drag to reorder"
+                      >
+                        <GripVertical className="w-4 h-4 pointer-events-none" />
+                      </div>
+                      <div className="flex-1 min-w-0 pointer-events-none">
+                        <p className="text-sm font-medium text-[#111827] truncate">{fieldDef?.label ?? key}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{key}</p>
+                      </div>
+                      <button
+                        type="button"
+                        draggable={false}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleFieldKey(key);
+                        }}
+                        className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 shrink-0"
+                        title="Remove field"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section Settings Dropdown (Global Rules & Configurations) — Placed BELOW Field Addition */}
           <div className="pt-2 border-t border-gray-100">
-            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-xs">
+            <div className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-2xs">
               <button
                 type="button"
                 onClick={() => setSectionSettingsOpen((v) => !v)}
@@ -856,11 +1053,18 @@ export function AdminSectionDrawer({
                   <Settings2 className="w-4 h-4 text-gray-500 shrink-0" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">Section Settings</span>
+                      <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                        {isAdmin ? "Global Rules" : "Section Settings"}
+                      </span>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {form.required && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
                             Required
+                          </span>
+                        )}
+                        {form.showAlways && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                            Show Always
                           </span>
                         )}
                         {form.userVisibility !== false && (
@@ -868,15 +1072,15 @@ export function AdminSectionDrawer({
                             User Visible
                           </span>
                         )}
-                        {form.isReusable && (
+                        {form.selectedModules.length > 1 && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                            Reusable Global
+                            Shared ({form.selectedModules.length})
                           </span>
                         )}
                       </div>
                     </div>
                     <p className="text-[11px] text-gray-400 mt-0.5 truncate">
-                      Configure global section rules and cross-module availability
+                      Configure global section rules and field visibility
                     </p>
                   </div>
                 </div>
@@ -887,27 +1091,28 @@ export function AdminSectionDrawer({
                 <div className="p-4 space-y-4 border-t border-gray-100 bg-white">
                   {/* 1. Required Section */}
                   <div className="space-y-2">
-                    <label className="flex items-start gap-3 select-none cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.required}
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setForm((p) => ({
-                            ...p,
-                            required: checked,
-                          }));
-                        }}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                      <div>
-                        <span className="text-sm font-semibold text-gray-800">Required section</span>
-                        <p className="text-xs text-gray-500 mt-0.5">Users must complete all required fields within this section</p>
-                      </div>
-                    </label>
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.required}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setForm((p) => ({
+                              ...p,
+                              required: checked,
+                              ...(checked ? { showAlways: true } : {}),
+                            }));
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-gray-800">Required section</span>
+                      </label>
+                      <InfoTooltip text="Users must complete all required fields within this section." size="sm" />
+                    </div>
 
-                    {form.required && form.module === "process" && (
-                      <div className="mt-2.5 ml-7 space-y-2.5">
+                    {form.required && isProcessActive && (
+                      <div className="mt-2.5 ml-6 space-y-2.5">
                         <div className="flex items-center justify-between">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-amber-900">
                             Process Stage Requirements
@@ -1019,143 +1224,188 @@ export function AdminSectionDrawer({
                     )}
                   </div>
 
-                  {/* 2. User Visibility */}
-                  <label className="flex items-start gap-3 select-none cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.userVisibility !== false}
-                      onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
-                      className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-                    />
-                    <div>
-                      <span className="text-sm font-semibold text-gray-800">User Visibility</span>
-                      <p className="text-xs text-gray-500 mt-0.5">Configure whether this section is visible to end users</p>
-                    </div>
-                  </label>
-
-                  {/* 3. Make reusable across other modules */}
-                  <div className="pt-3 border-t border-gray-100">
-                    <label className="flex items-start gap-3 select-none cursor-pointer">
+                  {/* 2. Show Always Checkbox */}
+                  <div className="flex items-center">
+                    <label className="flex items-center gap-2 select-none cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={form.isReusable}
-                        onChange={(e) => setForm((p) => ({ ...p, isReusable: e.target.checked }))}
-                        className="mt-0.5 w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        checked={form.showAlways}
+                        onChange={(e) => setForm((p) => ({ ...p, showAlways: e.target.checked }))}
+                        className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
                       />
-                      <div>
-                        <span className="text-sm font-semibold text-gray-800">Make reusable across other modules</span>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Enables this section and its assigned fields to appear across other modules (e.g. Clients, Processes, Appointments, Call Logs, Services, Organizations).
-                        </p>
-                      </div>
+                      <span className="text-xs font-semibold text-gray-800">Show always</span>
                     </label>
+                    <InfoTooltip text="Display the section in the form even if none of its fields are filled in." size="sm" />
                   </div>
+
+                  {/* 3. User Visibility Toggle (Admin Mode) */}
+                  {isAdmin && (
+                    <div className="flex items-center">
+                      <label className="flex items-center gap-2 select-none cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={form.userVisibility !== false}
+                          onChange={(e) => setForm((p) => ({ ...p, userVisibility: e.target.checked }))}
+                          className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-semibold text-gray-800">User Visibility</span>
+                      </label>
+                      <InfoTooltip text="Enable this to allow users in client records to restrict visibility of this section to specific team members." size="sm" />
+                    </div>
+                  )}
+
+                  {/* User Visibility & Team Members Selection (Client Mode) */}
+                  {!isAdmin && form.userVisibility !== false && (
+                    <div className="space-y-3 p-3.5 rounded-xl bg-gray-50/80 border border-gray-200">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 select-none">
+                          <div className="w-4 h-4 rounded bg-blue-600 text-white flex items-center justify-center shadow-2xs">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </div>
+                          <span className="text-xs font-semibold text-gray-800">User Visibility</span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            Active
+                          </span>
+                        </div>
+                        <InfoTooltip text="Specify which team members are permitted to view and edit this section." size="sm" />
+                      </div>
+
+                      {/* Team Member Dropdown */}
+                      <div className="space-y-2">
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-gray-500">
+                          Assigned Team Members ({form.visibleToUserIds.length > 0 ? form.visibleToUserIds.length : "All"})
+                        </label>
+
+                        <div className="relative" ref={teamPickerRef}>
+                          <button
+                            type="button"
+                            onClick={() => setTeamPickerOpen((v) => !v)}
+                            className="w-full flex items-center justify-between px-3 py-2 bg-white border border-gray-200 hover:border-gray-300 focus:border-blue-500 rounded-xl text-xs font-semibold text-gray-800 transition-all cursor-pointer shadow-2xs outline-none group text-left"
+                          >
+                            <div className="flex items-center gap-2 truncate">
+                              <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                {form.visibleToUserIds.length > 0 ? form.visibleToUserIds.length : "👥"}
+                              </div>
+                              <span className="truncate text-gray-700">
+                                {form.visibleToUserIds.length === 0
+                                  ? "Visible to all team members"
+                                  : `${form.visibleToUserIds.length} team ${form.visibleToUserIds.length === 1 ? "member" : "members"} selected`}
+                              </span>
+                            </div>
+                            <ChevronDown className={`w-3.5 h-3.5 text-gray-400 group-hover:text-gray-600 transition-transform duration-150 shrink-0 ml-2 ${teamPickerOpen ? "rotate-180" : ""}`} />
+                          </button>
+
+                          {teamPickerOpen && (
+                            <div className="absolute left-0 right-0 top-full mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden divide-y divide-gray-100">
+                              <div className="p-2.5 bg-gray-50 flex items-center justify-between">
+                                <span className="text-xs font-bold text-gray-700">Select Team Members</span>
+                                {form.visibleToUserIds.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setForm((p) => ({ ...p, visibleToUserIds: [] }))}
+                                    className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 hover:underline cursor-pointer"
+                                  >
+                                    Reset to All
+                                  </button>
+                                )}
+                              </div>
+                              <div className="max-h-52 overflow-y-auto p-1.5 space-y-0.5">
+                                {teamMembers.map((member) => {
+                                  const idStr = String(member.id);
+                                  const isAssigned = form.visibleToUserIds.includes(idStr);
+                                  return (
+                                    <button
+                                      key={member.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isAssigned) {
+                                          setForm((p) => ({
+                                            ...p,
+                                            visibleToUserIds: p.visibleToUserIds.filter((id) => id !== idStr),
+                                          }));
+                                        } else {
+                                          setForm((p) => ({
+                                            ...p,
+                                            visibleToUserIds: [...p.visibleToUserIds, idStr],
+                                          }));
+                                        }
+                                      }}
+                                      className={`w-full px-2.5 py-2 rounded-lg text-left text-xs flex items-center justify-between transition-colors cursor-pointer ${
+                                        isAssigned ? "bg-blue-50 text-blue-800 font-semibold" : "hover:bg-gray-50 text-gray-700"
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2.5 min-w-0">
+                                        <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[10px] shrink-0">
+                                          {member.name.charAt(0)}
+                                        </div>
+                                        <div className="truncate">
+                                          <span className="block truncate font-medium">{member.name}</span>
+                                          {member.role && (
+                                            <span className="text-[10px] text-gray-400 block truncate">
+                                              {member.role}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                      <div className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                        isAssigned ? "bg-blue-600 border-blue-600 text-white" : "border-gray-300 bg-white"
+                                      }`}>
+                                        {isAssigned && <Check className="w-2.5 h-2.5 stroke-[3]" />}
+                                      </div>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Selected Member Badges */}
+                        {form.visibleToUserIds.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                            {form.visibleToUserIds.map((userId) => {
+                              const member = teamMembers.find((m) => String(m.id) === String(userId));
+                              const memberName = member?.name || `User #${userId}`;
+                              return (
+                                <div
+                                  key={userId}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-gray-200 text-gray-800 text-xs font-medium rounded-lg shadow-2xs"
+                                >
+                                  <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-[9px]">
+                                    {memberName.charAt(0)}
+                                  </div>
+                                  <span className="truncate max-w-[140px]">{memberName}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setForm((p) => ({
+                                        ...p,
+                                        visibleToUserIds: p.visibleToUserIds.filter((id) => id !== userId),
+                                      }))
+                                    }
+                                    className="text-gray-400 hover:text-red-500 transition-colors cursor-pointer ml-0.5"
+                                    title="Remove team member"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {!isAdmin && form.userVisibility === false && (
+                    <div className="p-3 rounded-xl bg-gray-50/70 border border-gray-200 text-xs text-gray-500 flex items-center justify-between">
+                      <span className="font-medium">User Visibility</span>
+                      <span className="text-[11px] text-gray-400 italic">Disabled by Administrator</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          </div>
-
-
-          {/* Field assignment */}
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="text-xs font-semibold text-gray-700">
-                Fields in this section
-                <span className="ml-1.5 text-[10px] font-normal text-gray-400">({form.fieldKeys.length} selected)</span>
-              </label>
-              <div className="relative" ref={fieldPickerRef}>
-                <button type="button" onClick={() => setFieldPickerOpen(v => !v)}
-                  className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />Add fields
-                </button>
-                {fieldPickerOpen && (
-                  <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden flex flex-col" style={{ width: 300, maxHeight: 300 }}>
-                    <div className="px-3.5 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between text-xs">
-                      <span className="font-semibold text-gray-700">Available Fields</span>
-                      <span className="text-[10px] text-gray-500 font-medium">
-                        {form.scopingRules.length > 0 ? "Filtered by scope" : "All fields"}
-                      </span>
-                    </div>
-                    <div className="overflow-y-auto p-1 divide-y divide-gray-50">
-                      {eligibleFields.length === 0 ? (
-                        <p className="px-4 py-4 text-xs text-gray-400 italic text-center">
-                          No fields match this section's scope.
-                        </p>
-                      ) : (
-                        eligibleFields.map(f => (
-                          <button key={f.key} type="button"
-                            onClick={() => toggleFieldKey(f.key)}
-                            className={`w-full text-left px-3.5 py-2 text-xs flex items-center justify-between rounded-lg hover:bg-blue-50 cursor-pointer transition-colors ${form.fieldKeys.includes(f.key) ? "bg-blue-50 text-blue-700 font-semibold" : "text-[#111827]"}`}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <span className="truncate block font-medium">{f.label}</span>
-                              <span className="text-[10px] text-gray-400 font-mono">{f.key}</span>
-                            </div>
-                            {form.fieldKeys.includes(f.key) && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {form.fieldKeys.length === 0 ? (
-              <div className="flex items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl">
-                <Layers className="w-4 h-4 text-gray-300" />
-                <p className="text-sm text-gray-400">No fields added yet. Click "Add fields" above.</p>
-              </div>
-            ) : (
-              <div className="space-y-1.5">
-                {form.fieldKeys.map((key, idx) => {
-                  const fieldDef = moduleFields.find(f => f.key === key);
-                  return (
-                    <div
-                      key={key}
-                      draggable
-                      onDragStart={(e) => handleFieldDragStart(e, idx)}
-                      onDragOver={(e) => handleFieldDragOver(e, idx)}
-                      onDragEnter={(e) => handleFieldDragEnter(e, idx)}
-                      onDrop={(e) => handleFieldDrop(e, idx)}
-                      onDragEnd={handleFieldDragEnd}
-                      className={`group flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-lg border transition-all select-none cursor-grab active:cursor-grabbing ${
-                        dragOverKeyIdx === idx
-                          ? "border-blue-500 bg-blue-50/80 ring-2 ring-blue-400/20 shadow-xs"
-                          : draggedKeyIdx === idx
-                          ? "opacity-30 border-dashed border-blue-400 bg-white"
-                          : "border-gray-100 hover:border-gray-200 hover:bg-white"
-                      }`}
-                    >
-                      <div
-                        className="text-gray-400 group-hover:text-gray-600 p-0.5 pointer-events-none flex items-center justify-center shrink-0"
-                        title="Drag to reorder"
-                      >
-                        <GripVertical className="w-4 h-4 pointer-events-none" />
-                      </div>
-                      <div className="flex-1 min-w-0 pointer-events-none">
-                        <p className="text-sm font-medium text-[#111827] truncate">{fieldDef?.label ?? key}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">{key}</p>
-                      </div>
-                      <button
-                        type="button"
-                        draggable={false}
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleFieldKey(key);
-                        }}
-                        className="p-1.5 text-gray-300 hover:text-red-500 cursor-pointer rounded-lg hover:bg-red-50 shrink-0"
-                        title="Remove field"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         </div>
 
