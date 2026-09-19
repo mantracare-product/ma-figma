@@ -150,7 +150,6 @@ const CONSOLIDATED_FIELD_TYPES: {
       { id: "crm_bind", label: "Link to Mantra Entities", description: "Dynamically link to team members, clients, or services" },
       { id: "media", label: "Media Attach", description: "Image, document, or audio upload attachments" },
       { id: "signature", label: "Digital Signature", description: "Interactive touchscreen drawing signature pad" },
-      { id: "user", label: "User / Member", description: "Assign staff or team members" },
     ],
   },
 ];
