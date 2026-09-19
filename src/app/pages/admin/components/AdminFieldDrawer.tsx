@@ -124,7 +124,6 @@ const CONSOLIDATED_FIELD_TYPES: {
       { id: "tel", label: "Phone Number", description: "Phone number with country codes and formatting" },
       { id: "email", label: "Email", description: "Standard email address input" },
       { id: "link", label: "Link / URL", description: "Web links and external URLs" },
-      { id: "whatsapp_link", label: "WhatsApp Link", description: "Direct WhatsApp chat link" },
     ],
   },
   {
@@ -1007,6 +1006,25 @@ export function AdminFieldDrawer({
   const validate = (): boolean => {
     const errs: { label?: string } = {};
     if (!form.label.trim()) errs.label = "Field name is required";
+    if (form.primaryCategory === "number") {
+      if (form.minRange !== undefined && form.maxRange !== undefined && form.minRange > form.maxRange) {
+        toast.error("Min Value cannot be greater than Max Value");
+        return false;
+      }
+      if (form.defaultValue !== undefined && form.defaultValue !== "") {
+        const val = Number(form.defaultValue);
+        if (!isNaN(val)) {
+          if (form.minRange !== undefined && val < form.minRange) {
+            toast.error(`Default value (${val}) cannot be less than Min Value (${form.minRange})`);
+            return false;
+          }
+          if (form.maxRange !== undefined && val > form.maxRange) {
+            toast.error(`Default value (${val}) cannot exceed Max Value (${form.maxRange})`);
+            return false;
+          }
+        }
+      }
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };

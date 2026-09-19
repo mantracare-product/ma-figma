@@ -1617,6 +1617,39 @@ export function FieldInputRenderer({
 
   if (effectiveType === "number") {
     const numConfig = subField?.numberConfig || field?.numberConfig;
+    const min = numConfig?.min;
+    const max = numConfig?.max;
+
+    const numVal = typeof value === "number" ? value : (value !== "" && value !== undefined && value !== null && !isNaN(Number(value)) ? Number(value) : undefined);
+    const isOutOfRange = numVal !== undefined && ((min !== undefined && numVal < min) || (max !== undefined && numVal > max));
+
+    const handleNumberChange = (raw: string) => {
+      if (raw === "") {
+        onChange("");
+        return;
+      }
+      const parsed = Number(raw);
+      if (isNaN(parsed)) {
+        onChange(raw);
+        return;
+      }
+      // If max is set and user entered value exceeding max, clamp it directly
+      if (max !== undefined && parsed > max) {
+        onChange(max);
+        return;
+      }
+      onChange(parsed);
+    };
+
+    const handleNumberBlur = () => {
+      if (numVal !== undefined) {
+        if (min !== undefined && numVal < min) {
+          onChange(min);
+        } else if (max !== undefined && numVal > max) {
+          onChange(max);
+        }
+      }
+    };
 
     return (
       <div className="space-y-1">
@@ -1624,15 +1657,22 @@ export function FieldInputRenderer({
           type="number"
           value={typeof value === "number" ? value : value ?? ""}
           disabled={disabled}
-          min={numConfig?.min}
-          max={numConfig?.max}
-          onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))}
-          placeholder={effectivePlaceholder || (numConfig?.min !== undefined && numConfig?.max !== undefined ? `${numConfig.min} - ${numConfig.max}` : "Enter number")}
-          className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 ${borderClass}`}
+          min={min}
+          max={max}
+          onChange={(e) => handleNumberChange(e.target.value)}
+          onBlur={handleNumberBlur}
+          placeholder={effectivePlaceholder || (min !== undefined && max !== undefined ? `${min} - ${max}` : "Enter number")}
+          className={`w-full px-3 py-1.5 border rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 transition-all ${
+            isOutOfRange
+              ? "border-red-500 bg-red-50/20 focus:border-red-500 focus:ring-red-500"
+              : `focus:ring-blue-500 ${borderClass}`
+          }`}
         />
-        {(numConfig?.min !== undefined || numConfig?.max !== undefined) && (
-          <p className="text-[10px] text-slate-400">
-            Allowed range: {numConfig?.min ?? "–"} to {numConfig?.max ?? "–"}
+        {(min !== undefined || max !== undefined) && (
+          <p className={`text-[10px] ${isOutOfRange ? "text-red-500 font-semibold" : "text-slate-400"}`}>
+            {isOutOfRange
+              ? `⚠️ Value must be between ${min ?? "–"} and ${max ?? "–"} (Current: ${numVal})`
+              : `Allowed range: ${min ?? "–"} to ${max ?? "–"}`}
           </p>
         )}
       </div>
