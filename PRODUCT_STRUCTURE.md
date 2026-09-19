@@ -70,9 +70,10 @@ graph TD
         MainLayout --> Forms[Web Forms & Visual Builder]
     end
 
-    subgraph "Platform Governance"
+    subgraph "Platform Governance & Custom Fields"
         MainLayout --> KB[Knowledge Base & Guides]
         MainLayout --> Admin[User & Organization Management]
+        MainLayout --> CustomFields[Universal Field Registry & Admin Drawer]
         MainLayout --> Settings[Practice Settings & AI Models]
     end
 ```
@@ -108,6 +109,8 @@ graph TD
 | `/guide` | `GuidePageRoute.tsx` | Interactive platform help center & step-by-step guides |
 | `/organizations` | `Organizations.tsx` | Multi-clinic entity switcher & practice branch manager |
 | `/users` | `UserManagement.tsx` | Team member directory, clinical privileges & roles |
+| `/admin/custom-fields` | `AdminCustomFields.tsx` | Global custom fields manager & field drawer |
+| `/admin/industries` | `AdminIndustries.tsx` | Industry verticals, default templates & field scoping |
 | `/settings` | `Settings.tsx` | Telephony numbers, AI model keys, custom fields, notifications |
 | `/settings/team/:id`| `ManageTeamMember.tsx` | Granular provider schedule, credentials & access control |
 | `/profile` | `Profile.tsx` | Logged-in provider account preferences |
@@ -165,9 +168,37 @@ graph TD
 - **`Process.tsx` & `chatbotFlowEngine.ts`**: Visual node-based workflow builder for clinical automation (appointment reminders, post-op check-ins, lab result notifications).
 - **`FormBuilder.tsx` & `WebForms.tsx`**: Drag-and-drop clinical intake form creator supporting text, signatures, file uploads, and conditional logic.
 
-### 5.8 Universal Custom Fields Registry (`src/app/context/FieldRegistryContext.tsx`)
-- Centralized field schema manager allowing practices to define bespoke metadata across any entity (Clients, Appointments, Deals, Claims).
-- Supports data types: `Text`, `Number`, `Dropdown`, `Date`, `Checkbox`, `Currency`, and `Tabular`.
+### 5.8 Universal Custom Fields & Dynamic Schema Engine (`src/app/context/FieldRegistryContext.tsx`, `src/app/components/fields/`, `src/app/pages/admin/`)
+The platform features an enterprise-grade schema engine allowing administrators and clinicians to configure custom metadata fields across modules (`client`, `service`, `process`, `appointment`, `organization`).
+
+#### Field Categories & Supported Data Types
+1. **Text & Content**:
+   - `Text`: Single-line short text with configurable `maxChars` or formatted multiline paragraphs with integrated `RichTextEditor`.
+   - `Phone Number` (`tel`): Formatted phone input with international country code picker and configurable display masks.
+   - `Email` (`email`): Standard email validation input.
+   - `Link / URL` (`link`): Web URLs and clickable links.
+2. **Numbers & Dates**:
+   - `Number` (`number`): Integer or decimal numeric input with active real-time `min`/`max` guardrails, immediate upper-bound clamping, blur lower-bound clamping, and visual validation warnings.
+   - `Money / Currency` (`money`): Financial value inputs with currency symbols (INR, USD, EUR, GBP, CAD, AUD, etc.).
+   - `Date & Time` (`date_time`): Date-only, Time-only (12h/24h formats with timezone selection), or Combined date-time timestamps with optional `minDate`/`maxDate` constraints.
+   - `Rating / Score` (`rating`): 3, 5, or 10-star rating assessments.
+3. **Options & Logic**:
+   - `List` (`list`): Typed options with search filters, custom sorting (`manual`, `alphabetical_asc`, `alphabetical_desc`, `recent`), format inheritance from existing fields in the module, and live 2-way value synchronization (`liveSync`).
+   - `New List` (`new_list`):
+     - **Mode 1 — Manual List**: Direct option definitions supporting Single Select, Multi-Select, or Open-List custom tagging.
+     - **Mode 2 — Option List**: References an existing Composite Field (Table or Group). Features a per-column matrix (`Primary` column radio, `Disable` locked flags, `Editable` override flags), interactive subfield input controls (Multi-Select, Dropdowns, Dates, Money) in option rows, client runtime local overrides, **Download Sample CSV** (dynamically formatted according to the composite field's data types, min/max bounds, and options), and **Import CSV** (with RFC-compliant parser, preview table, error/warning feedback, and append/replace modes).
+   - `Yes / No` (`yes_no`): Binary boolean toggles and dual-button selectors.
+4. **Advanced & Media**:
+   - `Composite Field` (`composite`): Multi-field grouped records presented as Table View (Spreadsheet Rows) or Group View (Cards). Supports subfields with configurable **Min Entries (`minEntries`)** and **Max Entries (`maxEntries`)** bounds enforcement.
+   - `Link to Mantra Entities` (`crm_bind`): Dynamic 2-way relationship linking to CRM entities (`teamMember`, `client`, `organization`, `service`, `process`) in single or multi-record selection.
+   - `Media Attach` (`media`): Category-specific file uploads (`image`, `document`, `audio`) with portal-based `MediaFormatDropdown`, custom extension additions, file size limits, and multi-file upload rules.
+   - `Digital Signature` (`signature`): Touchscreen drawing canvas signature pad with clear and export capabilities.
+
+#### Key Field Components
+- `FieldInputRenderer.tsx`: Core recursive field renderer with seamless handling of full field definitions and child subfield configs.
+- `AdminFieldDrawer.tsx`: Comprehensive sliding field configuration drawer with validation, process scoping, role permissions, and default value configuration.
+- `MediaFormatDropdown.tsx`: Portal-based multi-format selector with search and custom extension additions.
+- `useDynamicListOptions.ts` & `useCrmBindOptions.ts`: Dynamic data fetching and option binding hooks.
 
 ---
 
@@ -200,6 +231,7 @@ ma-figma/
     │   ├── claimsStore.ts               # RCM claims persistent storage & CRUD
     │   ├── cptCodes.ts                  # CPT medical procedure code catalog
     │   ├── icdCodes.ts                  # ICD-10 medical diagnostic code catalog
+    │   ├── mediaFormatsStore.ts         # Media categories, format presets & custom extensions
     │   ├── pdfGenerator.ts              # PDF export utility
     │   ├── permissions.ts               # Role-based access control (RBAC) helpers
     │   ├── scribeSessionStore.ts        # AI Scribe audio & SOAP note storage
@@ -214,7 +246,7 @@ ma-figma/
         │   ├── AIProviderContext.tsx    # AI model API keys & voice presets
         │   ├── AuthContext.tsx          # User session, login state & roles
         │   ├── ClientFieldsContext.tsx  # Dynamic patient fields
-        │   ├── FieldRegistryContext.tsx # Centralized custom fields engine
+        │   ├── FieldRegistryContext.tsx # Centralized universal custom fields engine
         │   ├── InvoiceContext.tsx       # Invoice calculations & state
         │   ├── OrganizationContext.tsx  # Multi-tenant organization switching
         │   ├── SidebarContext.tsx       # Layout sidebar state
@@ -242,11 +274,24 @@ ma-figma/
         │   ├── Organizations.tsx        # Multi-location clinic switcher
         │   ├── UserManagement.tsx       # Staff directory & roles
         │   ├── Settings.tsx             # Practice configuration & integrations
+        │   │
+        │   ├── admin/                   # Administrative Governance & Custom Field Pages
+        │   │   ├── AdminCustomFields.tsx# Central custom fields catalog & management
+        │   │   ├── AdminIndustries.tsx  # Scoping verticals & default templates
+        │   │   └── components/          # Admin drawers & field configuration modals
+        │   │       ├── AdminFieldDrawer.tsx # Slide-out field creator & editor
+        │   │       └── MediaFormatDropdown.tsx # Portal format multi-select dropdown
+        │   │
         │   └── auth/                    # Authentication views (Login, Signup)
         │
         └── components/                  # Domain-specific and atomic UI components
             ├── layout/                  # MainLayout, Sidebar, Navbar
-            ├── ui/                      # Base UI primitives (Buttons, Modals, Drawers, Inputs)
+            ├── ui/                      # Base UI primitives (Buttons, Modals, Drawers, Inputs, Popovers)
+            ├── fields/                  # Custom field inputs & renderers
+            │   ├── FieldInputRenderer.tsx # Core universal field input renderer
+            │   ├── RichTextEditor.tsx   # Rich text formatting toolbar
+            │   ├── useCrmBindOptions.ts # CRM entity data binding hook
+            │   └── useDynamicListOptions.ts # List options & 2-way sync hook
             ├── appointments/            # Schedule drawer, appointment cards, details
             ├── claims/                  # CMS-1500 modal, claim drawers, progress bars
             ├── scribe/                  # Waveforms, audio recorders, SOAP note cards
@@ -267,10 +312,10 @@ The platform operates on a reactive, multi-tier state architecture:
 1. **Top-Level React Context**:
    - Manages synchronous UI state (Active Theme, Active Tenant Organization, Open Drawers, Navigation).
 2. **Reactive Local/Session Storage Stores** (`src/lib/*Store.ts`):
-   - In-browser persistent stores (`claimsStore.ts`, `servicesStore.ts`, `scribeSessionStore.ts`, `documentTemplatesStore.ts`).
+   - In-browser persistent stores (`claimsStore.ts`, `servicesStore.ts`, `scribeSessionStore.ts`, `mediaFormatsStore.ts`, `documentTemplatesStore.ts`).
    - Dispatches window-level custom events on mutate, enabling instant synchronization across sibling components and browser tabs without heavy external libraries.
 3. **Portal-Anchored UI Overlays**:
-   - Complex drawers (e.g. `CustomSideDrawer`) and dropdown menus (e.g. `CustomDropdown`) render directly into `document.body` via `createPortal` with high z-indices (`z-[9999]` and `z-[100000]`), guaranteeing that dropdown lists and overlays are never clipped by `overflow-hidden` containers.
+   - Complex drawers (e.g. `CustomSideDrawer`, `AdminFieldDrawer`) and dropdown menus (e.g. `AdminSelect`, `MediaFormatDropdown`) render directly into `document.body` via `createPortal` with high z-indices (`z-[9999]` and `z-[100010]`), guaranteeing that dropdown lists and overlays are never clipped by `overflow-hidden` containers.
 
 ---
 

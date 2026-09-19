@@ -35,6 +35,11 @@ import {
   Copy,
   ChevronUp,
   EyeOff,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  CheckCircle2,
+  HelpCircle,
 } from "lucide-react";
 import type {
   FieldDefinition,
@@ -207,6 +212,694 @@ export function formatCompositePreview(val: any): string {
   }
   const str = String(val);
   return str.split(",").map((s) => s.trim()).filter(Boolean).join(", ");
+}
+
+/**
+ * Escapes a cell string for safe RFC 4180 CSV serialization
+ */
+function escapeCsvCell(val: any): string {
+  if (val === undefined || val === null) return "";
+  const str = String(val);
+  if (str.includes(",") || str.includes('"') || str.includes("\n") || str.includes("\r")) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+/**
+ * Generates and triggers browser download of a sample CSV template for composite columns,
+ * strictly matching each column's data type, constraints (min/max), and available options.
+ */
+export function generateSampleCsvForComposite(
+  columns: SubFieldConfig[],
+  compositeName: string = "composite_options"
+): void {
+  if (!columns || columns.length === 0) {
+    toast.error("No columns found in selected composite field to generate sample CSV.");
+    return;
+  }
+
+  const headers = columns.map((c) => c.name || c.id);
+
+  // Generate 3 sample rows that adhere to field types and validation rules
+  const row1: string[] = [];
+  const row2: string[] = [];
+  const row3: string[] = [];
+
+  columns.forEach((col) => {
+    const type = (col.inputType || "text").toLowerCase();
+    const colName = (col.name || "").toLowerCase();
+
+    if (type === "number") {
+      const min = col.numberConfig?.min ?? 10;
+      const max = col.numberConfig?.max ?? 100;
+      const mid = Math.round((min + max) / 2);
+      row1.push(String(min));
+      row2.push(String(mid));
+      row3.push(String(max));
+    } else if (type === "money") {
+      row1.push("150.00");
+      row2.push("499.50");
+      row3.push("1250.00");
+    } else if (type === "date") {
+      row1.push("2026-10-01");
+      row2.push("2026-10-15");
+      row3.push("2026-11-01");
+    } else if (type === "time") {
+      row1.push("09:30 AM");
+      row2.push("02:15 PM");
+      row3.push("05:00 PM");
+    } else if (type === "date_time") {
+      row1.push("2026-10-01 09:30");
+      row2.push("2026-10-15 14:00");
+      row3.push("2026-11-01 16:30");
+    } else if (type === "yes_no") {
+      row1.push("Yes");
+      row2.push("No");
+      row3.push("Yes");
+    } else if (type === "email") {
+      row1.push("contact@example.com");
+      row2.push("support@example.com");
+      row3.push("billing@example.com");
+    } else if (type === "tel") {
+      row1.push("+1 555-0144");
+      row2.push("+1 555-0182");
+      row3.push("+1 555-0199");
+    } else if (type === "link" || type === "whatsapp_link") {
+      row1.push("https://example.com/docs");
+      row2.push("https://example.com/item");
+      row3.push("https://example.com/ref");
+    } else if (type === "rating") {
+      const maxR = col.maxRating || 5;
+      row1.push(String(maxR));
+      row2.push(String(Math.max(1, maxR - 1)));
+      row3.push(String(Math.max(1, maxR - 2)));
+    } else if (type === "list_select" || type === "select" || type === "list") {
+      if (col.options && col.options.length > 0) {
+        row1.push(col.options[0]?.label || col.options[0]?.value || "Option 1");
+        row2.push(col.options[1]?.label || col.options[0]?.label || "Option 2");
+        row3.push(col.options[2]?.label || col.options[0]?.label || "Option 3");
+      } else {
+        row1.push("Active");
+        row2.push("Pending");
+        row3.push("Completed");
+      }
+    } else if (type === "multiselect") {
+      if (col.options && col.options.length > 0) {
+        const optLabels = col.options.map((o) => o.label || o.value);
+        row1.push(optLabels.slice(0, 2).join(", ") || optLabels[0] || "Item A, Item B");
+        row2.push(optLabels[0] || "Item A");
+        row3.push(optLabels.slice(1, 3).join(", ") || optLabels[0] || "Item B, Item C");
+      } else {
+        row1.push("Tag A, Tag B");
+        row2.push("Tag C");
+        row3.push("Tag A, Tag C");
+      }
+    } else if (type === "textarea" || type === "richtext") {
+      row1.push("Standard dosage: Take once daily after meals.");
+      row2.push("High priority: Verify patient tolerance before dispensing.");
+      row3.push("Requires medical supervisor review within 14 days.");
+    } else if (type === "crm_bind") {
+      row1.push("Dr. Sarah Johnson");
+      row2.push("Michael Chen");
+      row3.push("Emily Davis");
+    } else {
+      // Context-aware text sample
+      if (colName.includes("medicine") || colName.includes("drug") || colName.includes("item")) {
+        row1.push("Amoxicillin 500mg");
+        row2.push("Paracetamol 650mg");
+        row3.push("Ibuprofen 400mg");
+      } else if (colName.includes("code") || colName.includes("sku") || colName.includes("id")) {
+        row1.push("MED-101");
+        row2.push("MED-102");
+        row3.push("MED-103");
+      } else if (colName.includes("unit") || colName.includes("pack") || colName.includes("dose") || colName.includes("qty")) {
+        row1.push("10 Tablets / Strip");
+        row2.push("1 Bottle (100ml)");
+        row3.push("1 Box (50 Caps)");
+      } else if (colName.includes("category") || colName.includes("type")) {
+        row1.push("Antibiotics");
+        row2.push("Analgesics");
+        row3.push("Antipyretics");
+      } else {
+        row1.push(`${col.name} Example 1`);
+        row2.push(`${col.name} Example 2`);
+        row3.push(`${col.name} Example 3`);
+      }
+    }
+  });
+
+  const csvLines = [
+    headers.map(escapeCsvCell).join(","),
+    row1.map(escapeCsvCell).join(","),
+    row2.map(escapeCsvCell).join(","),
+    row3.map(escapeCsvCell).join(","),
+  ];
+
+  const csvContent = "\uFEFF" + csvLines.join("\r\n"); // Include UTF-8 BOM for Excel compatibility
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const sanitizedName = (compositeName || "composite_options").toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `${sanitizedName}_sample_template.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  toast.success(`Downloaded sample CSV template (${headers.length} columns)`);
+}
+
+/**
+ * Parses raw CSV text into header names and data row arrays
+ */
+export function parseCsvText(csvText: string): { headers: string[]; rows: string[][] } {
+  const cleanText = csvText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let currentCell = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < cleanText.length; i++) {
+    const char = cleanText[i];
+    const nextChar = cleanText[i + 1];
+
+    if (char === '"') {
+      if (insideQuotes && nextChar === '"') {
+        currentCell += '"';
+        i++; // skip escaped quote
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+    } else if (char === "," && !insideQuotes) {
+      currentRow.push(currentCell.trim());
+      currentCell = "";
+    } else if (char === "\n" && !insideQuotes) {
+      currentRow.push(currentCell.trim());
+      if (currentRow.some((c) => c.length > 0)) {
+        rows.push(currentRow);
+      }
+      currentRow = [];
+      currentCell = "";
+    } else {
+      currentCell += char;
+    }
+  }
+
+  if (currentCell.length > 0 || currentRow.length > 0) {
+    currentRow.push(currentCell.trim());
+    if (currentRow.some((c) => c.length > 0)) {
+      rows.push(currentRow);
+    }
+  }
+
+  if (rows.length === 0) {
+    return { headers: [], rows: [] };
+  }
+
+  const rawHeaders = rows[0].map((h) => h.replace(/^\uFEFF/, "").trim());
+  const dataRows = rows.slice(1);
+
+  return { headers: rawHeaders, rows: dataRows };
+}
+
+/**
+ * Converts parsed CSV rows into structured FieldOption records mapped against composite columns
+ */
+export function convertCsvRowsToOptions(
+  csvData: { headers: string[]; rows: string[][] },
+  columns: SubFieldConfig[],
+  primaryColumnId?: string
+): { options: FieldOption[]; errors: string[]; warnings: string[] } {
+  const { headers, rows } = csvData;
+  const warnings: string[] = [];
+  const errors: string[] = [];
+
+  if (headers.length === 0 || rows.length === 0) {
+    errors.push("The CSV file does not contain any data rows.");
+    return { options: [], errors, warnings };
+  }
+
+  // Create header to column mapping
+  const colIndexMap: Map<number, SubFieldConfig> = new Map();
+  const unmappedHeaders: string[] = [];
+
+  headers.forEach((h, idx) => {
+    const normH = h.toLowerCase().trim().replace(/[\s_-]+/g, "");
+    const matchedCol = columns.find((col) => {
+      const normColName = (col.name || "").toLowerCase().trim().replace(/[\s_-]+/g, "");
+      const normColId = (col.id || "").toLowerCase().trim().replace(/[\s_-]+/g, "");
+      return normH === normColName || normH === normColId;
+    });
+
+    if (matchedCol) {
+      colIndexMap.set(idx, matchedCol);
+    } else {
+      unmappedHeaders.push(h);
+    }
+  });
+
+  if (colIndexMap.size === 0) {
+    errors.push(
+      `Could not match any CSV headers (${headers.join(", ")}) to composite columns (${columns.map((c) => c.name).join(", ")}).`
+    );
+    return { options: [], errors, warnings };
+  }
+
+  if (unmappedHeaders.length > 0) {
+    warnings.push(`Ignored ${unmappedHeaders.length} unmapped column(s): ${unmappedHeaders.join(", ")}`);
+  }
+
+  const resolvedPrimaryId = primaryColumnId || columns[0]?.id;
+  const primaryMapped = Array.from(colIndexMap.values()).some((c) => c.id === resolvedPrimaryId);
+  if (!primaryMapped && columns.length > 0) {
+    warnings.push(
+      `Primary column "${columns.find((c) => c.id === resolvedPrimaryId)?.name || resolvedPrimaryId}" was not found in CSV. Row labels will fallback to first available column.`
+    );
+  }
+
+  const generatedOptions: FieldOption[] = [];
+
+  rows.forEach((row, rowIdx) => {
+    if (row.length === 0 || row.every((c) => !c || c.trim() === "")) return;
+
+    const rowVals: Record<string, any> = {};
+    columns.forEach((c) => {
+      rowVals[c.id] = "";
+    });
+
+    row.forEach((cellVal, colIdx) => {
+      const col = colIndexMap.get(colIdx);
+      if (!col) return;
+
+      const type = (col.inputType || "text").toLowerCase();
+      let parsedVal: any = cellVal.trim();
+
+      if (type === "number") {
+        const num = parseFloat(parsedVal.replace(/,/g, ""));
+        if (!isNaN(num)) {
+          let clamped = num;
+          if (col.numberConfig?.min !== undefined && clamped < col.numberConfig.min) {
+            clamped = col.numberConfig.min;
+          }
+          if (col.numberConfig?.max !== undefined && clamped > col.numberConfig.max) {
+            clamped = col.numberConfig.max;
+          }
+          parsedVal = clamped;
+        } else {
+          parsedVal = "";
+        }
+      } else if (type === "money") {
+        const cleanMoney = parsedVal.replace(/[$€£₹,\s]/g, "");
+        const num = parseFloat(cleanMoney);
+        parsedVal = !isNaN(num) ? cleanMoney : parsedVal;
+      } else if (type === "yes_no") {
+        const lower = parsedVal.toLowerCase();
+        if (["yes", "true", "1", "y"].includes(lower)) parsedVal = "Yes";
+        else if (["no", "false", "0", "n"].includes(lower)) parsedVal = "No";
+      } else if (type === "multiselect") {
+        parsedVal = parsedVal
+          .split(/[,;]/)
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      }
+
+      rowVals[col.id] = parsedVal;
+    });
+
+    // Primary column value for the option label
+    const primaryVal = rowVals[resolvedPrimaryId];
+    let label = "";
+    if (primaryVal !== undefined && primaryVal !== null && String(primaryVal).trim() !== "") {
+      label = Array.isArray(primaryVal) ? primaryVal.join(", ") : String(primaryVal);
+    } else {
+      const firstNonEmpty = Object.values(rowVals).find((v) => v !== undefined && v !== null && String(v).trim() !== "");
+      label = firstNonEmpty ? (Array.isArray(firstNonEmpty) ? firstNonEmpty.join(", ") : String(firstNonEmpty)) : `Row ${rowIdx + 1}`;
+    }
+
+    generatedOptions.push({
+      id: Date.now() + rowIdx + Math.floor(Math.random() * 10000),
+      label: label,
+      value: rowVals,
+      index: rowIdx + 1,
+    });
+  });
+
+  return { options: generatedOptions, errors, warnings };
+}
+
+/**
+ * Modal dialog for uploading a CSV, previewing parsed rows, and importing into Option List
+ */
+interface CsvOptionListImportModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  compositeName: string;
+  columns: SubFieldConfig[];
+  primaryColumnId?: string;
+  currentOptionsCount: number;
+  onImport: (newOptions: FieldOption[], mode: "append" | "replace") => void;
+  zIndex?: number;
+}
+
+function CsvOptionListImportModal({
+  isOpen,
+  onClose,
+  compositeName,
+  columns,
+  primaryColumnId,
+  currentOptionsCount,
+  onImport,
+}: CsvOptionListImportModalProps) {
+  const [file, setFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<"append" | "replace">("append");
+  const [isDragging, setIsDragging] = useState(false);
+  const [previewOptions, setPreviewOptions] = useState<FieldOption[]>([]);
+  const [, setCsvHeaders] = useState<string[]>([]);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setFile(null);
+      setPreviewOptions([]);
+      setCsvHeaders([]);
+      setErrors([]);
+      setWarnings([]);
+      setImportMode("append");
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const processFile = (selectedFile: File) => {
+    if (!selectedFile.name.toLowerCase().endsWith(".csv") && selectedFile.type !== "text/csv") {
+      setErrors(["Please upload a valid CSV (.csv) file."]);
+      setFile(null);
+      setPreviewOptions([]);
+      return;
+    }
+
+    setFile(selectedFile);
+    setErrors([]);
+    setWarnings([]);
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const text = e.target?.result as string;
+        if (!text || !text.trim()) {
+          setErrors(["The selected CSV file is empty."]);
+          setPreviewOptions([]);
+          return;
+        }
+
+        const parsed = parseCsvText(text);
+        setCsvHeaders(parsed.headers);
+
+        const converted = convertCsvRowsToOptions(parsed, columns, primaryColumnId);
+        setErrors(converted.errors);
+        setWarnings(converted.warnings);
+        setPreviewOptions(converted.options);
+      } catch (err: any) {
+        setErrors([`Failed to parse CSV: ${err?.message || "Unknown error"}`]);
+        setPreviewOptions([]);
+      }
+    };
+    reader.onerror = () => {
+      setErrors(["Error reading file. Please try again."]);
+    };
+    reader.readAsText(selectedFile);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      processFile(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (previewOptions.length === 0) {
+      toast.error("No valid options to import.");
+      return;
+    }
+    onImport(previewOptions, importMode);
+    toast.success(
+      `Successfully imported ${previewOptions.length} option row(s) (${importMode === "replace" ? "Replaced all" : "Appended to existing"})`
+    );
+    onClose();
+  };
+
+  const columnNamesStr = columns.map((c) => c.name || c.id).join(", ");
+
+  return (
+    <div className="absolute inset-0 z-50 bg-white flex flex-col animate-in fade-in duration-150">
+      {/* Header — Matching Reference Image */}
+      <div className="px-6 py-5 border-b border-slate-100 flex items-start justify-between bg-white flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-[#eff6ff] text-[#2563eb] flex items-center justify-center border border-[#dbeafe] shrink-0">
+            <Upload className="w-5 h-5 stroke-[2.2]" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-[#0f172a]">Import Option Rows</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Bulk CSV onboarding for <strong className="text-slate-700 font-semibold">{compositeName}</strong>
+            </p>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="w-6 h-6 rounded-full bg-[#ef4444] hover:bg-[#dc2626] text-white flex items-center justify-center transition-colors cursor-pointer shadow-xs shrink-0"
+          title="Close"
+        >
+          <X className="w-3.5 h-3.5 stroke-[2.5]" />
+        </button>
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {/* CSV Tab Badge */}
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 shadow-2xs">
+            <FileSpreadsheet className="w-3.5 h-3.5 text-slate-600" />
+            <span>CSV</span>
+          </div>
+        </div>
+
+        {/* Guidance Text */}
+        <p className="text-xs text-slate-600 leading-relaxed">
+          Upload a CSV file to import options. Make sure your file follows the correct format.
+        </p>
+
+        {/* "Need a template?" Card — Exact Match to Reference Image */}
+        <div className="p-3.5 bg-[#f0f7ff] border border-[#d0e5ff] rounded-2xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-[#dbeafe] text-[#2563eb] flex items-center justify-center shrink-0">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-900">Need a template?</div>
+              <button
+                type="button"
+                onClick={() => generateSampleCsvForComposite(columns, compositeName)}
+                className="text-[11px] text-[#2563eb] font-medium hover:underline cursor-pointer block text-left"
+              >
+                Download our sample CSV file
+              </button>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => generateSampleCsvForComposite(columns, compositeName)}
+            className="px-3.5 py-1.5 bg-white text-[#2563eb] hover:bg-[#eff6ff] border border-[#bfdbfe] rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition-colors shrink-0 cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5 stroke-[2.2]" />
+            <span>Download</span>
+          </button>
+        </div>
+
+        {/* Upload Dropzone — Matching Reference Image */}
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                processFile(e.target.files[0]);
+              }
+            }}
+          />
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`border-2 border-dashed rounded-2xl p-7 text-center cursor-pointer transition-all ${
+              isDragging
+                ? "border-blue-500 bg-blue-50/50"
+                : file
+                ? "border-emerald-400 bg-emerald-50/30"
+                : "border-slate-200 hover:border-blue-400 bg-white hover:bg-slate-50/50"
+            }`}
+          >
+            {file ? (
+              <div className="space-y-1">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-2">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <p className="text-xs font-bold text-slate-800">{file.name}</p>
+                <p className="text-[11px] text-slate-500">
+                  {(file.size / 1024).toFixed(1)} KB • {previewOptions.length} valid row(s) parsed
+                </p>
+                <p className="text-[10px] text-blue-600 font-semibold pt-1">Click to choose a different file</p>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <div className="w-11 h-11 rounded-full bg-[#f1f5f9] text-[#64748b] flex items-center justify-center mx-auto mb-2">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <p className="text-xs font-semibold text-slate-700">Drag & drop your CSV file here</p>
+                <p className="text-xs text-slate-400">
+                  or <span className="text-[#2563eb] font-semibold">click to browse</span>
+                </p>
+                <p className="text-[10px] text-slate-400 pt-1">Maximum file size: 5MB</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* CSV Columns Box — Matching Reference Image */}
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">CSV columns:</label>
+          <div className="bg-[#f8fafc] border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-mono text-slate-600 overflow-x-auto whitespace-nowrap select-all shadow-2xs">
+            {columnNamesStr}
+          </div>
+        </div>
+
+        {/* Errors Banner */}
+        {errors.length > 0 && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-red-800">
+              <AlertCircle className="w-4 h-4 text-red-600" />
+              <span>Import Errors</span>
+            </div>
+            <ul className="list-disc list-inside text-xs text-red-700 pl-1">
+              {errors.map((err, i) => (
+                <li key={i}>{err}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Warnings Banner */}
+        {warnings.length > 0 && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <span>Import Warnings</span>
+            </div>
+            <ul className="list-disc list-inside text-xs text-amber-700 pl-1">
+              {warnings.map((warn, i) => (
+                <li key={i}>{warn}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Import Mode Selector if file selected */}
+        {previewOptions.length > 0 && (
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+              Import Destination Mode
+            </span>
+            <div className="grid grid-cols-2 gap-2">
+              <label
+                className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs transition-all ${
+                  importMode === "append"
+                    ? "bg-white border-blue-500 ring-1 ring-blue-500 text-blue-900 font-semibold"
+                    : "bg-white border-slate-200 text-slate-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="csvModeInDrawer"
+                  checked={importMode === "append"}
+                  onChange={() => setImportMode("append")}
+                  className="w-3.5 h-3.5 text-blue-600 accent-blue-600"
+                />
+                <div>
+                  <div>Append</div>
+                  <div className="text-[10px] text-slate-500 font-normal">
+                    Keep {currentOptionsCount} + Add {previewOptions.length}
+                  </div>
+                </div>
+              </label>
+              <label
+                className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs transition-all ${
+                  importMode === "replace"
+                    ? "bg-white border-rose-500 ring-1 ring-rose-500 text-rose-900 font-semibold"
+                    : "bg-white border-slate-200 text-slate-700"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="csvModeInDrawer"
+                  checked={importMode === "replace"}
+                  onChange={() => setImportMode("replace")}
+                  className="w-3.5 h-3.5 text-rose-600 accent-rose-600"
+                />
+                <div>
+                  <div>Replace All</div>
+                  <div className="text-[10px] text-slate-500 font-normal">
+                    Overwrite with {previewOptions.length}
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer — Matching Reference Image */}
+      <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3 bg-white flex-shrink-0">
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-slate-600 hover:text-slate-800 px-3 py-2 cursor-pointer transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={handleConfirm}
+          disabled={previewOptions.length === 0 || errors.length > 0}
+          className={`inline-flex items-center gap-1.5 px-5 py-2.5 font-semibold text-xs rounded-xl shadow-2xs transition-colors ${
+            previewOptions.length > 0 && errors.length === 0
+              ? "bg-[#2563eb] hover:bg-[#1d4ed8] text-white cursor-pointer"
+              : "bg-[#94a3b8] text-white cursor-not-allowed opacity-80"
+          }`}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          <span>Import Options</span>
+        </button>
+      </div>
+    </div>
+  );
 }
 
 interface FieldFormState {
@@ -614,6 +1307,7 @@ export function AdminFieldDrawer({
   const [fieldSettingsOpen, setFieldSettingsOpen] = useState(false);
   const [scopeDropdownOpen, setScopeDropdownOpen] = useState(false);
   const [permissionsDropdownOpen, setPermissionsDropdownOpen] = useState(false);
+  const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
   const [errors, setErrors] = useState<{ label?: string }>({});
 
@@ -1319,7 +2013,7 @@ export function AdminFieldDrawer({
     <div className="fixed inset-0 flex" style={{ pointerEvents: "none", zIndex }}>
       <style>{`@keyframes slideInFromRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
       <div className="flex-1 bg-black/40 backdrop-blur-[1px]" style={{ pointerEvents: "auto" }} onClick={onClose} />
-      <div className="flex flex-col bg-white" style={{ width: 540, maxWidth: "100%", height: "100vh", boxShadow: "-4px 0 40px rgba(0,0,0,0.14)", animation: "slideInFromRight 220ms cubic-bezier(0.16,1,0.3,1)", pointerEvents: "auto" }}>
+      <div className="flex flex-col bg-white relative overflow-hidden" style={{ width: 540, maxWidth: "100%", height: "100vh", boxShadow: "-4px 0 40px rgba(0,0,0,0.14)", animation: "slideInFromRight 220ms cubic-bezier(0.16,1,0.3,1)", pointerEvents: "auto" }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 flex-shrink-0 bg-white">
@@ -3185,37 +3879,49 @@ export function AdminFieldDrawer({
                   {/* Defined Option Items / Records for Option List */}
                   {selectedCompositeColumns.length > 0 && (
                     <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                           Defined Option Rows ({form.options.length})
                         </span>
 
                         {!isReadOnly && canClientAddOptions && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const newIdx = form.options.length + 1;
-                              const initialRowVals: Record<string, any> = {};
-                              selectedCompositeColumns.forEach((c) => {
-                                initialRowVals[c.id] = "";
-                              });
-                              setForm((p) => ({
-                                ...p,
-                                options: [
-                                  ...p.options,
-                                  {
-                                    id: Date.now() + newIdx,
-                                    label: "",
-                                    value: initialRowVals,
-                                    index: newIdx,
-                                  },
-                                ],
-                              }));
-                            }}
-                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200 transition-colors"
-                          >
-                            <Plus className="w-3 h-3" /> Add Option Row
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setCsvImportModalOpen(true)}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-indigo-600 hover:text-indigo-700 cursor-pointer bg-indigo-50 hover:bg-indigo-100/70 border-indigo-200 transition-colors shadow-2xs"
+                              title="Import option rows from a CSV file (or download template)"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Import CSV</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newIdx = form.options.length + 1;
+                                const initialRowVals: Record<string, any> = {};
+                                selectedCompositeColumns.forEach((c) => {
+                                  initialRowVals[c.id] = "";
+                                });
+                                setForm((p) => ({
+                                  ...p,
+                                  options: [
+                                    ...p.options,
+                                    {
+                                      id: Date.now() + newIdx,
+                                      label: "",
+                                      value: initialRowVals,
+                                      index: newIdx,
+                                    },
+                                  ],
+                                }));
+                              }}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 hover:bg-blue-100/70 border-blue-200 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" /> Add Option Row
+                            </button>
+                          </div>
                         )}
                       </div>
 
@@ -4091,6 +4797,26 @@ export function AdminFieldDrawer({
             </button>
           )}
         </div>
+
+        {/* CSV Option List Import Popup (Scoped inside drawer container) */}
+        {csvImportModalOpen && selectedCompositeColumns.length > 0 && (
+          <CsvOptionListImportModal
+            isOpen={csvImportModalOpen}
+            onClose={() => setCsvImportModalOpen(false)}
+            compositeName={selectedCompositeDef?.label || form.label || "Composite Options"}
+            columns={selectedCompositeColumns}
+            primaryColumnId={
+              form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id
+            }
+            currentOptionsCount={form.options.length}
+            onImport={(newOptions, mode) => {
+              setForm((p) => ({
+                ...p,
+                options: mode === "replace" ? newOptions : [...p.options, ...newOptions],
+              }));
+            }}
+          />
+        )}
       </div>
 
       {/* Stacked Nested Field Drawer (creates new field of chosen type and inherits it) */}
