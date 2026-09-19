@@ -77,6 +77,9 @@ export type SubFieldInputType =
   | "date_time"
   | "time"
   | "list_select"
+  | "multiselect"
+  | "select"
+  | "list"
   | "yes_no"
   | "link"
   | "email"
@@ -216,7 +219,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("date_time")) inputType = "date_time";
   else if (rawType.includes("time")) inputType = "time";
   else if (rawType.includes("date")) inputType = "date";
-  else if (rawType.includes("select") || rawType.includes("list") || rawType.includes("dropdown")) inputType = "list_select";
+  else if (rawType.includes("select") || rawType.includes("list") || rawType.includes("dropdown") || rawType.includes("multi")) inputType = "list_select";
   else if (rawType.includes("textarea") || rawType.includes("area") || rawType.includes("long")) inputType = "textarea";
   else if (rawType.includes("rating") || rawType.includes("score")) inputType = "rating";
   else if (rawType.includes("yes") || rawType.includes("bool")) inputType = "yes_no";
@@ -225,6 +228,8 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
   else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
   else if (rawType.includes("file") || rawType.includes("upload") || rawType.includes("media") || rawType.includes("attach") || rawType.includes("doc") || rawType.includes("image")) inputType = "file";
+
+  const isMulti = rawType.includes("multi") || col.selectionMode === "multiple";
 
   return {
     id: col.id || col.key || col.colId || col.name || `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -244,7 +249,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
     crmBindConfig: col.crmBindConfig || (inputType === "crm_bind" ? { sourceModule: "teamMember", displayField: "name", selectionMode: col.selectionMode || "single" } : undefined),
     defaultValue: col.defaultValue,
     currency: col.currency,
-    selectionMode: col.selectionMode || "single",
+    selectionMode: isMulti ? "multiple" : (col.selectionMode || "single"),
     maxRating: col.maxRating || (inputType === "rating" ? 5 : undefined),
     listBindConfig: col.listBindConfig,
     mediaConfig: col.mediaConfig,

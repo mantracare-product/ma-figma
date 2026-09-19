@@ -21,6 +21,7 @@ import {
 import type {
   FieldDefinition,
   SubFieldConfig,
+  SubFieldInputType,
   FieldOption,
   CrmBindConfig,
   FieldInputType,
@@ -809,8 +810,29 @@ function NewListInputRenderer({
 
   const compositeColumns: SubFieldConfig[] = useMemo(() => {
     if (!sourceCompositeDef) return [];
-    return resolveColumnsOrSubFields(sourceCompositeDef);
-  }, [sourceCompositeDef]);
+    const baseCols = resolveColumnsOrSubFields(sourceCompositeDef);
+    return baseCols.map((col) => {
+      const matchedField = allFields.find((f) => 
+        f.key === col.id || 
+        col.id.startsWith(`col_${f.key}_`) || 
+        col.id.startsWith(`col_${f.key}__`) || 
+        f.label.toLowerCase() === col.name.toLowerCase()
+      );
+      if (matchedField) {
+        const isMulti = matchedField.inputType === "multiselect" || matchedField.selectionMode === "multiple";
+        return {
+          ...col,
+          inputType: isMulti ? "multiselect" : (col.inputType || (matchedField.inputType as SubFieldInputType)),
+          options: (col.options && col.options.length > 0) ? col.options : matchedField.options,
+          selectionMode: isMulti ? "multiple" : (matchedField.selectionMode || col.selectionMode),
+          currency: col.currency || matchedField.currency,
+          crmBindConfig: col.crmBindConfig || matchedField.crmBindConfig,
+          listBindConfig: col.listBindConfig || matchedField.listBindConfig,
+        };
+      }
+      return col;
+    });
+  }, [sourceCompositeDef, allFields]);
 
   const columnConfigs: OptionListColumnConfig[] = optionListConfig?.columns || [];
   const primaryColConfig =
@@ -1130,17 +1152,18 @@ function NewListInputRenderer({
                 {isColDisabled || disabled ? (
                   // Locked / Greyed-Out Read-Only Field
                   <div className="px-2.5 py-1.5 bg-slate-100/90 border border-slate-200 rounded-lg text-xs text-slate-600 font-medium select-none truncate">
-                    {currentVal !== undefined && currentVal !== "" ? String(currentVal) : <span className="text-slate-400 italic">—</span>}
+                    {currentVal !== undefined && currentVal !== "" 
+                      ? (Array.isArray(currentVal) ? currentVal.join(", ") : String(currentVal)) 
+                      : <span className="text-slate-400 italic">—</span>}
                   </div>
                 ) : (
                   // Editable Field (Stored as local override)
-                  <input
-                    type={col.inputType === "number" || col.inputType === "money" ? "number" : "text"}
-                    value={currentVal ?? ""}
+                  <FieldInputRenderer
+                    subField={col}
+                    value={currentVal}
                     disabled={disabled}
-                    placeholder={`Enter ${col.name.toLowerCase()}...`}
-                    onChange={(e) => handleColumnOverrideChange(itemIdx, col.id, e.target.value)}
-                    className="w-full px-2.5 py-1.5 bg-white border border-slate-200 focus:border-blue-500 rounded-lg text-xs font-medium text-slate-800 outline-none focus:ring-1 focus:ring-blue-500 transition-all shadow-2xs"
+                    onChange={(val) => handleColumnOverrideChange(itemIdx, col.id, val)}
+                    isSubField={true}
                   />
                 )}
               </div>

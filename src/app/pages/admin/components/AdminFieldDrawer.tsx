@@ -786,10 +786,32 @@ export function AdminFieldDrawer({
     return allFieldsInPrimaryModule.find((f) => f.key === form.newListSourceCompositeKey);
   }, [allFieldsInPrimaryModule, form.newListSourceCompositeKey]);
 
-  const selectedCompositeColumns = useMemo(() => {
+  const selectedCompositeColumns: SubFieldConfig[] = useMemo(() => {
     if (!selectedCompositeDef) return [];
-    return resolveColumnsOrSubFields(selectedCompositeDef);
-  }, [selectedCompositeDef]);
+    const baseCols = resolveColumnsOrSubFields(selectedCompositeDef);
+    return baseCols.map((col): SubFieldConfig => {
+      const matchedField = allFieldsInPrimaryModule.find((f) => 
+        f.key === col.id || 
+        col.id.startsWith(`col_${f.key}_`) || 
+        col.id.startsWith(`col_${f.key}__`) || 
+        f.label.toLowerCase() === col.name.toLowerCase()
+      );
+      if (matchedField) {
+        const isMulti = matchedField.inputType === "multiselect" || matchedField.selectionMode === "multiple";
+        const finalType: SubFieldInputType = isMulti ? "multiselect" : (col.inputType || (matchedField.inputType as SubFieldInputType) || "text");
+        return {
+          ...col,
+          inputType: finalType,
+          options: (col.options && col.options.length > 0) ? col.options : matchedField.options,
+          selectionMode: isMulti ? "multiple" : (matchedField.selectionMode || col.selectionMode),
+          currency: col.currency || matchedField.currency,
+          crmBindConfig: col.crmBindConfig || matchedField.crmBindConfig,
+          listBindConfig: col.listBindConfig || matchedField.listBindConfig,
+        };
+      }
+      return col;
+    });
+  }, [selectedCompositeDef, allFieldsInPrimaryModule]);
 
   const handleSelectCompositeForNewList = (compositeKey: string) => {
     const targetComp = allFieldsInPrimaryModule.find((f) => f.key === compositeKey);
@@ -811,29 +833,35 @@ export function AdminFieldDrawer({
 
   const importExistingFieldToColumn = (f: FieldDefinition) => {
     let colType = "Text";
-    if (f.inputType === "number") colType = "Number";
-    else if (f.inputType === "money") colType = "Money";
-    else if (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect" || f.inputType === "list") colType = "Select";
-    else if (f.inputType === "date") colType = "Date";
-    else if (f.inputType === "time") colType = "Time";
-    else if (f.inputType === "date_time") colType = "Date & Time";
-    else if (f.inputType === "textarea" || f.inputType === "richtext") colType = "Long Text";
-    else if (f.inputType === "yes_no") colType = "Yes / No";
-    else if (f.inputType === "email") colType = "Email";
-    else if (f.inputType === "tel") colType = "Phone";
-    else if (f.inputType === "link" || f.inputType === "whatsapp_link") colType = "Link";
-    else if (f.inputType === "rating") colType = "Rating";
-    else if (f.inputType === "crm_bind") colType = "crm_bind";
+    let subInputType: SubFieldInputType = "text";
+    const isMulti = f.inputType === "multiselect" || f.selectionMode === "multiple";
+
+    if (f.inputType === "number") { colType = "Number"; subInputType = "number"; }
+    else if (f.inputType === "money") { colType = "Money"; subInputType = "money"; }
+    else if (f.inputType === "list_select" || f.inputType === "select" || f.inputType === "multiselect" || f.inputType === "list" || f.inputType === "new_list") {
+      colType = isMulti ? "Multi Select" : "Select";
+      subInputType = isMulti ? "multiselect" : "list_select";
+    }
+    else if (f.inputType === "date") { colType = "Date"; subInputType = "date"; }
+    else if (f.inputType === "time") { colType = "Time"; subInputType = "time"; }
+    else if (f.inputType === "date_time") { colType = "Date & Time"; subInputType = "date_time"; }
+    else if (f.inputType === "textarea" || f.inputType === "richtext") { colType = "Long Text"; subInputType = "textarea"; }
+    else if (f.inputType === "yes_no") { colType = "Yes / No"; subInputType = "yes_no"; }
+    else if (f.inputType === "email") { colType = "Email"; subInputType = "email"; }
+    else if (f.inputType === "tel") { colType = "Phone"; subInputType = "tel"; }
+    else if (f.inputType === "link" || f.inputType === "whatsapp_link") { colType = "Link"; subInputType = "link"; }
+    else if (f.inputType === "rating") { colType = "Rating"; subInputType = "rating"; }
+    else if (f.inputType === "crm_bind") { colType = "crm_bind"; subInputType = "crm_bind"; }
 
     const newCol: TableColumnConfig = {
       id: `col_${f.key}_${Date.now()}`,
       name: f.label,
       type: colType,
-      inputType: (f.inputType as SubFieldInputType) || "text",
+      inputType: subInputType,
       placeholder: f.placeholder || getSuggestedPlaceholderForType(f.inputType, f.label),
       options: f.options ? [...f.options] : undefined,
       currency: f.currency || (f.inputType === "money" ? "INR" : undefined),
-      selectionMode: f.selectionMode || "single",
+      selectionMode: isMulti ? "multiple" : (f.selectionMode || "single"),
       crmBindConfig: f.crmBindConfig ? { ...f.crmBindConfig } : undefined,
       maxRating: f.maxRating,
     };
@@ -2978,13 +3006,13 @@ export function AdminFieldDrawer({
                       </div>
 
                       {/* Matrix Grid */}
-                      <div className="border border-slate-200 rounded-lg overflow-hidden">
-                        <table className="w-full text-left text-xs border-collapse">
+                      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                        <table className="w-full min-w-[480px] text-left text-xs border-collapse">
                           <thead>
                             <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-700">
-                              <th className="px-3 py-2">Column Name</th>
+                              <th className="px-3 py-2 min-w-[140px]">Column Name</th>
                               <th className="px-2 py-2 text-center w-20">Type</th>
-                              <th className="px-2 py-2 text-center w-24">
+                              <th className="px-2 py-2 text-center w-20">
                                 <span className="text-blue-700">Primary</span>
                               </th>
                               <th className="px-2 py-2 text-center w-20">
@@ -3244,22 +3272,22 @@ export function AdminFieldDrawer({
                                             </span>
                                           )}
                                         </label>
-                                        <input
-                                          type={col.inputType === "number" || col.inputType === "money" ? "number" : "text"}
-                                          value={currentVal ?? ""}
+                                        <FieldInputRenderer
+                                          subField={col}
+                                          value={currentVal}
                                           disabled={isReadOnly}
-                                          placeholder={`Enter ${col.name.toLowerCase()}...`}
-                                          onChange={(e) => {
-                                            const nextVal = e.target.value;
-                                            const nextVals = { ...rowVals, [col.id]: nextVal };
+                                          onChange={(subVal) => {
+                                            const nextVals = { ...rowVals, [col.id]: subVal };
                                             const primaryColId = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
-                                            const updatedLabel = isPrimary ? nextVal : (nextVals[primaryColId] || opt.label || nextVal);
+                                            const updatedLabel = isPrimary
+                                              ? (typeof subVal === "string" ? subVal : (Array.isArray(subVal) ? subVal.join(", ") : String(subVal ?? "")))
+                                              : (nextVals[primaryColId] || opt.label || (typeof subVal === "string" ? subVal : ""));
                                             updateOption(optIdx, {
                                               label: updatedLabel,
                                               value: nextVals,
                                             });
                                           }}
-                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-800 shadow-2xs"
+                                          isSubField={true}
                                         />
                                       </div>
                                     );
