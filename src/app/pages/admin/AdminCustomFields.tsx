@@ -206,6 +206,7 @@ const FIELD_TYPES: { label: string; value: FieldInputType }[] = [
   { label: "Date & Time", value: "date_time" },
   { label: "Date", value: "date" },
   { label: "List", value: "list_select" },
+  { label: "New List", value: "new_list" },
   { label: "Open List (Tags)", value: "list_open" },
   { label: "Boolean (Yes/No)", value: "yes_no" },
   { label: "Email", value: "email" },
@@ -224,6 +225,7 @@ const FIELD_TYPE_REVERSE_MAP: Record<string, string> = {
   signature: "Digital Signature",
   drawing: "Digital Signature",
   list_select: "List",
+  new_list: "New List",
   list_open: "Open List",
   group: "Composite Field (Group)",
   group_repeatable: "Composite Field (Group)",
@@ -507,6 +509,10 @@ export function AdminCustomFields() {
                   else if (field.inputType === "select" || field.inputType === "list" || field.inputType === "list_select") {
                     typeBadgeStyle = field.selectionMode === "multiple" ? "bg-teal-50 text-teal-700" : "bg-emerald-50 text-emerald-700";
                     TypeIcon = ClipboardList;
+                  }
+                  else if (field.inputType === "new_list") {
+                    typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                    TypeIcon = Layers;
                   }
                   else if (field.inputType === "multiselect") { typeBadgeStyle = "bg-teal-50 text-teal-700"; TypeIcon = Tag; }
                   else if (field.inputType === "list_open") {

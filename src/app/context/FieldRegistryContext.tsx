@@ -50,6 +50,7 @@ export type FieldInputType =
   // Consolidated & Composable
   | "list_select"
   | "list_open"
+  | "new_list"
   | "group"
   | "group_repeatable"
   | "table"
@@ -81,7 +82,8 @@ export type SubFieldInputType =
   | "email"
   | "tel"
   | "rating"
-  | "crm_bind";
+  | "crm_bind"
+  | "file";
 
 export type CrmBindModule = "teamMember" | "client" | "organization" | "service" | "process";
 
@@ -113,6 +115,8 @@ export interface SubFieldConfig {
   selectionMode?: "single" | "multiple"; // for list_select and crm_bind sub-fields
   maxRating?: number; // for rating sub-fields
   listBindConfig?: ListBindConfig; // for list_select sub-fields
+  minEntries?: number; // for composite sub-fields
+  maxEntries?: number; // for composite sub-fields
   phoneConfig?: {
     countryCodeDisplay?: "name" | "code";
     showFlags?: boolean;
@@ -131,6 +135,13 @@ export interface SubFieldConfig {
     numberMode?: "single" | "range" | "integer";
     min?: number;
     max?: number;
+  };
+  mediaConfig?: {
+    mediaType?: "image" | "document" | "audio" | "video" | "any";
+    acceptedFormats?: string[];
+    maxFileSizeMB?: number;
+    allowMultiple?: boolean;
+    maxFiles?: number;
   };
 }
 
@@ -165,6 +176,13 @@ export interface TableColumnConfig {
     numberMode?: "single" | "range" | "integer";
     min?: number;
     max?: number;
+  };
+  mediaConfig?: {
+    mediaType?: "image" | "document" | "audio" | "video" | "any";
+    acceptedFormats?: string[];
+    maxFileSizeMB?: number;
+    allowMultiple?: boolean;
+    maxFiles?: number;
   };
 }
 
@@ -206,6 +224,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
   else if (rawType.includes("email")) inputType = "email";
   else if (rawType.includes("tel") || rawType.includes("phone")) inputType = "tel";
   else if (rawType.includes("link") || rawType.includes("url")) inputType = "link";
+  else if (rawType.includes("file") || rawType.includes("upload") || rawType.includes("media") || rawType.includes("attach") || rawType.includes("doc") || rawType.includes("image")) inputType = "file";
 
   return {
     id: col.id || col.key || col.colId || col.name || `col_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -228,6 +247,7 @@ export function normalizeLegacyColumn(col: any): SubFieldConfig | null {
     selectionMode: col.selectionMode || "single",
     maxRating: col.maxRating || (inputType === "rating" ? 5 : undefined),
     listBindConfig: col.listBindConfig,
+    mediaConfig: col.mediaConfig,
   };
 }
 
@@ -257,7 +277,7 @@ export function getSuggestedPlaceholderForType(type?: string, label?: string): s
   if (t === "date_time") return "Select date & time...";
   if (t === "textarea" || t.includes("long") || t === "richtext") return name ? `e.g. Enter ${name} details...` : "e.g. Enter details...";
   if (t === "crm_bind") return "Search and select record...";
-  if (t === "select" || t === "list_select" || t === "multiselect" || t === "list") return "Select an option...";
+  if (t === "select" || t === "list_select" || t === "multiselect" || t === "list" || t === "new_list") return "Select an option...";
   if (t === "yes_no") return "Select Yes / No";
   if (t === "rating") return "Select rating (1-5)";
   if (t === "signature") return "Sign here...";
@@ -299,6 +319,31 @@ export interface ListFieldConfig {
   liveLinkedFieldKey?: string; // Live 2-way sync with another List field in the module
 }
 
+export type NewListSourceMode = "manual" | "option_list";
+
+export interface OptionListColumnConfig {
+  columnId: string;
+  columnName?: string;
+  columnType?: string;
+  isPrimary?: boolean;   // exactly ONE column must be marked Primary
+  isDisable?: boolean;   // MULTIPLE columns can be marked Disable (read-only, locked)
+  isEditable?: boolean;  // MULTIPLE columns can be marked Editable (local override per record)
+}
+
+export interface OptionListConfig {
+  sourceCompositeFieldKey: string;
+  columns: OptionListColumnConfig[];
+}
+
+export interface NewListConfig {
+  sourceMode: NewListSourceMode; // "manual" | "option_list"
+  manualType?: "single" | "multiple" | "open_list";
+  optionList?: OptionListConfig;
+  selectionMode?: "single" | "multiple";
+  allowSearch?: boolean;
+  sortOrder?: "manual" | "alphabetical_asc" | "alphabetical_desc" | "recent";
+}
+
 export interface ScopingRule {
   id?: string;
   industryCategory?: string;  // Scoped to category e.g. "Healthcare", empty or "All" = global
@@ -334,6 +379,7 @@ export interface FieldDefinition {
   validation?: string;
   options?: FieldOption[];    // for select/dropdown/list types
   listConfig?: ListFieldConfig; // Search, sort order, and live 2-way linking
+  newListConfig?: NewListConfig; // for new_list field type
   tableColumns?: TableColumnConfig[]; // for table type (legacy)
   subFields?: SubFieldConfig[];       // canonical sub-fields for table, group, group_repeatable, structured list_open
   crmBindConfig?: CrmBindConfig;      // for crm_bind
@@ -370,6 +416,8 @@ export interface FieldDefinition {
     maxDate?: string;
   };
   compositeDisplayMode?: "table" | "group";
+  minEntries?: number; // for composite fields (minimum rows/entries required)
+  maxEntries?: number; // for composite fields (maximum rows/entries allowed)
   mediaConfig?: {
     mediaType?: "image" | "document" | "audio" | "video" | "any";
     acceptedFormats?: string[];
@@ -1719,8 +1767,11 @@ function sanitizeFieldDefinition(f: any, fallbackModule: Exclude<FieldModule, "d
     mediaConfig: f.mediaConfig ?? undefined,
     numberConfig: f.numberConfig ?? undefined,
     compositeDisplayMode: f.compositeDisplayMode ?? undefined,
+    minEntries: typeof f.minEntries === "number" ? f.minEntries : undefined,
+    maxEntries: typeof f.maxEntries === "number" ? f.maxEntries : undefined,
     maxRating: f.maxRating ?? undefined,
     currency: f.currency ?? undefined,
+    newListConfig: f.newListConfig ?? undefined,
   };
 }
 

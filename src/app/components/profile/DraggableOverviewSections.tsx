@@ -1111,6 +1111,7 @@ export default function DraggableOverviewSections({
             regField?.inputType === "group_repeatable" ||
             regField?.inputType === "crm_bind" ||
             regField?.inputType === "list_select" ||
+            regField?.inputType === "new_list" ||
             regField?.inputType === "multiselect" ||
             regField?.inputType === "rating" ||
             (regField?.inputType === "list_open" && key !== "prescribed_medications" && key !== "medications") ? (
@@ -1317,7 +1318,12 @@ export default function DraggableOverviewSections({
             <p className="text-xs font-semibold text-slate-600">
               {rawVal || `Upload ${label.toLowerCase()}`}
             </p>
-            <p className="text-[10px] text-slate-400 mt-0.5">PDF, DOCX, JPG up to 10MB</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              {regField.mediaConfig?.acceptedFormats && regField.mediaConfig.acceptedFormats.length > 0
+                ? regField.mediaConfig.acceptedFormats.join(", ")
+                : "PDF, DOCX, JPG"}
+              {regField.mediaConfig?.maxFileSizeMB ? ` up to ${regField.mediaConfig.maxFileSizeMB}MB` : " up to 10MB"}
+            </p>
           </div>
         ) : regField?.inputType === "select" ? (
           <DropdownMenu>

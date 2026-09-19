@@ -52,6 +52,10 @@ import type {
   SubFieldInputType,
   ListBindConfig,
   ListFieldConfig,
+  NewListConfig,
+  NewListSourceMode,
+  OptionListConfig,
+  OptionListColumnConfig,
 } from "../../../context/FieldRegistryContext";
 import {
   useFieldRegistry,
@@ -66,6 +70,12 @@ import { getStoredTeamMembers, TeamMember, TEAM_STORE_EVENT } from "../../../../
 import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import { FieldInputRenderer } from "../../../components/fields/FieldInputRenderer";
 import { AdminSelect } from "../../../components/ui/AdminSelect";
+import { MediaFormatDropdown } from "./MediaFormatDropdown";
+import {
+  getAllMediaFormats,
+  DEFAULT_MEDIA_PRESETS,
+  MediaCategory,
+} from "../../../../lib/mediaFormatsStore";
 import { toast } from "sonner";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
@@ -90,6 +100,7 @@ export type PrimaryFieldTypeCategory =
   | "link"
   | "whatsapp_link"
   | "list"
+  | "new_list"
   | "yes_no"
   | "rating"
   | "composite"
@@ -129,6 +140,7 @@ const CONSOLIDATED_FIELD_TYPES: {
     category: "Options & Logic",
     items: [
       { id: "list", label: "List", description: "Typed options, search filters, sorting, and 2-way sync" },
+      { id: "new_list", label: "New List", description: "Manual options or composite-linked option list with row overrides" },
       { id: "yes_no", label: "Yes / No", description: "Binary boolean toggle" },
     ],
   },
@@ -153,11 +165,11 @@ const COMMON_DATE_FORMATS = [
 ];
 
 const COMMON_PHONE_FORMATS = [
-  { value: "(XXX) XXX-XXXX", label: "(555) 123-4567 (Parentheses 3-3-4)" },
-  { value: "XXX-XXX-XXXX", label: "555-123-4567 (Hyphenated 3-3-4)" },
-  { value: "XXXXX XXXXX", label: "98765 43210 (5-5 Spaced)" },
-  { value: "XXX XXX XXXX", label: "123 456 7890 (3-3-4 Spaced)" },
-  { value: "XXXXXXXXXX", label: "1234567890 (Unformatted Plain Digits)" },
+  { value: "(XXX) XXX-XXXX", label: "(XXX) XXX-XXXX (e.g. (555) 123-4567)" },
+  { value: "XXX-XXX-XXXX", label: "XXX-XXX-XXXX (e.g. 555-123-4567)" },
+  { value: "XXXXX XXXXX", label: "XXXXX XXXXX (e.g. 98765 43210)" },
+  { value: "XXX XXX XXXX", label: "XXX XXX XXXX (e.g. 123 456 7890)" },
+  { value: "XXXXXXXXXX", label: "XXXXXXXXXX (e.g. 1234567890)" },
 ];
 
 const COMMON_TIMEZONES = [
@@ -172,9 +184,9 @@ const COMMON_TIMEZONES = [
 ];
 
 const MEDIA_PRESET_FORMATS: Record<"image" | "document" | "audio", string[]> = {
-  image: ["JPG", "PNG", "WEBP", "SVG", "GIF"],
-  document: ["PDF", "DOCX", "XLSX", "TXT", "CSV"],
-  audio: ["MP3", "WAV", "AAC", "M4A", "OGG"],
+  image: DEFAULT_MEDIA_PRESETS.image,
+  document: DEFAULT_MEDIA_PRESETS.document,
+  audio: DEFAULT_MEDIA_PRESETS.audio,
 };
 
 const LIST_OPTION_VALUE_TYPES: { value: ListValueType; label: string; category: string }[] = CONSOLIDATED_FIELD_TYPES.flatMap((grp) =>
@@ -234,6 +246,8 @@ interface FieldFormState {
   // Composite field configuration
   compositeDisplayMode: "table" | "group";
   tableColumns: TableColumnConfig[];
+  minEntries?: number;
+  maxEntries?: number;
 
   // Media configuration
   mediaType: "document" | "image" | "audio" | "video" | "any";
@@ -268,6 +282,12 @@ interface FieldFormState {
   sortOrder: "manual" | "alphabetical_asc" | "alphabetical_desc" | "recent";
   liveLinkedFieldKey: string;
 
+  // New List configuration
+  newListSourceMode: NewListSourceMode;
+  newListManualType: "single" | "multiple" | "open_list";
+  newListSourceCompositeKey: string;
+  newListColumnConfigs: OptionListColumnConfig[];
+
   // CRM Bind configuration
   crmBindModule: CrmBindModule;
   crmBindSelectionMode: "single" | "multiple";
@@ -278,6 +298,7 @@ interface FieldFormState {
 
 function resolvePrimaryCategory(f: FieldDefinition): PrimaryFieldTypeCategory {
   const t = f.inputType;
+  if (t === "new_list" || f.newListConfig !== undefined) return "new_list";
   if (
     f.compositeDisplayMode !== undefined ||
     t === "table" ||
@@ -345,9 +366,11 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     // Composite
     compositeDisplayMode: "table",
     tableColumns: [],
+    minEntries: undefined,
+    maxEntries: undefined,
     // Media
     mediaType: "document",
-    acceptedFormats: ["PDF", "DOCX", "JPG", "PNG"],
+    acceptedFormats: getAllMediaFormats("document"),
     maxFileSizeMB: 10,
     allowMultipleFiles: false,
     maxFiles: undefined,
@@ -373,6 +396,11 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     allowSearch: true,
     sortOrder: "manual",
     liveLinkedFieldKey: "",
+    // New List
+    newListSourceMode: "manual",
+    newListManualType: "single",
+    newListSourceCompositeKey: "",
+    newListColumnConfigs: [],
     // CRM Bind
     crmBindModule: "teamMember",
     crmBindSelectionMode: "single",
@@ -471,9 +499,11 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     // Composite
     compositeDisplayMode: f.compositeDisplayMode || (f.inputType === "group" || f.inputType === "group_repeatable" ? "group" : "table"),
     tableColumns,
+    minEntries: f.minEntries,
+    maxEntries: f.maxEntries,
     // Media
     mediaType: f.mediaConfig?.mediaType || "document",
-    acceptedFormats: f.mediaConfig?.acceptedFormats || MEDIA_PRESET_FORMATS[f.mediaConfig?.mediaType || "document"],
+    acceptedFormats: f.mediaConfig?.acceptedFormats || getAllMediaFormats((f.mediaConfig?.mediaType || "document") as MediaCategory),
     maxFileSizeMB: f.mediaConfig?.maxFileSizeMB || 10,
     allowMultipleFiles: Boolean(f.mediaConfig?.allowMultiple),
     maxFiles: f.mediaConfig?.maxFiles,
@@ -499,6 +529,11 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     allowSearch: f.listConfig?.allowSearch !== false,
     sortOrder: f.listConfig?.sortOrder || "manual",
     liveLinkedFieldKey: f.listConfig?.liveLinkedFieldKey || "",
+    // New List
+    newListSourceMode: f.newListConfig?.sourceMode || (f.newListConfig?.optionList?.sourceCompositeFieldKey ? "option_list" : "manual"),
+    newListManualType: f.newListConfig?.manualType || (isMultiSelect ? "multiple" : (f.listEntryType === "plain_text" ? "open_list" : "single")),
+    newListSourceCompositeKey: f.newListConfig?.optionList?.sourceCompositeFieldKey || "",
+    newListColumnConfigs: f.newListConfig?.optionList?.columns || [],
     // CRM Bind
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
     crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
@@ -732,6 +767,48 @@ export function AdminFieldDrawer({
     );
   }, [allFieldsInPrimaryModule, form.key]);
 
+  // Existing Composite fields in this module for "New List" Mode 2 (Option List)
+  const availableCompositeFieldsInModule = useMemo(() => {
+    return allFieldsInPrimaryModule.filter(
+      (f) =>
+        f.key !== form.key &&
+        (f.inputType === "table" ||
+          f.inputType === "group" ||
+          f.inputType === "group_repeatable" ||
+          (f.tableColumns && f.tableColumns.length > 0) ||
+          (f.subFields && f.subFields.length > 0) ||
+          f.compositeDisplayMode !== undefined)
+    );
+  }, [allFieldsInPrimaryModule, form.key]);
+
+  const selectedCompositeDef = useMemo(() => {
+    if (!form.newListSourceCompositeKey) return undefined;
+    return allFieldsInPrimaryModule.find((f) => f.key === form.newListSourceCompositeKey);
+  }, [allFieldsInPrimaryModule, form.newListSourceCompositeKey]);
+
+  const selectedCompositeColumns = useMemo(() => {
+    if (!selectedCompositeDef) return [];
+    return resolveColumnsOrSubFields(selectedCompositeDef);
+  }, [selectedCompositeDef]);
+
+  const handleSelectCompositeForNewList = (compositeKey: string) => {
+    const targetComp = allFieldsInPrimaryModule.find((f) => f.key === compositeKey);
+    const cols = resolveColumnsOrSubFields(targetComp);
+    const initialConfigs: OptionListColumnConfig[] = cols.map((c, i) => ({
+      columnId: c.id,
+      columnName: c.name,
+      columnType: c.inputType,
+      isPrimary: i === 0,
+      isDisable: false,
+      isEditable: i !== 0,
+    }));
+    setForm((p) => ({
+      ...p,
+      newListSourceCompositeKey: compositeKey,
+      newListColumnConfigs: initialConfigs,
+    }));
+  };
+
   const importExistingFieldToColumn = (f: FieldDefinition) => {
     let colType = "Text";
     if (f.inputType === "number") colType = "Number";
@@ -823,6 +900,7 @@ export function AdminFieldDrawer({
       },
       mediaConfig: {
         mediaType: form.mediaType,
+        acceptedFormats: form.acceptedFormats,
         maxFileSizeMB: form.maxFileSizeMB,
         allowMultiple: form.allowMultipleFiles,
       },
@@ -842,6 +920,7 @@ export function AdminFieldDrawer({
     form.crmBindModule,
     form.crmBindSelectionMode,
     form.mediaType,
+    form.acceptedFormats,
     form.maxFileSizeMB,
     form.allowMultipleFiles,
   ]);
@@ -943,6 +1022,8 @@ export function AdminFieldDrawer({
         return "user";
       case "list":
         return form.selectionMode === "multiple" ? "multiselect" : "list_select";
+      case "new_list":
+        return "new_list";
       default:
         return "text";
     }
@@ -1008,6 +1089,8 @@ export function AdminFieldDrawer({
 
       // Composite Field Config
       compositeDisplayMode: form.primaryCategory === "composite" ? form.compositeDisplayMode : undefined,
+      minEntries: form.primaryCategory === "composite" ? (form.minEntries !== undefined && !isNaN(form.minEntries) ? form.minEntries : undefined) : undefined,
+      maxEntries: form.primaryCategory === "composite" ? (form.maxEntries !== undefined && !isNaN(form.maxEntries) ? form.maxEntries : undefined) : undefined,
       tableColumns: form.primaryCategory === "composite" ? form.tableColumns : undefined,
       subFields: form.primaryCategory === "composite" && form.tableColumns.length > 0
         ? form.tableColumns.map(normalizeLegacyColumn).filter((c): c is SubFieldConfig => c !== null)
@@ -1036,12 +1119,19 @@ export function AdminFieldDrawer({
         numberFormat: form.phoneFormat,
       } : undefined,
 
-      // List Redesign Config
-      options: form.primaryCategory === "list" ? form.options.map((opt, i) => ({ ...opt, index: i + 1 })) : undefined,
+      // Options Config
+      options: (form.primaryCategory === "list" || form.primaryCategory === "new_list")
+        ? form.options.map((opt, i) => ({ ...opt, index: i + 1 }))
+        : undefined,
       selectionMode: form.primaryCategory === "crm_bind"
         ? form.crmBindSelectionMode
         : form.primaryCategory === "list"
         ? form.selectionMode
+        : form.primaryCategory === "new_list"
+        ? (form.newListSourceMode === "manual" ? (form.newListManualType === "multiple" ? "multiple" : "single") : form.selectionMode)
+        : undefined,
+      listEntryType: (form.primaryCategory === "new_list" && form.newListSourceMode === "manual" && form.newListManualType === "open_list")
+        ? "plain_text"
         : undefined,
       listConfig: form.primaryCategory === "list" ? {
         valueType: form.listValueType,
@@ -1051,6 +1141,21 @@ export function AdminFieldDrawer({
         liveLinkedFieldKey: (form.liveSync && (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim()))
           ? (form.liveLinkedFieldKey.trim() || form.inheritedFieldKey.trim())
           : undefined,
+      } : undefined,
+
+      // New List Config
+      newListConfig: form.primaryCategory === "new_list" ? {
+        sourceMode: form.newListSourceMode,
+        manualType: form.newListSourceMode === "manual" ? form.newListManualType : undefined,
+        selectionMode: form.newListSourceMode === "manual"
+          ? (form.newListManualType === "multiple" ? "multiple" : "single")
+          : form.selectionMode,
+        allowSearch: form.allowSearch,
+        sortOrder: form.sortOrder,
+        optionList: form.newListSourceMode === "option_list" ? {
+          sourceCompositeFieldKey: form.newListSourceCompositeKey,
+          columns: form.newListColumnConfigs,
+        } : undefined,
       } : undefined,
 
       // CRM Bind
@@ -1910,6 +2015,47 @@ export function AdminFieldDrawer({
                   ]}
                 />
               </div>
+
+              {/* Min & Max Entries constraints */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-200/70">
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Min Entries</label>
+                    <InfoTooltip text="Minimum number of entries/rows required. Leave blank or 0 for none." size="sm" />
+                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.minEntries ?? ""}
+                    disabled={isReadOnly}
+                    placeholder="0"
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? undefined : Math.max(0, parseInt(e.target.value, 10));
+                      setForm((p) => ({ ...p, minEntries: isNaN(val as any) ? undefined : val }));
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700">Max Entries</label>
+                    <InfoTooltip text="Maximum number of entries/rows allowed. Leave blank for unlimited." size="sm" />
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    value={form.maxEntries ?? ""}
+                    disabled={isReadOnly}
+                    placeholder="Unlimited"
+                    onChange={(e) => {
+                      const val = e.target.value === "" ? undefined : Math.max(1, parseInt(e.target.value, 10));
+                      setForm((p) => ({ ...p, maxEntries: isNaN(val as any) ? undefined : val }));
+                    }}
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-medium text-slate-800 outline-none focus:border-blue-500 shadow-2xs"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
@@ -1932,7 +2078,7 @@ export function AdminFieldDrawer({
                       onClick={() => setForm((p) => ({
                         ...p,
                         mediaType: mType,
-                        acceptedFormats: MEDIA_PRESET_FORMATS[mType],
+                        acceptedFormats: getAllMediaFormats(mType),
                       }))}
                       className={`py-2 px-2.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer capitalize ${
                         form.mediaType === mType
@@ -1946,42 +2092,14 @@ export function AdminFieldDrawer({
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <label className="block text-xs font-semibold text-slate-700">
-                    Accepted Formats
-                  </label>
-                  <InfoTooltip text="Allowed file formats for upload." size="sm" />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {MEDIA_PRESET_FORMATS[form.mediaType].map((fmt) => {
-                    const isFmtActive = form.acceptedFormats.includes(fmt);
-                    return (
-                      <button
-                        key={fmt}
-                        type="button"
-                        disabled={isReadOnly}
-                        onClick={() => {
-                          setForm((p) => {
-                            const exists = p.acceptedFormats.includes(fmt);
-                            const next = exists
-                              ? p.acceptedFormats.filter((f) => f !== fmt)
-                              : [...p.acceptedFormats, fmt];
-                            return { ...p, acceptedFormats: next.length > 0 ? next : [fmt] };
-                          });
-                        }}
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-all cursor-pointer ${
-                          isFmtActive
-                            ? "bg-blue-600 text-white border-blue-600"
-                            : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
-                        }`}
-                      >
-                        {fmt}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Format Dropdown with Custom Type-In & Permanent Storage */}
+              <MediaFormatDropdown
+                category={form.mediaType as MediaCategory}
+                selectedFormats={form.acceptedFormats}
+                onChange={(fmts) => setForm((p) => ({ ...p, acceptedFormats: fmts }))}
+                disabled={isReadOnly}
+                zIndex={zIndex + 10}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
@@ -2559,6 +2677,665 @@ export function AdminFieldDrawer({
                   </div>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* 3H-2. NEW LIST FIELD CONFIGURATION (Manual List vs Option List) */}
+          {form.primaryCategory === "new_list" && (
+            <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-4">
+              {/* SOURCE MODE DROPDOWN */}
+              <div>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                    Source Mode <span className="text-red-500">*</span>
+                  </label>
+                  <InfoTooltip
+                    text="Choose between defining manual options or referencing an existing Composite field."
+                    size="sm"
+                  />
+                </div>
+                <AdminSelect
+                  value={form.newListSourceMode}
+                  disabled={isReadOnly}
+                  onChange={(val) => setForm((p) => ({ ...p, newListSourceMode: val as any }))}
+                  options={[
+                    { value: "manual", label: "Manual List" },
+                    { value: "option_list", label: "Option List" },
+                  ]}
+                />
+              </div>
+
+              {/* ─────────────────────────────────────────────────────────────
+                  MODE 1 — MANUAL LIST (Reusing exact List manual-option UI/logic)
+                 ───────────────────────────────────────────────────────────── */}
+              {form.newListSourceMode === "manual" && (
+                <div className="space-y-4 pt-1">
+                  {/* Manual Type Choice (Single / Multi / Open-List) */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <label className="text-xs font-semibold text-slate-800">Manual Selection Type</label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: "single", label: "Single Select" },
+                        { id: "multiple", label: "Multi-Select" },
+                        { id: "open_list", label: "Open-List" },
+                      ].map((t) => {
+                        const isSelected = form.newListManualType === t.id;
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            disabled={isReadOnly}
+                            onClick={() =>
+                              setForm((p) => ({
+                                ...p,
+                                newListManualType: t.id as any,
+                                selectionMode: t.id === "multiple" ? "multiple" : "single",
+                              }))
+                            }
+                            className={`py-2 px-3 rounded-lg border text-center transition-all cursor-pointer text-xs font-semibold ${
+                              isSelected
+                                ? "bg-blue-50 border-blue-400 text-blue-800"
+                                : "bg-slate-50/60 border-slate-200 text-slate-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Options List Builder (Reused exact logic from List) */}
+                  {form.newListManualType !== "open_list" ? (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                          Defined Options ({form.options.length})
+                        </span>
+
+                        {!isReadOnly && canClientAddOptions && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newIdx = form.options.length + 1;
+                              setForm((p) => ({
+                                ...p,
+                                options: [
+                                  ...p.options,
+                                  {
+                                    id: Date.now(),
+                                    label: "",
+                                    value: "",
+                                    index: newIdx,
+                                  },
+                                ],
+                              }));
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> Add Option
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                        {form.options.length === 0 ? (
+                          <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
+                            No options defined yet.
+                          </div>
+                        ) : (
+                          form.options.map((opt, idx) => (
+                            <div
+                              key={opt.id || idx}
+                              className="flex items-center gap-2 p-2.5 bg-white border border-slate-200 rounded-xl shadow-2xs hover:border-slate-300 transition-colors"
+                            >
+                              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded shrink-0">
+                                #{idx + 1}
+                              </span>
+
+                              <div className="flex-1 min-w-0">
+                                <input
+                                  type="text"
+                                  value={typeof opt.value === "string" ? opt.value : opt.label || ""}
+                                  disabled={isReadOnly}
+                                  placeholder={`Option #${idx + 1}...`}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    updateOption(idx, { value: val, label: val });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-800"
+                                />
+                              </div>
+
+                              {!isReadOnly && (
+                                <div className="flex items-center gap-0.5 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveOption(idx, -1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move up"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === form.options.length - 1}
+                                    onClick={() => moveOption(idx, 1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move down"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeOption(idx)}
+                                    className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                                    title="Delete option"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl text-xs text-slate-600">
+                      <span className="font-semibold text-slate-800">Open-List Mode:</span> Users can enter custom tags at runtime.
+                    </div>
+                  )}
+
+                  {/* List Search & Sorting Configuration */}
+                  <div className="pt-3 border-t border-slate-200/80 space-y-3">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      List Behavior & Sorting
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 bg-white border border-slate-200 rounded-xl">
+                      <div className="flex items-center gap-1.5">
+                        <Search className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-xs font-semibold text-slate-800">Allow Search Bar</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={form.allowSearch}
+                          disabled={isReadOnly}
+                          onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                        <label className="block text-xs font-semibold text-slate-700">Sorting Order</label>
+                      </div>
+                      <AdminSelect
+                        value={form.sortOrder}
+                        disabled={isReadOnly}
+                        onChange={(val) => setForm((p) => ({ ...p, sortOrder: val as any }))}
+                        options={[
+                          { value: "manual", label: "Manual Order" },
+                          { value: "alphabetical_asc", label: "Alphabetical (A - Z)" },
+                          { value: "alphabetical_desc", label: "Alphabetical (Z - A)" },
+                          { value: "recent", label: "Most Recently Added First" },
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ─────────────────────────────────────────────────────────────
+                  MODE 2 — OPTION LIST (Linked to Existing Composite Field)
+                 ───────────────────────────────────────────────────────────── */}
+              {form.newListSourceMode === "option_list" && (
+                <div className="space-y-4 pt-1">
+                  {/* Select Source Composite Field */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        Source Composite Field <span className="text-red-500">*</span>
+                      </label>
+                      {!isReadOnly && availableCompositeFieldsInModule.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNestedDrawerCategory("composite");
+                            setNestedDrawerOpen(true);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>Create New</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {availableCompositeFieldsInModule.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <AdminSelect
+                          value={form.newListSourceCompositeKey}
+                          disabled={isReadOnly}
+                          onChange={(val) => handleSelectCompositeForNewList(val)}
+                          placeholder="— Select an existing composite field —"
+                          options={[
+                            { value: "", label: "— Select an existing composite field —" },
+                            ...availableCompositeFieldsInModule.map((cf) => ({
+                              value: cf.key,
+                              label: `${cf.label} (${cf.key})`,
+                              subtitle: `Type: ${cf.inputType === "table" ? "Table" : "Group"} • ${resolveColumnsOrSubFields(cf).length} columns`,
+                            })),
+                          ]}
+                        />
+                        {form.newListSourceCompositeKey && selectedCompositeDef && (
+                          <p className="text-[11px] text-emerald-700 font-medium flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5 stroke-[3]" />
+                            <span>
+                              Connected to <strong>{selectedCompositeDef.label}</strong> ({selectedCompositeColumns.length} columns)
+                            </span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2.5">
+                        <p className="text-xs font-medium text-slate-600">No composite fields found in this module</p>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setNestedDrawerCategory("composite");
+                              setNestedDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-semibold text-xs rounded-lg border border-blue-200 transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Create Composite Field</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Column Properties Configuration Table */}
+                  {selectedCompositeColumns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Per-Column Behavior Properties
+                        </span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                          {selectedCompositeColumns.length} Columns
+                        </span>
+                      </div>
+
+                      {/* Matrix Grid */}
+                      <div className="border border-slate-200 rounded-lg overflow-hidden">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                              <th className="px-3 py-2">Column Name</th>
+                              <th className="px-2 py-2 text-center w-20">Type</th>
+                              <th className="px-2 py-2 text-center w-24">
+                                <span className="text-blue-700">Primary</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-slate-600">Disable</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-emerald-700">Editable</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedCompositeColumns.map((col, idx) => {
+                              const existingCfg = form.newListColumnConfigs.find((c) => c.columnId === col.id) || {
+                                columnId: col.id,
+                                columnName: col.name,
+                                columnType: col.inputType,
+                                isPrimary: idx === 0,
+                                isDisable: false,
+                                isEditable: idx !== 0,
+                              };
+
+                              const isPrimary = Boolean(existingCfg.isPrimary);
+                              const isDisable = Boolean(existingCfg.isDisable);
+                              const isEditable = Boolean(existingCfg.isEditable);
+
+                              return (
+                                <tr key={col.id} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="px-3 py-2.5">
+                                    <div className="font-semibold text-slate-800 text-xs">{col.name}</div>
+                                    <div className="text-[10px] font-mono text-slate-400">{col.id}</div>
+                                  </td>
+                                  <td className="px-2 py-2.5 text-center">
+                                    <span className="text-[10px] font-medium bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200/60 uppercase">
+                                      {col.inputType || "text"}
+                                    </span>
+                                  </td>
+                                  {/* 1. Primary Radio (exactly 1 marked Primary) */}
+                                  <td className="px-2 py-2.5 text-center">
+                                    <label className="inline-flex items-center justify-center p-1 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name="primaryColumnRadio"
+                                        disabled={isReadOnly}
+                                        checked={isPrimary}
+                                        onChange={() => {
+                                          const next = selectedCompositeColumns.map((c) => {
+                                            const cfg = form.newListColumnConfigs.find((x) => x.columnId === c.id) || {
+                                              columnId: c.id,
+                                              columnName: c.name,
+                                              columnType: c.inputType,
+                                              isPrimary: false,
+                                              isDisable: false,
+                                              isEditable: true,
+                                            };
+                                            const selectedThis = c.id === col.id;
+                                            return {
+                                              ...cfg,
+                                              columnId: c.id,
+                                              columnName: c.name,
+                                              columnType: c.inputType,
+                                              isPrimary: selectedThis,
+                                              isDisable: selectedThis ? false : cfg.isDisable,
+                                              isEditable: selectedThis ? false : cfg.isEditable,
+                                            };
+                                          });
+                                          setForm((p) => ({ ...p, newListColumnConfigs: next }));
+                                        }}
+                                        className="w-4 h-4 text-blue-600 cursor-pointer accent-blue-600"
+                                      />
+                                    </label>
+                                  </td>
+                                  {/* 2. Disable Checkbox (Multiple allowed) */}
+                                  <td className="px-2 py-2.5 text-center">
+                                    <label className={`inline-flex items-center justify-center p-1 ${isPrimary || isReadOnly ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
+                                      <input
+                                        type="checkbox"
+                                        disabled={isPrimary || isReadOnly}
+                                        checked={isDisable}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked;
+                                          const next = selectedCompositeColumns.map((c) => {
+                                            const cfg = form.newListColumnConfigs.find((x) => x.columnId === c.id) || {
+                                              columnId: c.id,
+                                              columnName: c.name,
+                                              columnType: c.inputType,
+                                              isPrimary: c.id === col.id ? isPrimary : false,
+                                              isDisable: false,
+                                              isEditable: true,
+                                            };
+                                            if (c.id === col.id) {
+                                              return {
+                                                ...cfg,
+                                                columnId: c.id,
+                                                columnName: c.name,
+                                                columnType: c.inputType,
+                                                isDisable: checked,
+                                                isEditable: checked ? false : cfg.isEditable,
+                                              };
+                                            }
+                                            return cfg;
+                                          });
+                                          setForm((p) => ({ ...p, newListColumnConfigs: next }));
+                                        }}
+                                        className="w-4 h-4 text-slate-600 rounded cursor-pointer accent-slate-600"
+                                      />
+                                    </label>
+                                  </td>
+                                  {/* 3. Editable Checkbox (Multiple allowed) */}
+                                  <td className="px-2 py-2.5 text-center">
+                                    <label className={`inline-flex items-center justify-center p-1 ${isPrimary || isReadOnly ? "opacity-30 cursor-not-allowed" : "cursor-pointer"}`}>
+                                      <input
+                                        type="checkbox"
+                                        disabled={isPrimary || isReadOnly}
+                                        checked={isEditable}
+                                        onChange={(e) => {
+                                          const checked = e.target.checked;
+                                          const next = selectedCompositeColumns.map((c) => {
+                                            const cfg = form.newListColumnConfigs.find((x) => x.columnId === c.id) || {
+                                              columnId: c.id,
+                                              columnName: c.name,
+                                              columnType: c.inputType,
+                                              isPrimary: c.id === col.id ? isPrimary : false,
+                                              isDisable: false,
+                                              isEditable: true,
+                                            };
+                                            if (c.id === col.id) {
+                                              return {
+                                                ...cfg,
+                                                columnId: c.id,
+                                                columnName: c.name,
+                                                columnType: c.inputType,
+                                                isEditable: checked,
+                                                isDisable: checked ? false : cfg.isDisable,
+                                              };
+                                            }
+                                            return cfg;
+                                          });
+                                          setForm((p) => ({ ...p, newListColumnConfigs: next }));
+                                        }}
+                                        className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
+                                      />
+                                    </label>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Defined Option Items / Records for Option List */}
+                  {selectedCompositeColumns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Defined Option Rows ({form.options.length})
+                        </span>
+
+                        {!isReadOnly && canClientAddOptions && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const newIdx = form.options.length + 1;
+                              const initialRowVals: Record<string, any> = {};
+                              selectedCompositeColumns.forEach((c) => {
+                                initialRowVals[c.id] = "";
+                              });
+                              setForm((p) => ({
+                                ...p,
+                                options: [
+                                  ...p.options,
+                                  {
+                                    id: Date.now() + newIdx,
+                                    label: "",
+                                    value: initialRowVals,
+                                    index: newIdx,
+                                  },
+                                ],
+                              }));
+                            }}
+                            className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 border-blue-200 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" /> Add Option Row
+                          </button>
+                        )}
+                      </div>
+
+                      {form.options.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
+                          No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; above to add options.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                          {form.options.map((opt, optIdx) => {
+                            const primaryCol = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
+                            const rowVals: Record<string, any> = (typeof opt.value === "object" && opt.value !== null)
+                              ? opt.value
+                              : { [primaryCol]: opt.label || opt.value || "" };
+
+                            return (
+                              <div
+                                key={opt.id || optIdx}
+                                className="p-3 bg-slate-50/60 border border-slate-200 rounded-xl space-y-2 hover:border-slate-300 transition-colors"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
+                                    Row #{optIdx + 1}
+                                  </span>
+
+                                  {!isReadOnly && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === 0}
+                                        onClick={() => moveOption(optIdx, -1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move up"
+                                      >
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === form.options.length - 1}
+                                        onClick={() => moveOption(optIdx, 1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move down"
+                                      >
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => removeOption(optIdx)}
+                                        className="p-1 text-slate-300 hover:text-red-500 cursor-pointer rounded"
+                                        title="Delete row"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  {selectedCompositeColumns.map((col) => {
+                                    const colCfg = form.newListColumnConfigs.find((c) => c.columnId === col.id);
+                                    const isPrimary = colCfg?.isPrimary ?? (col.id === selectedCompositeColumns[0]?.id);
+                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                    return (
+                                      <div key={col.id} className="space-y-1">
+                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center gap-1">
+                                          <span>{col.name}</span>
+                                          {isPrimary && (
+                                            <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
+                                              Primary
+                                            </span>
+                                          )}
+                                        </label>
+                                        <input
+                                          type={col.inputType === "number" || col.inputType === "money" ? "number" : "text"}
+                                          value={currentVal ?? ""}
+                                          disabled={isReadOnly}
+                                          placeholder={`Enter ${col.name.toLowerCase()}...`}
+                                          onChange={(e) => {
+                                            const nextVal = e.target.value;
+                                            const nextVals = { ...rowVals, [col.id]: nextVal };
+                                            const primaryColId = form.newListColumnConfigs.find((c) => c.isPrimary)?.columnId || selectedCompositeColumns[0]?.id;
+                                            const updatedLabel = isPrimary ? nextVal : (nextVals[primaryColId] || opt.label || nextVal);
+                                            updateOption(optIdx, {
+                                              label: updatedLabel,
+                                              value: nextVals,
+                                            });
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-800 shadow-2xs"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Option List Render & Selection Settings */}
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Option List Behavior & Selection
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Selection Mode */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <label className="block text-xs font-semibold text-slate-700">Selection Mode</label>
+                        </div>
+                        <AdminSelect
+                          value={form.selectionMode}
+                          disabled={isReadOnly}
+                          onChange={(val) => setForm((p) => ({ ...p, selectionMode: val as "single" | "multiple" }))}
+                          options={[
+                            { value: "single", label: "Single Selection (1 Row Block)" },
+                            { value: "multiple", label: "Multiple Selection (Multi-Row Blocks)" },
+                          ]}
+                        />
+                      </div>
+
+                      {/* Sorting Order */}
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                          <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+                          <label className="block text-xs font-semibold text-slate-700">Sorting Order</label>
+                        </div>
+                        <AdminSelect
+                          value={form.sortOrder}
+                          disabled={isReadOnly}
+                          onChange={(val) => setForm((p) => ({ ...p, sortOrder: val as any }))}
+                          options={[
+                            { value: "manual", label: "Source Row Order" },
+                            { value: "alphabetical_asc", label: "Primary Column (A - Z)" },
+                            { value: "alphabetical_desc", label: "Primary Column (Z - A)" },
+                            { value: "recent", label: "Most Recent First" },
+                          ]}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Allow Search Bar */}
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5">
+                        <Search className="w-3.5 h-3.5 text-slate-500" />
+                        <span className="text-xs font-semibold text-slate-800">Allow Search Bar</span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={form.allowSearch}
+                          disabled={isReadOnly}
+                          onChange={(e) => setForm((p) => ({ ...p, allowSearch: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -3277,7 +4054,7 @@ export function AdminFieldDrawer({
           field={null}
           initialModule={form.module}
           initialCategory={nestedDrawerCategory}
-          lockCategory={form.primaryCategory !== "composite"}
+          lockCategory={nestedDrawerCategory === "composite" || form.primaryCategory !== "composite"}
           lockModule={true}
           sections={sections}
           zIndex={zIndex + 20}
@@ -3286,6 +4063,8 @@ export function AdminFieldDrawer({
             setNestedDrawerOpen(false);
             if (form.primaryCategory === "composite") {
               importExistingFieldToColumn(createdField);
+            } else if (form.primaryCategory === "new_list") {
+              handleSelectCompositeForNewList(createdField.key);
             } else {
               setForm((p) => ({
                 ...p,

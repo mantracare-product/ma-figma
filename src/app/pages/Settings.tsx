@@ -1354,6 +1354,7 @@ export default function Settings() {
     "Table": "table",
     "Drawing / Signature": "signature",
     "List (Dropdown)": "select",
+    "New List": "new_list",
     "Multi-Select": "multiselect",
     "Date": "date",
     "Date & Time": "date_time",
@@ -1375,6 +1376,7 @@ export default function Settings() {
     "signature": "Drawing / Signature",
     "drawing": "Drawing / Signature",
     "select": "List (Dropdown)",
+    "new_list": "New List",
     "multiselect": "Multi-Select",
     "date": "Date",
     "date_time": "Date & Time",
@@ -6430,6 +6432,10 @@ export default function Settings() {
                               TypeIcon = field.compositeDisplayMode === "table" || field.inputType === "table" ? TableIcon : Layers;
                             }
                             else if (field.inputType === "signature" || field.inputType === "drawing") { typeBadgeStyle = "bg-rose-50 text-rose-700"; TypeIcon = PenTool; }
+                            else if (field.inputType === "new_list") {
+                              typeBadgeStyle = "bg-indigo-50 text-indigo-700";
+                              TypeIcon = Layers;
+                            }
                             else if (field.inputType === "list_open") {
                               typeBadgeStyle = "bg-emerald-50 text-emerald-700";
                               TypeIcon = Tag;

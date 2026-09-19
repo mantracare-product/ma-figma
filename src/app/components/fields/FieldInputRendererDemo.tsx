@@ -48,6 +48,27 @@ export const realLegacyTableColumns = [
   { id: "col_4", name: "Effective Date", type: "Date" },
 ];
 
+// ── Sample 4: New List (Option List Mode with Medicine Block) ──
+export const sampleNewListOptionListField: Partial<FieldDefinition> = {
+  id: 104,
+  key: "prescribed_medication_block",
+  label: "Prescribed Medications",
+  inputType: "new_list",
+  newListConfig: {
+    sourceMode: "option_list",
+    selectionMode: "single",
+    allowSearch: true,
+    optionList: {
+      sourceCompositeFieldKey: "medicines_catalog",
+      columns: [
+        { columnId: "med_name", columnName: "Medicine Name", columnType: "text", isPrimary: true, isDisable: false, isEditable: false },
+        { columnId: "salt", columnName: "Salt / Composition", columnType: "text", isPrimary: false, isDisable: true, isEditable: false },
+        { columnId: "dosage", columnName: "Dosage & Frequency", columnType: "text", isPrimary: false, isDisable: false, isEditable: true },
+      ],
+    },
+  },
+};
+
 export function FieldInputRendererDemo() {
   // States for list_select
   const [runtimeListVal, setRuntimeListVal] = useState("whatsapp");
@@ -64,6 +85,16 @@ export function FieldInputRendererDemo() {
     street: "Default Main St",
     zip: 10001,
   });
+
+  // State for New List (Option List with local overrides)
+  const [runtimeNewListVal, setRuntimeNewListVal] = useState({
+    selectedRowId: "med_1",
+    primaryValue: "Amoxicillin 500mg",
+    overrides: {
+      dosage: "1 tablet twice daily with food (overridden for this patient)",
+    },
+  });
+  const [adminDefaultNewListVal, setAdminDefaultNewListVal] = useState<any>(null);
 
   // Verify normalizeLegacyColumn against real data
   const normalizedCols: SubFieldConfig[] = realLegacyTableColumns.map(normalizeLegacyColumn);
@@ -122,10 +153,62 @@ export function FieldInputRendererDemo() {
         </div>
       </div>
 
-      {/* ── Test 2: group (Address Block) ── */}
+      {/* ── Test 2: New List (Option List Mode with Medicine Block & Local Overrides) ── */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm">
         <h2 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-          2. Recursive Group Field: Same Sub-Field Tree Across Modes
+          2. NEW FIELD TYPE — New List (Option List Mode with Medicine Block & Overrides)
+        </h2>
+        <p className="text-xs text-slate-500">
+          Selecting a primary value auto-populates associated columns. Locked columns stay disabled; editable columns store per-record overrides without mutating source composite.
+        </p>
+
+        <div className="grid grid-cols-2 gap-6">
+          {/* Runtime Mode */}
+          <div className="space-y-2 p-3 bg-slate-50/70 rounded-lg border border-slate-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-700">mode="runtime" (End-User)</span>
+              <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium">Record Block & Overrides</span>
+            </div>
+            <FieldInputRenderer
+              field={sampleNewListOptionListField}
+              value={runtimeNewListVal}
+              onChange={setRuntimeNewListVal}
+              mode="runtime"
+            />
+            <div className="text-[11px] text-slate-500 pt-1">
+              <span className="font-semibold block text-slate-700">Storage Shape:</span>
+              <pre className="text-[10px] text-slate-600 bg-white p-2 rounded border border-slate-200 overflow-x-auto mt-1">
+                {JSON.stringify(runtimeNewListVal, null, 2)}
+              </pre>
+            </div>
+          </div>
+
+          {/* Admin Default Mode */}
+          <div className="space-y-2 p-3 bg-blue-50/30 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-blue-800">mode="admin_default" (Admin)</span>
+              <span className="text-[10px] bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-medium">Pre-seed Default Row</span>
+            </div>
+            <FieldInputRenderer
+              field={sampleNewListOptionListField}
+              value={adminDefaultNewListVal}
+              onChange={setAdminDefaultNewListVal}
+              mode="admin_default"
+            />
+            <div className="text-[11px] text-slate-500 pt-1">
+              <span className="font-semibold block text-blue-800">Configured Default:</span>
+              <pre className="text-[10px] text-blue-700 bg-white p-2 rounded border border-blue-200 overflow-x-auto mt-1">
+                {JSON.stringify(adminDefaultNewListVal, null, 2)}
+              </pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Test 3: group (Address Block) ── */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4 shadow-sm">
+        <h2 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
+          3. Recursive Group Field: Same Sub-Field Tree Across Modes
         </h2>
 
         <div className="grid grid-cols-2 gap-6">
@@ -165,10 +248,10 @@ export function FieldInputRendererDemo() {
         </div>
       </div>
 
-      {/* ── Test 3: Real Legacy Column Normalization Output ── */}
+      {/* ── Test 4: Real Legacy Column Normalization Output ── */}
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3 shadow-sm">
         <h2 className="text-sm font-bold text-slate-800 border-b border-slate-100 pb-2">
-          3. Real Existing Table Column Data Normalization Verification
+          4. Real Existing Table Column Data Normalization Verification
         </h2>
         <p className="text-xs text-slate-500">
           Raw legacy column objects from localStorage / codebase transformed via <code className="bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-mono">normalizeLegacyColumn()</code>:
