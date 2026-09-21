@@ -1,0 +1,12 @@
+{
+  "srcWidth": 1920,
+  "srcHeight": 1080,
+  "rFrameRate": "24/1",
+  "duration": "N/A",
+  "rawCrop": "crop=934:986:494:94",
+  "finalW": 972,
+  "finalH": 1016,
+  "finalX": 474,
+  "finalY": 64,
+  "cropFilter": "crop=972:1016:474:64"
+}

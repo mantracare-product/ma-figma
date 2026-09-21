@@ -239,9 +239,14 @@ export const AnimatedAvatar: React.FC<AnimatedAvatarProps> = ({
       setAr(v.videoWidth / v.videoHeight);
     }
     v.currentTime = REST_POINTS[0];
+    setReady(true);
   };
 
   const onLoadedData = () => {
+    setReady(true);
+  };
+
+  const onCanPlay = () => {
     setReady(true);
   };
 
@@ -259,7 +264,7 @@ export const AnimatedAvatar: React.FC<AnimatedAvatarProps> = ({
       {videoError ? (
         <img className="avatar-fallback" src={avatarFallbackPng} alt={avatarName} />
       ) : (
-        <div className="avatar-figure" style={{ ['--ar' as any]: ar ?? 0.75 }}>
+        <div className="avatar-figure" style={{ ['--ar' as any]: ar ?? (972 / 1016) }}>
           <video
             ref={videoRef}
             className="avatar-layer"
@@ -268,10 +273,10 @@ export const AnimatedAvatar: React.FC<AnimatedAvatarProps> = ({
             preload="auto"
             onLoadedMetadata={onLoadedMetadata}
             onLoadedData={onLoadedData}
+            onCanPlay={onCanPlay}
             onError={handleVideoError}
             style={{
-              opacity: ready ? 1 : 0,
-              transition: 'opacity 200ms var(--ease-out, ease-out)',
+              opacity: 1,
             }}
           >
             <source src={avatarWebm} type="video/webm" />

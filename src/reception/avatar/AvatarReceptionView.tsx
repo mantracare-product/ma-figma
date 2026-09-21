@@ -53,6 +53,7 @@ import type {
   VisitSummary,
 } from '../types/reception';
 import '../styles/navodyaTokens.css';
+import '../styles/avatarStage.css';
 
 export type ScreenState =
   | 'IDLE'
@@ -78,6 +79,69 @@ export type FaceRegistrationPhase = 'intro' | 'capturing' | 'duplicate_found' | 
 export type FlowType = 'SCHEDULED' | 'WALK_IN' | 'MY_VISIT' | null;
 
 const INACTIVITY_TIMEOUT_SECONDS = 60;
+
+export interface ActionStackProps {
+  primary?: {
+    label: string;
+    icon?: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: 'primary' | 'secondary' | 'glass';
+  };
+  secondary?: {
+    label: string;
+    icon?: React.ReactNode;
+    onClick?: () => void;
+    disabled?: boolean;
+    variant?: 'primary' | 'secondary' | 'glass';
+  };
+  className?: string;
+}
+
+export const ActionStack: React.FC<ActionStackProps> = ({ primary, secondary, className = '' }) => {
+  return (
+    <div className={`shrink-0 flex flex-col gap-3 pt-4 w-full ${className}`}>
+      {primary && (
+        <button
+          onClick={primary.onClick}
+          disabled={primary.disabled}
+          className={`w-full h-[var(--touch,60px)] min-h-[56px] px-6 rounded-full text-base font-bold transition-all duration-200 cursor-pointer flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed ${
+            primary.variant === 'glass' || primary.variant === 'secondary'
+              ? 'bg-white/70 hover:bg-white/90 backdrop-blur-[16px] backdrop-saturate-[160%] border border-[#e2e8f0] border-t-white/90 shadow-[0_8px_24px_rgba(24,30,37,0.08)] hover:shadow-[0_12px_28px_rgba(20,86,240,0.18)] text-[#181e25]'
+              : 'bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white shadow-[0_12px_28px_rgba(20,86,240,0.40)] hover:shadow-[0_16px_36px_rgba(20,86,240,0.50)] hover:scale-[1.01] active:scale-[0.99]'
+          }`}
+        >
+          {primary.icon}
+          <span>{primary.label}</span>
+        </button>
+      )}
+
+      {secondary && (
+        <button
+          onClick={secondary.onClick}
+          disabled={secondary.disabled}
+          className={`w-full h-[var(--touch,60px)] min-h-[56px] px-6 rounded-full text-base font-bold transition-all duration-200 cursor-pointer flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed ${
+            secondary.variant === 'primary'
+              ? 'bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white shadow-[0_12px_28px_rgba(20,86,240,0.40)]'
+              : 'bg-white/70 hover:bg-white/90 backdrop-blur-[16px] backdrop-saturate-[160%] border border-[#e2e8f0] border-t-white/90 shadow-[0_8px_24px_rgba(24,30,37,0.08)] hover:shadow-[0_12px_28px_rgba(20,86,240,0.18)] text-[#181e25] hover:scale-[1.01] active:scale-[0.99]'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {secondary.icon}
+            <span className={secondary.variant === 'primary' ? 'text-white' : 'text-[#181e25] group-hover:text-[#1456f0] transition-colors'}>
+              {secondary.label}
+            </span>
+          </div>
+          <ArrowRight
+            className={`w-5 h-5 group-hover:translate-x-1 transition-transform shrink-0 ${
+              secondary.variant === 'primary' ? 'text-white' : 'text-[#1456f0]'
+            }`}
+          />
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const AvatarReceptionView: React.FC = () => {
   const maClient = getMaClient();
@@ -1182,9 +1246,17 @@ export const AvatarReceptionView: React.FC = () => {
               </h2>
               <p className="text-sm text-[#64748b] mt-0.5">
                 {(screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') &&
-                  'Look into the camera to check in, or use your phone number below.'}
-                {screen === 'FACE_CONFIRM' && 'Please confirm your identity to reveal clinical details.'}
-                {screen === 'PHONE' && 'Enter your registered 10-digit mobile phone number.'}
+                  (currentLanguage === 'en'
+                    ? 'Look into the camera. Your image is not saved.'
+                    : 'कैमरे में देखें। आपकी छवि सहेजी नहीं गई है।')}
+                {screen === 'FACE_CONFIRM' &&
+                  (currentLanguage === 'en'
+                    ? 'Please confirm your identity to reveal clinical details.'
+                    : 'कृपया पहचान की पुष्टि करें।')}
+                {screen === 'PHONE' &&
+                  (currentLanguage === 'en'
+                    ? 'Enter your registered 10-digit mobile phone number.'
+                    : 'अपना पंजीकृत 10-अंकीय मोबाइल नंबर दर्ज करें।')}
                 {screen === 'DETAILS_SUMMARY' && 'Summary retrieved directly from clinic system.'}
                 {screen === 'ONBOARDING_FACE' && 'Next time, check in with just a look.'}
                 {screen === 'ONBOARDING_REVIEW' && 'Review details before registering.'}
@@ -1336,9 +1408,8 @@ export const AvatarReceptionView: React.FC = () => {
         {/* FACE RECOGNITION SCANNER                                              */}
         {/* ===================================================================== */}
         {(screen === 'FACE_SCAN' || screen === 'VERIFY_CHOICE' || screen === 'FACE_CONSENT') && (
-          <div className="flex-1 w-full h-full flex flex-col justify-between relative py-1 min-h-0">
-            {/* Camera Viewfinder Card */}
-            <div className="flex-1 min-h-0 w-full relative rounded-[28px] overflow-hidden bg-[#181e25] border-2 border-white/80 shadow-[0_16px_40px_rgba(24,30,37,0.18)] flex flex-col justify-between">
+          <div className="face-stage">
+            <div className="face-camera">
               {/* Live Webcam Stream */}
               <video
                 ref={videoRef}
@@ -1355,31 +1426,31 @@ export const AvatarReceptionView: React.FC = () => {
                   {facePhase === 'idle' && (
                     <>
                       <Camera className="w-3.5 h-3.5 text-blue-400" />
-                      <span>Ready</span>
+                      <span>{currentLanguage === 'en' ? 'Ready' : 'तैयार'}</span>
                     </>
                   )}
                   {facePhase === 'starting' && (
                     <>
                       <Clock className="w-3.5 h-3.5 text-blue-400 animate-spin" />
-                      <span>Starting</span>
+                      <span>{currentLanguage === 'en' ? 'Starting' : 'प्रारंभ'}</span>
                     </>
                   )}
                   {facePhase === 'scanning' && (
                     <>
                       <ScanFace className="w-3.5 h-3.5 text-blue-400 animate-pulse" />
-                      <span>Scanning</span>
+                      <span>{currentLanguage === 'en' ? 'Scanning' : 'स्कैनिंग'}</span>
                     </>
                   )}
                   {facePhase === 'success' && (
                     <>
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Verified</span>
+                      <span>{currentLanguage === 'en' ? 'Verified' : 'सत्यापित'}</span>
                     </>
                   )}
                   {facePhase === 'no_match' && (
                     <>
                       <AlertCircle className="w-3.5 h-3.5 text-slate-300" />
-                      <span>Try again</span>
+                      <span>{currentLanguage === 'en' ? 'Try again' : 'पुनः प्रयास'}</span>
                     </>
                   )}
                 </div>
@@ -1404,38 +1475,31 @@ export const AvatarReceptionView: React.FC = () => {
               </div>
 
               {/* ONE SHARED GUIDE BOX, absolutely centered inside card */}
-              <div className="absolute inset-x-0 top-14 bottom-24 grid place-items-center pointer-events-none z-10">
-                <div
-                  className="relative flex items-center justify-center transition-all duration-300 pointer-events-none"
-                  style={{
-                    height: 'min(100%, 560px)',
-                    aspectRatio: '3 / 4',
-                    maxWidth: '70%',
-                  }}
-                >
-                  {/* 4 Crisp Corner Brackets */}
+              <div className="face-guide-area">
+                <div className="face-guide">
+                  {/* 4 Crisp Corner Brackets exactly on guide box corners */}
                   <div
-                    className={`absolute -top-1 -left-1 w-8 h-8 border-t-[3px] border-l-[3px] rounded-tl-xl transition-colors duration-200 ${
+                    className={`absolute top-0 left-0 w-8 h-8 border-t-[3px] border-l-[3px] rounded-tl-xl transition-colors duration-200 ${
                       isAligned || facePhase === 'success' ? 'border-[#10b981]' : 'border-[#3b82f6]'
                     }`}
                   />
                   <div
-                    className={`absolute -top-1 -right-1 w-8 h-8 border-t-[3px] border-r-[3px] rounded-tr-xl transition-colors duration-200 ${
+                    className={`absolute top-0 right-0 w-8 h-8 border-t-[3px] border-r-[3px] rounded-tr-xl transition-colors duration-200 ${
                       isAligned || facePhase === 'success' ? 'border-[#10b981]' : 'border-[#3b82f6]'
                     }`}
                   />
                   <div
-                    className={`absolute -bottom-1 -left-1 w-8 h-8 border-b-[3px] border-l-[3px] rounded-bl-xl transition-colors duration-200 ${
+                    className={`absolute bottom-0 left-0 w-8 h-8 border-b-[3px] border-l-[3px] rounded-bl-xl transition-colors duration-200 ${
                       isAligned || facePhase === 'success' ? 'border-[#10b981]' : 'border-[#3b82f6]'
                     }`}
                   />
                   <div
-                    className={`absolute -bottom-1 -right-1 w-8 h-8 border-b-[3px] border-r-[3px] rounded-br-xl transition-colors duration-200 ${
+                    className={`absolute bottom-0 right-0 w-8 h-8 border-b-[3px] border-r-[3px] rounded-br-xl transition-colors duration-200 ${
                       isAligned || facePhase === 'success' ? 'border-[#10b981]' : 'border-[#3b82f6]'
                     }`}
                   />
 
-                  {/* Dashed Oval with Soft Navy Dimmed Layer outside (rgba(24,30,37,0.45)) */}
+                  {/* Dashed Oval with Soft Navy Dimmed Layer outside */}
                   <div
                     className={`w-full h-full border-[3px] border-dashed transition-all duration-200 relative flex items-center justify-center ${
                       isAligned || facePhase === 'success'
@@ -1464,7 +1528,7 @@ export const AvatarReceptionView: React.FC = () => {
                           {countdown}
                         </span>
                         <span className="text-xs font-semibold uppercase tracking-widest text-blue-300 mt-2">
-                          Starting scan...
+                          {currentLanguage === 'en' ? 'Starting scan...' : 'स्कैन प्रारंभ...'}
                         </span>
                       </div>
                     )}
@@ -1476,13 +1540,19 @@ export const AvatarReceptionView: React.FC = () => {
                           <CheckCircle2 className="w-9 h-9" />
                         </div>
                         <span className="text-xs font-bold uppercase tracking-wider text-emerald-300 bg-emerald-900/60 px-3 py-1 rounded-full border border-emerald-400/30">
-                          Verified {(faceConfidence * 100).toFixed(0)}% Match
+                          {currentLanguage === 'en'
+                            ? `Verified ${(faceConfidence * 100).toFixed(0)}% Match`
+                            : `सत्यापित ${(faceConfidence * 100).toFixed(0)}% मिलान`}
                         </span>
                         <h3 className="text-xl font-bold text-white font-display mt-2 text-center">
-                          Hi {matchedCandidateName}, is this you?
+                          {currentLanguage === 'en'
+                            ? `Hi ${matchedCandidateName}, is this you?`
+                            : `नमस्ते ${matchedCandidateName}, क्या यह आप हैं?`}
                         </h3>
                         <p className="text-xs text-emerald-100/80 mt-0.5 text-center">
-                          Confirm identity to view clinic details
+                          {currentLanguage === 'en'
+                            ? 'Confirm identity to view clinic details'
+                            : 'विवरण देखने के लिए पहचान की पुष्टि करें'}
                         </p>
                         <div className="flex items-center gap-3 mt-4 w-full">
                           <button
@@ -1490,103 +1560,107 @@ export const AvatarReceptionView: React.FC = () => {
                             className="flex-1 py-3 px-4 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-sm font-bold shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[48px]"
                           >
                             <Check className="w-4 h-4" />
-                            <span>Yes, that's me</span>
+                            <span>{currentLanguage === 'en' ? "Yes, that's me" : 'हाँ, यह मैं हूँ'}</span>
                           </button>
                           <button
                             onClick={handleFaceConfirmNo}
                             className="px-4 py-3 rounded-full bg-white/15 hover:bg-white/25 border border-white/20 text-white text-sm font-semibold backdrop-blur-sm transition-all cursor-pointer min-h-[48px]"
                           >
-                            No
+                            {currentLanguage === 'en' ? 'No' : 'नहीं'}
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* No Match Phase */}
+                    {/* No Match Phase inside oval */}
                     {facePhase === 'no_match' && (
                       <div className="flex flex-col items-center justify-center bg-slate-900/90 backdrop-blur-md rounded-3xl p-6 border border-blue-400/40 text-center max-w-xs animate-in zoom-in-90 duration-300 pointer-events-auto shadow-2xl mx-4">
                         <div className="w-14 h-14 rounded-full bg-blue-500/20 text-blue-400 border border-blue-400/40 flex items-center justify-center mb-2">
                           <AlertCircle className="w-7 h-7" />
                         </div>
-                        <h4 className="text-base font-bold text-white font-display">No match found</h4>
+                        <h4 className="text-base font-bold text-white font-display">
+                          {currentLanguage === 'en' ? 'No match found' : 'कोई मिलान नहीं मिला'}
+                        </h4>
                         <p className="text-xs text-slate-300 mt-1">
                           {faceAttempts >= 3
-                            ? 'Multiple attempts reached. You can call staff or check in with phone.'
-                            : 'We could not recognize your face. Please try again or use your phone number.'}
+                            ? currentLanguage === 'en'
+                              ? 'Multiple attempts reached. Please use phone number check-in.'
+                              : 'अधिकतम प्रयास पूर्ण। कृपया फ़ोन नंबर से चेक-इन करें।'
+                            : currentLanguage === 'en'
+                            ? 'We could not recognize your face. Please try again or use your phone number.'
+                            : 'चेहरा पहचाना नहीं जा सका। पुनः प्रयास करें या फ़ोन नंबर का उपयोग करें।'}
                         </p>
-                        <div className="flex flex-col gap-2 mt-4 w-full">
-                          <button
-                            onClick={startScanning}
-                            className="w-full py-2.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-sm font-bold shadow-md hover:shadow-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                            <span>Try again</span>
-                          </button>
-                          {faceAttempts >= 3 && (
-                            <button
-                              onClick={() => handleNavClick('staff')}
-                              className="w-full py-2.5 rounded-full bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px]"
-                            >
-                              <HelpCircle className="w-4 h-4" />
-                              <span>Call Staff Assistance</span>
-                            </button>
-                          )}
-                        </div>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Reserved Bottom Zone for Start Scanning Button */}
-              <div className="w-full h-24 shrink-0 flex flex-col items-center justify-center px-4 pb-4 z-20 pointer-events-auto">
+            {/* .face-dock floating over bottom edge of camera card */}
+            {facePhase !== 'success' && (
+              <div className="face-dock">
                 {facePhase === 'idle' && (
-                  <>
-                    <button
-                      onClick={startScanning}
-                      className="w-[60%] min-w-[320px] sm:min-w-[420px] max-w-[calc(100%-32px)] h-[var(--touch,60px)] min-h-[56px] rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] hover:from-[#1146c7] hover:to-[#1d4ed8] text-white text-base font-bold shadow-[0_12px_28px_rgba(20,86,240,0.40)] hover:shadow-[0_16px_36px_rgba(20,86,240,0.50)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 cursor-pointer flex items-center justify-center gap-3"
-                    >
-                      <Camera className="w-5 h-5" />
-                      <span>Start scanning</span>
-                    </button>
-                    <p className="text-xs text-slate-300/90 text-center mt-1.5">
-                      One-time scan. Your image is not saved.
-                    </p>
-                  </>
+                  <button className="dock-btn dock-primary" onClick={startScanning}>
+                    <Camera size={20} />
+                    <span>{currentLanguage === 'en' ? 'Start scanning' : 'स्कैन शुरू करें'}</span>
+                  </button>
+                )}
+
+                {facePhase === 'starting' && (
+                  <button className="dock-btn dock-primary" disabled>
+                    <Clock size={20} className="animate-spin" />
+                    <span>{currentLanguage === 'en' ? 'Starting...' : 'प्रारंभ हो रहा है...'}</span>
+                  </button>
                 )}
 
                 {facePhase === 'scanning' && (
+                  <button className="dock-btn dock-cancel" onClick={cancelScanning}>
+                    <X size={20} />
+                    <span>{currentLanguage === 'en' ? 'Cancel scanning' : 'स्कैन रद्द करें'}</span>
+                  </button>
+                )}
+
+                {facePhase === 'no_match' && (
+                  <>
+                    {faceAttempts < 3 ? (
+                      <button className="dock-btn dock-primary" onClick={startScanning}>
+                        <RefreshCw size={20} />
+                        <span>{currentLanguage === 'en' ? 'Try again' : 'पुनः प्रयास करें'}</span>
+                      </button>
+                    ) : (
+                      <button
+                        className="dock-btn dock-primary"
+                        onClick={() => {
+                          stopCameraStream();
+                          startPhoneVerification();
+                        }}
+                      >
+                        <Phone size={20} />
+                        <span>{currentLanguage === 'en' ? 'Use phone number instead' : 'फ़ोन नंबर से चेक-इन करें'}</span>
+                        <ArrowRight size={20} />
+                      </button>
+                    )}
+                  </>
+                )}
+
+                {(facePhase !== 'no_match' || faceAttempts < 3) && (
                   <button
-                    onClick={cancelScanning}
-                    className="h-12 px-6 rounded-full bg-slate-900/70 hover:bg-slate-900/90 text-white/90 hover:text-white border border-white/20 backdrop-blur-md text-sm font-semibold shadow-lg transition-all cursor-pointer flex items-center gap-2"
+                    className="dock-btn dock-ghost"
+                    onClick={() => {
+                      stopCameraStream();
+                      startPhoneVerification();
+                    }}
                   >
-                    <X className="w-4 h-4" />
-                    <span>Cancel</span>
+                    <span className="flex items-center gap-2.5">
+                      <Phone size={20} />
+                      <span>{currentLanguage === 'en' ? 'Use phone number instead' : 'फ़ोन नंबर से चेक-इन करें'}</span>
+                    </span>
+                    <ArrowRight size={20} />
                   </button>
                 )}
               </div>
-            </div>
-
-            {/* Overlapping Glass Strip: "Use phone number instead" */}
-            <div className="relative -mt-6 z-30 flex items-center justify-center w-full px-4">
-              <button
-                onClick={() => {
-                  stopCameraStream();
-                  startPhoneVerification();
-                }}
-                className="w-[60%] min-w-[320px] sm:min-w-[420px] max-w-[calc(100%-32px)] h-[var(--touch,60px)] min-h-[56px] px-6 rounded-full bg-white/70 hover:bg-white/90 backdrop-blur-[16px] backdrop-saturate-[160%] border border-[#e2e8f0] border-t-white/90 shadow-[0_10px_30px_rgba(24,30,37,0.12)] hover:shadow-[0_14px_36px_rgba(20,86,240,0.20)] flex items-center justify-between text-[#181e25] transition-all duration-200 cursor-pointer group hover:scale-[1.01] active:scale-[0.99]"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-50 text-[#1456f0] flex items-center justify-center group-hover:bg-[#1456f0] group-hover:text-white transition-all shadow-xs shrink-0">
-                    <Phone className="w-5 h-5" />
-                  </div>
-                  <span className="text-base font-bold text-[#181e25] group-hover:text-[#1456f0] transition-colors">
-                    Use phone number instead
-                  </span>
-                </div>
-                <ArrowRight className="w-5 h-5 text-[#1456f0] group-hover:translate-x-1 transition-transform shrink-0" />
-              </button>
-            </div>
+            )}
           </div>
         )}
 
@@ -1638,63 +1712,64 @@ export const AvatarReceptionView: React.FC = () => {
         {/* PHONE NUMBER KEYPAD                                                   */}
         {/* ===================================================================== */}
         {screen === 'PHONE' && (
-          <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full py-2">
-            <div className="mb-3">
-              <label className="block text-sm font-semibold text-[#64748b] uppercase tracking-wider mb-1">
-                Enter Mobile Phone Number
-              </label>
-              <div className="h-[var(--touch,60px)] min-h-[56px] px-4 rounded-2xl bg-white border-2 border-[#e2e8f0] focus-within:border-[#1456f0] flex items-center justify-between shadow-2xs">
-                <span className="text-xl font-mono font-bold text-[#222222] tracking-wider">
-                  {phoneNumber || <span className="text-slate-300 font-normal">e.g. 9876543210</span>}
-                </span>
-                {phoneNumber && (
+          <div className="flex-1 flex flex-col justify-between max-w-md mx-auto w-full py-2">
+            <div className="flex-1 flex flex-col justify-center">
+              <div className="mb-3">
+                <label className="block text-sm font-semibold text-[#64748b] uppercase tracking-wider mb-1">
+                  {currentLanguage === 'en'
+                    ? 'Enter Mobile Phone Number'
+                    : 'मोबाइल फ़ोन नंबर दर्ज करें'}
+                </label>
+                <div className="h-[var(--touch,60px)] min-h-[56px] px-4 rounded-2xl bg-white border-2 border-[#e2e8f0] focus-within:border-[#1456f0] flex items-center justify-between shadow-2xs">
+                  <span className="text-xl font-mono font-bold text-[#222222] tracking-wider">
+                    {phoneNumber || (
+                      <span className="text-slate-300 font-normal">e.g. 9876543210</span>
+                    )}
+                  </span>
+                  {phoneNumber && (
+                    <button
+                      onClick={() => setPhoneNumber('')}
+                      className="text-slate-400 hover:text-slate-700 p-1"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Numerical Touch Keypad */}
+              <div className="grid grid-cols-3 gap-2 mb-1">
+                {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLEAR', '0', 'BACK'].map((val) => (
                   <button
-                    onClick={() => setPhoneNumber('')}
-                    className="text-slate-400 hover:text-slate-700 p-1"
+                    key={val}
+                    onClick={() => handleKeypadPress(val)}
+                    className="h-[var(--touch,60px)] min-h-[56px] rounded-xl bg-white border border-[#e2e8f0] hover:bg-blue-50/50 hover:border-blue-300 text-2xl font-bold text-[#222222] shadow-2xs transition-colors cursor-pointer flex items-center justify-center font-display"
                   >
-                    <X className="w-5 h-5" />
+                    {val === 'BACK' ? '⌫' : val === 'CLEAR' ? 'C' : val}
                   </button>
-                )}
+                ))}
               </div>
             </div>
 
-            {/* Numerical Touch Keypad */}
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9', 'CLEAR', '0', 'BACK'].map((val) => (
-                <button
-                  key={val}
-                  onClick={() => handleKeypadPress(val)}
-                  className="h-[var(--touch,60px)] min-h-[56px] rounded-xl bg-white border border-[#e2e8f0] hover:bg-blue-50/50 hover:border-blue-300 text-2xl font-bold text-[#222222] shadow-2xs transition-colors cursor-pointer flex items-center justify-center font-display"
-                >
-                  {val === 'BACK' ? '⌫' : val === 'CLEAR' ? 'C' : val}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={handleSendOtp}
-              disabled={!phoneNumber || phoneNumber.replace(/\D/g, '').length < 7}
-              className="w-full py-3.5 rounded-full bg-gradient-to-r from-[#1456f0] to-[#2563eb] text-white text-base font-bold shadow-md hover:shadow-lg disabled:opacity-50 transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[var(--touch,60px)]"
-            >
-              <span>Continue & Send Code</span>
-              <ArrowRight className="w-5 h-5" />
-            </button>
-
-            {/* Matching Glass Strip: "Use face check-in instead" */}
-            <div className="mt-2.5 flex items-center justify-center w-full">
+            {/* Same dock buttons on Phone screen */}
+            <div className="flex flex-col gap-2 p-2 rounded-[32px] bg-white/72 backdrop-blur-[16px] backdrop-saturate-[160%] border border-[#e2e8f0] border-t-white/90 shadow-[0_16px_40px_rgba(24,30,37,0.18)] mt-3">
               <button
-                onClick={handleResetSession}
-                className="w-full h-[var(--touch,60px)] min-h-[56px] px-5 rounded-full bg-white/70 hover:bg-white/90 backdrop-blur-[16px] backdrop-saturate-[160%] border border-[#e2e8f0] border-t-white/90 shadow-[0_6px_20px_rgba(24,30,37,0.08)] hover:shadow-[0_10px_26px_rgba(20,86,240,0.18)] flex items-center justify-between text-[#181e25] transition-all duration-200 cursor-pointer group hover:scale-[1.01] active:scale-[0.99]"
+                className="dock-btn dock-primary"
+                onClick={handleSendOtp}
+                disabled={!phoneNumber || phoneNumber.replace(/\D/g, '').length < 7}
               >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-blue-50 text-[#1456f0] flex items-center justify-center group-hover:bg-[#1456f0] group-hover:text-white transition-all shadow-xs shrink-0">
-                    <ScanFace className="w-5 h-5" />
-                  </div>
-                  <span className="text-sm font-bold text-[#181e25] group-hover:text-[#1456f0] transition-colors">
-                    Use face check-in instead
-                  </span>
-                </div>
-                <ArrowRight className="w-4 h-4 text-[#1456f0] group-hover:translate-x-1 transition-transform shrink-0" />
+                <span>{currentLanguage === 'en' ? 'Continue & Send Code' : 'जारी रखें और कोड भेजें'}</span>
+                <ArrowRight size={20} />
+              </button>
+              <button
+                className="dock-btn dock-ghost"
+                onClick={handleResetSession}
+              >
+                <span className="flex items-center gap-2.5">
+                  <ScanFace size={20} />
+                  <span>{currentLanguage === 'en' ? 'Use face check-in instead' : 'चेहरे से चेक-इन करें'}</span>
+                </span>
+                <ArrowRight size={20} />
               </button>
             </div>
           </div>

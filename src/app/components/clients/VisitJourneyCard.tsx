@@ -57,7 +57,7 @@ export const VisitJourneyCard: React.FC<VisitJourneyCardProps> = ({
       for (const st of allStations) {
         const q = await maClient.getStationQueue(st.id);
         const match = q.find(
-          (t) =>
+          (t: QueueTicket) =>
             t.clientId === clientId ||
             (clientPhone && t.clientPhone?.replace(/\D/g, '') === clientPhone.replace(/\D/g, ''))
         );

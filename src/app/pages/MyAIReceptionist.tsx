@@ -47,7 +47,7 @@ export default function MyAIReceptionist() {
   const [newQuestions, setNewQuestions] = useState("");
   const [showEditLanguagesModal, setShowEditLanguagesModal] = useState(false);
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>(["English"]);
-  const [selectedVoice, setSelectedVoice] = useState({ name: "Dakota H", provider: "Eleven", badge: null });
+  const [selectedVoice, setSelectedVoice] = useState<{ name: string; provider: string; badge: string | null }>({ name: "Dakota H", provider: "Eleven", badge: null });
   const [showVoiceLibraryModal, setShowVoiceLibraryModal] = useState(false);
   const [voiceLibraryTab, setVoiceLibraryTab] = useState<"voice-library" | "clone-voice">("voice-library");
   const [cloneVoiceName, setCloneVoiceName] = useState("");
