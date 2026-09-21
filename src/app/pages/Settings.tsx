@@ -11661,7 +11661,7 @@ export default function Settings() {
             field={editingFieldId !== null ? (getAllFields(currentModule).find((f) => f.id === editingFieldId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
             sections={getAllSections(currentModule)}
-            isAdmin={false}
+            isAdmin={true}
             onClose={() => {
               setShowAddFieldDrawer(false);
               setEditingFieldId(null);
@@ -11678,7 +11678,7 @@ export default function Settings() {
           <AdminSectionDrawer
             section={editingSectionId !== null ? (getAllSections(currentModule).find((s) => s.id === editingSectionId) || null) : null}
             initialModule={currentModule as Exclude<FieldModule, "deal">}
-            isAdmin={false}
+            isAdmin={true}
             onClose={() => {
               setShowAddSectionDrawer(false);
               setEditingSectionId(null);

@@ -37,6 +37,7 @@ export interface CreateFieldModalProps {
   activeProcessId?: string;
   activeProcessName?: string;
   processStages?: Array<{ id: string; name: string; color?: string }>;
+  isAdmin?: boolean;
   onClose: () => void;
   onCreated?: (field: FieldDefinition) => void;
 }
@@ -47,6 +48,7 @@ export function CreateFieldModal({
   activeProcessId,
   activeProcessName,
   processStages,
+  isAdmin = true,
   onClose,
   onCreated,
 }: CreateFieldModalProps) {
@@ -62,7 +64,7 @@ export function CreateFieldModal({
       activeProcessId={activeProcessId}
       activeProcessName={activeProcessName}
       processStages={processStages}
-      isAdmin={false}
+      isAdmin={isAdmin}
       onClose={onClose}
       onSaved={(newField) => {
         if (onCreated) onCreated(newField);
@@ -79,6 +81,7 @@ export interface SelectFieldsModalProps {
   activeProcessId?: string;
   activeProcessName?: string;
   processStages?: Array<{ id: string; name: string; color?: string }>;
+  isAdmin?: boolean;
 }
 
 export function SelectFieldsModal({
@@ -89,6 +92,7 @@ export function SelectFieldsModal({
   activeProcessId,
   activeProcessName,
   processStages,
+  isAdmin = true,
 }: SelectFieldsModalProps) {
   const { getAllFields, updateCustomField } = useFieldRegistry();
   const { activeOrganization } = useOrganization();
@@ -329,6 +333,7 @@ export function SelectFieldsModal({
           activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={resolvedProcessStages}
+          isAdmin={isAdmin}
           onClose={() => setCreateFieldModalOpenFor(null)}
           onCreated={(newField) => {
             setSelectedFieldsForModal(prev => [...prev, newField.key]);

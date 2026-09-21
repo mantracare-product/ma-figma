@@ -70,6 +70,7 @@ import {
   formatTimestamp,
 } from "../../../lib/activityEngine";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
+import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
   id: string;
@@ -562,13 +563,38 @@ export default function ProcessDetailDrawer({
     return missingRequiredFields.map((f) => f.key);
   }, [missingRequiredFields]);
 
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    targetStageName: string;
+    targetStageIdx: number;
+    missingFields: MissingRequiredField[];
+  }>({
+    isOpen: false,
+    targetStageName: "",
+    targetStageIdx: 1,
+    missingFields: [],
+  });
+
   const handleStageClick = (newStageIdx: number) => {
-    if (newStageIdx > effectiveStageIdx && missingRequiredFields.length > 0) {
-      toast.error(
-        `Cannot move to next stage: Please fill all ${missingRequiredFields.length} required field(s) for "${currentStageName}" first.`
-      );
+    const targetStageName = activeStageList[newStageIdx - 1] || "";
+    const missingForTarget = getMissingRequiredProcessFields({
+      processId: currentProcessId,
+      processName: log?.process,
+      currentStageName: targetStageName,
+      allFields: allRegistryProcessFields,
+      fieldValues: processFieldValues,
+    });
+
+    if (missingForTarget.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        targetStageName,
+        targetStageIdx: newStageIdx,
+        missingFields: missingForTarget,
+      });
       return;
     }
+
     onStageChange(newStageIdx);
   };
 
@@ -1103,6 +1129,27 @@ export default function ProcessDetailDrawer({
           </div>
         </div>
       </div>
+
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={clientName}
+        clientId={clientId}
+        processName={log?.process || ""}
+        targetStageName={requiredFieldsModalState.targetStageName}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={allRegistryProcessFields}
+        initialValues={processFieldValues}
+        onConfirm={(filledValues) => {
+          Object.entries(filledValues).forEach(([k, v]) => {
+            onFieldSave?.(k, v);
+          });
+          onStageChange(requiredFieldsModalState.targetStageIdx);
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);
+        }}
+        zIndex={1000}
+      />
     </>
   );
 }

@@ -453,7 +453,7 @@ export default function TranscriptFieldMappingDrawer({
         <AdminSectionDrawer
           section={null}
           initialModule="scribe"
-          isAdmin={false}
+          isAdmin={true}
           onClose={() => setAddSectionModalOpen(false)}
           onSaved={(savedSec) => {
             const newSec: ScribeMappingSection = {
