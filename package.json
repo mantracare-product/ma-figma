@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test": "vitest run"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
@@ -75,7 +76,8 @@
     "@vitejs/plugin-react": "4.7.0",
     "tailwindcss": "4.1.12",
     "typescript": "^6.0.3",
-    "vite": "6.3.5"
+    "vite": "6.3.5",
+    "vitest": "^3.2.7"
   },
   "peerDependencies": {
     "react": "18.3.1",

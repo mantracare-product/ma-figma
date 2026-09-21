@@ -65,6 +65,9 @@ export interface Stage {
   channelSources?: StageChannelSource[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  receptionStationId?: string;
+  receptionAutoAdvance?: boolean;
+  receptionIsOptional?: boolean;
 }
 
 export interface ScopingRule {
@@ -88,6 +91,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  receptionEnabled?: boolean;
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;

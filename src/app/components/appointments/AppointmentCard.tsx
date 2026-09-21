@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Clock, Check, X, Video, MessageCircle, Star, User, MoreVertical, CalendarIcon, XCircle, AlertCircle, Trash2 } from "lucide-react";
+import { Calendar, Clock, Check, X, Video, MessageCircle, Star, User, MoreVertical, CalendarIcon, XCircle, AlertCircle, Trash2, Sparkles, MapPin, Ticket } from "lucide-react";
 import { toast } from "sonner";
 
 interface Appointment {
@@ -20,6 +20,10 @@ interface Appointment {
   tags?: string[];
   processId?: string;
   stageId?: string;
+  source?: string;
+  roomName?: string;
+  tokenNumber?: string;
+  checkedInAt?: string;
 }
 
 interface Employee {
@@ -168,16 +172,23 @@ export default function AppointmentCard({
 
           {/* Client Name, Provider Name, Service */}
           <div>
-            <div
-              style={{
-                fontSize: "15px",
-                fontWeight: "bold",
-                color: "#111827",
-                fontFamily: "DM Sans, sans-serif",
-                marginBottom: "2px",
-              }}
-            >
-              {appointment.clientName}
+            <div className="flex items-center gap-2 mb-0.5">
+              <span
+                style={{
+                  fontSize: "15px",
+                  fontWeight: "bold",
+                  color: "#111827",
+                  fontFamily: "DM Sans, sans-serif",
+                }}
+              >
+                {appointment.clientName}
+              </span>
+              {appointment.source === "kiosk" && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                  <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                  AI Receptionist
+                </span>
+              )}
             </div>
             <div
               style={{
@@ -198,6 +209,24 @@ export default function AppointmentCard({
             >
               {service?.name || "Unknown Service"}
             </div>
+
+            {/* Room & Token (if originated or assigned via reception) */}
+            {(appointment.roomName || appointment.tokenNumber) && (
+              <div className="flex items-center gap-2 mt-1.5 pt-1.5 border-t border-slate-100 text-[11px] font-['Outfit']">
+                {appointment.tokenNumber && (
+                  <span className="inline-flex items-center gap-1 font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md">
+                    <Ticket className="w-3 h-3 text-slate-500" />
+                    {appointment.tokenNumber}
+                  </span>
+                )}
+                {appointment.roomName && (
+                  <span className="inline-flex items-center gap-1 text-slate-600 font-medium">
+                    <MapPin className="w-3 h-3 text-blue-600" />
+                    {appointment.roomName}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

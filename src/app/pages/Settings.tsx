@@ -17,6 +17,7 @@ import { AdminFieldDrawer } from "./admin/components/AdminFieldDrawer";
 import { AdminSectionDrawer } from "./admin/components/AdminSectionDrawer";
 import OrganizationLocationsSection from "../components/settings/OrganizationLocationsSection";
 import MemberLocationScheduleTab from "../components/settings/MemberLocationScheduleTab";
+import ReceptionSettingsTab from "../components/reception/ReceptionSettingsTab";
 import { getStoredTeamMembers, saveStoredTeamMembers, TEAM_STORE_EVENT } from "../../lib/teamStore";
 import { getStoredServices, updateService, onServicesChanged, Service } from "../../lib/servicesStore";
 import {
@@ -3147,6 +3148,7 @@ export default function Settings() {
     { id: "numbers", label: "Numbers", icon: Phone },
     { id: "custom-fields", label: "Sections/Fields", icon: Layers },
     { id: "integrations", label: "Integrations", icon: LinkIcon },
+    { id: "reception", label: "AI Reception", icon: Sparkles },
     { id: "audit-logs", label: "Audit Logs", icon: FileText },
     { id: "security", label: "Security", icon: ShieldCheck },
   ];
@@ -7220,6 +7222,9 @@ export default function Settings() {
                 )}
               </div>
             )}
+
+            {/* Reception Tab */}
+            {activeTab === "reception" && <ReceptionSettingsTab />}
           </div>
         </div>
 

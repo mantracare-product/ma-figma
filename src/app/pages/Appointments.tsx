@@ -59,6 +59,10 @@ interface Appointment {
   tags?: string[];
   processId?: string;
   stageId?: string;
+  source?: string;
+  roomName?: string;
+  tokenNumber?: string;
+  checkedInAt?: string;
 }
 
 interface Employee {
@@ -123,6 +127,24 @@ export default function Appointments() {
       try { return JSON.parse(saved); } catch {}
     }
     return [
+      {
+        id: 101,
+        clientName: "Sunita Rao",
+        clientEmail: "sunita.rao@example.com",
+        clientPhone: "+91 91234 56780",
+        employeeId: 1,
+        serviceId: 1,
+        date: new Date().toISOString().split("T")[0],
+        time: "10:30",
+        duration: 30,
+        status: "scheduled",
+        notes: "Cardiology consult check-in via reception kiosk",
+        source: "kiosk",
+        roomName: "Dr. Sharma - Room 101",
+        tokenNumber: "D-001",
+        processId: "Appointment Scheduling",
+        stageId: "Confirmed",
+      },
       {
         id: 1,
         clientName: "James Wilson",

@@ -61,6 +61,8 @@ import {
 import DrawerShell from "../components/ui/DrawerShell";
 import CPTCodeInput from "../components/ui/CPTCodeInput";
 import DraggableOverviewSections, { OverviewSection } from "../components/profile/DraggableOverviewSections";
+import { VisitJourneyCard } from "../components/clients/VisitJourneyCard";
+import { FaceCheckinCard } from "../components/clients/FaceCheckinCard";
 import {
   Service, EMPLOYEES as SVC_EMPLOYEES, CURRENCIES as SVC_CURRENCIES, INIT_FORM as SVC_INIT_FORM,
   getCurrencySymbol, getStoredServices, addService, onServicesChanged,
@@ -122,6 +124,11 @@ const HEADING_BY_TYPE: Record<string, string> = {
   appointment_booked: "Appointment Booked",
   process_completed: "Process Completed",
   website_message: "Website Message Received",
+  kiosk_checkin: "AI Receptionist Check-in",
+  kiosk_onboarding_completed: "Kiosk Walk-in Onboarding Completed",
+  process_assigned: "Process Assigned via Kiosk Rule",
+  kiosk_face_enrolled: "Biometric Face Check-in Enrolled",
+  kiosk_face_deleted: "Biometric Face Data Deleted",
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -1520,6 +1527,15 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* LEFT COLUMN: Draggable Structured Information Sections */}
                 <div className="lg:col-span-5 space-y-5">
+                  <VisitJourneyCard
+                    clientId={client.id}
+                    clientName={client.name}
+                    clientPhone={client.phone}
+                  />
+                  <FaceCheckinCard
+                    clientId={client.id}
+                    clientName={client.name}
+                  />
                   <DraggableOverviewSections
                     mode="client"
                     client={client}
