@@ -314,6 +314,7 @@ export interface FieldOption {
   value: any;
   valueType?: OptionValueType;
   index?: number;
+  isDefault?: boolean; // Set/unset default value per option
 }
 
 export interface ListFieldConfig {
@@ -322,9 +323,11 @@ export interface ListFieldConfig {
   allowSearch?: boolean;
   sortOrder?: "alphabetical_asc" | "alphabetical_desc" | "manual" | "recent";
   liveLinkedFieldKey?: string; // Live 2-way sync with another List field in the module
+  allowCustomOptions?: boolean; // Allow users to type and add new options if not in list
+  selectionMode?: "single" | "multiple";
 }
 
-export type NewListSourceMode = "manual" | "option_list";
+export type NewListSourceMode = "manual" | "option_list" | "advance_2" | "basic_list" | "advanced_list";
 
 export interface OptionListColumnConfig {
   columnId: string;
@@ -341,12 +344,14 @@ export interface OptionListConfig {
 }
 
 export interface NewListConfig {
-  sourceMode: NewListSourceMode; // "manual" | "option_list"
-  manualType?: "single" | "multiple" | "open_list";
+  sourceMode: NewListSourceMode; // "manual" (Basic List) | "option_list" (Advanced List) | "advance_2" (Advance 2)
+  manualType?: "single" | "multiple";
   optionList?: OptionListConfig;
   selectionMode?: "single" | "multiple";
   allowSearch?: boolean;
   sortOrder?: "manual" | "alphabetical_asc" | "alphabetical_desc" | "recent";
+  allowCustomOptions?: boolean; // Checkbox: Allow users to add new options if not available
+  defaultOptionId?: string | number;
 }
 
 export interface ScopingRule {
@@ -383,6 +388,7 @@ export interface FieldDefinition {
   placeholder?: string;
   validation?: string;
   options?: FieldOption[];    // for select/dropdown/list types
+  allowCustomOptions?: boolean; // Allow users to type custom options at runtime
   listConfig?: ListFieldConfig; // Search, sort order, and live 2-way linking
   newListConfig?: NewListConfig; // for new_list field type
   tableColumns?: TableColumnConfig[]; // for table type (legacy)

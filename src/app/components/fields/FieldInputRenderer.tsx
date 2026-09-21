@@ -322,6 +322,8 @@ interface MultiSelectDropdownProps {
   isAdminDefault?: boolean;
   borderClass?: string;
   allowSearch?: boolean;
+  allowCustomOptions?: boolean;
+  onAddOption?: (newVal: string) => void;
 }
 
 function MultiSelectDropdown({
@@ -333,6 +335,8 @@ function MultiSelectDropdown({
   isAdminDefault = false,
   borderClass = "",
   allowSearch = false,
+  allowCustomOptions = false,
+  onAddOption,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -441,7 +445,7 @@ function MultiSelectDropdown({
         )}
 
         <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
-          {filteredOptions.length === 0 ? (
+          {filteredOptions.length === 0 && !allowCustomOptions ? (
             <div className="px-3 py-2 text-xs text-slate-400 italic">
               {searchQuery ? "No matching options" : "No options configured"}
             </div>
@@ -467,6 +471,25 @@ function MultiSelectDropdown({
                 </label>
               );
             })
+          )}
+
+          {/* Dynamic custom option addition */}
+          {allowCustomOptions && searchQuery.trim() && !options.some((o) => o.label.toLowerCase() === searchQuery.trim().toLowerCase() || String(o.value).toLowerCase() === searchQuery.trim().toLowerCase()) && (
+            <button
+              type="button"
+              onClick={() => {
+                const newVal = searchQuery.trim();
+                onAddOption?.(newVal);
+                if (!selected.includes(newVal)) {
+                  onChange([...selected, newVal]);
+                }
+                setSearchQuery("");
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 cursor-pointer select-none text-blue-600 hover:bg-blue-50 font-semibold border-t border-slate-100 mt-1"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Add &ldquo;{searchQuery.trim()}&rdquo; as new option</span>
+            </button>
           )}
         </div>
       </PopoverContent>
@@ -690,68 +713,46 @@ function NewListInputRenderer({
   const config = field?.newListConfig;
   const sourceMode = config?.sourceMode || "manual";
   const label = subField?.name || field?.label || "List";
+  const [localExtraOptions, setLocalExtraOptions] = useState<FieldOption[]>([]);
 
-  // ─────────────────────────────────────────────────────────────
-  // 1. MODE 1 — MANUAL LIST (Exact reuse of List manual options)
-  // ─────────────────────────────────────────────────────────────
-  if (sourceMode === "manual") {
-    const manualType = config?.manualType || (field?.selectionMode === "multiple" ? "multiple" : "single");
-    const options: FieldOption[] = field?.options || subField?.options || [];
-
-    if (manualType === "open_list" || field?.listEntryType === "plain_text") {
-      const entries: string[] = Array.isArray(value) ? value.map(String) : [];
-      return (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5 min-h-[34px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
-            {entries.length === 0 ? (
-              <span className="text-xs text-slate-400 italic">
-                {isAdminDefault ? "No default entries pre-seeded." : `No ${label.toLowerCase()} added yet.`}
-              </span>
-            ) : (
-              entries.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 text-xs font-medium rounded-lg shadow-2xs"
-                >
-                  <span>{String(item)}</span>
-                  {!disabled && (
-                    <button
-                      type="button"
-                      onClick={() => onChange(entries.filter((_, i) => i !== idx))}
-                      className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-          {!disabled && (
-            <input
-              type="text"
-              placeholder={`+ Type ${label.toLowerCase()} and press Enter...`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
-                  e.preventDefault();
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (!entries.includes(val)) {
-                    onChange([...entries, val]);
-                  }
-                  (e.target as HTMLInputElement).value = "";
-                }
-              }}
-              className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
-            />
-          )}
-        </div>
-      );
+  const handleAddLocalOption = (newOptVal: string) => {
+    if (!newOptVal.trim()) return;
+    const exists = localExtraOptions.some((o) => o.value.toLowerCase() === newOptVal.toLowerCase());
+    if (!exists) {
+      setLocalExtraOptions((prev) => [...prev, { id: `custom_${Date.now()}`, label: newOptVal.trim(), value: newOptVal.trim() }]);
     }
+  };
 
-    if (manualType === "multiple" || field?.selectionMode === "multiple" || config?.selectionMode === "multiple") {
+  // ─────────────────────────────────────────────────────────────
+  // 0. MODE 3 — ADVANCE 2 (Placeholder for future functionality)
+  // ─────────────────────────────────────────────────────────────
+  if (sourceMode === "advance_2") {
+    return (
+      <div className="p-3 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/80 rounded-xl space-y-1.5">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4 text-purple-600" />
+          <span className="text-xs font-semibold text-purple-900">Advance 2 Mode</span>
+          <span className="px-1.5 py-0.5 text-[10px] font-bold bg-purple-200 text-purple-800 rounded">Configured</span>
+        </div>
+        <p className="text-[11px] text-purple-700">
+          This field is configured for Advance 2 list mode. Functionality will be activated once logic is specified.
+        </p>
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1. MODE 1 — BASIC LIST (Manual Options)
+  // ─────────────────────────────────────────────────────────────
+  if (sourceMode === "manual" || sourceMode === "basic_list") {
+    const rawOptions: FieldOption[] = [...(field?.options || subField?.options || []), ...localExtraOptions];
+    const isMulti = field?.selectionMode === "multiple" || config?.selectionMode === "multiple";
+    const allowCustom = Boolean(config?.allowCustomOptions ?? field?.allowCustomOptions);
+
+    if (isMulti) {
       return (
         <MultiSelectDropdown
-          options={options}
+          options={rawOptions}
           value={value}
           onChange={onChange}
           disabled={disabled}
@@ -759,6 +760,8 @@ function NewListInputRenderer({
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
           allowSearch={config?.allowSearch}
+          allowCustomOptions={allowCustom}
+          onAddOption={handleAddLocalOption}
         />
       );
     }
@@ -771,13 +774,18 @@ function NewListInputRenderer({
         disabled={disabled}
         onChange={onChange}
         placeholder={isAdminDefault ? "— No Default (Empty) —" : (field?.placeholder || "Select an option...")}
-        options={options.map((opt) => ({
+        options={rawOptions.map((opt) => ({
           value: String(opt.value),
           label: opt.label || String(opt.value),
         }))}
         size="sm"
         triggerClassName={borderClass}
         allowSearch={config?.allowSearch}
+        allowCustomOptions={allowCustom}
+        onAddOption={(newVal) => {
+          handleAddLocalOption(newVal);
+          onChange(newVal);
+        }}
       />
     );
   }
@@ -1332,6 +1340,7 @@ export function FieldInputRenderer({
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "list_select" || effectiveType === "select" || effectiveType === "multiselect" || effectiveType === "list") {
     const isMultiple = subField?.selectionMode === "multiple" || field?.selectionMode === "multiple" || effectiveType === "multiselect";
+    const allowCustom = Boolean(effectiveListConfig?.allowCustomOptions ?? field?.allowCustomOptions);
 
     if (isMultiple) {
       return (
@@ -1344,6 +1353,7 @@ export function FieldInputRenderer({
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
           allowSearch={effectiveListConfig?.allowSearch}
+          allowCustomOptions={allowCustom}
         />
       );
     }
@@ -1364,6 +1374,10 @@ export function FieldInputRenderer({
         size="sm"
         triggerClassName={borderClass}
         allowSearch={effectiveListConfig?.allowSearch}
+        allowCustomOptions={allowCustom}
+        onAddOption={(newVal) => {
+          onChange(newVal);
+        }}
       />
     );
   }

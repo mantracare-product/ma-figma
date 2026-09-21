@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check, Plus } from "lucide-react";
 import { InfoTooltip } from "../help/InfoTooltip";
 
 export interface AdminSelectOption {
@@ -25,6 +25,8 @@ export interface AdminSelectProps {
   dropdownWidth?: string | number;
   emptyText?: string;
   allowSearch?: boolean;
+  allowCustomOptions?: boolean;
+  onAddOption?: (newVal: string) => void;
 }
 
 export function AdminSelect({
@@ -39,6 +41,8 @@ export function AdminSelect({
   dropdownWidth,
   emptyText = "No options available",
   allowSearch = false,
+  allowCustomOptions = false,
+  onAddOption,
 }: AdminSelectProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -118,7 +122,7 @@ export function AdminSelect({
             </div>
           )}
           <div className="max-h-60 overflow-y-auto space-y-0.5 pr-0.5">
-            {filteredOptions.length === 0 ? (
+            {filteredOptions.length === 0 && !allowCustomOptions ? (
               <div className="px-3 py-2 text-xs text-slate-400 italic">
                 {searchQuery ? "No matching options" : emptyText}
               </div>
@@ -169,6 +173,24 @@ export function AdminSelect({
                   </button>
                 );
               })
+            )}
+
+            {/* Allow adding new custom option dynamically */}
+            {allowCustomOptions && searchQuery.trim() && !options.some((o) => o.label.toLowerCase() === searchQuery.trim().toLowerCase() || String(o.value).toLowerCase() === searchQuery.trim().toLowerCase()) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const newVal = searchQuery.trim();
+                  onAddOption?.(newVal);
+                  onChange(newVal);
+                  setIsOpen(false);
+                  setSearchQuery("");
+                }}
+                className="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 cursor-pointer select-none text-blue-600 hover:bg-blue-50 font-semibold border-t border-slate-100 mt-1"
+              >
+                <Plus className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Add &ldquo;{searchQuery.trim()}&rdquo; as new option</span>
+              </button>
             )}
           </div>
         </PopoverContent>
