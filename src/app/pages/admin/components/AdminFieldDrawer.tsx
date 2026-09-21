@@ -1286,18 +1286,51 @@ export function AdminFieldDrawer({
   );
 
   const [form, setForm] = useState<FieldFormState>(() => {
+    const stored = getStoredProcesses();
+    const targetProc = stored.find(
+      (p) =>
+        (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+        (activeProcessName &&
+          (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+    );
+
+    let inheritedRules: ScopingRule[] = [];
+    if (targetProc) {
+      if (targetProc.scopingRules && targetProc.scopingRules.length > 0) {
+        inheritedRules = targetProc.scopingRules.map((r, i) => ({
+          id: `rule_inherited_${i}_${Date.now()}`,
+          industryCategory: r.industryCategory || "All",
+          industries: r.industries || [],
+          locations: r.locations || [],
+        }));
+      } else if (targetProc.industryCategory || targetProc.industry || (targetProc.locations && targetProc.locations.length > 0)) {
+        inheritedRules = [{
+          id: `rule_inherited_${Date.now()}`,
+          industryCategory: targetProc.industryCategory || "All",
+          industries: targetProc.industry && targetProc.industry !== "All" ? [targetProc.industry] : [],
+          locations: targetProc.locations && !targetProc.locations.includes("All") ? targetProc.locations : [],
+        }];
+      }
+    }
+
     if (isEdit) {
       const init = initFormFromField(field!);
-      if (activeProcessId && (!init.processIds || init.processIds.length === 0)) {
-        return { ...init, processIds: [activeProcessId] };
-      }
-      return init;
+      const finalProcessIds = activeProcessId && (!init.processIds || init.processIds.length === 0)
+        ? [activeProcessId]
+        : (targetProc && (!init.processIds || init.processIds.length === 0) ? [targetProc.id] : init.processIds);
+      const finalRules = (!init.scopingRules || init.scopingRules.length === 0) && inheritedRules.length > 0
+        ? inheritedRules
+        : init.scopingRules;
+      return { ...init, processIds: finalProcessIds, scopingRules: finalRules };
     }
+
     const def = defaultForm(initialModule, initialCategory || "text");
-    if (activeProcessId) {
-      return { ...def, processIds: [activeProcessId] };
-    }
-    return def;
+    const resolvedProcessIds = activeProcessId ? [activeProcessId] : (targetProc ? [targetProc.id] : def.processIds);
+    return {
+      ...def,
+      processIds: resolvedProcessIds,
+      scopingRules: inheritedRules.length > 0 ? inheritedRules : def.scopingRules,
+    };
   });
 
   const [typePickerOpen, setTypePickerOpen] = useState(false);
@@ -1420,12 +1453,37 @@ export function AdminFieldDrawer({
 
   const targetProcessesForRequirement = useMemo(() => {
     if (!form.selectedModules.includes("process") && form.module !== "process") return [];
+
+    // 1. Explicit active process context by ID or name
+    if (activeProcessId || activeProcessName) {
+      const target = allProcesses.find(
+        (p) =>
+          (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+          (activeProcessName &&
+            (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+      );
+      if (target) return [target];
+    }
+
+    // 2. Explicit processStages passed directly
+    if (processStages && processStages.length > 0) {
+      return [{
+        id: activeProcessId || "active_proc",
+        name: activeProcessName || "Active Process",
+        stages: processStages.map((st) => ({ id: st.id || st.name, name: st.name, color: st.color })),
+        assignedToUserId: 0,
+        description: "",
+        aiSettings: {} as any,
+      }];
+    }
+
+    // 3. Scoped processIds if specified
     if (form.processIds && form.processIds.length > 0 && !form.processIds.includes("all")) {
       const filtered = availableProcesses.filter((p) => form.processIds.includes(p.id) || form.processIds.includes(p.name));
       if (filtered.length > 0) return filtered;
     }
     return availableProcesses.length > 0 ? availableProcesses : allProcesses;
-  }, [form.selectedModules, form.module, form.processIds, availableProcesses, allProcesses]);
+  }, [form.selectedModules, form.module, form.processIds, availableProcesses, allProcesses, activeProcessId, activeProcessName, processStages]);
 
   // Existing fields in current primary module
   const allFieldsInPrimaryModule = useMemo(() => {

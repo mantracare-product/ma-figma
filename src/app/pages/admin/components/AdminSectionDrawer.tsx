@@ -209,18 +209,51 @@ export function AdminSectionDrawer({
   );
 
   const [form, setForm] = useState<SectionFormState>(() => {
+    const stored = getStoredProcesses();
+    const targetProc = stored.find(
+      (p) =>
+        (activeProcessId && (p.id === activeProcessId || p.name === activeProcessId)) ||
+        (activeProcessName &&
+          (p.name.toLowerCase() === activeProcessName.toLowerCase() || p.id === activeProcessName))
+    );
+
+    let inheritedRules: ScopingRule[] = [];
+    if (targetProc) {
+      if (targetProc.scopingRules && targetProc.scopingRules.length > 0) {
+        inheritedRules = targetProc.scopingRules.map((r, i) => ({
+          id: `rule_inherited_${i}_${Date.now()}`,
+          industryCategory: r.industryCategory || "All",
+          industries: r.industries || [],
+          locations: r.locations || [],
+        }));
+      } else if (targetProc.industryCategory || targetProc.industry || (targetProc.locations && targetProc.locations.length > 0)) {
+        inheritedRules = [{
+          id: `rule_inherited_${Date.now()}`,
+          industryCategory: targetProc.industryCategory || "All",
+          industries: targetProc.industry && targetProc.industry !== "All" ? [targetProc.industry] : [],
+          locations: targetProc.locations && !targetProc.locations.includes("All") ? targetProc.locations : [],
+        }];
+      }
+    }
+
     if (isEdit) {
       const init = sectionToForm(section!);
-      if (activeProcessId && (!init.processIds || init.processIds.length === 0)) {
-        return { ...init, processIds: [activeProcessId] };
-      }
-      return init;
+      const finalProcessIds = activeProcessId && (!init.processIds || init.processIds.length === 0)
+        ? [activeProcessId]
+        : (targetProc && (!init.processIds || init.processIds.length === 0) ? [targetProc.id] : init.processIds);
+      const finalRules = (!init.scopingRules || init.scopingRules.length === 0) && inheritedRules.length > 0
+        ? inheritedRules
+        : init.scopingRules;
+      return { ...init, processIds: finalProcessIds, scopingRules: finalRules };
     }
+
     const def = defaultSectionForm(initialModule);
-    if (activeProcessId) {
-      return { ...def, processIds: [activeProcessId] };
-    }
-    return def;
+    const resolvedProcessIds = activeProcessId ? [activeProcessId] : (targetProc ? [targetProc.id] : def.processIds);
+    return {
+      ...def,
+      processIds: resolvedProcessIds,
+      scopingRules: inheritedRules.length > 0 ? inheritedRules : def.scopingRules,
+    };
   });
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(() => getStoredTeamMembers());
   const [teamPickerOpen, setTeamPickerOpen] = useState(false);
