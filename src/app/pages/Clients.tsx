@@ -20,11 +20,11 @@ import { InfoTooltip } from "../components/help/InfoTooltip";
 import { StageProgressBar } from "../components/StageProgressBar";
 import ProcessStageSelect, { availableProcesses, getStagesForProcess, combinedStages } from "../components/ui/ProcessStageSelect";
 import { useFieldRegistry, isFieldMatchingOrg } from "../context/FieldRegistryContext";
-import { useOrganization } from "../context/OrganizationContext";
-import { CLIENTS_STORE_EVENT } from "../../lib/clientProcessState";
-import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
+import { CLIENTS_STORE_EVENT, getStoredClients, saveStoredClients } from "../../lib/clientProcessState";
 import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
 import { addProcessCallLog } from "../../lib/processLogsStore";
+import { useOrganization } from "../context/OrganizationContext";
+import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 
 interface Client {
   id: string;
@@ -181,20 +181,20 @@ export default function Clients() {
   ];
 
   const [clients, setClients] = useState<Client[]>(() => {
-    const saved = sessionStorage.getItem("clients");
-    return saved ? JSON.parse(saved) : initialClients;
+    const list = getStoredClients();
+    return list.length > 0 ? list : initialClients;
   });
 
   useEffect(() => {
-    sessionStorage.setItem("clients", JSON.stringify(clients));
+    saveStoredClients(clients);
   }, [clients]);
 
-  // Live-sync: pick up clients written by TestProcessChatDrawer or other tabs
+  // Live-sync: pick up clients written by other windows, Patient Front, or drawers
   useEffect(() => {
     const handler = () => {
       try {
-        const saved = sessionStorage.getItem("clients");
-        if (saved) setClients(JSON.parse(saved));
+        const stored = getStoredClients();
+        if (stored.length > 0) setClients(stored);
       } catch {}
     };
     window.addEventListener(CLIENTS_STORE_EVENT, handler);

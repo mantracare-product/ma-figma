@@ -66,6 +66,38 @@ const DEFAULT_FIELD_RULES: InvoiceFieldRulesMap = {
 
 const INITIAL_INVOICES: ClientInvoice[] = [
   {
+    id: "INV-2026-041",
+    clientId: "CL-001",
+    clientName: "Ramesh Iyer",
+    clientEmail: "ramesh.iyer@email.com",
+    clientPhone: "+91 98765 43210",
+    appointmentId: "1",
+    appointmentTitle: "Cataract Surgery Package",
+    status: "sent",
+    currency: "$",
+    paymentMode: "Card",
+    lineItems: [
+      { id: "li-cat-1", source: "service", serviceId: "srv-cat-1", description: "Surgeon fee", quantity: 1, unitPrice: 900 },
+      { id: "li-cat-2", source: "service", serviceId: "srv-cat-2", description: "OT & anesthesia", quantity: 1, unitPrice: 650 },
+      { id: "li-cat-3", source: "service", serviceId: "srv-cat-3", description: "IOL lens", quantity: 1, unitPrice: 300 },
+    ],
+    subtotal: 1850,
+    discountAmount: 1200,
+    discountType: "amount",
+    discountValue: 1200,
+    taxAmount: 0,
+    total: 650,
+    amountPaid: 0,
+    paymentType: "insurance",
+    notes: "Insurance adjustment: -$1,200.00 applied",
+    createdAt: "2026-09-21T08:00:00Z",
+    createdBy: "Admin User",
+    dueDate: "2026-09-21",
+    sentAt: "2026-09-21T08:30:00Z",
+    sentVia: "sms",
+    paymentLinkUrl: "https://pay.mantraassist.mock/inv-2026-041",
+  },
+  {
     id: "INV-CL-1040",
     clientId: "c-1",
     clientName: "James Wilson",
@@ -461,10 +493,14 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { getAllFields } = useFieldRegistry();
 
   const [invoices, setInvoices] = useState<ClientInvoice[]>(() => {
-    const saved = localStorage.getItem("mantra_invoices_v1");
+    const saved = localStorage.getItem("mantra_invoices_v2");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.some((i: any) => i.id === "INV-2026-041")) {
+          return [INITIAL_INVOICES[0], ...parsed];
+        }
+        return parsed;
       } catch {}
     }
     return INITIAL_INVOICES;
@@ -555,7 +591,7 @@ export const InvoiceProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
 
   useEffect(() => {
-    localStorage.setItem("mantra_invoices_v1", JSON.stringify(invoices));
+    localStorage.setItem("mantra_invoices_v2", JSON.stringify(invoices));
   }, [invoices]);
 
   useEffect(() => {

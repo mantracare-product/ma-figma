@@ -2,10 +2,14 @@ export interface ClientFormSubmission {
   id: string;            // unique, e.g. "SUB-CL001-1"
   clientId: string;      // must match Client.id, e.g. "CL-001"
   formId: number;        // must match a Form.id from INITIAL_FORMS
-  sentAt: string;        // date form was sent/shared with the client
+  sentAt?: string;       // date form was sent/shared with the client
   submittedAt: string;   // display date, same style as Client.lastContact, e.g. "Apr 8, 2024"
   status: "completed" | "pending" | "failed";
-  fields: Record<string, string>; // keys MUST exactly match that Form's field `label`s — no extra, no missing
+  fields?: Record<string, string>; // keys MUST exactly match that Form's field `label`s — no extra, no missing
+  formTitle?: string;
+  clientName?: string;
+  source?: string;
+  answers?: Record<string, any>;
 }
 
 export const CLIENT_FORM_SUBMISSIONS: ClientFormSubmission[] = [

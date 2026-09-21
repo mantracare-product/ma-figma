@@ -39,27 +39,12 @@ import { useSearchParams } from "react-router";
 import { useInvoices } from "../context/InvoiceContext";
 import { initialClients } from "./ClientProfile";
 import { useTeamMembers } from "../../lib/teamStore";
-
-interface Appointment {
-  id: number;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string;
-  employeeId: number | string;
-  serviceId: number | string;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM
-  duration: number; // in minutes
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
-  notes?: string;
-  rating?: number; // 1-5 stars for completed appointments
-  // Extended fields (additive)
-  title?: string;
-  description?: string;
-  tags?: string[];
-  processId?: string;
-  stageId?: string;
-}
+import {
+  getStoredAppointments,
+  saveStoredAppointments,
+  APPOINTMENTS_STORE_EVENT,
+  type Appointment,
+} from "../../lib/appointmentsStore";
 
 interface Employee {
   id: number | string;
@@ -117,63 +102,19 @@ export default function Appointments() {
     { id: 4, name: "X-Ray Imaging", duration: 20, price: 80 },
   ];
 
-  const [appointments, setAppointments] = useState<Appointment[]>(() => {
-    const saved = sessionStorage.getItem("appointments_v1");
-    if (saved) {
-      try { return JSON.parse(saved); } catch {}
-    }
-    return [
-      {
-        id: 1,
-        clientName: "James Wilson",
-        clientEmail: "james.w@example.com",
-        clientPhone: "+1 (555) 123-4567",
-        employeeId: 1,
-        serviceId: 1,
-        date: "2026-05-12",
-        time: "09:00",
-        duration: 60,
-        status: "pending-accept",
-        notes: "First-time patient",
-      },
-      {
-        id: 2,
-        clientName: "Emma Brown",
-        clientEmail: "emma.b@example.com",
-        clientPhone: "+1 (555) 234-5678",
-        employeeId: 2,
-        serviceId: 2,
-        date: "2026-05-12",
-        time: "10:30",
-        duration: 30,
-        status: "scheduled",
-      },
-      {
-        id: 3,
-        clientName: "Oliver Davis",
-        clientEmail: "oliver.d@example.com",
-        clientPhone: "+1 (555) 345-6789",
-        employeeId: 1,
-        serviceId: 4,
-        date: "2026-05-13",
-        time: "14:00",
-        duration: 20,
-        status: "scheduled",
-      },
-      {
-        id: 4,
-        clientName: "Sophia Martinez",
-        clientEmail: "sophia.m@example.com",
-        clientPhone: "+1 (555) 456-7890",
-        employeeId: 5,
-        serviceId: 3,
-        date: "2026-05-14",
-        time: "11:00",
-        duration: 45,
-        status: "scheduled",
-      },
-    ];
-  });
+  const [appointments, setAppointments] = useState<Appointment[]>(getStoredAppointments);
+
+  useEffect(() => {
+    const handleSync = () => {
+      setAppointments(getStoredAppointments());
+    };
+    window.addEventListener(APPOINTMENTS_STORE_EVENT, handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener(APPOINTMENTS_STORE_EVENT, handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
+  }, []);
 
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState<"calendar" | "list" | "availability">("list");
@@ -236,7 +177,7 @@ export default function Appointments() {
   });
 
   useEffect(() => {
-    sessionStorage.setItem("appointments_v1", JSON.stringify(appointments));
+    saveStoredAppointments(appointments);
   }, [appointments]);
 
   const [searchParams] = useSearchParams();

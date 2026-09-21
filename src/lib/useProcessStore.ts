@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { WorkflowStep } from "../app/types/workflow";
+import { broadcastSync, onSyncEvent } from "./syncBroadcast";
 
 export interface AISettings {
   platform: string;
@@ -52,6 +53,43 @@ export interface CallTriggerSettings {
   transferReason?: string;
 }
 
+export type PipelineType = "OPD" | "IPD" | "Operation";
+
+export interface PatientStageChecklistItem {
+  id: string;
+  label: string;
+  description?: string;
+  required?: boolean;
+}
+
+export interface PatientStageConsent {
+  id: string;
+  title: string;
+  description?: string;
+  content: string;
+  requiresSignature?: boolean;
+}
+
+export interface PatientStageDocRequest {
+  id: string;
+  title: string;
+  description?: string;
+  acceptedTypes?: string;
+  required?: boolean;
+}
+
+export interface PatientFacingStageContent {
+  infoText?: string;
+  instructions?: string[];
+  badge?: string;
+  estimatedWaitTime?: string;
+  roomOrCounter?: string;
+  doctorName?: string;
+  checklist?: PatientStageChecklistItem[];
+  consent?: PatientStageConsent;
+  documentRequests?: PatientStageDocRequest[];
+}
+
 export interface Stage {
   id: string;
   name: string;
@@ -65,6 +103,7 @@ export interface Stage {
   channelSources?: StageChannelSource[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  patientFacingContent?: PatientFacingStageContent;
 }
 
 export interface ScopingRule {
@@ -88,6 +127,7 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  pipelineType?: PipelineType;
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -231,6 +271,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     name: "Patient Intake",
     description: "Initial patient onboarding and verification process",
     assignedToUserId: 1,
+    pipelineType: "OPD",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -245,10 +286,301 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     ],
   },
   {
+    id: "opd-oph",
+    name: "Ophthalmology Consultation",
+    description: "Comprehensive eye examination, refraction, and specialist consult",
+    assignedToUserId: 1,
+    pipelineType: "OPD",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      {
+        id: "oph-1",
+        name: "Reception & Token",
+        description: "Patient checked in and waiting token issued",
+        status: "active",
+        color: "#3B82F6",
+        patientFacingContent: {
+          infoText: "Welcome to EyeMantra. Your token has been generated. Please proceed to Waiting Bay A.",
+          instructions: ["Take a seat in Waiting Bay A", "Keep your photo ID and insurance card handy"],
+          badge: "Token Issued",
+          estimatedWaitTime: "~5 mins",
+          roomOrCounter: "Desk 2 - Reception",
+        },
+      },
+      {
+        id: "oph-2",
+        name: "Optometry & Vitals",
+        description: "Visual acuity test, autorefraction, and eye pressure measurement",
+        status: "active",
+        color: "#10B981",
+        patientFacingContent: {
+          infoText: "Please proceed to Vision Room 1 for basic eye checkup with the optometrist.",
+          instructions: ["Read letter charts without glasses then with glasses", "Non-contact puff test for ocular pressure"],
+          badge: "Screening",
+          estimatedWaitTime: "~10 mins",
+          roomOrCounter: "Vision Room 1",
+          checklist: [
+            { id: "opt-1", label: "Wear current spectacles/contacts", description: "Bring them so optometrist can measure your current prescription", required: true },
+            { id: "opt-2", label: "Note down any eye strain or headaches", description: "Mention reading or screen difficulty", required: false },
+          ],
+        },
+      },
+      {
+        id: "oph-3",
+        name: "Dilation & Waiting",
+        description: "Pupil dilating eye drops administered for retinal examination",
+        status: "active",
+        color: "#F59E0B",
+        patientFacingContent: {
+          infoText: "Dilating eye drops have been instilled. Your vision will blur slightly for 2-3 hours.",
+          instructions: ["Keep your eyes relaxed and closed if bright lights cause discomfort", "Wait for your name to be called for the doctor's cabin"],
+          badge: "Dilation in Progress",
+          estimatedWaitTime: "~20 mins",
+          roomOrCounter: "Dilation Lounge",
+          checklist: [
+            { id: "dil-1", label: "Both eyes drops received", description: "Confirmed drops instilled by nurse", required: true },
+            { id: "dil-2", label: "Sunglasses available", description: "Protective sunglasses handy for leaving the clinic", required: false },
+          ],
+        },
+      },
+      {
+        id: "oph-4",
+        name: "Doctor Consultation",
+        description: "Slit-lamp examination, retina check, and diagnosis by Dr. Sarah Johnson",
+        status: "active",
+        color: "#6366F1",
+        patientFacingContent: {
+          infoText: "Dr. Sarah Johnson is ready for your comprehensive examination.",
+          instructions: ["Rest your chin on the slit lamp rest", "Discuss treatment plan and ask any questions"],
+          badge: "With Doctor",
+          estimatedWaitTime: "In Consultation",
+          roomOrCounter: "Cabin 304 - Dr. Sarah Johnson",
+        },
+      },
+      {
+        id: "oph-5",
+        name: "Pharmacy & Billing",
+        description: "Prescription pickup, medication counsel, and invoice settlement",
+        status: "active",
+        color: "#EC4899",
+        patientFacingContent: {
+          infoText: "Your consultation is complete! Please settle your bill and collect your eye drops.",
+          instructions: ["Collect medication at Counter 4", "Review eye drop dosage schedule", "Schedule follow-up appointment if required"],
+          badge: "Checkout",
+          estimatedWaitTime: "~5 mins",
+          roomOrCounter: "Counter 4 - Pharmacy & Billing",
+        },
+      },
+    ],
+  },
+  {
+    id: "op-cataract",
+    name: "Cataract Surgery Daycare",
+    description: "Surgical phacoemulsification with intraocular lens implantation",
+    assignedToUserId: 1,
+    pipelineType: "Operation",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      {
+        id: "cat-1",
+        name: "Checked In",
+        description: "Pre-op check-in, baseline vitals, and surgical consent review",
+        status: "active",
+        color: "#10b981",
+        patientFacingContent: {
+          infoText: "You are checked into EyeMantra. Welcome to the Pre-Op Daycare Lounge.",
+          instructions: [
+            "Take a seat in the Pre-Op Lounge while nursing prepares your record",
+            "Confirm you have had zero food or water since midnight (fasting)",
+            "Review and sign your surgical consent before entering the holding room",
+          ],
+          badge: "Pre-Op Check-In",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "Pre-Op Daycare Lounge (Bay 3)",
+          estimatedWaitTime: "~10 mins",
+          checklist: [
+            { id: "cat-f-1", label: "Strict fasting since midnight", description: "No food, tea, or water this morning as instructed", required: true },
+            { id: "cat-f-2", label: "Attendant or companion present", description: "Priya Iyer is present to accompany you home today", required: true },
+            { id: "cat-f-3", label: "Eyewear & personal valuables handed over", description: "Spectacles and personal valuables safely kept with your attendant", required: true },
+          ],
+          consent: {
+            id: "cat-consent-1",
+            title: "Consent for Right-Eye Cataract Phacoemulsification & Foldable Toric IOL",
+            description: "Review and electronically sign procedure consent",
+            content: "I hereby authorize Dr. Meera Nair and the surgical care team at EyeMantra to perform Phacoemulsification with Foldable Toric Intraocular Lens (IOL) implantation on my Right Eye. The procedure steps, topical anesthesia, and recovery care have been explained to me in plain language. I confirm that I have complied with pre-operative fasting guidelines.",
+            requiresSignature: true,
+          },
+        },
+      },
+      {
+        id: "cat-2",
+        name: "Dilation & Drops",
+        description: "Numbing and pupil-dilating drops placed in preparation room",
+        status: "active",
+        color: "#F59E0B",
+        patientFacingContent: {
+          infoText: "Dilating and topical numbing drops have been placed in your right eye. Your vision will blur slightly — this is completely normal and expected.",
+          instructions: [
+            "Rest comfortably in the holding chair with both eyes relaxed",
+            "Pupillary dilation takes approximately 15–20 minutes",
+            "Avoid touching or rubbing your right eye",
+          ],
+          badge: "Dilation in Progress",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "Holding Area Bay B",
+          estimatedWaitTime: "~15 mins",
+        },
+      },
+      {
+        id: "cat-3",
+        name: "Pre-Op Prep",
+        description: "Sterile gowning, right-eye marking confirmation, and transfer prep",
+        status: "active",
+        color: "#3B82F6",
+        patientFacingContent: {
+          infoText: "You are in pre-op prep. You will be moved to Operating Theatre 2 shortly.",
+          instructions: [
+            "Relax on the transfer stretcher while your sterile gown is secured",
+            "Nurse will verify your Right Eye surgical marking and +21.5D Toric lens prescription",
+            "Dr. Meera Nair's surgical team will escort you into the theatre",
+          ],
+          badge: "Ready for OR",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "OT Prep Suite 4",
+          estimatedWaitTime: "~5 mins",
+        },
+      },
+      {
+        id: "cat-4",
+        name: "In Surgery",
+        description: "Surgery in progress in Operating Theatre 2",
+        status: "active",
+        color: "#8B5CF6",
+        patientFacingContent: {
+          infoText: "Ramesh is in surgery with Dr. Meera Nair. This usually takes about 15 minutes — we'll update this the moment he's out.",
+          instructions: [
+            "Attendant waiting area: 2nd Floor Lounge (Bay 3)",
+            "Complimentary water, coffee, and tea available at Desk 2",
+            "Dr. Nair or our nurse coordinator will greet you immediately upon completion",
+          ],
+          badge: "In Surgery (OT-2)",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "Operating Theatre 2 (OR-2)",
+          estimatedWaitTime: "~15 mins",
+        },
+      },
+      {
+        id: "cat-5",
+        name: "Recovery & Discharge",
+        description: "Post-op rest, clear protective eye shield, and home medication schedule",
+        status: "active",
+        color: "#10B981",
+        patientFacingContent: {
+          infoText: "Surgery complete! Ramesh is resting comfortably in the daycare recovery suite.",
+          instructions: [
+            "Keep the clear protective eye shield taped and dry; wear it while sleeping for 7 days",
+            "View and follow the full eye drops medication schedule in Documents",
+            "Attend the Post-Op Day 1 Review tomorrow at 10:30 AM with Dr. Meera Nair",
+          ],
+          badge: "Recovery Suite",
+          doctorName: "Dr. Meera Nair",
+          roomOrCounter: "Recovery Suite (Bed 4)",
+          estimatedWaitTime: "Discharge ready ~30 mins",
+          checklist: [
+            { id: "cat-dis-1", label: "Clear protective eye shield in place", description: "Shield secured over right eye; do not rub or apply water", required: true },
+            { id: "cat-dis-2", label: "Eye drops schedule & prescription received", description: "Moxifloxacin & lubricating drop regimen reviewed with Priya", required: true },
+            { id: "cat-dis-3", label: "Day 1 follow-up confirmed", description: "Review appointment tomorrow at 10:30 AM with Dr. Meera Nair", required: true },
+          ],
+        },
+      },
+    ],
+  },
+  {
+    id: "ipd-ward",
+    name: "Inpatient Medical Ward",
+    description: "Multi-day inpatient monitoring, intravenous therapy, and clinical observation",
+    assignedToUserId: 2,
+    pipelineType: "IPD",
+    aiSettings: {
+      platform: "Anthropic Claude",
+      voiceSpeed: 1.0,
+      voice: "Eva",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      {
+        id: "ipd-1",
+        name: "Admission & Bed Allocation",
+        description: "Inpatient registration, room allotment, and baseline vitals",
+        status: "active",
+        color: "#3B82F6",
+        patientFacingContent: {
+          infoText: "Admission complete. You have been assigned Bed #14 in Ward 3B.",
+          instructions: ["Duty nurse will conduct initial intake vitals", "Attendant pass provided at nursing desk"],
+          badge: "Day 1 - Admission",
+          roomOrCounter: "Ward 3B • Bed #14",
+        },
+      },
+      {
+        id: "ipd-2",
+        name: "Diagnostic Workup & Vitals",
+        description: "Blood draws, continuous vitals monitoring, and diagnostic imaging",
+        status: "active",
+        color: "#10B981",
+        patientFacingContent: {
+          infoText: "Morning blood labs and vitals telemetry underway.",
+          instructions: ["Nurse rounds every 4 hours", "Lab samples sent to pathology"],
+          badge: "Day 2 - Active Care",
+          roomOrCounter: "Ward 3B • Bed #14",
+        },
+      },
+      {
+        id: "ipd-3",
+        name: "Active Treatment & Rounds",
+        description: "Specialist doctor morning rounds, IV therapy, and recovery response",
+        status: "active",
+        color: "#6366F1",
+        patientFacingContent: {
+          infoText: "Attending consultant morning rounds and intravenous medication.",
+          instructions: ["Consultant visit between 10:00 AM - 12:00 PM", "Dietary meal served at 12:30 PM"],
+          badge: "Day 3 - Observation",
+          roomOrCounter: "Ward 3B • Bed #14",
+        },
+      },
+      {
+        id: "ipd-4",
+        name: "Discharge Planning & Summary",
+        description: "Discharge summary generation, home prescription, and insurance settlement",
+        status: "active",
+        color: "#06B6D4",
+        patientFacingContent: {
+          infoText: "Discharge authorization signed by Dr. Sarah Johnson. Preparing discharge packet.",
+          instructions: ["TPA insurance cashless desk processing final claim", "Medication counseling with ward pharmacist"],
+          badge: "Day 4 - Discharge",
+          roomOrCounter: "Ward 3B • Bed #14",
+        },
+      },
+    ],
+  },
+  {
     id: "2",
     name: "Follow-up Calls",
     description: "Post-visit follow-up and medication reminders",
     assignedToUserId: 2,
+    pipelineType: "OPD",
     aiSettings: {
       platform: "Anthropic Claude",
       voiceSpeed: 1.2,
@@ -282,7 +614,29 @@ export const DEFAULT_WORKFLOW_STEPS: Record<string, WorkflowStep[]> = {
 export function getStoredProcesses(): Process[] {
   try {
     const raw = localStorage.getItem(PROCESSES_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : DEFAULT_INITIAL_PROCESSES;
+    if (!raw) return DEFAULT_INITIAL_PROCESSES;
+    const parsed: Process[] = JSON.parse(raw);
+    // Auto-migrate if stored processes still have legacy doctor or outdated copy
+    const cataract = parsed.find((p) => p.id === "op-cataract");
+    const hasOldData = cataract?.stages.some(
+      (s) =>
+        s.patientFacingContent?.doctorName?.includes("Sarah Chen") ||
+        s.patientFacingContent?.instructions?.some((i) => i.includes("microscope illumination")) ||
+        s.patientFacingContent?.instructions?.some((i) => i.includes("Dr. Sarah Chen")) ||
+        s.patientFacingContent?.checklist?.some((c) => c.description?.includes("Vikram")) ||
+        s.patientFacingContent?.roomOrCounter?.includes("Daycare Suite Bed 4") ||
+        s.patientFacingContent?.infoText?.includes("Mantra Eye Care") ||
+        s.patientFacingContent?.consent?.content?.includes("Mantra Eye Care")
+    );
+    if (hasOldData) {
+      const newCataract = DEFAULT_INITIAL_PROCESSES.find((p) => p.id === "op-cataract");
+      if (newCataract) {
+        const updated = parsed.map((p) => (p.id === "op-cataract" ? newCataract : p));
+        localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(updated));
+        return updated;
+      }
+    }
+    return parsed;
   } catch {
     return DEFAULT_INITIAL_PROCESSES;
   }
@@ -292,6 +646,7 @@ export function saveStoredProcesses(processes: Process[]) {
   try {
     localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(processes));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
+    broadcastSync("PROCESS_UPDATED", processes);
   } catch { }
 }
 
@@ -308,6 +663,7 @@ export function saveStoredWorkflowSteps(steps: Record<string, WorkflowStep[]>) {
   try {
     localStorage.setItem(STEPS_STORAGE_KEY, JSON.stringify(steps));
     window.dispatchEvent(new Event(PROCESS_STORE_EVENT));
+    broadcastSync("PROCESS_UPDATED");
   } catch { }
 }
 
@@ -329,9 +685,11 @@ export function useProcessStore() {
     };
     window.addEventListener(PROCESS_STORE_EVENT, handler);
     window.addEventListener("storage", handler);
+    const unsub = onSyncEvent("PROCESS_UPDATED", handler);
     return () => {
       window.removeEventListener(PROCESS_STORE_EVENT, handler);
       window.removeEventListener("storage", handler);
+      unsub();
     };
   }, []);
 

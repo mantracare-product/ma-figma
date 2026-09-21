@@ -2,25 +2,38 @@
  * submissionsStore.ts
  *
  * Single source of truth for client-linked form submissions, backed by
- * sessionStorage("clientFormSubmissions"). This module is the ONLY place
- * that reads/writes that key so the seeding and serialisation logic stays
- * in one spot.
+ * localStorage("clientFormSubmissions") with sessionStorage fallback.
  *
  * Consumers:
  *  - ClientProfile.tsx  (read)
  *  - WebForms.tsx       (write on handlePreviewSubmit / handleShareSend)
  *  - WebFormsTest.tsx   (write on handleSubmit)
+ *  - PatientForms.tsx   (read/write for patient submissions)
  */
 
 import { CLIENT_FORM_SUBMISSIONS, type ClientFormSubmission } from "./clientFormSubmissions";
+import { broadcastSync, onSyncEvent } from "../lib/syncBroadcast";
 export type { ClientFormSubmission };
 
 const STORAGE_KEY = "clientFormSubmissions";
+export const SUBMISSIONS_STORE_EVENT = "submissionsStore_updated";
+
+if (typeof window !== "undefined") {
+  onSyncEvent("SUBMISSIONS_UPDATED", () => {
+    window.dispatchEvent(new Event(SUBMISSIONS_STORE_EVENT));
+  });
+}
 
 /** Load all client-linked form submissions. Falls back to the static seed. */
 export function loadClientSubmissions(): ClientFormSubmission[] {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    let raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        localStorage.setItem(STORAGE_KEY, raw);
+      }
+    }
     if (raw) return JSON.parse(raw) as ClientFormSubmission[];
   } catch {
     // JSON parse failure — fall through to seed
@@ -34,9 +47,13 @@ export function loadClientSubmissions(): ClientFormSubmission[] {
 /** Persist the full submissions array. */
 export function saveClientSubmissions(submissions: ClientFormSubmission[]): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(submissions));
+    const serialized = JSON.stringify(submissions);
+    localStorage.setItem(STORAGE_KEY, serialized);
+    sessionStorage.setItem(STORAGE_KEY, serialized);
+    window.dispatchEvent(new Event(SUBMISSIONS_STORE_EVENT));
+    broadcastSync("SUBMISSIONS_UPDATED");
   } catch {
-    // sessionStorage full / unavailable — silently ignore
+    // storage full / unavailable — silently ignore
   }
 }
 

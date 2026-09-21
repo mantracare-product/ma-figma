@@ -57,6 +57,7 @@ import {
   SCRIBE_EVENT,
   PRESET_SCENARIOS,
 } from "../../lib/scribeSessionStore";
+import { setClientProcessStage, getClientProcessStages } from "../../lib/clientProcessState";
 
 import DrawerShell from "../components/ui/DrawerShell";
 import CPTCodeInput from "../components/ui/CPTCodeInput";
@@ -938,6 +939,19 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
       setDrawerProcessStages(initialStages);
     }
   }, [id]);
+
+  // Sync drawerProcessStages live to shared clientProcessState (for Patient Front cross-window sync)
+  useEffect(() => {
+    if (!client?.id || Object.keys(drawerProcessStages).length === 0) return;
+    Object.entries(drawerProcessStages).forEach(([procId, stageName]) => {
+      setClientProcessStage(client.id, {
+        processId: procId,
+        processName: procId,
+        stageId: stageName,
+        stageName,
+      });
+    });
+  }, [client?.id, drawerProcessStages]);
 
   // Close field picker on outside click
   useEffect(() => {

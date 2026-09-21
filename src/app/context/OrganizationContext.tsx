@@ -27,7 +27,7 @@ const OrganizationContext = createContext<OrganizationContextType | undefined>(u
 const defaultOrganizations: Organization[] = [
   {
     id: "demo",
-    name: "Demo Mantra Care",
+    name: "Demo MantraAssist",
     industryCategory: "Healthcare",
     industry: "General Physician",
     locations: ["California", "New York"],

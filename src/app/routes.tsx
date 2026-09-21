@@ -36,8 +36,19 @@ import Claims from "./pages/Claims";
 import AdminCustomFields from "./pages/admin/AdminCustomFields";
 import AdminIndustries from "./pages/admin/AdminIndustries";
 import AdminProcessTemplates from "./pages/admin/AdminProcessTemplates";
+import PatientFrontLayout from "./pages/patient-front/PatientFrontLayout";
 
 export const router = createBrowserRouter([
+  {
+    // NOTE: Unauthenticated demo route as specified in patient-front-prd.md.
+    // In production, this would be guarded by a master patient identity layer.
+    path: "/patient-front",
+    Component: PatientFrontLayout,
+  },
+  {
+    path: "/patient-front/*",
+    Component: PatientFrontLayout,
+  },
   {
     path: "/login",
     Component: Login,

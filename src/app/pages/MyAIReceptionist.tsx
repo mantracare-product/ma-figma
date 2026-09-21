@@ -10,10 +10,10 @@ export default function MyAIReceptionist() {
   const [expandedSection, setExpandedSection] = useState("basic-settings");
   const [expandedBasicSetting, setExpandedBasicSetting] = useState<string | null>(null);
   const [isEditingGreeting, setIsEditingGreeting] = useState(false);
-  const [greetingPhrase, setGreetingPhrase] = useState("Hi, this is Alex from Mantra Care Health, who do I have the pleasure of speaking with today?");
+  const [greetingPhrase, setGreetingPhrase] = useState("Hi, this is Alex from MantraAssist, who do I have the pleasure of speaking with today?");
   const [customCommandsTab, setCustomCommandsTab] = useState<"voice" | "text">("voice");
   const [isEditingCustomCommands, setIsEditingCustomCommands] = useState(false);
-  const [customCommandsPrompt, setCustomCommandsPrompt] = useState("You are an AI receptionist for Mantra Care Health Private Limited, a healthcare provider. Your role is to answer general inquiries, schedule appointments, and direct callers to the appropriate department. Be empathetic, professional, and clear. You cannot provide medical advice or diagnoses. If a caller needs urgent medical attention, advise them to contact emergency services immediately. Always confirm details before ending a call.");
+  const [customCommandsPrompt, setCustomCommandsPrompt] = useState("You are an AI receptionist for MantraAssist, a healthcare provider. Your role is to answer general inquiries, schedule appointments, and direct callers to the appropriate department. Be empathetic, professional, and clear. You cannot provide medical advice or diagnoses. If a caller needs urgent medical attention, advise them to contact emergency services immediately. Always confirm details before ending a call.");
   const [showAddTextModal, setShowAddTextModal] = useState(false);
   const [newTextContent, setNewTextContent] = useState("");
   const [showAddWebsiteModal, setShowAddWebsiteModal] = useState(false);
@@ -123,7 +123,7 @@ export default function MyAIReceptionist() {
       type: "text",
       active: true,
       tokens: 165,
-      content: "# About Mantra Care Health Private Limited\nMantra Care Health Private Limited is a leading healthcare provider dedicated to offering comprehensive and compassionate medical services. We strive to del...",
+      content: "# About MantraAssist\nMantraAssist is a leading healthcare technology platform dedicated to offering comprehensive and compassionate clinical operations. We strive to del...",
       processing: false
     },
     {
@@ -131,7 +131,7 @@ export default function MyAIReceptionist() {
       type: "text",
       active: true,
       tokens: 212,
-      content: "# Services Offered Mantra Care Health Private Limited offers a wide range of medical services to meet the diverse needs of our patients. # # Specialties Include: * **General Medicine:** Diagnosis ...",
+      content: "# Services Offered MantraAssist offers a wide range of medical services to meet the diverse needs of our patients. # # Specialties Include: * **General Medicine:** Diagnosis ...",
       processing: false
     },
     {
@@ -155,7 +155,7 @@ export default function MyAIReceptionist() {
       type: "text",
       active: true,
       tokens: 491,
-      content: "# Business Information **Business Name:** Mantra Care Health Private Limited **Phone:** 918700086169 **Address:** - Address 1: **Business Hours:** - Monday: 9:00 AM - 6:00 PM | Open: true - Tuesd...",
+      content: "# Business Information **Business Name:** MantraAssist **Phone:** 918700086169 **Address:** - Address 1: **Business Hours:** - Monday: 9:00 AM - 6:00 PM | Open: true - Tuesd...",
       processing: false
     }
   ]);
@@ -213,7 +213,7 @@ export default function MyAIReceptionist() {
               <h3 className="font-semibold text-lg" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Commands</h3>
             </div>
             <p className="text-sm leading-relaxed flex-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-              You are an AI receptionist for Mantra Care Health Private Limited, a healthcare provider. Your role is to answer general inquiries, schedule appointments, and direct callers to the appropriate de...
+              You are an AI receptionist for MantraAssist, a healthcare provider. Your role is to answer general inquiries, schedule appointments, and direct callers to the appropriate de...
             </p>
             <button className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors font-medium mt-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
               EDIT
@@ -230,10 +230,10 @@ export default function MyAIReceptionist() {
               <h3 className="font-semibold text-lg" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Business Info</h3>
             </div>
             <p className="text-sm leading-relaxed flex-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-              # About Mantra Care Health Private Limited
-              Mantra Care Health Private Limited is a leading...
+              # About MantraAssist
+              MantraAssist is a leading...
               <br /><br />
-              # Services Offered Mantra Care Health Private Limited offers a wide range of medical services t...
+              # Services Offered MantraAssist offers a wide range of medical services t...
             </p>
             <button className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors font-medium mt-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
               EDIT
@@ -253,7 +253,7 @@ export default function MyAIReceptionist() {
               <h3 className="font-semibold text-lg" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Greeting Phrase</h3>
             </div>
             <p className="text-sm leading-relaxed flex-1" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-              Hi, this is Alex from Mantra Care Health, who do I have the pleasure of speaking with today?
+              Hi, this is Alex from MantraAssist, who do I have the pleasure of speaking with today?
             </p>
             <button className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors font-medium mt-4" style={{ fontFamily: 'Outfit, sans-serif' }}>
               EDIT

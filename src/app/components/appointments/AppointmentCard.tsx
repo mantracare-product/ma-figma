@@ -12,7 +12,7 @@ interface Appointment {
   date: string;
   time: string;
   duration: number;
-  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept";
+  status: "scheduled" | "completed" | "cancelled" | "no-show" | "pending-accept" | "arrived";
   notes?: string;
   rating?: number;
   title?: string;

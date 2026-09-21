@@ -774,7 +774,7 @@ export default function Process() {
   // Basic Settings state variables
   const [expandedBasicSetting, setExpandedBasicSetting] = useState<string | null>(null);
   const [isEditingGreeting, setIsEditingGreeting] = useState(false);
-  const [greetingPhrase, setGreetingPhrase] = useState("Hi, this is Alex from Mantra Care Health, who do I have the pleasure of speaking with today?");
+  const [greetingPhrase, setGreetingPhrase] = useState("Hi, this is Alex from MantraAssist, who do I have the pleasure of speaking with today?");
 
   // Stage configuration state
   const [whenToMove, setWhenToMove] = useState<string>("");

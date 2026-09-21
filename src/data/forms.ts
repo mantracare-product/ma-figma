@@ -27,6 +27,8 @@ export type Form = {
   autoCreateStageId?: string;
 };
 
+export type FormTemplate = Form;
+
 export const INITIAL_FORMS: Form[] = [
   {
     id: 1,
@@ -103,7 +105,7 @@ export const INITIAL_FORMS: Form[] = [
   },
   {
     id: 5,
-    name: "Patient Intake Form",
+    name: "General Medical History & Intake",
     formType: "intake",
     createdBy: "Admin User",
     fieldCount: 7,
@@ -119,8 +121,26 @@ export const INITIAL_FORMS: Form[] = [
     status: "live",
     submissions: 23,
     enabled: true,
-    description: "New patient onboarding — collects health history, consent, and contact preferences.",
+    description: "New patient onboarding — health history, allergies, and contact preferences.",
     createdAt: "Jun 1, 2026",
+  },
+  {
+    id: 6,
+    name: "Pre-Procedure Eye & Allergy Assessment",
+    formType: "intake",
+    createdBy: "Admin User",
+    fieldCount: 5,
+    fields: [
+      { label: "Current Eye Symptoms", type: "textarea", placeholder: "Blurry vision, dry eyes, glare...", required: true },
+      { label: "Known Drug Allergies", type: "text", placeholder: "e.g. Penicillin, Latex, None", required: true },
+      { label: "Current Eye Drops / Medications", type: "text", placeholder: "List any daily medications" },
+      { label: "Previous Eye Surgeries", type: "select", placeholder: "Yes / No" },
+    ],
+    status: "live",
+    submissions: 18,
+    enabled: true,
+    description: "Specialized clinical questionnaire required prior to ophthalmology interventions.",
+    createdAt: "Jun 10, 2026",
   },
   {
     id: 10,
