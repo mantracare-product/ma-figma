@@ -128,6 +128,7 @@ export interface Process {
   stages: Stage[];
   aiSettings: AISettings;
   pipelineType?: PipelineType;
+  category?: "patient_front" | "ai_calling";
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -272,6 +273,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Initial patient onboarding and verification process",
     assignedToUserId: 1,
     pipelineType: "OPD",
+    category: "patient_front",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -291,6 +293,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Comprehensive eye examination, refraction, and specialist consult",
     assignedToUserId: 1,
     pipelineType: "OPD",
+    category: "patient_front",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -385,6 +388,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Surgical phacoemulsification with intraocular lens implantation",
     assignedToUserId: 1,
     pipelineType: "Operation",
+    category: "patient_front",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -513,6 +517,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Multi-day inpatient monitoring, intravenous therapy, and clinical observation",
     assignedToUserId: 2,
     pipelineType: "IPD",
+    category: "patient_front",
     aiSettings: {
       platform: "Anthropic Claude",
       voiceSpeed: 1.0,
@@ -581,6 +586,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Post-visit follow-up and medication reminders",
     assignedToUserId: 2,
     pipelineType: "OPD",
+    category: "ai_calling",
     aiSettings: {
       platform: "Anthropic Claude",
       voiceSpeed: 1.2,
@@ -589,8 +595,83 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
       style: "Balanced",
     },
     stages: [
-      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active" },
-      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active" },
+      { id: "2-1", name: "Post-Visit Check", description: "Check on patient after their visit", status: "active", color: "#3B82F6" },
+      { id: "2-2", name: "Medication Reminder", description: "Remind patient to take their medication", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "test-cycle",
+    name: "Test Cycle",
+    description: "Testing the MantraAssist",
+    assignedToUserId: 1,
+    category: "ai_calling",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "tc-1", name: "Initial Verification", description: "Automated test cycle run", status: "active", color: "#3B82F6" },
+    ],
+  },
+  {
+    id: "insurance-outreach",
+    name: "Insurance Companies - Strategic Calling",
+    description: "Strategic AI calling process designed to secure meetings with insurance partnership teams.",
+    assignedToUserId: 1,
+    category: "ai_calling",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "ins-1", name: "Connected – Strategic Interest", description: "Interest shown in alliance discussion", status: "active", color: "#10B981" },
+      { id: "ins-2", name: "Can't Connect", description: "Unreachable or voicemail reached", status: "active", color: "#EF4444" },
+      { id: "ins-3", name: "New Lead", description: "New contact identified for outreach", status: "active", color: "#3B82F6" },
+      { id: "ins-4", name: "Qualification Done", description: "Initial stakeholder criteria validated", status: "active", color: "#8B5CF6" },
+      { id: "ins-5", name: "Demo / Intro Call Booked", description: "Partnership discovery call confirmed", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "insurance-brokers",
+    name: "Insurance Brokers & Consultants",
+    description: "Outbound AI calling process to connect with insurance brokers and benefits consultants and schedule partnership meetings.",
+    assignedToUserId: 1,
+    category: "ai_calling",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "ib-1", name: "Outreach Initiated", description: "Call attempt placed", status: "active", color: "#3B82F6" },
+      { id: "ib-2", name: "Follow-Up Scheduled", description: "Callback request noted", status: "active", color: "#F59E0B" },
+      { id: "ib-3", name: "Partner Onboarded", description: "Broker agreement review scheduled", status: "active", color: "#10B981" },
+    ],
+  },
+  {
+    id: "hr-eap",
+    name: "HR > EAP - Saudi | UAE",
+    description: "AI cold calling process focused on GCC HR decision-makers to promote corporate employee assistance programs.",
+    assignedToUserId: 2,
+    category: "ai_calling",
+    aiSettings: {
+      platform: "OpenAI - GPT-4o",
+      voiceSpeed: 1.0,
+      voice: "Ava",
+      tone: "Professional",
+      style: "Balanced",
+    },
+    stages: [
+      { id: "hr-1", name: "Prospect Contacted", description: "Initial introduction to HR head", status: "active", color: "#3B82F6" },
+      { id: "hr-2", name: "Corporate Demo Booked", description: "Executive briefing scheduled", status: "active", color: "#10B981" },
     ],
   },
 ];
@@ -635,6 +716,25 @@ export function getStoredProcesses(): Process[] {
         localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(updated));
         return updated;
       }
+    }
+    parsed.forEach((p) => {
+      if (!p.category) {
+        if (p.id === "op-cataract" || p.id === "opd-oph" || p.id === "ipd-ward" || p.id === "1") {
+          p.category = "patient_front";
+        } else {
+          p.category = "ai_calling";
+        }
+      }
+    });
+    // Ensure live dashboard default processes exist if missing
+    const hasInsurance = parsed.some((p) => p.id === "insurance-outreach");
+    if (!hasInsurance) {
+      DEFAULT_INITIAL_PROCESSES.forEach((initP) => {
+        if (!parsed.some((p) => p.id === initP.id)) {
+          parsed.push(initP);
+        }
+      });
+      localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(parsed));
     }
     return parsed;
   } catch {

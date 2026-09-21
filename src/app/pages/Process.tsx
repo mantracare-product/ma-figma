@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Tag, MapPin, User, HeartHandshake, FileSignature } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -40,6 +40,9 @@ import {
   ScopingRule,
   ProcessPermissions,
   isProcessMatchingOrg,
+  PatientFacingStageContent,
+  PatientStageChecklistItem,
+  PatientStageConsent,
 } from "../../lib/useProcessStore";
 
 interface AISettings {
@@ -83,6 +86,7 @@ export interface Stage {
   workflowSteps?: WorkflowStep[];
   enableCalling?: boolean;
   callTriggerSettings?: CallTriggerSettings;
+  patientFacingContent?: PatientFacingStageContent;
 }
 
 export interface Process {
@@ -92,6 +96,8 @@ export interface Process {
   assignedToUserId: number;
   stages: Stage[];
   aiSettings: AISettings;
+  pipelineType?: string;
+  category?: "patient_front" | "ai_calling";
   // Scoping & Tenant Permissions
   industryCategory?: string;
   industry?: string;
@@ -118,6 +124,21 @@ const STAGE_PRESET_COLORS = [
 ];
 
 const STAGE_COLORS = STAGE_PRESET_COLORS;
+
+export const STAGE_SWATCH_COLORS = [
+  "#475569", // slate
+  "#EF4444", // red
+  "#F97316", // orange
+  "#F59E0B", // amber
+  "#10B981", // emerald
+  "#14B8A6", // teal
+  "#3B82F6", // blue
+  "#6366F1", // indigo
+  "#8B5CF6", // purple
+  "#A855F7", // violet
+  "#EC4899", // pink
+  "#F43F5E", // rose
+];
 
 // Comprehensive color palette for stage color picker (10x10 grid)
 const COLOR_PALETTE = [
@@ -593,9 +614,43 @@ export default function Process() {
     });
   }, [processes, organization]);
 
-  // Filter client-visible processes by search query
+  const [processCategoryFilter, setProcessCategoryFilter] = useState<"all" | "patient_front" | "ai_calling">("all");
+
+  // Direct in-place editing for Stage Basic Information
+  const [stageNameInput, setStageNameInput] = useState<string>("");
+  const [stageDescriptionInput, setStageDescriptionInput] = useState<string>("");
+  const [stageColorInput, setStageColorInput] = useState<string>("#3B82F6");
+
+  // Direct configuration for Patient Front companion app
+  const [stageRoomOrCounter, setStageRoomOrCounter] = useState<string>("");
+  const [stageDoctorName, setStageDoctorName] = useState<string>("");
+  const [stageEstimatedWaitTime, setStageEstimatedWaitTime] = useState<string>("");
+  const [stageBadge, setStageBadge] = useState<string>("");
+  const [stageInfoText, setStageInfoText] = useState<string>("");
+  const [stageInstructions, setStageInstructions] = useState<string[]>([]);
+  const [stageChecklist, setStageChecklist] = useState<PatientStageChecklistItem[]>([]);
+  const [stageConsent, setStageConsent] = useState<PatientStageConsent>({
+    id: "consent-default",
+    title: "Informed Surgical / Procedure Consent",
+    description: "Mandatory authorization prior to entering the procedure area.",
+    content: "I hereby give my informed consent for the proposed clinical procedure, anesthesia, and related interventions as explained by my attending physician.",
+    requiresSignature: true,
+  });
+  const [stageConsentEnabled, setStageConsentEnabled] = useState<boolean>(false);
+
+  // Draft inputs for Patient Companion lists
+  const [newInstructionInput, setNewInstructionInput] = useState<string>("");
+  const [newChecklistItemLabel, setNewChecklistItemLabel] = useState<string>("");
+  const [newChecklistItemDesc, setNewChecklistItemDesc] = useState<string>("");
+  const [newChecklistItemRequired, setNewChecklistItemRequired] = useState<boolean>(true);
+
+  // Filter client-visible processes by search query & category filter
   const filteredProcesses = useMemo(() => {
     return clientVisibleProcesses.filter((p) => {
+      const pCat = p.category || (p.pipelineType ? "patient_front" : "ai_calling");
+      if (processCategoryFilter !== "all" && pCat !== processCategoryFilter) {
+        return false;
+      }
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
       return (
@@ -604,7 +659,19 @@ export default function Process() {
         p.stages.some((s) => s.name.toLowerCase().includes(q))
       );
     });
-  }, [clientVisibleProcesses, searchQuery]);
+  }, [clientVisibleProcesses, searchQuery, processCategoryFilter]);
+
+  const totalAll = clientVisibleProcesses.length;
+  const totalPatientFront = useMemo(() => {
+    return clientVisibleProcesses.filter(
+      (p) => (p.category || (p.pipelineType ? "patient_front" : "ai_calling")) === "patient_front"
+    ).length;
+  }, [clientVisibleProcesses]);
+  const totalAiCalling = useMemo(() => {
+    return clientVisibleProcesses.filter(
+      (p) => (p.category || (p.pipelineType ? "patient_front" : "ai_calling")) === "ai_calling"
+    ).length;
+  }, [clientVisibleProcesses]);
 
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
@@ -617,7 +684,6 @@ export default function Process() {
 
   const [expandedStage, setExpandedStage] = useState<string | null>(null);
   const [customApiIntegrations, setCustomApiIntegrations] = useState<any[]>([]);
-
 
   const [viewMode, setViewMode] = useState<"process" | "stage" | null>(null); // Track what we're viewing
   const [activeTab, setActiveTab] = useState<string>("basic");
@@ -799,6 +865,31 @@ export default function Process() {
     const proc = processes.find((p) => p.id === selectedProcess);
     const stg = proc?.stages.find((s) => s.id === expandedStage);
     if (!stg) return;
+
+    setStageNameInput(stg.name || "");
+    setStageDescriptionInput(stg.description || "");
+    setStageColorInput(stg.color || STAGE_PRESET_COLORS[0]);
+
+    const pfc = stg.patientFacingContent || {};
+    setStageRoomOrCounter(pfc.roomOrCounter || "");
+    setStageDoctorName(pfc.doctorName || "");
+    setStageEstimatedWaitTime(pfc.estimatedWaitTime || "");
+    setStageBadge(pfc.badge || "");
+    setStageInfoText(pfc.infoText || "");
+    setStageInstructions(pfc.instructions || []);
+    setStageChecklist(pfc.checklist || []);
+    setStageConsent(
+      pfc.consent || {
+        id: `consent-${stg.id}`,
+        title: "Informed Surgical / Procedure Consent",
+        description: "Mandatory authorization prior to entering the procedure area.",
+        content:
+          "I hereby give my informed consent for the proposed clinical procedure, anesthesia, and related interventions as explained by my attending physician.",
+        requiresSignature: true,
+      }
+    );
+    setStageConsentEnabled(Boolean(pfc.consent && (pfc.consent.content || pfc.consent.title)));
+
     setStageType(stg.stageType ?? "AI Receives Calls");
     setSelectedInboundNumbers(stg.selectedInboundNumbers ?? ["+1 (555) 123-4567"]);
     setSelectedStageChannels(stg.selectedStageChannels ?? ["calls"]);
@@ -829,6 +920,78 @@ export default function Process() {
     setEnableCalling(stg.enableCalling ?? true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProcess, expandedStage, viewMode]);
+
+  // Partial update helper for patientFacingContent
+  const updateStagePfc = (partialPfc: Partial<PatientFacingStageContent>) => {
+    if (!selectedProcess || !expandedStage) return;
+    setProcesses((prev) =>
+      prev.map((p) => {
+        if (p.id !== selectedProcess) return p;
+        return {
+          ...p,
+          stages: p.stages.map((s) => {
+            if (s.id !== expandedStage) return s;
+            return {
+              ...s,
+              patientFacingContent: {
+                ...(s.patientFacingContent || {}),
+                ...partialPfc,
+              },
+            };
+          }),
+        };
+      })
+    );
+  };
+
+  // Comprehensive stage configuration save handler
+  const handleSaveStageFullConfig = () => {
+    if (!selectedProcess || !expandedStage) return;
+    setProcesses((prev) =>
+      prev.map((p) => {
+        if (p.id !== selectedProcess) return p;
+        return {
+          ...p,
+          stages: p.stages.map((s) => {
+            if (s.id !== expandedStage) return s;
+            const updatedPfc: PatientFacingStageContent = {
+              ...(s.patientFacingContent || {}),
+              roomOrCounter: stageRoomOrCounter.trim(),
+              doctorName: stageDoctorName.trim(),
+              estimatedWaitTime: stageEstimatedWaitTime.trim(),
+              badge: stageBadge.trim(),
+              infoText: stageInfoText.trim(),
+              instructions: stageInstructions.filter((i) => i && i.trim()),
+              checklist: stageChecklist,
+              consent: stageConsentEnabled ? stageConsent : undefined,
+            };
+            return {
+              ...s,
+              name: stageNameInput.trim() || s.name,
+              description: stageDescriptionInput.trim(),
+              color: stageColorInput || s.color,
+              stageType,
+              selectedInboundNumbers,
+              selectedStageChannels,
+              channelSources,
+              responsiblePerson,
+              whenToMove,
+              callerPitchMode,
+              callerPitch,
+              greetingIntroMessage,
+              objectiveText,
+              businessInfoItems,
+              primaryLanguage,
+              secondaryLanguages,
+              enableCalling,
+              patientFacingContent: updatedPfc,
+            };
+          }),
+        };
+      })
+    );
+    toast.success("Stage configuration saved and synchronized to Patient Front!");
+  };
 
   // Auto-persist workflowSteps immediately (only discrete drawer-save changes, safe to auto-save)
   useEffect(() => {
@@ -1727,7 +1890,7 @@ export default function Process() {
   const [selectedStageTemplate, setSelectedStageTemplate] = useState<string | null>(null);
 
   // Form states
-  const [newProcess, setNewProcess] = useState({ name: "", description: "" });
+  const [newProcess, setNewProcess] = useState<{ name: string; description: string; category?: "patient_front" | "ai_calling" }>({ name: "", description: "", category: "patient_front" });
   const [newStage, setNewStage] = useState({ name: "", description: "", color: STAGE_PRESET_COLORS[0], type: "AI Receives Calls" });
   const [newStagePosition, setNewStagePosition] = useState<"initial" | "final" | null>(null);
   const [newStageSelectedNumbers, setNewStageSelectedNumbers] = useState<string[]>([]);
@@ -1892,11 +2055,47 @@ export default function Process() {
       return;
     }
 
+    const isPatientFront = (newProcess.category || "patient_front") === "patient_front";
+    const newProcessId = `proc-${Date.now()}`;
+
     const process: Process = {
-      id: String(processes.length + 1),
-      ...newProcess,
+      id: newProcessId,
+      name: newProcess.name.trim(),
+      description: newProcess.description.trim(),
+      category: isPatientFront ? "patient_front" : "ai_calling",
+      pipelineType: isPatientFront ? "OPD" : undefined,
       assignedToUserId: 1,
-      stages: [],
+      stages: isPatientFront
+        ? [
+            {
+              id: `${newProcessId}-stg-1`,
+              name: "Initial Check-in",
+              description: "Patient registered and initial vitals recorded",
+              status: "active",
+              color: "#10B981",
+              patientFacingContent: {
+                infoText: "Welcome! Please report to reception and relax in the lounge area.",
+                instructions: ["Report to the front reception desk", "Keep photo ID and insurance ready"],
+                badge: "Checked In",
+                roomOrCounter: "Reception Counter 1",
+                estimatedWaitTime: "~10 mins",
+                checklist: [
+                  { id: `chk-${Date.now()}-1`, label: "Patient registration complete", required: true },
+                ],
+              },
+            },
+          ]
+        : [
+            {
+              id: `${newProcessId}-stg-1`,
+              name: "New Lead",
+              description: "Initial contact and qualification",
+              status: "active",
+              color: "#3B82F6",
+              stageType: "AI Receives Calls",
+              callTriggerSettings: getDefaultCallTriggerSettings(),
+            },
+          ],
       aiSettings: {
         platform: "OpenAI - GPT-4o",
         voiceSpeed: 1.0,
@@ -1909,9 +2108,14 @@ export default function Process() {
     setProcesses([...processes, process]);
     setSelectedProcess(process.id);
     setExpandedProcesses([...expandedProcesses, process.id]);
-    setExpandedStage(null);
-    setViewMode("process");
-    setNewProcess({ name: "", description: "" });
+    if (process.stages.length > 0) {
+      setExpandedStage(process.stages[0].id);
+      setViewMode("stage");
+    } else {
+      setExpandedStage(null);
+      setViewMode("process");
+    }
+    setNewProcess({ name: "", description: "", category: "patient_front" });
     setShowAddProcessModal(false);
     toast.success("Process added successfully");
   };
@@ -2125,158 +2329,236 @@ export default function Process() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fafafa]">
-      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6">
-        <PageHeader
-          title="Process Settings"
-          subtitle="Design how your AI receptionist behaves at every step, from greeting to hand-off"
-          badge={
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold uppercase tracking-wider bg-blue-50 text-[#1456f0] border border-blue-200/60">
-              Workflow Architect
-            </span>
-          }
-          actions={
-            <>
-              <Button variant="outline" onClick={() => setShowTestProcessDrawer(true)}>Test Process</Button>
-              <HowItWorksButton label="How Process Settings Works" onClick={() => setShowHelp(true)} />
-            </>
-          }
-        />
+    <div className="min-h-screen bg-[#F8FAFC]">
+      <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-4">
+        {/* Centered Production Header */}
+        <div className="text-center pt-4 pb-2">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+            Process <span className="text-blue-600">Settings</span>
+          </h1>
+          <p className="text-sm text-slate-500 mt-2 max-w-2xl mx-auto" style={{ fontFamily: 'Outfit, sans-serif' }}>
+            Design and manage your organization's custom processes, stages, and automation rules.
+          </p>
+        </div>
 
-        {/* Top Control Bar: Search Bar + Add New Process */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3.5 flex items-center justify-between gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        {/* Top Control Bar: Search Bar + Actions */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="relative w-full sm:w-88">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search processes..."
-              className="w-full pl-10 pr-9 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 placeholder-gray-400 focus:outline-none focus:border-blue-500 focus:bg-white transition-all"
+              className="w-full pl-10 pr-9 py-2.5 bg-white border border-slate-200 rounded-full text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 shadow-2xs transition-all"
               style={{ fontFamily: 'Outfit, sans-serif' }}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-0.5 cursor-pointer rounded-full hover:bg-gray-200 transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full hover:bg-slate-100 transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
+
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              onClick={() => setShowTestProcessDrawer(true)}
+              className="px-4 py-2.5 text-xs font-semibold text-slate-700 hover:text-slate-900 bg-white border border-slate-200 hover:bg-slate-50 rounded-full shadow-2xs transition-all cursor-pointer"
+              style={{ fontFamily: 'DM Sans, sans-serif' }}
+            >
+              Test Process
+            </button>
+            <button
+              onClick={() => setShowAddProcessModal(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-full shadow-xs hover:shadow transition-all cursor-pointer flex-shrink-0"
+              style={{ fontFamily: 'DM Sans, sans-serif' }}
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ New Process</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Category Filter Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
           <button
-            onClick={() => setShowAddProcessModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow transition-all cursor-pointer flex-shrink-0"
-            style={{ fontFamily: 'DM Sans, sans-serif' }}
+            type="button"
+            onClick={() => setProcessCategoryFilter("all")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+              processCategoryFilter === "all"
+                ? "bg-slate-900 text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
           >
-            <Plus className="w-4 h-4" />
-            <span>Add New Process</span>
+            All Processes ({totalAll})
+          </button>
+          <button
+            type="button"
+            onClick={() => setProcessCategoryFilter("patient_front")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              processCategoryFilter === "patient_front"
+                ? "bg-emerald-600 text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            Patient Journeys (Patient Front) ({totalPatientFront})
+          </button>
+          <button
+            type="button"
+            onClick={() => setProcessCategoryFilter("ai_calling")}
+            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              processCategoryFilter === "ai_calling"
+                ? "bg-blue-600 text-white shadow-xs"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+            AI Outreach & Calling ({totalAiCalling})
           </button>
         </div>
 
-        <div className="flex gap-6 min-h-[calc(100vh-270px)]">
-          {/* Left Panel - Process List */}
-          <div className="w-80 bg-white rounded-2xl border border-gray-200 shadow-sm p-4 h-[calc(100vh-270px)] overflow-y-auto flex-shrink-0">
-            <div className="space-y-1.5">
-              {filteredProcesses.length === 0 ? (
-                <div className="p-4 text-center rounded-xl bg-gray-50 border border-dashed border-gray-200">
-                  <p className="text-xs text-gray-500 font-medium">
-                    {searchQuery ? "No processes match your search" : "No processes configured for your organization scope"}
-                  </p>
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
-                    >
-                      Clear Search
-                    </button>
-                  )}
-                </div>
-              ) : (
-                filteredProcesses.map((process, index) => {
+        <div className="flex gap-6 min-h-[calc(100vh-270px)] pt-2">
+          {/* Left Panel - Process Cards List */}
+          <div className="w-80 sm:w-88 flex-shrink-0 space-y-3 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
+            {filteredProcesses.length === 0 ? (
+              <div className="p-6 text-center rounded-2xl bg-white border border-dashed border-slate-200 shadow-2xs">
+                <p className="text-xs text-slate-500 font-medium">
+                  {searchQuery ? "No processes match your search" : "No processes in this category"}
+                </p>
+                {(searchQuery || processCategoryFilter !== "all") && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery("");
+                      setProcessCategoryFilter("all");
+                    }}
+                    className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                  >
+                    Reset Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              filteredProcesses.map((process) => {
                 const isExpanded = expandedProcesses.includes(process.id);
-                const isProcessSelected = selectedProcess === process.id && viewMode === "process";
-                const isProcessActive = selectedProcess === process.id; // Highlight if process or any of its stages is active
+                const isProcessActive = selectedProcess === process.id;
+                const isPatientCategory = (process.category === "patient_front") || Boolean(process.pipelineType);
 
                 return (
-                  <div key={process.id} className={index > 0 ? "pt-1.5" : ""}>
-                    {/* Process Row */}
-                    <div className="flex items-center gap-1">
+                  <div
+                    key={process.id}
+                    className={`bg-white rounded-2xl border transition-all p-3.5 shadow-2xs ${
+                      isProcessActive ? "border-blue-400 ring-1 ring-blue-100" : "border-slate-200/90 hover:border-slate-300"
+                    }`}
+                  >
+                    {/* Card Header Row */}
+                    <div
+                      className="flex items-start gap-2.5 cursor-pointer select-none"
+                      onClick={() => {
+                        setExpandedProcesses((prev) =>
+                          prev.includes(process.id)
+                            ? prev.filter((id) => id !== process.id)
+                            : [...prev, process.id]
+                        );
+                        setSelectedProcess(process.id);
+                      }}
+                    >
                       <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setExpandedProcesses((prev) =>
-                            prev.includes(process.id)
-                              ? prev.filter((id) => id !== process.id)
-                              : [...prev, process.id]
-                          );
-                        }}
-                        className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                        type="button"
+                        className="p-1 hover:bg-slate-100 rounded-lg transition-colors mt-0.5 text-slate-400 hover:text-slate-600 cursor-pointer"
                       >
-                        <ChevronRight className={`w-4 h-4 text-gray-600 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""
-                          }`} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedProcess(process.id);
-                          setExpandedStage(null);
-                          setViewMode("process");
-                          if (!isExpanded) {
-                            setExpandedProcesses((prev) => [...prev, process.id]);
-                          }
-                        }}
-                        className={`flex-1 flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${isProcessSelected
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : isProcessActive
-                            ? "bg-blue-50 text-blue-700 border border-blue-200"
-                            : "hover:bg-gray-50 border border-transparent"
+                        <ChevronRight
+                          className={`w-4 h-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-90 text-blue-600" : ""
                           }`}
-                      >
-                        <span className="flex-1 text-left font-semibold text-sm" style={{ fontFamily: 'DM Sans, sans-serif' }}>{process.name}</span>
-                        <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${isProcessSelected
-                          ? "bg-white/20 text-white"
-                          : isProcessActive
-                            ? "bg-blue-200 text-blue-700"
-                            : "bg-gray-100 text-gray-600"
-                          }`}>
-                          {process.stages.length}
-                        </span>
+                        />
                       </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                            {process.name}
+                          </h4>
+                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-2xs">
+                            {process.stages.length}
+                          </span>
+                        </div>
+
+                        {process.description && (
+                          <p className="text-[11px] text-slate-500 line-clamp-2 mt-1 leading-snug" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                            {process.description}
+                          </p>
+                        )}
+
+                        {/* Tags row */}
+                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              isPatientCategory
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                isPatientCategory ? "bg-emerald-500" : "bg-blue-500"
+                              }`}
+                            />
+                            {isPatientCategory ? "Patient Front" : "AI Calling"}
+                          </span>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedProcess(process.id);
+                              setDraftProcessName(process.name);
+                              setDraftProcessDescription(process.description);
+                              setIsEditingProcessInfo(true);
+                              setViewMode("process");
+                            }}
+                            className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Edit process details"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Stages (when expanded) */}
+                    {/* Expanded Stages */}
                     {isExpanded && (
-                      <div className="ml-10 mt-2 space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
-                        {process.stages.length === 0 ? (
-                          <div className="px-4 py-3 text-sm italic text-gray-400 bg-gray-50 rounded-lg" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                            No stages yet
-                          </div>
-                        ) : (
-                          process.stages.map((stage, index) => {
-                            const isStageSelected = selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 space-y-1">
+                        {process.stages.map((stage) => {
+                          const isStageSelected =
+                            selectedProcess === process.id && expandedStage === stage.id && viewMode === "stage";
+                          return (
+                            <button
+                              key={stage.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedProcess(process.id);
+                                setExpandedStage(stage.id);
+                                setViewMode("stage");
+                              }}
+                              className={`w-full flex items-center gap-2.5 text-left px-3 py-2 rounded-xl text-xs transition-all cursor-pointer ${
+                                isStageSelected
+                                  ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200 shadow-2xs"
+                                  : "text-slate-700 hover:bg-slate-50 border border-transparent"
+                              }`}
+                            >
+                              <span
+                                className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                style={{ backgroundColor: stage.color || "#3B82F6" }}
+                              />
+                              <span className="flex-1 truncate">{stage.name}</span>
+                            </button>
+                          );
+                        })}
 
-                            return (
-                              <button
-                                key={stage.id}
-                                onClick={() => {
-                                  setSelectedProcess(process.id);
-                                  setExpandedStage(stage.id);
-                                  setViewMode("stage");
-                                }}
-                                className={`w-full flex items-center gap-2.5 text-left px-4 py-2.5 rounded-lg text-sm transition-all ${isStageSelected
-                                  ? "bg-purple-50 text-purple-700 font-medium border border-purple-200"
-                                  : "text-gray-700 hover:bg-gray-100 border border-transparent"
-                                  }`}
-                              >
-                                <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
-                                  style={{ backgroundColor: stage.color || '#22D3EE' }}
-                                />
-                                <span className="flex-1 font-medium">{stage.name}</span>
-                              </button>
-                            );
-                          })
-                        )}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -2284,18 +2566,18 @@ export default function Process() {
                             setSelectedProcess(process.id);
                             setShowAddStageModal(true);
                           }}
-                          className="w-full flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold text-blue-600 hover:bg-blue-50/80 transition-colors border border-dashed border-blue-200 hover:border-blue-300 mt-1 cursor-pointer"
+                          className="w-full flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-blue-600 hover:bg-blue-50 transition-colors mt-1.5 cursor-pointer"
                           style={{ fontFamily: 'Outfit, sans-serif' }}
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>Add Stage</span>
+                          <span>+ Add New Stage</span>
                         </button>
                       </div>
                     )}
                   </div>
                 );
-              }))}
-            </div>
+              })
+            )}
           </div>
 
           {/* Right Panel - Process or Stage Settings */}
@@ -3360,18 +3642,37 @@ export default function Process() {
                 return (
                   <div className="h-full flex flex-col">
                     {/* Stage Header */}
-                    <div className="px-6 py-4 border-b border-border">
+                    <div className="px-6 py-4 border-b border-slate-200 bg-white">
                       <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3">
-                            <h2 className="text-2xl font-bold" style={{ fontFamily: 'DM Sans, sans-serif' }}>{stage.name}</h2>
-                            <span className="text-sm px-3 py-1 bg-secondary/10 text-secondary rounded-full" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                              Stage
-                            </span>
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="w-3.5 h-3.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: stageColorInput || stage.color || '#3B82F6' }}
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h2 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                {stageNameInput || stage.name}
+                              </h2>
+                              <span
+                                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
+                                  (selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType)
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                    : "bg-blue-50 text-blue-700 border border-blue-200"
+                                }`}
+                              >
+                                {(selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType)
+                                  ? "Patient Front Stage"
+                                  : "AI Calling Stage"}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-400 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                              in {selectedProcessData.name}
+                            </p>
                           </div>
-                          <p className="text-sm mt-2" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>{stage.description}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+
+                        <div className="flex items-center gap-2.5">
                           <Tooltip text="Temporarily disable this stage">
                             <label className="relative inline-flex items-center cursor-pointer">
                               <input
@@ -3383,51 +3684,221 @@ export default function Process() {
                                   toast.success(e.target.checked ? "Stage temporarily disabled" : "Stage re-enabled");
                                 }}
                               />
-                              <div className="w-11 h-6 bg-gray-200 peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                              <div className="w-10 h-5 bg-gray-200 peer-focus:ring-2 peer-focus:ring-blue-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
                             </label>
                           </Tooltip>
-                          <HowItWorksButton label="How Stage Works" onClick={() => setShowStageHowItWorksModal(true)} />
-                          <Tooltip text="Delete Stage">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setStageToDelete(stage);
-                                setShowDeleteStageModal(true);
-                              }}
-                            >
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
-                          </Tooltip>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStageToDelete(stage);
+                              setShowDeleteStageModal(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                            title="Delete Stage"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleSaveStageFullConfig}
+                            className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                          >
+                            Save Changes
+                          </Button>
                         </div>
                       </div>
 
-                      {/* Stage Tabs */}
-                      <div className="flex gap-2 mt-4">
+                      {/* Stage Tab Navigation Pills */}
+                      <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1">
                         {[
-                          { id: "basic", label: "Basic" },
-                          { id: "automation", label: "Automation" },
-                          { id: "flowbuilder", label: "Flow Builder" },
-                        ].map((tab) => (
-                          <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`px-4 py-2 rounded-lg font-medium transition-colors ${activeTab === tab.id
-                              ? "bg-primary text-primary-foreground"
-                              : "text-muted-foreground hover:bg-muted"
+                          { id: "basic", label: "General", icon: Sliders },
+                          {
+                            id: "patient_companion",
+                            label: "Patient Companion",
+                            icon: HeartHandshake,
+                            badge: (selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType) ? "Live Sync" : undefined
+                          },
+                          { id: "ai_agent", label: "AI Agent", icon: Bot },
+                          { id: "webhooks", label: "Webhooks", icon: Webhook },
+                          { id: "automation", label: "Automations", icon: Zap },
+                          { id: "advanced", label: "Advanced", icon: Settings },
+                        ].map((tab) => {
+                          const IconComp = tab.icon;
+                          const isActive = activeTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              type="button"
+                              onClick={() => setActiveTab(tab.id)}
+                              className={`px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer flex-shrink-0 ${
+                                isActive
+                                  ? "bg-blue-600 text-white shadow-xs"
+                                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
                               }`}
-                          >
-                            {tab.label}
-                          </button>
-                        ))}
+                            >
+                              <IconComp className="w-3.5 h-3.5" />
+                              <span>{tab.label}</span>
+                              {tab.badge && (
+                                <span className={`text-[9px] px-1.5 py-0.2 rounded-full font-bold uppercase tracking-wider ${
+                                  isActive ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-800"
+                                }`}>
+                                  {tab.badge}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
 
                     {/* Stage Content */}
                     <div className="flex-1 overflow-y-auto p-6">
-                      {/* Basic Tab */}
+                      {/* General / Basic Tab */}
                       {activeTab === "basic" && (
                         <div className="space-y-6">
+                          {/* Basic Information Card (matches live MantraAssist screenshot) */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs">
+                            <div className="mb-4">
+                              <h3 className="text-base font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Basic Information
+                              </h3>
+                              <p className="text-xs text-slate-500 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Configure the name and identity of this stage.
+                              </p>
+                            </div>
+
+                            <div className="space-y-4">
+                              {/* Stage Name */}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1.5" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  <Tag className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Stage Name</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={stageNameInput}
+                                  onChange={(e) => {
+                                    setStageNameInput(e.target.value);
+                                    if (selectedProcess && expandedStage) {
+                                      setProcesses((prev) =>
+                                        prev.map((p) =>
+                                          p.id !== selectedProcess
+                                            ? p
+                                            : {
+                                                ...p,
+                                                stages: p.stages.map((s) =>
+                                                  s.id !== expandedStage ? s : { ...s, name: e.target.value }
+                                                ),
+                                              }
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  placeholder="Enter stage name"
+                                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                              </div>
+
+                              {/* Description */}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Description</span>
+                                </label>
+                                <p className="text-[11px] text-slate-400 mb-1.5">What does this stage mean in the process?</p>
+                                <textarea
+                                  value={stageDescriptionInput}
+                                  onChange={(e) => {
+                                    setStageDescriptionInput(e.target.value);
+                                    if (selectedProcess && expandedStage) {
+                                      setProcesses((prev) =>
+                                        prev.map((p) =>
+                                          p.id !== selectedProcess
+                                            ? p
+                                            : {
+                                                ...p,
+                                                stages: p.stages.map((s) =>
+                                                  s.id !== expandedStage ? s : { ...s, description: e.target.value }
+                                                ),
+                                              }
+                                        )
+                                      );
+                                    }
+                                  }}
+                                  placeholder="Describe the clinical or operational purpose of this stage..."
+                                  rows={3}
+                                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs resize-none transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                              </div>
+
+                              {/* Stage Color Swatches */}
+                              <div>
+                                <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-700 mb-2" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  <Sliders className="w-3.5 h-3.5 text-blue-600" />
+                                  <span>Stage Color</span>
+                                </label>
+                                <div className="flex items-center gap-2.5 flex-wrap">
+                                  {STAGE_SWATCH_COLORS.map((swatch) => {
+                                    const isSelected = (stageColorInput || stage.color)?.toLowerCase() === swatch.toLowerCase();
+                                    return (
+                                      <button
+                                        key={swatch}
+                                        type="button"
+                                        onClick={() => {
+                                          setStageColorInput(swatch);
+                                          if (selectedProcess && expandedStage) {
+                                            setProcesses((prev) =>
+                                              prev.map((p) =>
+                                                p.id !== selectedProcess
+                                                  ? p
+                                                  : {
+                                                      ...p,
+                                                      stages: p.stages.map((s) =>
+                                                        s.id !== expandedStage ? s : { ...s, color: swatch }
+                                                      ),
+                                                    }
+                                              )
+                                            );
+                                          }
+                                        }}
+                                        className={`w-6 h-6 rounded-full transition-all cursor-pointer flex items-center justify-center ${
+                                          isSelected ? "ring-2 ring-offset-2 ring-slate-900 scale-110 shadow-sm" : "hover:scale-105 opacity-90 hover:opacity-100"
+                                        }`}
+                                        style={{ backgroundColor: swatch }}
+                                      >
+                                        {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {(selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType) && (
+                            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-1.5">
+                                  <HeartHandshake className="w-4 h-4 text-emerald-700" />
+                                  <h4 className="text-xs font-bold text-emerald-900">Patient Companion Live Journey Stage</h4>
+                                </div>
+                                <p className="text-xs text-emerald-700 mt-0.5">
+                                  Configure bay/room, attending doctor, estimated wait time, guidance advisory, checklists, and surgical consents.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setActiveTab("patient_companion")}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex-shrink-0 cursor-pointer"
+                              >
+                                Open Patient Companion Tab →
+                              </button>
+                            </div>
+                          )}
+
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
                             {/* Type and Right Column Field Row */}
@@ -4258,6 +4729,552 @@ export default function Process() {
 
 
 
+                        </div>
+                      )}
+
+                      {/* Patient Companion Tab (Dedicated for Patient Front workflows) */}
+                      {activeTab === "patient_companion" && (
+                        <div className="space-y-6">
+                          {/* Top Info Banner */}
+                          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300/60">
+                                  Patient Front Live Sync
+                                </span>
+                                <span className="text-xs text-slate-500">Auto-broadcasts to /patient-front</span>
+                              </div>
+                              <h3 className="text-base font-bold text-slate-900 mt-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Patient Companion Experience & Stage Data
+                              </h3>
+                              <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                                Every parameter configured below powers the real-time Today timeline, hero cards, and Stage Details drawer on the patient app.
+                              </p>
+                            </div>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleSaveStageFullConfig}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex-shrink-0"
+                            >
+                              Save & Sync Live
+                            </Button>
+                          </div>
+
+                          {/* 1. Glanceable Location & Clinical Meta */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                              <MapPin className="w-4 h-4 text-blue-600" />
+                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Glanceable Location & Clinical Meta
+                              </h4>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Room / Location / Bay
+                                </label>
+                                <input
+                                  type="text"
+                                  value={stageRoomOrCounter}
+                                  onChange={(e) => {
+                                    setStageRoomOrCounter(e.target.value);
+                                    updateStagePfc({ roomOrCounter: e.target.value });
+                                  }}
+                                  placeholder="e.g. Pre-Op Daycare Lounge (Bay 3) or OT Suite 2"
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                                <span className="text-[11px] text-slate-400 mt-1 block">Displayed on Today hero card & visit details drawer</span>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Attending Doctor / Specialist
+                                </label>
+                                <input
+                                  type="text"
+                                  value={stageDoctorName}
+                                  onChange={(e) => {
+                                    setStageDoctorName(e.target.value);
+                                    updateStagePfc({ doctorName: e.target.value });
+                                  }}
+                                  placeholder="e.g. Dr. Meera Nair, MS (Ophthalmology)"
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                                <span className="text-[11px] text-slate-400 mt-1 block">Primary physician or clinical lead for this stage</span>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Estimated Wait Time / Duration
+                                </label>
+                                <input
+                                  type="text"
+                                  value={stageEstimatedWaitTime}
+                                  onChange={(e) => {
+                                    setStageEstimatedWaitTime(e.target.value);
+                                    updateStagePfc({ estimatedWaitTime: e.target.value });
+                                  }}
+                                  placeholder="e.g. ~15 mins, 20–30 mins, or 45 mins"
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                                <span className="text-[11px] text-slate-400 mt-1 block">Shown with clock icon on patient status cards</span>
+                              </div>
+
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Stage Status Badge
+                                </label>
+                                <input
+                                  type="text"
+                                  value={stageBadge}
+                                  onChange={(e) => {
+                                    setStageBadge(e.target.value);
+                                    updateStagePfc({ badge: e.target.value });
+                                  }}
+                                  placeholder="e.g. Dilation in Progress, Ready for OR, In Surgery"
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
+                                  style={{ fontFamily: 'Outfit, sans-serif' }}
+                                />
+                                <span className="text-[11px] text-slate-400 mt-1 block">Highlighted pill badge on patient card</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 2. Patient Guidance & Clinical Advisory */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                              <Sparkles className="w-4 h-4 text-amber-500" />
+                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Patient Advisory & Clinical Guidance
+                              </h4>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Guidance message displayed prominently to the patient or attendant while they are in this stage.
+                            </p>
+                            <textarea
+                              value={stageInfoText}
+                              onChange={(e) => {
+                                setStageInfoText(e.target.value);
+                                updateStagePfc({ infoText: e.target.value });
+                              }}
+                              placeholder="e.g. Dilating and topical numbing drops have been placed in your right eye. Your vision will blur slightly — this is completely normal and expected."
+                              rows={3}
+                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs resize-none transition-all"
+                              style={{ fontFamily: 'Outfit, sans-serif' }}
+                            />
+                          </div>
+
+                          {/* 3. Step-by-Step Instructions */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <ClipboardList className="w-4 h-4 text-blue-600" />
+                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Step-by-Step Patient Instructions ({stageInstructions.length})
+                                </h4>
+                              </div>
+                              <span className="text-xs text-slate-400">Rendered in Visit Details drawer</span>
+                            </div>
+
+                            {/* List of instructions */}
+                            <div className="space-y-2">
+                              {stageInstructions.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic py-2">No instructions added yet for this stage.</p>
+                              ) : (
+                                stageInstructions.map((inst, idx) => (
+                                  <div key={idx} className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
+                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                                      {idx + 1}
+                                    </span>
+                                    <input
+                                      type="text"
+                                      value={inst}
+                                      onChange={(e) => {
+                                        const updated = [...stageInstructions];
+                                        updated[idx] = e.target.value;
+                                        setStageInstructions(updated);
+                                        updateStagePfc({ instructions: updated });
+                                      }}
+                                      className="flex-1 bg-transparent text-xs sm:text-sm text-slate-800 focus:outline-none"
+                                      style={{ fontFamily: 'Outfit, sans-serif' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = stageInstructions.filter((_, i) => i !== idx);
+                                        setStageInstructions(updated);
+                                        updateStagePfc({ instructions: updated });
+                                      }}
+                                      className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
+                                      title="Remove step"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            {/* Add instruction */}
+                            <div className="flex items-center gap-2 pt-2">
+                              <input
+                                type="text"
+                                value={newInstructionInput}
+                                onChange={(e) => setNewInstructionInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    if (newInstructionInput.trim()) {
+                                      const updated = [...stageInstructions, newInstructionInput.trim()];
+                                      setStageInstructions(updated);
+                                      setNewInstructionInput("");
+                                      updateStagePfc({ instructions: updated });
+                                    }
+                                  }
+                                }}
+                                placeholder="Add new step instruction (e.g. Rest comfortably with eyes relaxed)..."
+                                className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs"
+                                style={{ fontFamily: 'Outfit, sans-serif' }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (newInstructionInput.trim()) {
+                                    const updated = [...stageInstructions, newInstructionInput.trim()];
+                                    setStageInstructions(updated);
+                                    setNewInstructionInput("");
+                                    updateStagePfc({ instructions: updated });
+                                  }
+                                }}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer flex-shrink-0"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Add Step</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 4. Stage Checklist */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Stage Verification Checklist ({stageChecklist.length})
+                                </h4>
+                              </div>
+                              <span className="text-xs text-slate-400">Interactive patient checklist</span>
+                            </div>
+
+                            {/* Existing items */}
+                            <div className="space-y-2">
+                              {stageChecklist.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic py-2">No checklist items configured for this stage.</p>
+                              ) : (
+                                stageChecklist.map((item) => (
+                                  <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-start justify-between gap-3">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs sm:text-sm font-semibold text-slate-900">{item.label}</span>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const updated = stageChecklist.map((c) =>
+                                              c.id === item.id ? { ...c, required: !c.required } : c
+                                            );
+                                            setStageChecklist(updated);
+                                            updateStagePfc({ checklist: updated });
+                                          }}
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
+                                            item.required
+                                              ? "bg-red-50 text-red-700 border border-red-200"
+                                              : "bg-slate-200 text-slate-700"
+                                          }`}
+                                        >
+                                          {item.required ? "Required" : "Optional"}
+                                        </button>
+                                      </div>
+                                      {item.description && (
+                                        <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
+                                      )}
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = stageChecklist.filter((c) => c.id !== item.id);
+                                        setStageChecklist(updated);
+                                        updateStagePfc({ checklist: updated });
+                                      }}
+                                      className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors cursor-pointer"
+                                      title="Delete item"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+
+                            {/* Add checklist item form */}
+                            <div className="p-3.5 rounded-xl bg-slate-50/80 border border-dashed border-slate-300 space-y-2.5">
+                              <span className="text-xs font-semibold text-slate-700">Add New Checklist Item:</span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  value={newChecklistItemLabel}
+                                  onChange={(e) => setNewChecklistItemLabel(e.target.value)}
+                                  placeholder="Item label (e.g. Biometric eye verification)"
+                                  className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                                />
+                                <input
+                                  type="text"
+                                  value={newChecklistItemDesc}
+                                  onChange={(e) => setNewChecklistItemDesc(e.target.value)}
+                                  placeholder="Optional instructions or notes"
+                                  className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                                />
+                              </div>
+                              <div className="flex items-center justify-between pt-1">
+                                <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={newChecklistItemRequired}
+                                    onChange={(e) => setNewChecklistItemRequired(e.target.checked)}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span>Mark as Required for stage completion</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (!newChecklistItemLabel.trim()) {
+                                      toast.error("Please enter a label for the checklist item");
+                                      return;
+                                    }
+                                    const newItem: PatientStageChecklistItem = {
+                                      id: `chk-${Date.now()}`,
+                                      label: newChecklistItemLabel.trim(),
+                                      description: newChecklistItemDesc.trim() || undefined,
+                                      required: newChecklistItemRequired,
+                                    };
+                                    const updated = [...stageChecklist, newItem];
+                                    setStageChecklist(updated);
+                                    setNewChecklistItemLabel("");
+                                    setNewChecklistItemDesc("");
+                                    setNewChecklistItemRequired(true);
+                                    updateStagePfc({ checklist: updated });
+                                    toast.success("Checklist item added");
+                                  }}
+                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Add Item</span>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* 5. Informed Procedure / Surgical Consent Form */}
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <FileSignature className="w-4 h-4 text-purple-600" />
+                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                  Informed Procedure / Surgical Consent Form
+                                </h4>
+                              </div>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  className="sr-only peer"
+                                  checked={stageConsentEnabled}
+                                  onChange={(e) => {
+                                    const enabled = e.target.checked;
+                                    setStageConsentEnabled(enabled);
+                                    updateStagePfc({ consent: enabled ? stageConsent : undefined });
+                                    toast.info(enabled ? "Informed consent enabled for this stage" : "Informed consent disabled");
+                                  }}
+                                />
+                                <div className="w-10 h-5 bg-slate-200 peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                              </label>
+                            </div>
+
+                            {stageConsentEnabled ? (
+                              <div className="space-y-3 pt-1 animate-in fade-in duration-200">
+                                <div>
+                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Consent Form Title
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={stageConsent.title}
+                                    onChange={(e) => {
+                                      const updated = { ...stageConsent, title: e.target.value };
+                                      setStageConsent(updated);
+                                      updateStagePfc({ consent: updated });
+                                    }}
+                                    placeholder="e.g. Informed Surgical Consent - Cataract Phacoemulsification"
+                                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Short Summary / Subtitle
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={stageConsent.description || ""}
+                                    onChange={(e) => {
+                                      const updated = { ...stageConsent, description: e.target.value };
+                                      setStageConsent(updated);
+                                      updateStagePfc({ consent: updated });
+                                    }}
+                                    placeholder="e.g. Mandatory clinical authorization prior to entering the procedure area."
+                                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white"
+                                  />
+                                </div>
+
+                                <div>
+                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                    Full Legal & Medical Authorization Text
+                                  </label>
+                                  <textarea
+                                    value={stageConsent.content}
+                                    onChange={(e) => {
+                                      const updated = { ...stageConsent, content: e.target.value };
+                                      setStageConsent(updated);
+                                      updateStagePfc({ consent: updated });
+                                    }}
+                                    placeholder="Enter the full clinical consent terms, procedure details, risks explained, and patient declaration..."
+                                    rows={5}
+                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white font-mono leading-relaxed"
+                                  />
+                                </div>
+
+                                <div className="flex items-center justify-between pt-1">
+                                  <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={stageConsent.requiresSignature ?? true}
+                                      onChange={(e) => {
+                                        const updated = { ...stageConsent, requiresSignature: e.target.checked };
+                                        setStageConsent(updated);
+                                        updateStagePfc({ consent: updated });
+                                      }}
+                                      className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                                    />
+                                    <span className="font-medium">Require Digital Signature (patient signs on screen with finger or stylus)</span>
+                                  </label>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-500">
+                                Informed consent is currently disabled for this stage. Toggle the switch above to enable legal and surgical consent verification.
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action footer */}
+                          <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-xs text-slate-500">
+                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                              <span>Live sync active for Patient Front companion app</span>
+                            </div>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={handleSaveStageFullConfig}
+                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
+                            >
+                              Save All Stage Settings
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* AI Agent Tab */}
+                      {activeTab === "ai_agent" && (
+                        <div className="space-y-6">
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                              <Bot className="w-4 h-4 text-blue-600" />
+                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                AI Voice, Model & Behavior
+                              </h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">AI Model Engine</label>
+                                <select
+                                  value={selectedAIModel}
+                                  onChange={(e) => setSelectedAIModel(e.target.value)}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                                >
+                                  <option value="Gemini 2.5 Flash">Gemini 2.5 Flash (Ultra Fast)</option>
+                                  <option value="GPT-4o Mini">OpenAI GPT-4o Mini</option>
+                                  <option value="Deepseek V4 Flash">Deepseek V4 Flash</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-700 mb-1">Voice Accent & Persona</label>
+                                <select
+                                  value={stageVoice}
+                                  onChange={(e) => setStageVoice(e.target.value)}
+                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:outline-none focus:border-blue-500"
+                                >
+                                  <option value="Ava">Ava (Warm & Empathetic)</option>
+                                  <option value="Eva">Eva (Professional & Clear)</option>
+                                  <option value="Adam">Adam (Authoritative)</option>
+                                  <option value="Priya">Priya (Indian English, Caring)</option>
+                                </select>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <label className="text-xs font-semibold text-slate-700">Voice Speed: {stageVoiceSpeed}x</label>
+                              </div>
+                              <input
+                                type="range"
+                                min="0.75"
+                                max="1.5"
+                                step="0.05"
+                                value={stageVoiceSpeed}
+                                onChange={(e) => setStageVoiceSpeed(parseFloat(e.target.value))}
+                                className="w-full accent-blue-600 cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Webhooks Tab */}
+                      {activeTab === "webhooks" && (
+                        <div className="space-y-6">
+                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
+                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+                              <Webhook className="w-4 h-4 text-purple-600" />
+                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                                Stage Webhook & API Dispatches
+                              </h4>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              Notify hospital HMS, CRM, or external systems whenever a patient enters or finishes this stage.
+                            </p>
+                            <div>
+                              <label className="block text-xs font-semibold text-slate-700 mb-1">Stage Event Webhook URL</label>
+                              <input
+                                type="text"
+                                placeholder="https://api.hospital.com/v1/stage-transitions"
+                                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
 
@@ -5806,47 +6823,15 @@ export default function Process() {
                       />
 
 
-                      <div className="mt-6 pt-6 border-t border-border flex justify-end gap-3">
+                      <div className="mt-6 pt-6 border-t border-slate-200 flex justify-end gap-3">
                         <Button variant="outline" onClick={() => {
                           setExpandedStage(null);
                           setViewMode("process");
                         }}>Cancel</Button>
                         <Button
                           variant="primary"
-                          onClick={() => {
-                            if (!selectedProcess || !expandedStage) return;
-                            setProcesses((prev) =>
-                              prev.map((p) =>
-                                p.id !== selectedProcess
-                                  ? p
-                                  : {
-                                      ...p,
-                                      stages: p.stages.map((s) =>
-                                        s.id !== expandedStage
-                                          ? s
-                                          : {
-                                              ...s,
-                                              stageType,
-                                              selectedInboundNumbers,
-                                              selectedStageChannels,
-                                              channelSources,
-                                              responsiblePerson,
-                                              whenToMove,
-                                              callerPitchMode,
-                                              callerPitch,
-                                              greetingIntroMessage,
-                                              objectiveText,
-                                              businessInfoItems,
-                                              primaryLanguage,
-                                              secondaryLanguages,
-                                              enableCalling,
-                                            }
-                                      ),
-                                    }
-                              )
-                            );
-                            toast.success("Stage configuration saved");
-                          }}
+                          onClick={handleSaveStageFullConfig}
+                          className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
                         >
                           Save Changes
                         </Button>
@@ -5856,13 +6841,22 @@ export default function Process() {
                 );
               })()
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-center p-8">
-                <div className="w-24 h-24 bg-muted/30 rounded-full flex items-center justify-center mb-6">
-                  <ChevronRight className="w-12 h-12" style={{ color: '#64748B' }} />
+              <div className="h-full flex-1 flex flex-col items-center justify-center text-center p-12 bg-white">
+                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mb-4 text-slate-400">
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                  </div>
                 </div>
-                <h3 className="text-xl font-semibold mb-2" style={{ color: '#020817', fontFamily: 'DM Sans, sans-serif' }}>Select a process or stage to begin</h3>
-                <p className="max-w-md" style={{ color: '#64748B', fontFamily: 'Outfit, sans-serif' }}>
-                  Choose a process to configure its settings, or select a stage to edit its configuration
+                <h3 className="text-base font-bold text-slate-800 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
+                  No Stage Selected
+                </h3>
+                <p className="text-xs text-slate-500 max-w-xs leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                  Select a template process and then a stage from the sidebar to view its configuration.
                 </p>
               </div>
             )}
@@ -5874,14 +6868,14 @@ export default function Process() {
           isOpen={showAddProcessModal}
           onClose={() => {
             setShowAddProcessModal(false);
-            setNewProcess({ name: "", description: "" });
+            setNewProcess({ name: "", description: "", category: "patient_front" });
           }}
           title="Add New Process"
           footer={
             <>
               <Button variant="outline" onClick={() => {
                 setShowAddProcessModal(false);
-                setNewProcess({ name: "", description: "" });
+                setNewProcess({ name: "", description: "", category: "patient_front" });
               }}>
                 Cancel
               </Button>
@@ -5899,16 +6893,56 @@ export default function Process() {
               label="Process Name"
               value={newProcess.name}
               onChange={(e) => setNewProcess({ ...newProcess, name: e.target.value })}
-              placeholder="Enter process name"
+              placeholder="e.g. LASIK Refractive Daycare"
             />
             <div>
-              <label className="block text-sm font-medium mb-2">Process Description</label>
+              <label className="block text-sm font-medium mb-1 text-slate-700">Process Description</label>
               <textarea
                 value={newProcess.description}
                 onChange={(e) => setNewProcess({ ...newProcess, description: e.target.value })}
-                placeholder="Enter process description"
-                className="w-full px-4 py-3 bg-input-background border border-input rounded-xl resize-none h-24"
+                placeholder="Describe this clinical journey or automated outreach process..."
+                className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl resize-none h-20 text-xs sm:text-sm text-slate-800 focus:outline-none focus:border-blue-500"
               />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-2">Process Category</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNewProcess({ ...newProcess, category: "patient_front" })}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    (newProcess.category || "patient_front") === "patient_front"
+                      ? "border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500/30"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-xs font-bold text-slate-900">Patient Front Journey</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                    Powers the patient companion app (/patient-front), tracking stages, checklists, and consents.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setNewProcess({ ...newProcess, category: "ai_calling" })}
+                  className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                    newProcess.category === "ai_calling"
+                      ? "border-blue-500 bg-blue-50/70 ring-1 ring-blue-500/30"
+                      : "border-slate-200 bg-white hover:bg-slate-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-xs font-bold text-slate-900">AI Calling & Outreach</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-snug">
+                    Automated outreach, receptionist call handling, qualification, and appointment booking.
+                  </p>
+                </button>
+              </div>
             </div>
           </div>
         </Modal>
