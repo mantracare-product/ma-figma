@@ -1,13 +1,3 @@
-/**
- * AdvanceListDrawer.tsx
- * Path: src/app/pages/admin/components/AdvanceListDrawer.tsx
- *
- * Slide-out drawer for creating or editing an Advance List 2 definition.
- * Allows defining custom typed columns (String, Number), setting behavior properties
- * (Primary, Editable, Disable), downloading dynamically generated sample CSV templates,
- * and importing or managing list data rows.
- */
-
 import React, { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -17,22 +7,15 @@ import {
   Download,
   Upload,
   Layers,
-  Star,
   Check,
   AlertCircle,
   ChevronUp,
   ChevronDown,
-  Sparkles,
-  HelpCircle,
   FileSpreadsheet,
   CheckCircle2,
-  FileText,
-  Hash,
-  Type,
-  Lock,
-  Edit3,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InfoTooltip } from "../../../components/help/InfoTooltip";
 import {
   AdvanceListDefinition,
   AdvanceListColumn,
@@ -59,13 +42,10 @@ export function AdvanceListDrawer({
   editingList = null,
   zIndex = 100050,
 }: AdvanceListDrawerProps) {
-  // Form State
+  // Form State - Start empty for new list
   const [listName, setListName] = useState("");
   const [description, setDescription] = useState("");
-  const [columns, setColumns] = useState<AdvanceListColumn[]>([
-    { id: "col_item_name", name: "Item Name", type: "string", isPrimary: true, isEditable: false, isDisable: false },
-    { id: "col_value", name: "Value / Price", type: "number", isPrimary: false, isEditable: true, isDisable: false },
-  ]);
+  const [columns, setColumns] = useState<AdvanceListColumn[]>([]);
   const [rows, setRows] = useState<AdvanceListRow[]>([]);
 
   // CSV Import Modal & Feedback State
@@ -83,24 +63,14 @@ export function AdvanceListDrawer({
   useEffect(() => {
     if (isOpen) {
       if (editingList) {
-        setListName(editingList.name);
+        setListName(editingList.name || "");
         setDescription(editingList.description || "");
-        setColumns(
-          editingList.columns && editingList.columns.length > 0
-            ? editingList.columns
-            : [
-                { id: "col_item_name", name: "Item Name", type: "string", isPrimary: true, isEditable: false, isDisable: false },
-              ]
-        );
+        setColumns(editingList.columns || []);
         setRows(editingList.rows || []);
       } else {
-        const initialColId = `col_${Date.now()}`;
         setListName("");
         setDescription("");
-        setColumns([
-          { id: `${initialColId}_name`, name: "Item Name", type: "string", isPrimary: true, isEditable: false, isDisable: false },
-          { id: `${initialColId}_price`, name: "Price", type: "number", isPrimary: false, isEditable: true, isDisable: false },
-        ]);
+        setColumns([]);
         setRows([]);
       }
       setCsvFile(null);
@@ -123,7 +93,7 @@ export function AdvanceListDrawer({
         id: newColId,
         name: `Column ${colCount}`,
         type: "string",
-        isPrimary: prev.length === 0,
+        isPrimary: prev.length === 0, // First column added is automatically marked as primary
         isEditable: false,
         isDisable: false,
       },
@@ -156,14 +126,10 @@ export function AdvanceListDrawer({
   };
 
   const removeColumn = (index: number) => {
-    if (columns.length <= 1) {
-      toast.error("Advance List must have at least one column.");
-      return;
-    }
-    const removedWasPrimary = columns[index].isPrimary;
+    const removedWasPrimary = columns[index]?.isPrimary;
     const nextCols = columns.filter((_, idx) => idx !== index);
 
-    // If removed column was primary, nominate the first column as primary
+    // If removed column was primary and other columns remain, nominate the first column as primary
     if (removedWasPrimary && nextCols.length > 0) {
       nextCols[0].isPrimary = true;
       nextCols[0].isDisable = false;
@@ -259,7 +225,10 @@ export function AdvanceListDrawer({
 
   // ── Manual Row Management ─────────────────────────────────────────────────
   const addRow = () => {
-    const primaryCol = columns.find((c) => c.isPrimary) || columns[0];
+    if (columns.length === 0) {
+      toast.error("Please add columns in Tab 1 before creating rows.");
+      return;
+    }
     const initialVals: Record<string, string | number> = {};
     columns.forEach((c) => {
       initialVals[c.id] = c.type === "number" ? 0 : "";
@@ -328,7 +297,7 @@ export function AdvanceListDrawer({
     }
 
     if (columns.length === 0) {
-      toast.error("Please add at least one column.");
+      toast.error("Please add at least one column to this Advance List.");
       return;
     }
 
@@ -386,8 +355,6 @@ export function AdvanceListDrawer({
     onClose();
   };
 
-  const primaryColumn = columns.find((c) => c.isPrimary) || columns[0];
-
   return createPortal(
     <div
       style={{ zIndex }}
@@ -405,23 +372,18 @@ export function AdvanceListDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-indigo-50/40">
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/20">
-              <Layers className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
+              <Layers className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-bold text-slate-800">
-                  {editingList ? "Edit Advance List 2" : "Create Advance List 2"}
-                </h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">
-                  Advance 2
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Configure typed columns, behavior properties, and import dataset via CSV.
-              </p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-900">
+                {editingList ? "Edit Advance List 2" : "Create Advance List 2"}
+              </h2>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                Advance 2
+              </span>
             </div>
           </div>
           <button
@@ -429,18 +391,18 @@ export function AdvanceListDrawer({
             onClick={onClose}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="px-6 pt-3 border-b border-slate-200 bg-white flex items-center gap-2">
+        <div className="px-6 pt-2 border-b border-slate-200 bg-white flex items-center gap-4">
           <button
             type="button"
             onClick={() => setActiveTab("schema")}
-            className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 pb-2.5 px-1 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
               activeTab === "schema"
-                ? "border-indigo-600 text-indigo-600"
+                ? "border-blue-600 text-blue-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -451,9 +413,9 @@ export function AdvanceListDrawer({
           <button
             type="button"
             onClick={() => setActiveTab("data")}
-            className={`flex items-center gap-1.5 pb-2.5 px-3 text-xs font-bold border-b-2 transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 pb-2.5 px-1 text-xs font-semibold border-b-2 transition-all cursor-pointer ${
               activeTab === "data"
-                ? "border-indigo-600 text-indigo-600"
+                ? "border-blue-600 text-blue-600"
                 : "border-transparent text-slate-500 hover:text-slate-800"
             }`}
           >
@@ -466,32 +428,38 @@ export function AdvanceListDrawer({
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* TAB 1: SCHEMA & COLUMNS */}
           {activeTab === "schema" && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* List Metadata */}
-              <div className="p-4 bg-slate-50/80 border border-slate-200 rounded-xl space-y-3.5">
+              <div className="p-4 bg-slate-50/60 border border-slate-200 rounded-xl space-y-3.5">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    List Name <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center gap-1.5 mb-1.5">
+                    <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                      List Name <span className="text-red-500">*</span>
+                    </label>
+                    <InfoTooltip text="Display name for this Advance List dataset (e.g., Procedures, Price Book, Inventory)." />
+                  </div>
                   <input
                     type="text"
                     value={listName}
                     placeholder="e.g. Dental Procedures, Membership Tiers..."
                     onChange={(e) => setListName(e.target.value)}
-                    className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-lg focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none font-medium text-slate-800 shadow-2xs"
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none font-medium text-slate-800 shadow-2xs"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Description / Purpose <span className="text-slate-400 font-normal">(Optional)</span>
-                  </label>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <label className="text-xs font-semibold text-slate-600">
+                      Description <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <InfoTooltip text="Optional notes or documentation for this dataset." />
+                  </div>
                   <input
                     type="text"
                     value={description}
                     placeholder="Brief description of this list dataset..."
                     onChange={(e) => setDescription(e.target.value)}
-                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:border-indigo-500 outline-none text-slate-700"
+                    className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none text-slate-700"
                   />
                 </div>
               </div>
@@ -499,187 +467,214 @@ export function AdvanceListDrawer({
               {/* Columns Builder */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-1.5">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       List Columns & Behavior Rules
                     </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Configure typed columns (String, Number), mark 1 Primary column, and set Editable / Disable flags.
-                    </p>
+                    <InfoTooltip text="Define typed columns. Exactly one column must be marked Primary (acts as the record title). Editable allows per-record value overrides, and Disable locks columns as read-only." />
                   </div>
 
                   <button
                     type="button"
                     onClick={addColumn}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100/80 font-bold text-xs cursor-pointer shadow-2xs transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-semibold text-xs cursor-pointer shadow-2xs transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
                     <span>Add Column</span>
                   </button>
                 </div>
 
-                {/* Columns Table */}
-                <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-bold text-slate-700">
-                        <th className="px-3 py-2.5 min-w-[160px]">Column Name</th>
-                        <th className="px-2 py-2.5 text-center w-28">Type</th>
-                        <th className="px-2 py-2.5 text-center w-20">
-                          <span className="text-blue-700 flex items-center justify-center gap-1">
-                            <Star className="w-3 h-3 fill-blue-500 text-blue-500" />
-                            <span>Primary</span>
-                          </span>
-                        </th>
-                        <th className="px-2 py-2.5 text-center w-20">
-                          <span className="text-emerald-700">Editable</span>
-                        </th>
-                        <th className="px-2 py-2.5 text-center w-20">
-                          <span className="text-slate-600">Disable</span>
-                        </th>
-                        <th className="px-2 py-2.5 text-center w-16">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {columns.map((col, idx) => {
-                        const isPrimary = Boolean(col.isPrimary);
-                        const isEditable = Boolean(col.isEditable);
-                        const isDisable = Boolean(col.isDisable);
-
-                        return (
-                          <tr
-                            key={col.id || idx}
-                            className={`transition-colors ${
-                              isPrimary ? "bg-blue-50/30" : "hover:bg-slate-50/60"
-                            }`}
-                          >
-                            {/* Column Name */}
-                            <td className="px-3 py-2.5">
-                              <input
-                                type="text"
-                                value={col.name}
-                                placeholder="Column Name..."
-                                onChange={(e) => updateColumn(idx, { name: e.target.value })}
-                                className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-semibold text-slate-800"
-                              />
-                            </td>
-
-                            {/* Column Type (String or Number) */}
-                            <td className="px-2 py-2.5 text-center">
-                              <select
-                                value={col.type}
-                                onChange={(e) =>
-                                  updateColumn(idx, { type: e.target.value as AdvanceColumnType })
-                                }
-                                className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-700 cursor-pointer"
-                              >
-                                <option value="string">String (Text)</option>
-                                <option value="number">Number</option>
-                              </select>
-                            </td>
-
-                            {/* Primary (Exactly 1 Column) */}
-                            <td className="px-2 py-2.5 text-center">
-                              <label
-                                className="inline-flex items-center justify-center p-1 cursor-pointer"
-                                title="Set as Primary (Main Label)"
-                              >
-                                <input
-                                  type="radio"
-                                  name="advanceListPrimaryColumn"
-                                  checked={isPrimary}
-                                  onChange={() => updateColumn(idx, { isPrimary: true })}
-                                  className="w-4 h-4 text-blue-600 cursor-pointer accent-blue-600"
-                                />
-                              </label>
-                            </td>
-
-                            {/* Editable Checkbox */}
-                            <td className="px-2 py-2.5 text-center">
-                              <label
-                                className="inline-flex items-center justify-center p-1 cursor-pointer"
-                                title="Allow editing value per record"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={isEditable}
-                                  onChange={(e) => updateColumn(idx, { isEditable: e.target.checked })}
-                                  className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
-                                />
-                              </label>
-                            </td>
-
-                            {/* Disable Checkbox */}
-                            <td className="px-2 py-2.5 text-center">
-                              <label
-                                className={`inline-flex items-center justify-center p-1 ${
-                                  isPrimary ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
-                                }`}
-                                title={isPrimary ? "Primary column cannot be disabled" : "Lock column as disabled"}
-                              >
-                                <input
-                                  type="checkbox"
-                                  disabled={isPrimary}
-                                  checked={isDisable}
-                                  onChange={(e) => updateColumn(idx, { isDisable: e.target.checked })}
-                                  className="w-4 h-4 text-slate-600 rounded cursor-pointer accent-slate-600"
-                                />
-                              </label>
-                            </td>
-
-                            {/* Actions (Reorder / Delete) */}
-                            <td className="px-2 py-2.5 text-center">
-                              <div className="flex items-center justify-center gap-0.5">
-                                <button
-                                  type="button"
-                                  disabled={idx === 0}
-                                  onClick={() => moveColumn(idx, -1)}
-                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                  title="Move up"
-                                >
-                                  <ChevronUp className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === columns.length - 1}
-                                  onClick={() => moveColumn(idx, 1)}
-                                  className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                  title="Move down"
-                                >
-                                  <ChevronDown className="w-3.5 h-3.5" />
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={columns.length <= 1}
-                                  onClick={() => removeColumn(idx)}
-                                  className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-20 cursor-pointer"
-                                  title="Delete column"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl flex items-start gap-2 text-xs text-blue-800">
-                  <Sparkles className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                  <div>
-                    <strong>Primary Column:</strong> &ldquo;{primaryColumn?.name || "Column"}&rdquo; will be displayed as the main title when this list is selected in records.
+                {/* Columns Table / Empty State */}
+                {columns.length === 0 ? (
+                  <div className="p-8 border border-dashed border-slate-200 rounded-xl bg-slate-50/50 text-center space-y-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center mx-auto">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-slate-700">No columns defined yet</p>
+                      <p className="text-[11px] text-slate-400">Click &ldquo;Add Column&rdquo; above or below to build your column schema.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addColumn}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs cursor-pointer shadow-xs transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Column</span>
+                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs bg-white">
+                    <table className="w-full text-left text-xs border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-semibold text-slate-700">
+                          <th className="px-3 py-2.5 min-w-[160px]">Column Name</th>
+                          <th className="px-2 py-2.5 text-center w-28">
+                            <span className="inline-flex items-center justify-center gap-1">
+                              Type
+                              <InfoTooltip text="Column data type: String (Text) or Number." />
+                            </span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center w-20">
+                            <span className="inline-flex items-center justify-center gap-1 text-slate-700 font-bold">
+                              Primary
+                              <InfoTooltip text="Main title/label displayed when this item is selected in records. Exactly one column must be primary." />
+                            </span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center w-20">
+                            <span className="inline-flex items-center justify-center gap-1 text-slate-700 font-bold">
+                              Editable
+                              <InfoTooltip text="Allows users to edit and override this column's value on individual records." />
+                            </span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center w-20">
+                            <span className="inline-flex items-center justify-center gap-1 text-slate-700 font-bold">
+                              Disable
+                              <InfoTooltip text="Locks this column as read-only. Values cannot be changed on records." />
+                            </span>
+                          </th>
+                          <th className="px-2 py-2.5 text-center w-16">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {columns.map((col, idx) => {
+                          const isPrimary = Boolean(col.isPrimary);
+                          const isEditable = Boolean(col.isEditable);
+                          const isDisable = Boolean(col.isDisable);
+
+                          return (
+                            <tr
+                              key={col.id || idx}
+                              className={`transition-colors ${
+                                isPrimary ? "bg-blue-50/25" : "hover:bg-slate-50/60"
+                              }`}
+                            >
+                              {/* Column Name */}
+                              <td className="px-3 py-2.5">
+                                <input
+                                  type="text"
+                                  value={col.name}
+                                  placeholder="Column Name..."
+                                  onChange={(e) => updateColumn(idx, { name: e.target.value })}
+                                  className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-semibold text-slate-800"
+                                />
+                              </td>
+
+                              {/* Column Type (String or Number) */}
+                              <td className="px-2 py-2.5 text-center">
+                                <select
+                                  value={col.type}
+                                  onChange={(e) =>
+                                    updateColumn(idx, { type: e.target.value as AdvanceColumnType })
+                                  }
+                                  className="w-full px-2 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 font-medium text-slate-700 cursor-pointer"
+                                >
+                                  <option value="string">String (Text)</option>
+                                  <option value="number">Number</option>
+                                </select>
+                              </td>
+
+                              {/* Primary (Exactly 1 Column) */}
+                              <td className="px-2 py-2.5 text-center">
+                                <label
+                                  className="inline-flex items-center justify-center p-1 cursor-pointer"
+                                  title="Set as Primary (Main Label)"
+                                >
+                                  <input
+                                    type="radio"
+                                    name="advanceListPrimaryColumn"
+                                    checked={isPrimary}
+                                    onChange={() => updateColumn(idx, { isPrimary: true })}
+                                    className="w-4 h-4 text-blue-600 cursor-pointer accent-blue-600"
+                                  />
+                                </label>
+                              </td>
+
+                              {/* Editable Checkbox */}
+                              <td className="px-2 py-2.5 text-center">
+                                <label
+                                  className="inline-flex items-center justify-center p-1 cursor-pointer"
+                                  title="Allow editing value per record"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isEditable}
+                                    onChange={(e) => updateColumn(idx, { isEditable: e.target.checked })}
+                                    className="w-4 h-4 text-emerald-600 rounded cursor-pointer accent-emerald-600"
+                                  />
+                                </label>
+                              </td>
+
+                              {/* Disable Checkbox */}
+                              <td className="px-2 py-2.5 text-center">
+                                <label
+                                  className={`inline-flex items-center justify-center p-1 ${
+                                    isPrimary ? "opacity-30 cursor-not-allowed" : "cursor-pointer"
+                                  }`}
+                                  title={isPrimary ? "Primary column cannot be disabled" : "Lock column as disabled"}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    disabled={isPrimary}
+                                    checked={isDisable}
+                                    onChange={(e) => updateColumn(idx, { isDisable: e.target.checked })}
+                                    className="w-4 h-4 text-slate-600 rounded cursor-pointer accent-slate-600"
+                                  />
+                                </label>
+                              </td>
+
+                              {/* Actions (Reorder / Delete) */}
+                              <td className="px-2 py-2.5 text-center">
+                                <div className="flex items-center justify-center gap-0.5">
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveColumn(idx, -1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move up"
+                                  >
+                                    <ChevronUp className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === columns.length - 1}
+                                    onClick={() => moveColumn(idx, 1)}
+                                    className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                    title="Move down"
+                                  >
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeColumn(idx)}
+                                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
+                                    title="Delete column"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
 
               {/* Step 2 CTA */}
               <div className="pt-2 flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setActiveTab("data")}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-md shadow-indigo-600/20 cursor-pointer transition-all"
+                  onClick={() => {
+                    if (columns.length === 0) {
+                      toast.error("Please add at least one column before proceeding.");
+                      return;
+                    }
+                    setActiveTab("data");
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs cursor-pointer transition-all"
                 >
                   <span>Proceed to Data & CSV Import</span>
                   <ChevronDown className="w-4 h-4 -rotate-90" />
@@ -690,21 +685,19 @@ export function AdvanceListDrawer({
 
           {/* TAB 2: DATA & CSV IMPORT */}
           {activeTab === "data" && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* CSV Import & Template Actions Card */}
-              <div className="p-4 bg-gradient-to-br from-indigo-50/80 via-blue-50/40 to-slate-50 border border-indigo-200/80 rounded-2xl space-y-4 shadow-xs">
+              <div className="p-4 bg-slate-50/70 border border-slate-200 rounded-xl space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                    <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
                       <Upload className="w-4 h-4" />
                     </div>
-                    <div>
+                    <div className="flex items-center gap-1.5">
                       <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                         Import Data via CSV
                       </h4>
-                      <p className="text-[11px] text-slate-600">
-                        Download a sample template with your exact column schema or upload an existing CSV.
-                      </p>
+                      <InfoTooltip text="Download a sample template with your exact columns schema or upload an existing CSV file." />
                     </div>
                   </div>
 
@@ -712,7 +705,7 @@ export function AdvanceListDrawer({
                   <button
                     type="button"
                     onClick={handleDownloadSampleCsv}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs cursor-pointer shadow-2xs transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 font-semibold text-xs cursor-pointer shadow-2xs transition-colors"
                   >
                     <Download className="w-3.5 h-3.5" />
                     <span>Download Sample CSV</span>
@@ -736,8 +729,8 @@ export function AdvanceListDrawer({
                   onClick={() => fileInputRef.current?.click()}
                   className={`p-5 border-2 border-dashed rounded-xl text-center cursor-pointer transition-all ${
                     isCsvDragging
-                      ? "border-indigo-500 bg-indigo-100/50"
-                      : "border-indigo-200 bg-white hover:border-indigo-300 hover:bg-indigo-50/30"
+                      ? "border-blue-500 bg-blue-50/50"
+                      : "border-slate-200 bg-white hover:border-blue-300 hover:bg-blue-50/30"
                   }`}
                 >
                   <input
@@ -752,12 +745,12 @@ export function AdvanceListDrawer({
                     }}
                   />
                   <div className="flex flex-col items-center gap-1.5">
-                    <FileSpreadsheet className="w-7 h-7 text-indigo-500" />
+                    <FileSpreadsheet className="w-7 h-7 text-blue-600" />
                     <span className="text-xs font-bold text-slate-700">
                       {csvFile ? csvFile.name : "Click to select or drag & drop CSV file"}
                     </span>
                     <span className="text-[11px] text-slate-400">
-                      Columns expected: {columns.map((c) => c.name).join(", ")}
+                      Columns expected: {columns.length > 0 ? columns.map((c) => c.name).join(", ") : "None defined"}
                     </span>
                   </div>
                 </div>
@@ -789,7 +782,7 @@ export function AdvanceListDrawer({
 
                 {/* CSV Staged Preview */}
                 {csvPreviewRows.length > 0 && (
-                  <div className="p-3 bg-white border border-indigo-200 rounded-xl space-y-3">
+                  <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -805,7 +798,7 @@ export function AdvanceListDrawer({
                             name="csvMode"
                             checked={csvImportMode === "append"}
                             onChange={() => setCsvImportMode("append")}
-                            className="accent-indigo-600"
+                            className="accent-blue-600"
                           />
                           <span className="text-slate-700">Append to existing</span>
                         </label>
@@ -815,7 +808,7 @@ export function AdvanceListDrawer({
                             name="csvMode"
                             checked={csvImportMode === "replace"}
                             onChange={() => setCsvImportMode("replace")}
-                            className="accent-indigo-600"
+                            className="accent-blue-600"
                           />
                           <span className="text-slate-700">Replace current rows</span>
                         </label>
@@ -825,7 +818,7 @@ export function AdvanceListDrawer({
                     <button
                       type="button"
                       onClick={applyCsvImport}
-                      className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                      className="w-full py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs cursor-pointer transition-colors flex items-center justify-center gap-1.5"
                     >
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
                       <span>Apply CSV Import ({csvPreviewRows.length} Rows)</span>
@@ -837,19 +830,17 @@ export function AdvanceListDrawer({
               {/* Rows List / Table */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <div>
+                  <div className="flex items-center gap-1.5">
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
                       Defined List Rows ({rows.length})
                     </h3>
-                    <p className="text-[11px] text-slate-500">
-                      Add, edit, or toggle default options for this Advance List.
-                    </p>
+                    <InfoTooltip text="Manage row entries and default choices for this dataset." />
                   </div>
 
                   <button
                     type="button"
                     onClick={addRow}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-bold text-xs cursor-pointer shadow-2xs transition-colors"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 font-semibold text-xs cursor-pointer shadow-2xs transition-colors"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Add Row</span>
@@ -857,7 +848,7 @@ export function AdvanceListDrawer({
                 </div>
 
                 {rows.length === 0 ? (
-                  <div className="p-8 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2">
+                  <div className="p-8 bg-slate-50/50 border border-slate-200 border-dashed rounded-xl text-center space-y-2">
                     <p className="text-xs text-slate-500 font-medium">
                       No data rows in this list yet.
                     </p>
@@ -884,8 +875,7 @@ export function AdvanceListDrawer({
                               </span>
                               {row.isDefault && (
                                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                                  <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
-                                  <span>Default Option</span>
+                                  Default Option
                                 </span>
                               )}
                             </div>
@@ -939,7 +929,7 @@ export function AdvanceListDrawer({
                                     value={val}
                                     placeholder={`${col.name}...`}
                                     onChange={(e) => updateRowCell(rIdx, col.id, e.target.value)}
-                                    className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-800"
+                                    className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium text-slate-800"
                                   />
                                 </div>
                               );
@@ -956,11 +946,11 @@ export function AdvanceListDrawer({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+        <div className="px-6 py-3.5 border-t border-slate-200 bg-slate-50/80 flex items-center justify-between">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 transition-colors cursor-pointer"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-200/60 transition-colors cursor-pointer"
           >
             Cancel
           </button>
@@ -968,7 +958,7 @@ export function AdvanceListDrawer({
           <button
             type="button"
             onClick={handleSave}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 cursor-pointer transition-all"
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-xs cursor-pointer transition-all"
           >
             <Check className="w-4 h-4 stroke-[3]" />
             <span>Save & Apply Advance List</span>
@@ -981,3 +971,4 @@ export function AdvanceListDrawer({
 }
 
 export default AdvanceListDrawer;
+
