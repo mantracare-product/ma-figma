@@ -70,6 +70,7 @@ import {
   formatTimestamp,
 } from "../../../lib/activityEngine";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
+import { updateProcessCallLogFields, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
 import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
@@ -467,6 +468,62 @@ export default function ProcessDetailDrawer({
       });
   }, [dealFields, visibleFieldKeys, editedValues, log, client]);
 
+  const [localEditedValues, setLocalEditedValues] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (clientId && log?.process) {
+      try {
+        const currentLogs = getStoredCallLogs();
+        const found = currentLogs.find(
+          (l) =>
+            (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+            l.process.toLowerCase() === log.process.toLowerCase()
+        );
+        if (found) {
+          setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
+        }
+      } catch {}
+    }
+  }, [clientId, log?.process]);
+
+  useEffect(() => {
+    const handleLogsUpdate = () => {
+      if (clientId && log?.process) {
+        try {
+          const currentLogs = getStoredCallLogs();
+          const found = currentLogs.find(
+            (l) =>
+              (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+              l.process.toLowerCase() === log.process.toLowerCase()
+          );
+          if (found) {
+            setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+    window.addEventListener("ma_record_data_changed", handleLogsUpdate);
+    window.addEventListener("storage", handleLogsUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+      window.removeEventListener("ma_record_data_changed", handleLogsUpdate);
+      window.removeEventListener("storage", handleLogsUpdate);
+    };
+  }, [clientId, log?.process]);
+
+  const handleFieldChangeInternal = (key: string, value: any) => {
+    setLocalEditedValues((prev) => ({ ...prev, [key]: value }));
+    if (clientId && log?.process) {
+      updateProcessCallLogFields(clientId, log.process, { [key]: value });
+    }
+    onFieldSave?.(key, value);
+    try {
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
+  };
+
   const processFieldValues = React.useMemo(() => {
     const vals: Record<string, any> = {
       ...(log as any),
@@ -490,7 +547,7 @@ export default function ProcessDetailDrawer({
         }
       });
     }
-    // Directly merge all editedValues so ANY field (custom or standard) immediately updates and preserves its typed value
+    // Directly merge all editedValues and local overrides so ANY field immediately updates and preserves its value
     if (editedValues && typeof editedValues === "object") {
       Object.entries(editedValues).forEach(([k, v]) => {
         if (v !== undefined) {
@@ -498,8 +555,15 @@ export default function ProcessDetailDrawer({
         }
       });
     }
+    if (localEditedValues && typeof localEditedValues === "object") {
+      Object.entries(localEditedValues).forEach(([k, v]) => {
+        if (v !== undefined) {
+          vals[k] = v;
+        }
+      });
+    }
     return vals;
-  }, [client, log, clientName, fields, editedValues]);
+  }, [client, log, clientName, fields, editedValues, localEditedValues]);
 
   // Compute active stages
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
@@ -954,7 +1018,7 @@ export default function ProcessDetailDrawer({
                       sections={processSections}
                       onSectionsChange={setProcessSections}
                       fieldValues={processFieldValues}
-                      onFieldValueChange={onFieldSave}
+                      onFieldValueChange={handleFieldChangeInternal}
                       onNavigateToClient={(cId) => {
                         onClose();
                         navigate(`/clients/${cId}`);
@@ -1014,6 +1078,7 @@ export default function ProcessDetailDrawer({
                     onClose={onCloseFieldManager}
                     onCreated={(newField) => {
                       onVisibleFieldKeysChange([...visibleFieldKeys, newField.key]);
+                      toast.success(`Field "${newField.label}" created and added to view`);
                     }}
                   />
                 )}
@@ -1147,9 +1212,16 @@ export default function ProcessDetailDrawer({
         allFields={allRegistryProcessFields}
         initialValues={processFieldValues}
         onConfirm={(filledValues) => {
+          setLocalEditedValues((prev) => ({ ...prev, ...filledValues }));
+          if (clientId && log?.process) {
+            updateProcessCallLogFields(clientId, log.process, filledValues);
+          }
           Object.entries(filledValues).forEach(([k, v]) => {
             onFieldSave?.(k, v);
           });
+          try {
+            window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+          } catch {}
           onStageChange(requiredFieldsModalState.targetStageIdx);
           setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
           toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);

@@ -594,12 +594,16 @@ export function isFieldMatchingOrg(
   if (!field) return true;
   if (field.source === "system" || (field.id !== undefined && field.id < 0) || (field.key && SYSTEM_FIELD_KEYS.has(field.key))) return true;
 
-  // If specific processId is evaluated and field is assigned to specific processes
-  if (processId && field.processIds && field.processIds.length > 0) {
-    if (isProcessMatchingAssignment(field.processIds, processId)) {
-      return true;
+  // If field is assigned to specific process(es), enforce strict process matching
+  if (field.processIds && field.processIds.length > 0) {
+    const isAll = field.processIds.includes("all") || field.processIds.includes("*");
+    if (!isAll) {
+      if (!processId) {
+        if (field.module === "process") return false;
+      } else if (!isProcessMatchingAssignment(field.processIds, processId)) {
+        return false;
+      }
     }
-    return false;
   }
 
   // If multi-rule scoping is present, check against rules
@@ -702,12 +706,16 @@ export function isSectionMatchingOrg(
   if (!section) return true;
   if (section.source === "system" || (section as any).isCustom === false || SYSTEM_SECTION_IDS.has(section.id)) return true;
 
-  // If specific processId is evaluated and section is assigned to specific processes
-  if (processId && section.processIds && section.processIds.length > 0) {
-    if (isProcessMatchingAssignment(section.processIds, processId)) {
-      return true;
+  // If section is assigned to specific process(es), enforce strict process matching
+  if (section.processIds && section.processIds.length > 0) {
+    const isAll = section.processIds.includes("all") || section.processIds.includes("*");
+    if (!isAll) {
+      if (!processId) {
+        if (section.module === "process") return false;
+      } else if (!isProcessMatchingAssignment(section.processIds, processId)) {
+        return false;
+      }
     }
-    return false;
   }
 
   // If multi-rule scoping is present, check against rules

@@ -32,14 +32,16 @@ import {
   isSectionMatchingOrg,
 } from "../context/FieldRegistryContext";
 import { useOrganization } from "../context/OrganizationContext";
-import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
-import { getActivityForClient, getActivityForProcess } from "../../lib/activityLog";
-import { getStoredCallLogs, CallLog } from "../../lib/processLogsStore";
+import { getStoredCallLogs, CallLog, updateProcessCallLogFields, updateProcessCallLogStage } from "../../lib/processLogsStore";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
+import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import ActivityTab from "../components/activity/ActivityTab";
 import ProcessDetailDrawer, { ProcessDetailHistoryFilterState } from "../components/deals/ProcessDetailDrawer";
 import ScheduleAppointmentDrawer, { BookingFormValues } from "../components/appointments/ScheduleAppointmentDrawer";
 import { appendActivity } from "../../lib/activityEngine";
+import { getActivityForProcess, getActivityForClient } from "../../lib/activityLog";
+import { CLIENTS_STORE_EVENT, ClientProcessStage } from "../../lib/clientProcessState";
 import { useInvoices } from "../context/InvoiceContext";
 import InvoiceDetailDrawer from "../components/invoices/InvoiceDetailDrawer";
 import CreateInvoiceDrawer from "../components/invoices/CreateInvoiceDrawer";
@@ -913,6 +915,62 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
     selectedAddFields: [],
   });
 
+  const [clientProfileRequiredModal, setClientProfileRequiredModal] = useState<{
+    isOpen: boolean;
+    processId: string;
+    processName: string;
+    targetStageName: string;
+    missingFields: MissingRequiredField[];
+    initialValues: Record<string, any>;
+  }>({
+    isOpen: false,
+    processId: "",
+    processName: "",
+    targetStageName: "",
+    missingFields: [],
+    initialValues: {},
+  });
+
+  const handleProcessTableStageClick = (proc: { id: string; name: string }, targetStageLabel: string) => {
+    if (!client) return;
+    const allLogs = getStoredCallLogs();
+    const matchingLog = allLogs.find(
+      (l) => (l.clientId === client.id || (l.client && l.client.toLowerCase() === client.name.toLowerCase())) &&
+             (l.process.toLowerCase() === proc.name.toLowerCase())
+    );
+    const procFieldValues: Record<string, any> = {
+      ...(matchingLog || {}),
+      ...editedValues,
+      client_name: client.name,
+      email: client.email,
+      phone: client.phone,
+    };
+    const allProcFields = getAllFields("process");
+    const missing = getMissingRequiredProcessFields({
+      processId: proc.id,
+      processName: proc.name,
+      currentStageName: targetStageLabel,
+      allFields: allProcFields,
+      fieldValues: procFieldValues,
+    });
+
+    if (missing.length > 0) {
+      setClientProfileRequiredModal({
+        isOpen: true,
+        processId: proc.id,
+        processName: proc.name,
+        targetStageName: targetStageLabel,
+        missingFields: missing,
+        initialValues: procFieldValues,
+      });
+      return;
+    }
+
+    setDrawerProcessStages((prev) => ({ ...prev, [proc.id]: targetStageLabel }));
+    updateProcessCallLogStage(String(client.id), proc.name, targetStageLabel);
+    toast.success(`Stage updated to ${targetStageLabel}`);
+  };
+
   // Initialize selectedProcesses and drawerProcessStages from client
   useEffect(() => {
     if (client) {
@@ -1764,10 +1822,6 @@ export default function ClientProfile({ clientIdProp, onCloseOverride, initialOp
                                               <div key={stage.id} style={{ position: "relative" }}>
                                                 <button
                                                   type="button"
-                                                  onClick={() => {
-                                                    setDrawerProcessStages((prev) => ({ ...prev, [process.id]: stage.label }));
-                                                    toast.success(`Stage updated to ${stage.label}`);
-                                                  }}
                                                   onMouseEnter={() => setHoveredStage(stageKey)}
                                                   onMouseLeave={() => setHoveredStage(null)}
                                                   style={{
