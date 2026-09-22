@@ -1514,8 +1514,13 @@ export function AdminFieldDrawer({
     return advanceLists.find((l) => l.id === form.advanceListId);
   }, [advanceLists, form.advanceListId]);
 
-  const handleSelectAdvanceList = (listId: string) => {
-    const targetList = advanceLists.find((l) => l.id === listId);
+  const handleSelectAdvanceList = (listId: string, customListPool?: AdvanceListDefinition[]) => {
+    const pool = customListPool && customListPool.length > 0
+      ? customListPool
+      : advanceLists.length > 0
+      ? advanceLists
+      : getStoredAdvanceLists();
+    const targetList = pool.find((l) => l.id === listId) || getStoredAdvanceLists().find((l) => l.id === listId);
     if (!targetList) {
       setForm((p) => ({
         ...p,
@@ -4575,12 +4580,15 @@ export function AdminFieldDrawer({
                     </div>
                   )}
 
-                  {/* Defined Option Items / Records for Advance List 2 */}
+                  {/* Defined Option Items / Records for Advance List 2 (Table View) */}
                   {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
                     <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                          Defined Option Rows ({form.options.length})
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <span>Defined Option Rows</span>
+                          <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">
+                            {form.options.length}
+                          </span>
                         </span>
 
                         {!isReadOnly && canClientAddOptions && (
@@ -4629,57 +4637,94 @@ export function AdminFieldDrawer({
                           No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; or &ldquo;Import CSV&rdquo; above.
                         </div>
                       ) : (
-                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
-                          {form.options.map((opt, optIdx) => {
-                            const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
-                            const rowVals: Record<string, any> =
-                              typeof opt.value === "object" && opt.value !== null
-                                ? opt.value
-                                : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
-
-                            return (
-                              <div
-                                key={opt.id || optIdx}
-                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
-                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
-                                      Row #{optIdx + 1}
-                                    </span>
-                                    {opt.isDefault && (
-                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
-                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
-                                        <span>Default Row</span>
+                        <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-96">
+                          <table className="w-full text-left text-xs border-collapse min-w-[480px]">
+                            <thead className="sticky top-0 z-10 bg-slate-100 border-b border-slate-200 shadow-2xs">
+                              <tr className="text-[11px] font-bold text-slate-700">
+                                <th className="px-2.5 py-2 text-center w-12 text-slate-500 font-mono">#</th>
+                                {selectedAdvanceListDef.columns.map((col) => (
+                                  <th key={col.id} className="px-3 py-2 min-w-[140px]">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-semibold text-slate-800">{col.name}</span>
+                                      {col.isPrimary && (
+                                        <span className="text-[9px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
+                                          Primary
+                                        </span>
+                                      )}
+                                      <span className="text-[9px] font-mono text-slate-400 uppercase font-normal">
+                                        ({col.type})
                                       </span>
-                                    )}
-                                  </div>
+                                    </div>
+                                  </th>
+                                ))}
+                                <th className="px-2 py-2 text-center w-16">Default</th>
+                                {!isReadOnly && <th className="px-2 py-2 text-center w-20">Actions</th>}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {form.options.map((opt, optIdx) => {
+                                const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
+                                const rowVals: Record<string, any> =
+                                  typeof opt.value === "object" && opt.value !== null
+                                    ? opt.value
+                                    : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
 
-                                  {!isReadOnly && (
-                                    <div className="flex items-center gap-0.5">
+                                return (
+                                  <tr
+                                    key={opt.id || optIdx}
+                                    className={`hover:bg-slate-50/70 transition-colors ${
+                                      opt.isDefault ? "bg-blue-50/30" : ""
+                                    }`}
+                                  >
+                                    {/* Row Index */}
+                                    <td className="px-2.5 py-2 text-center font-mono font-bold text-slate-400 text-[11px]">
+                                      {optIdx + 1}
+                                    </td>
+
+                                    {/* Column Input Cells */}
+                                    {selectedAdvanceListDef.columns.map((col) => {
+                                      const isPrimary = col.isPrimary;
+                                      const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                      return (
+                                        <td key={col.id} className="px-2.5 py-1.5">
+                                          <input
+                                            type={col.type === "number" ? "number" : "text"}
+                                            value={currentVal}
+                                            disabled={isReadOnly}
+                                            placeholder={`${col.name}...`}
+                                            onChange={(e) => {
+                                              const rawVal = e.target.value;
+                                              const nextVal =
+                                                col.type === "number"
+                                                  ? rawVal === ""
+                                                    ? 0
+                                                    : isNaN(parseFloat(rawVal))
+                                                    ? 0
+                                                    : parseFloat(rawVal)
+                                                  : rawVal;
+                                              const nextVals = { ...rowVals, [col.id]: nextVal };
+                                              const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
+                                              const updatedLabel = isPrimary
+                                                ? String(nextVal)
+                                                : nextVals[primaryColId] || opt.label || String(nextVal);
+                                              updateOption(optIdx, {
+                                                label: updatedLabel,
+                                                value: nextVals,
+                                              });
+                                            }}
+                                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/20 font-medium text-slate-800 transition-all"
+                                          />
+                                        </td>
+                                      );
+                                    })}
+
+                                    {/* Default Star Toggle */}
+                                    <td className="px-2 py-1.5 text-center">
                                       <button
                                         type="button"
-                                        disabled={optIdx === 0}
-                                        onClick={() => moveOption(optIdx, -1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move up"
-                                      >
-                                        <ChevronUp className="w-3.5 h-3.5" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        disabled={optIdx === form.options.length - 1}
-                                        onClick={() => moveOption(optIdx, 1)}
-                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
-                                        title="Move down"
-                                      >
-                                        <ChevronDown className="w-3.5 h-3.5" />
-                                      </button>
-                                      <OptionRowMenu
-                                        isDefault={opt.isDefault}
-                                        onToggleDefault={() => {
+                                        disabled={isReadOnly}
+                                        onClick={() => {
                                           const isCurrentlyDefault = opt.isDefault;
                                           if (isCurrentlyDefault) {
                                             updateOption(optIdx, { isDefault: false });
@@ -4702,55 +4747,55 @@ export function AdminFieldDrawer({
                                             }
                                           }
                                         }}
-                                        onDelete={() => removeOption(optIdx)}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
+                                        className={`p-1 rounded cursor-pointer transition-colors ${
+                                          opt.isDefault
+                                            ? "text-amber-500 hover:text-amber-600 bg-amber-50"
+                                            : "text-slate-300 hover:text-slate-500"
+                                        }`}
+                                        title={opt.isDefault ? "Default option (Click to remove)" : "Set as default option"}
+                                      >
+                                        <Star className={`w-3.5 h-3.5 ${opt.isDefault ? "fill-amber-400" : ""}`} />
+                                      </button>
+                                    </td>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                  {selectedAdvanceListDef.columns.map((col) => {
-                                    const isPrimary = col.isPrimary;
-                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
-
-                                    return (
-                                      <div key={col.id} className="space-y-1">
-                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center justify-between">
-                                          <div className="flex items-center gap-1">
-                                            <span>{col.name}</span>
-                                            {isPrimary && (
-                                              <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
-                                                Primary
-                                              </span>
-                                            )}
-                                          </div>
-                                          <span className="text-[9px] font-mono text-slate-400 uppercase">{col.type}</span>
-                                        </label>
-                                        <input
-                                          type={col.type === "number" ? "number" : "text"}
-                                          value={currentVal}
-                                          disabled={isReadOnly}
-                                          placeholder={`${col.name}...`}
-                                          onChange={(e) => {
-                                            const rawVal = e.target.value;
-                                            const nextVal = col.type === "number" ? (rawVal === "" ? 0 : isNaN(parseFloat(rawVal)) ? 0 : parseFloat(rawVal)) : rawVal;
-                                            const nextVals = { ...rowVals, [col.id]: nextVal };
-                                            const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
-                                            const updatedLabel = isPrimary ? String(nextVal) : (nextVals[primaryColId] || opt.label || String(nextVal));
-                                            updateOption(optIdx, {
-                                              label: updatedLabel,
-                                              value: nextVals,
-                                            });
-                                          }}
-                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-800"
-                                        />
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
+                                    {/* Row Actions */}
+                                    {!isReadOnly && (
+                                      <td className="px-2 py-1.5 text-center">
+                                        <div className="flex items-center justify-center gap-0.5">
+                                          <button
+                                            type="button"
+                                            disabled={optIdx === 0}
+                                            onClick={() => moveOption(optIdx, -1)}
+                                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                            title="Move up"
+                                          >
+                                            <ChevronUp className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={optIdx === form.options.length - 1}
+                                            onClick={() => moveOption(optIdx, 1)}
+                                            className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                            title="Move down"
+                                          >
+                                            <ChevronDown className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => removeOption(optIdx)}
+                                            className="p-1 text-slate-400 hover:text-red-600 cursor-pointer transition-colors"
+                                            title="Delete row"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    )}
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
                         </div>
                       )}
                     </div>
@@ -5611,8 +5656,9 @@ export function AdminFieldDrawer({
           onSaved={(savedList) => {
             setAdvanceListDrawerOpen(false);
             setAdvanceListEditingDef(null);
-            setAdvanceLists(getStoredAdvanceLists());
-            handleSelectAdvanceList(savedList.id);
+            const freshLists = getStoredAdvanceLists();
+            setAdvanceLists(freshLists);
+            handleSelectAdvanceList(savedList.id, freshLists);
           }}
         />
       )}
