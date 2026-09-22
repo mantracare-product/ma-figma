@@ -55,8 +55,10 @@ import {
   useFieldRegistry,
   FieldDefinition,
   SectionDefinition,
+  isSectionMatchingOrg,
   SECTION_REGISTRY_EVENT,
   LEGACY_SECTION_REGISTRY_EVENT,
+  FIELD_REGISTRY_EVENT,
 } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
