@@ -302,7 +302,7 @@ export default function PatientFrontLayout() {
                   }`}
                 >
                   <FileText className="w-3.5 h-3.5 shrink-0" />
-                  <span>Documents</span>
+                  <span>Documents and Forms</span>
                 </button>
 
                 {/* Sub 2: Billing */}

@@ -6,6 +6,10 @@ import {
   QrCode,
   X,
   CheckCircle2,
+  Video,
+  MapPin,
+  Building2,
+  ExternalLink,
 } from "lucide-react";
 import {
   getAppointmentsByClient,
@@ -142,29 +146,56 @@ export default function PatientAppointments({
           {upcoming.map((appt, idx) => {
             const isFirst = idx === 0;
             const isSurgery = appt.serviceName?.includes("Cataract") || appt.id === 1;
+            const isVideo = appt.type === "video";
+            const locationLabel =
+              appt.locationCode === "PV"
+                ? "Paschim Vihar (PV)"
+                : appt.locationCode === "NOIDA"
+                ? "Noida (Sec 62)"
+                : appt.locationCode === "BAHADURGARH"
+                ? "Bahadurgarh"
+                : appt.location || "EyeMantra (PV)";
 
             return (
               <div
                 key={appt.id}
-                className={`p-4 rounded-2xl transition-all flex items-center justify-between gap-4 ${
+                className={`p-4 rounded-2xl transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
                   isFirst
                     ? "bg-white dark:bg-[#151c24] border border-blue-200/80 dark:border-blue-900/60 shadow-xs ring-1 ring-blue-500/10"
                     : "bg-white dark:bg-[#151c24] border border-slate-200/80 dark:border-slate-800"
                 }`}
               >
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                <div className="space-y-1.5 min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-sm text-slate-900 dark:text-white truncate">
                       {appt.title || appt.serviceName}
                     </span>
-                    {isFirst && (
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#1456f0] dark:bg-blue-950/60 dark:text-blue-300">
+
+                    {/* Mode badge: Video vs In-Person */}
+                    {isVideo ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 border border-purple-200/60 dark:border-purple-900/60">
+                        <Video className="w-2.5 h-2.5" />
+                        <span>Video Consult</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-[#1456f0] dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200/60 dark:border-blue-900/60">
+                        <MapPin className="w-2.5 h-2.5" />
+                        <span>{locationLabel}</span>
+                      </span>
+                    )}
+
+                    {isFirst && !isVideo && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
                         Arrival day
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Dr. Meera Nair &nbsp;·&nbsp;{" "}
+
+                  <div className="text-xs text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-medium text-slate-800 dark:text-slate-200">
+                      {appt.doctorName || "Dr. Meera Nair"}
+                    </span>
+                    <span>&nbsp;·&nbsp;</span>
                     <span className="font-medium text-slate-700 dark:text-slate-300">
                       {appt.date.includes("2026-09-21")
                         ? "Sept 21"
@@ -173,18 +204,37 @@ export default function PatientAppointments({
                         : appt.date}
                       , {appt.time}
                     </span>
+                    {isVideo && (
+                      <>
+                        <span>&nbsp;·&nbsp;</span>
+                        <span className="text-purple-600 dark:text-purple-400 font-medium">
+                          Link emailed to both
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
 
                 {/* Actions per spec */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedQRPassAppt(appt)}
-                    className="cursor-pointer text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline px-2 py-1 rounded-md"
-                  >
-                    View pass
-                  </button>
+                <div className="flex items-center gap-2 sm:gap-3 shrink-0 self-end sm:self-center">
+                  {isVideo && appt.meetingLink ? (
+                    <button
+                      type="button"
+                      onClick={() => window.open(appt.meetingLink, "_blank")}
+                      className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold shadow-xs transition-all active:scale-95"
+                    >
+                      <Video className="w-3.5 h-3.5" />
+                      <span>Join Call</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedQRPassAppt(appt)}
+                      className="cursor-pointer text-xs font-semibold text-[#1456f0] hover:text-blue-700 hover:underline px-2 py-1 rounded-md"
+                    >
+                      View pass
+                    </button>
+                  )}
 
                   {/* Reschedule on subsequent appointments */}
                   {!isSurgery && (
@@ -228,7 +278,7 @@ export default function PatientAppointments({
                 {selectedQRPassAppt.title || selectedQRPassAppt.serviceName}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Dr. Meera Nair · EyeMantra
+                {selectedQRPassAppt.doctorName || "Dr. Meera Nair"} · {selectedQRPassAppt.location || "EyeMantra"}
               </p>
             </div>
 
@@ -247,6 +297,12 @@ export default function PatientAppointments({
                 <span className="text-slate-500">Scheduled Time</span>
                 <span className="font-medium text-slate-900 dark:text-white">
                   {selectedQRPassAppt.date} · {selectedQRPassAppt.time}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Location</span>
+                <span className="font-medium text-slate-900 dark:text-white truncate max-w-[200px]">
+                  {selectedQRPassAppt.location || "EyeMantra Paschim Vihar (PV)"}
                 </span>
               </div>
             </div>

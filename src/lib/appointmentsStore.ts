@@ -27,8 +27,12 @@ export interface Appointment {
   stageId?: string;
   qrCode?: string;
   doctorName?: string;
+  doctorEmail?: string;
   serviceName?: string;
   location?: string;
+  locationCode?: "PV" | "NOIDA" | "BAHADURGARH";
+  type?: "in-person" | "video";
+  meetingLink?: string;
 }
 
 export const APPOINTMENTS_STORAGE_KEY = "appointments_v2";

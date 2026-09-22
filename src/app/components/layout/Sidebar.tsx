@@ -80,7 +80,6 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   // Secondary modules accessible via dropdown
   const secondaryLinks = [
-    { path: "/patient-front", label: "Patient Front (Live Portal)", icon: QrCode },
     { path: "/chats", label: "Chats", icon: MessageCircle },
     { path: "/invoices", label: "Invoices", icon: Receipt },
     { path: "/claims", label: "Insurance & Claims", icon: Shield },

@@ -15,7 +15,7 @@ interface PatientMoreProps {
 }
 
 const MENU_ITEMS = [
-  { id: "documents" as const, label: "Documents", icon: FileText },
+  { id: "documents" as const, label: "Documents and Forms", icon: FileText },
   { id: "billing" as const, label: "Billing", icon: CreditCard },
   { id: "profile" as const, label: "Profile", icon: User },
 ];

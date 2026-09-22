@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Calendar,
   FileText,
@@ -262,17 +262,26 @@ export default function PatientFrontHome({
   const isInSurgery = currentStageId === "cat-4";
   const isRecovery = currentStageId === "cat-5";
 
+  // Filter out stages explicitly set as internal-only (visibleToPatient === false)
+  const patientVisibleStages = useMemo(() => {
+    const visible = processStagesList.filter(
+      (s) => s.patientFacingContent?.visibleToPatient !== false
+    );
+    return visible.length > 0 ? visible : processStagesList;
+  }, [processStagesList]);
+
   // Current active stage object
   const currentStageObj: Stage =
-    processStagesList.find((s) => s.id === currentStageId) ||
-    processStagesList[2] ||
+    patientVisibleStages.find((s) => s.id === currentStageId) ||
+    patientVisibleStages[2] ||
+    processStagesList[0] ||
     defaultCataractStages[2];
 
-  const currentIdx = processStagesList.findIndex((s) => s.id === currentStageObj.id);
+  const currentIdx = patientVisibleStages.findIndex((s) => s.id === currentStageObj.id);
   const activeIdx = currentIdx !== -1 ? currentIdx : 2;
 
-  // Build the 5-stage track steps
-  const stageSteps: StageStep[] = processStagesList.map((stg, i) => ({
+  // Build the stage track steps from patient-visible stages
+  const stageSteps: StageStep[] = patientVisibleStages.map((stg, i) => ({
     id: stg.id,
     label: stg.name,
     status: i < activeIdx ? "done" : i === activeIdx ? "current" : "upcoming",

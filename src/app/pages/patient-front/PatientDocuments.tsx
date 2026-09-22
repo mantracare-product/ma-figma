@@ -98,10 +98,10 @@ export default function PatientDocuments({ clientId, clientName }: PatientDocume
 
   return (
     <div className="w-full space-y-6 select-none animate-in fade-in duration-200">
-      {/* Header — Rule 0 & §3: Header "Documents" with no subtext. "Upload document" as plain text link */}
+      {/* Header — Rule 0 & §3: Header "Documents and Forms" with no subtext. "Upload document" as plain text link */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="font-display font-semibold text-xl tracking-tight text-slate-900 dark:text-white">
-          Documents
+          Documents and Forms
         </h1>
 
         <button

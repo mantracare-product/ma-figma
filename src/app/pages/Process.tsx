@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Link, useNavigate } from "react-router";
-import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Tag, MapPin, User, HeartHandshake, FileSignature } from "lucide-react";
+import { ChevronRight, ChevronDown, Plus, GripVertical, Edit, Trash2, Sparkles, Info, Play, AlertCircle, X, Bot, Phone, MessageSquare, PhoneCall, Mic, RefreshCw, Volume2, Sliders, Star, Ticket, MessageCircle, Clock, Timer, Volume, Users, Ban, Shield, Lock, FileText, UserCheck, Mail, PhoneOff, MessagesSquare, AlertTriangle, ExternalLink, Download, Upload, Lightbulb, Globe, Settings, Search, Calendar, ClipboardList, Inbox, Paperclip, Zap, Copy, Database, Webhook, LayoutGrid, Filter, Pencil, PhoneForwarded, Voicemail, GitBranch, Layers, CheckCircle2, Check, Tag, MapPin, User, HeartHandshake, FileSignature, Code, Eye, CheckSquare } from "lucide-react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 import { Modal } from "../components/ui/Modal";
@@ -28,6 +28,7 @@ import StepDetailDrawer from "../components/process/StepDetailDrawer";
 import { assignNumberToStage } from "../../lib/useStageNumberRouting";
 import TestProcessChatDrawer from "../components/process/TestProcessChatDrawer";
 import CallTriggerDrawer from "../components/process/CallTriggerDrawer";
+import PatientCompanionStageBuilder from "../components/process/PatientCompanionStageBuilder";
 import { useProcessTemplates } from "../context/ProcessTemplateContext";
 import { useOrganization } from "../context/OrganizationContext";
 import {
@@ -586,6 +587,33 @@ const buildAvailablePredecessors = (steps: WorkflowStep[], lane: "stage" | "inca
   }));
 };
 
+const HTML_SNIPPET_TEMPLATES = [
+  {
+    label: "+ Advisory Callout",
+    snippet: `<div style="background-color: #EFF6FF; border-left: 4px solid #3B82F6; padding: 14px 16px; border-radius: 0 12px 12px 0; margin: 12px 0;">\n  <strong style="color: #1E40AF; display: block; margin-bottom: 4px;">ℹ️ Clinical Advisory</strong>\n  <p style="color: #1E3A8A; font-size: 13px; margin: 0; line-height: 1.5;">Please rest comfortably in Waiting Lounge Bay B. Pupillary dilation drops take 15–20 minutes to take full effect.</p>\n</div>`,
+  },
+  {
+    label: "+ Warning Note",
+    snippet: `<div style="background-color: #FFFBEB; border: 1px solid #FDE68A; padding: 14px 16px; border-radius: 12px; margin: 12px 0;">\n  <strong style="color: #92400E; display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">⚠️ Nil By Mouth (Fasting Required)</strong>\n  <p style="color: #78350F; font-size: 13px; margin: 0; line-height: 1.5;">Strictly avoid food, water, or liquids until evaluated and cleared by Dr. Meera Nair's surgical team.</p>\n</div>`,
+  },
+  {
+    label: "+ Success / Cleared",
+    snippet: `<div style="background-color: #ECFDF5; border: 1px solid #A7F3D0; padding: 14px 16px; border-radius: 12px; margin: 12px 0;">\n  <strong style="color: #065F46; display: block; margin-bottom: 4px;">✅ Verification Cleared</strong>\n  <p style="color: #047857; font-size: 13px; margin: 0; line-height: 1.5;">Biometric lens calculation and consent signed. Patient is queued for theatre transfer.</p>\n</div>`,
+  },
+  {
+    label: "+ Numbered Steps",
+    snippet: `<div style="margin: 12px 0; display: flex; flex-direction: column; gap: 8px;">\n  <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;">\n    <span style="width: 22px; height: 22px; background: #2563EB; color: #fff; font-weight: bold; font-size: 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">1</span>\n    <span style="font-size: 13px; color: #1E293B;">Rest comfortably in the recliner chair with both eyes relaxed.</span>\n  </div>\n  <div style="display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px;">\n    <span style="width: 22px; height: 22px; background: #2563EB; color: #fff; font-weight: bold; font-size: 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">2</span>\n    <span style="font-size: 13px; color: #1E293B;">Avoid rubbing or touching your marked eye. Nurse rounds occur every 10 mins.</span>\n  </div>\n</div>`,
+  },
+  {
+    label: "+ Key Metric Cards",
+    snippet: `<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0;">\n  <div style="padding: 12px; background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 10px;">\n    <span style="font-size: 11px; font-weight: bold; color: #15803D; text-transform: uppercase; display: block;">Attending Nurse</span>\n    <span style="font-size: 13px; font-weight: 600; color: #14532D;">Sister Anjali (Ext. 204)</span>\n  </div>\n  <div style="padding: 12px; background: #FAF5FF; border: 1px solid #E9D5FF; border-radius: 10px;">\n    <span style="font-size: 11px; font-weight: bold; color: #7E22CE; text-transform: uppercase; display: block;">Theatre Suite</span>\n    <span style="font-size: 13px; font-weight: 600; color: #581C87;">OT Suite 2 · 2nd Floor</span>\n  </div>\n</div>`,
+  },
+  {
+    label: "+ Helpline Link",
+    snippet: `<div style="padding: 12px 14px; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 10px; margin: 12px 0; display: flex; align-items: center; justify-content: space-between;">\n  <div>\n    <strong style="font-size: 13px; color: #0F172A; display: block;">Attendant Lounge Assistance</strong>\n    <span style="font-size: 11px; color: #64748B;">For inquiries or family queries</span>\n  </div>\n  <a href="tel:+919811000000" style="font-size: 12px; font-weight: bold; color: #2563EB; text-decoration: none;">Call Desk →</a>\n</div>`,
+  },
+];
+
 export default function Process() {
   const { getActiveProviders } = useAIProviders();
   const activeProviders = getActiveProviders();
@@ -614,14 +642,16 @@ export default function Process() {
     });
   }, [processes, organization]);
 
-  const [processCategoryFilter, setProcessCategoryFilter] = useState<"all" | "patient_front" | "ai_calling">("all");
-
   // Direct in-place editing for Stage Basic Information
   const [stageNameInput, setStageNameInput] = useState<string>("");
   const [stageDescriptionInput, setStageDescriptionInput] = useState<string>("");
   const [stageColorInput, setStageColorInput] = useState<string>("#3B82F6");
 
   // Direct configuration for Patient Front companion app
+  const [stageVisibleToPatient, setStageVisibleToPatient] = useState<boolean>(false);
+  const [stageHtmlContent, setStageHtmlContent] = useState<string>("");
+  const [htmlPreviewTab, setHtmlPreviewTab] = useState<"edit" | "preview">("edit");
+  const [activeCompanionSubSection, setActiveCompanionSubSection] = useState<"builder" | "location_meta" | "checklist" | "consent">("builder");
   const [stageRoomOrCounter, setStageRoomOrCounter] = useState<string>("");
   const [stageDoctorName, setStageDoctorName] = useState<string>("");
   const [stageEstimatedWaitTime, setStageEstimatedWaitTime] = useState<string>("");
@@ -644,34 +674,19 @@ export default function Process() {
   const [newChecklistItemDesc, setNewChecklistItemDesc] = useState<string>("");
   const [newChecklistItemRequired, setNewChecklistItemRequired] = useState<boolean>(true);
 
-  // Filter client-visible processes by search query & category filter
+  // Filter client-visible processes by search query
   const filteredProcesses = useMemo(() => {
-    return clientVisibleProcesses.filter((p) => {
-      const pCat = p.category || (p.pipelineType ? "patient_front" : "ai_calling");
-      if (processCategoryFilter !== "all" && pCat !== processCategoryFilter) {
-        return false;
-      }
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase().trim();
-      return (
+    if (!searchQuery.trim()) return clientVisibleProcesses;
+    const q = searchQuery.toLowerCase().trim();
+    return clientVisibleProcesses.filter(
+      (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.description && p.description.toLowerCase().includes(q)) ||
         p.stages.some((s) => s.name.toLowerCase().includes(q))
-      );
-    });
-  }, [clientVisibleProcesses, searchQuery, processCategoryFilter]);
+    );
+  }, [clientVisibleProcesses, searchQuery]);
 
   const totalAll = clientVisibleProcesses.length;
-  const totalPatientFront = useMemo(() => {
-    return clientVisibleProcesses.filter(
-      (p) => (p.category || (p.pipelineType ? "patient_front" : "ai_calling")) === "patient_front"
-    ).length;
-  }, [clientVisibleProcesses]);
-  const totalAiCalling = useMemo(() => {
-    return clientVisibleProcesses.filter(
-      (p) => (p.category || (p.pipelineType ? "patient_front" : "ai_calling")) === "ai_calling"
-    ).length;
-  }, [clientVisibleProcesses]);
 
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
   const [isEditingProcessInfo, setIsEditingProcessInfo] = useState(false);
@@ -871,6 +886,20 @@ export default function Process() {
     setStageColorInput(stg.color || STAGE_PRESET_COLORS[0]);
 
     const pfc = stg.patientFacingContent || {};
+    const isCallProcess =
+      proc?.category === "ai_calling" ||
+      proc?.id === "1" ||
+      proc?.id === "2" ||
+      proc?.id === "test-cycle" ||
+      proc?.id === "insurance-outreach" ||
+      proc?.id === "insurance-brokers" ||
+      proc?.id === "hr-eap";
+
+    const isVisible = isCallProcess
+      ? false
+      : (proc?.id === "op-cataract" ? pfc.visibleToPatient !== false : Boolean(pfc.visibleToPatient === true));
+    setStageVisibleToPatient(Boolean(isVisible));
+    setStageHtmlContent(pfc.htmlContent || "");
     setStageRoomOrCounter(pfc.roomOrCounter || "");
     setStageDoctorName(pfc.doctorName || "");
     setStageEstimatedWaitTime(pfc.estimatedWaitTime || "");
@@ -956,6 +985,8 @@ export default function Process() {
             if (s.id !== expandedStage) return s;
             const updatedPfc: PatientFacingStageContent = {
               ...(s.patientFacingContent || {}),
+              visibleToPatient: stageVisibleToPatient,
+              htmlContent: stageHtmlContent.trim(),
               roomOrCounter: stageRoomOrCounter.trim(),
               doctorName: stageDoctorName.trim(),
               estimatedWaitTime: stageEstimatedWaitTime.trim(),
@@ -2382,62 +2413,20 @@ export default function Process() {
           </div>
         </div>
 
-        {/* Category Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1">
-          <button
-            type="button"
-            onClick={() => setProcessCategoryFilter("all")}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-              processCategoryFilter === "all"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            All Processes ({totalAll})
-          </button>
-          <button
-            type="button"
-            onClick={() => setProcessCategoryFilter("patient_front")}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-              processCategoryFilter === "patient_front"
-                ? "bg-emerald-600 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            Patient Journeys (Patient Front) ({totalPatientFront})
-          </button>
-          <button
-            type="button"
-            onClick={() => setProcessCategoryFilter("ai_calling")}
-            className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
-              processCategoryFilter === "ai_calling"
-                ? "bg-blue-600 text-white shadow-xs"
-                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-            AI Outreach & Calling ({totalAiCalling})
-          </button>
-        </div>
-
         <div className="flex gap-6 min-h-[calc(100vh-270px)] pt-2">
           {/* Left Panel - Process Cards List */}
           <div className="w-80 sm:w-88 flex-shrink-0 space-y-3 overflow-y-auto max-h-[calc(100vh-250px)] pr-1">
             {filteredProcesses.length === 0 ? (
               <div className="p-6 text-center rounded-2xl bg-white border border-dashed border-slate-200 shadow-2xs">
                 <p className="text-xs text-slate-500 font-medium">
-                  {searchQuery ? "No processes match your search" : "No processes in this category"}
+                  {searchQuery ? "No processes match your search" : "No processes available"}
                 </p>
-                {(searchQuery || processCategoryFilter !== "all") && (
+                {searchQuery && (
                   <button
-                    onClick={() => {
-                      setSearchQuery("");
-                      setProcessCategoryFilter("all");
-                    }}
+                    onClick={() => setSearchQuery("")}
                     className="mt-2 text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
                   >
-                    Reset Filters
+                    Clear Search
                   </button>
                 )}
               </div>
@@ -2445,7 +2434,6 @@ export default function Process() {
               filteredProcesses.map((process) => {
                 const isExpanded = expandedProcesses.includes(process.id);
                 const isProcessActive = selectedProcess === process.id;
-                const isPatientCategory = (process.category === "patient_front") || Boolean(process.pipelineType);
 
                 return (
                   <div
@@ -2482,9 +2470,26 @@ export default function Process() {
                           <h4 className="text-xs sm:text-sm font-bold text-slate-900 truncate" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                             {process.name}
                           </h4>
-                          <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0 shadow-2xs">
-                            {process.stages.length}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center shadow-2xs">
+                              {process.stages.length}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedProcess(process.id);
+                                setDraftProcessName(process.name);
+                                setDraftProcessDescription(process.description);
+                                setIsEditingProcessInfo(true);
+                                setViewMode("process");
+                              }}
+                              className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
+                              title="Edit process details"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          </div>
                         </div>
 
                         {process.description && (
@@ -2492,40 +2497,6 @@ export default function Process() {
                             {process.description}
                           </p>
                         )}
-
-                        {/* Tags row */}
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-                          <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                              isPatientCategory
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
-                            }`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                isPatientCategory ? "bg-emerald-500" : "bg-blue-500"
-                              }`}
-                            />
-                            {isPatientCategory ? "Patient Front" : "AI Calling"}
-                          </span>
-
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedProcess(process.id);
-                              setDraftProcessName(process.name);
-                              setDraftProcessDescription(process.description);
-                              setIsEditingProcessInfo(true);
-                              setViewMode("process");
-                            }}
-                            className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
-                            title="Edit process details"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        </div>
                       </div>
                     </div>
 
@@ -3654,17 +3625,6 @@ export default function Process() {
                               <h2 className="text-xl font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
                                 {stageNameInput || stage.name}
                               </h2>
-                              <span
-                                className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                                  (selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType)
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-blue-50 text-blue-700 border border-blue-200"
-                                }`}
-                              >
-                                {(selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType)
-                                  ? "Patient Front Stage"
-                                  : "AI Calling Stage"}
-                              </span>
                             </div>
                             <p className="text-xs text-slate-400 mt-0.5" style={{ fontFamily: 'Outfit, sans-serif' }}>
                               in {selectedProcessData.name}
@@ -3713,12 +3673,6 @@ export default function Process() {
                       <div className="flex items-center gap-2 mt-4 overflow-x-auto pb-1">
                         {[
                           { id: "basic", label: "General", icon: Sliders },
-                          {
-                            id: "patient_companion",
-                            label: "Patient Companion",
-                            icon: HeartHandshake,
-                            badge: (selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType) ? "Live Sync" : undefined
-                          },
                           { id: "ai_agent", label: "AI Agent", icon: Bot },
                           { id: "webhooks", label: "Webhooks", icon: Webhook },
                           { id: "automation", label: "Automations", icon: Zap },
@@ -3878,26 +3832,64 @@ export default function Process() {
                             </div>
                           </div>
 
-                          {(selectedProcessData.category === "patient_front" || selectedProcessData.pipelineType) && (
-                            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <HeartHandshake className="w-4 h-4 text-emerald-700" />
-                                  <h4 className="text-xs font-bold text-emerald-900">Patient Companion Live Journey Stage</h4>
-                                </div>
-                                <p className="text-xs text-emerald-700 mt-0.5">
-                                  Configure bay/room, attending doctor, estimated wait time, guidance advisory, checklists, and surgical consents.
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setActiveTab("patient_companion")}
-                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-xl shadow-2xs transition-colors flex-shrink-0 cursor-pointer"
-                              >
-                                Open Patient Companion Tab →
-                              </button>
-                            </div>
-                          )}
+                          {/* Patient Companion Live Journey Stage & Content Builder */}
+                          <PatientCompanionStageBuilder
+                            visibleToPatient={stageVisibleToPatient}
+                            onToggleVisible={(val) => {
+                              setStageVisibleToPatient(val);
+                              updateStagePfc({ visibleToPatient: val });
+                            }}
+                            roomOrCounter={stageRoomOrCounter}
+                            onRoomOrCounterChange={(val) => {
+                              setStageRoomOrCounter(val);
+                              updateStagePfc({ roomOrCounter: val });
+                            }}
+                            doctorName={stageDoctorName}
+                            onDoctorNameChange={(val) => {
+                              setStageDoctorName(val);
+                              updateStagePfc({ doctorName: val });
+                            }}
+                            estimatedWaitTime={stageEstimatedWaitTime}
+                            onEstimatedWaitTimeChange={(val) => {
+                              setStageEstimatedWaitTime(val);
+                              updateStagePfc({ estimatedWaitTime: val });
+                            }}
+                            badge={stageBadge}
+                            onBadgeChange={(val) => {
+                              setStageBadge(val);
+                              updateStagePfc({ badge: val });
+                            }}
+                            htmlContent={stageHtmlContent}
+                            onHtmlContentChange={(val) => {
+                              setStageHtmlContent(val);
+                              updateStagePfc({ htmlContent: val });
+                            }}
+                            infoText={stageInfoText}
+                            onInfoTextChange={(val) => {
+                              setStageInfoText(val);
+                              updateStagePfc({ infoText: val });
+                            }}
+                            instructions={stageInstructions}
+                            onInstructionsChange={(val) => {
+                              setStageInstructions(val);
+                              updateStagePfc({ instructions: val });
+                            }}
+                            checklist={stageChecklist}
+                            onChecklistChange={(val) => {
+                              setStageChecklist(val);
+                              updateStagePfc({ checklist: val });
+                            }}
+                            consent={stageConsent}
+                            onConsentChange={(val) => {
+                              setStageConsent(val);
+                              updateStagePfc({ consent: val });
+                            }}
+                            consentEnabled={stageConsentEnabled}
+                            onConsentEnabledChange={(val) => {
+                              setStageConsentEnabled(val);
+                              updateStagePfc({ consent: val ? stageConsent : undefined });
+                            }}
+                          />
 
                           {/* Stage Configuration Section */}
                           <div className="space-y-4">
@@ -4724,479 +4716,9 @@ export default function Process() {
                               </div>
                             )}
 
-                          </div>
-
-
-
-
-                        </div>
-                      )}
-
-                      {/* Patient Companion Tab (Dedicated for Patient Front workflows) */}
-                      {activeTab === "patient_companion" && (
-                        <div className="space-y-6">
-                          {/* Top Info Banner */}
-                          <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-blue-500/10 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-2xs">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-300/60">
-                                  Patient Front Live Sync
-                                </span>
-                                <span className="text-xs text-slate-500">Auto-broadcasts to /patient-front</span>
-                              </div>
-                              <h3 className="text-base font-bold text-slate-900 mt-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                Patient Companion Experience & Stage Data
-                              </h3>
-                              <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed" style={{ fontFamily: 'Outfit, sans-serif' }}>
-                                Every parameter configured below powers the real-time Today timeline, hero cards, and Stage Details drawer on the patient app.
-                              </p>
-                            </div>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={handleSaveStageFullConfig}
-                              className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex-shrink-0"
-                            >
-                              Save & Sync Live
-                            </Button>
-                          </div>
-
-                          {/* 1. Glanceable Location & Clinical Meta */}
-                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
-                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                              <MapPin className="w-4 h-4 text-blue-600" />
-                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                Glanceable Location & Clinical Meta
-                              </h4>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Room / Location / Bay
-                                </label>
-                                <input
-                                  type="text"
-                                  value={stageRoomOrCounter}
-                                  onChange={(e) => {
-                                    setStageRoomOrCounter(e.target.value);
-                                    updateStagePfc({ roomOrCounter: e.target.value });
-                                  }}
-                                  placeholder="e.g. Pre-Op Daycare Lounge (Bay 3) or OT Suite 2"
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                />
-                                <span className="text-[11px] text-slate-400 mt-1 block">Displayed on Today hero card & visit details drawer</span>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Attending Doctor / Specialist
-                                </label>
-                                <input
-                                  type="text"
-                                  value={stageDoctorName}
-                                  onChange={(e) => {
-                                    setStageDoctorName(e.target.value);
-                                    updateStagePfc({ doctorName: e.target.value });
-                                  }}
-                                  placeholder="e.g. Dr. Meera Nair, MS (Ophthalmology)"
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                />
-                                <span className="text-[11px] text-slate-400 mt-1 block">Primary physician or clinical lead for this stage</span>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Estimated Wait Time / Duration
-                                </label>
-                                <input
-                                  type="text"
-                                  value={stageEstimatedWaitTime}
-                                  onChange={(e) => {
-                                    setStageEstimatedWaitTime(e.target.value);
-                                    updateStagePfc({ estimatedWaitTime: e.target.value });
-                                  }}
-                                  placeholder="e.g. ~15 mins, 20–30 mins, or 45 mins"
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                />
-                                <span className="text-[11px] text-slate-400 mt-1 block">Shown with clock icon on patient status cards</span>
-                              </div>
-
-                              <div>
-                                <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Stage Status Badge
-                                </label>
-                                <input
-                                  type="text"
-                                  value={stageBadge}
-                                  onChange={(e) => {
-                                    setStageBadge(e.target.value);
-                                    updateStagePfc({ badge: e.target.value });
-                                  }}
-                                  placeholder="e.g. Dilation in Progress, Ready for OR, In Surgery"
-                                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs transition-all"
-                                  style={{ fontFamily: 'Outfit, sans-serif' }}
-                                />
-                                <span className="text-[11px] text-slate-400 mt-1 block">Highlighted pill badge on patient card</span>
-                              </div>
                             </div>
                           </div>
-
-                          {/* 2. Patient Guidance & Clinical Advisory */}
-                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-                            <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                              <Sparkles className="w-4 h-4 text-amber-500" />
-                              <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                Patient Advisory & Clinical Guidance
-                              </h4>
-                            </div>
-                            <p className="text-xs text-slate-500">
-                              Guidance message displayed prominently to the patient or attendant while they are in this stage.
-                            </p>
-                            <textarea
-                              value={stageInfoText}
-                              onChange={(e) => {
-                                setStageInfoText(e.target.value);
-                                updateStagePfc({ infoText: e.target.value });
-                              }}
-                              placeholder="e.g. Dilating and topical numbing drops have been placed in your right eye. Your vision will blur slightly — this is completely normal and expected."
-                              rows={3}
-                              className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs resize-none transition-all"
-                              style={{ fontFamily: 'Outfit, sans-serif' }}
-                            />
-                          </div>
-
-                          {/* 3. Step-by-Step Instructions */}
-                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                              <div className="flex items-center gap-2">
-                                <ClipboardList className="w-4 h-4 text-blue-600" />
-                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Step-by-Step Patient Instructions ({stageInstructions.length})
-                                </h4>
-                              </div>
-                              <span className="text-xs text-slate-400">Rendered in Visit Details drawer</span>
-                            </div>
-
-                            {/* List of instructions */}
-                            <div className="space-y-2">
-                              {stageInstructions.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic py-2">No instructions added yet for this stage.</p>
-                              ) : (
-                                stageInstructions.map((inst, idx) => (
-                                  <div key={idx} className="flex items-center gap-2.5 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80">
-                                    <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
-                                      {idx + 1}
-                                    </span>
-                                    <input
-                                      type="text"
-                                      value={inst}
-                                      onChange={(e) => {
-                                        const updated = [...stageInstructions];
-                                        updated[idx] = e.target.value;
-                                        setStageInstructions(updated);
-                                        updateStagePfc({ instructions: updated });
-                                      }}
-                                      className="flex-1 bg-transparent text-xs sm:text-sm text-slate-800 focus:outline-none"
-                                      style={{ fontFamily: 'Outfit, sans-serif' }}
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = stageInstructions.filter((_, i) => i !== idx);
-                                        setStageInstructions(updated);
-                                        updateStagePfc({ instructions: updated });
-                                      }}
-                                      className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
-                                      title="Remove step"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            {/* Add instruction */}
-                            <div className="flex items-center gap-2 pt-2">
-                              <input
-                                type="text"
-                                value={newInstructionInput}
-                                onChange={(e) => setNewInstructionInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    if (newInstructionInput.trim()) {
-                                      const updated = [...stageInstructions, newInstructionInput.trim()];
-                                      setStageInstructions(updated);
-                                      setNewInstructionInput("");
-                                      updateStagePfc({ instructions: updated });
-                                    }
-                                  }
-                                }}
-                                placeholder="Add new step instruction (e.g. Rest comfortably with eyes relaxed)..."
-                                className="flex-1 px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white shadow-2xs"
-                                style={{ fontFamily: 'Outfit, sans-serif' }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (newInstructionInput.trim()) {
-                                    const updated = [...stageInstructions, newInstructionInput.trim()];
-                                    setStageInstructions(updated);
-                                    setNewInstructionInput("");
-                                    updateStagePfc({ instructions: updated });
-                                  }
-                                }}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer flex-shrink-0"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                                <span>Add Step</span>
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* 4. Stage Checklist */}
-                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-3">
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Stage Verification Checklist ({stageChecklist.length})
-                                </h4>
-                              </div>
-                              <span className="text-xs text-slate-400">Interactive patient checklist</span>
-                            </div>
-
-                            {/* Existing items */}
-                            <div className="space-y-2">
-                              {stageChecklist.length === 0 ? (
-                                <p className="text-xs text-slate-400 italic py-2">No checklist items configured for this stage.</p>
-                              ) : (
-                                stageChecklist.map((item) => (
-                                  <div key={item.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-start justify-between gap-3">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-xs sm:text-sm font-semibold text-slate-900">{item.label}</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            const updated = stageChecklist.map((c) =>
-                                              c.id === item.id ? { ...c, required: !c.required } : c
-                                            );
-                                            setStageChecklist(updated);
-                                            updateStagePfc({ checklist: updated });
-                                          }}
-                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-colors ${
-                                            item.required
-                                              ? "bg-red-50 text-red-700 border border-red-200"
-                                              : "bg-slate-200 text-slate-700"
-                                          }`}
-                                        >
-                                          {item.required ? "Required" : "Optional"}
-                                        </button>
-                                      </div>
-                                      {item.description && (
-                                        <p className="text-[11px] text-slate-500 mt-0.5">{item.description}</p>
-                                      )}
-                                    </div>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        const updated = stageChecklist.filter((c) => c.id !== item.id);
-                                        setStageChecklist(updated);
-                                        updateStagePfc({ checklist: updated });
-                                      }}
-                                      className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors cursor-pointer"
-                                      title="Delete item"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                ))
-                              )}
-                            </div>
-
-                            {/* Add checklist item form */}
-                            <div className="p-3.5 rounded-xl bg-slate-50/80 border border-dashed border-slate-300 space-y-2.5">
-                              <span className="text-xs font-semibold text-slate-700">Add New Checklist Item:</span>
-                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                <input
-                                  type="text"
-                                  value={newChecklistItemLabel}
-                                  onChange={(e) => setNewChecklistItemLabel(e.target.value)}
-                                  placeholder="Item label (e.g. Biometric eye verification)"
-                                  className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
-                                />
-                                <input
-                                  type="text"
-                                  value={newChecklistItemDesc}
-                                  onChange={(e) => setNewChecklistItemDesc(e.target.value)}
-                                  placeholder="Optional instructions or notes"
-                                  className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-none focus:border-blue-500"
-                                />
-                              </div>
-                              <div className="flex items-center justify-between pt-1">
-                                <label className="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={newChecklistItemRequired}
-                                    onChange={(e) => setNewChecklistItemRequired(e.target.checked)}
-                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  <span>Mark as Required for stage completion</span>
-                                </label>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (!newChecklistItemLabel.trim()) {
-                                      toast.error("Please enter a label for the checklist item");
-                                      return;
-                                    }
-                                    const newItem: PatientStageChecklistItem = {
-                                      id: `chk-${Date.now()}`,
-                                      label: newChecklistItemLabel.trim(),
-                                      description: newChecklistItemDesc.trim() || undefined,
-                                      required: newChecklistItemRequired,
-                                    };
-                                    const updated = [...stageChecklist, newItem];
-                                    setStageChecklist(updated);
-                                    setNewChecklistItemLabel("");
-                                    setNewChecklistItemDesc("");
-                                    setNewChecklistItemRequired(true);
-                                    updateStagePfc({ checklist: updated });
-                                    toast.success("Checklist item added");
-                                  }}
-                                  className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-2xs transition-colors flex items-center gap-1 cursor-pointer"
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  <span>Add Item</span>
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* 5. Informed Procedure / Surgical Consent Form */}
-                          <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
-                            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                              <div className="flex items-center gap-2">
-                                <FileSignature className="w-4 h-4 text-purple-600" />
-                                <h4 className="text-sm font-bold text-slate-900" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                  Informed Procedure / Surgical Consent Form
-                                </h4>
-                              </div>
-                              <label className="relative inline-flex items-center cursor-pointer">
-                                <input
-                                  type="checkbox"
-                                  className="sr-only peer"
-                                  checked={stageConsentEnabled}
-                                  onChange={(e) => {
-                                    const enabled = e.target.checked;
-                                    setStageConsentEnabled(enabled);
-                                    updateStagePfc({ consent: enabled ? stageConsent : undefined });
-                                    toast.info(enabled ? "Informed consent enabled for this stage" : "Informed consent disabled");
-                                  }}
-                                />
-                                <div className="w-10 h-5 bg-slate-200 peer-focus:ring-2 peer-focus:ring-purple-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
-                              </label>
-                            </div>
-
-                            {stageConsentEnabled ? (
-                              <div className="space-y-3 pt-1 animate-in fade-in duration-200">
-                                <div>
-                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                    Consent Form Title
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={stageConsent.title}
-                                    onChange={(e) => {
-                                      const updated = { ...stageConsent, title: e.target.value };
-                                      setStageConsent(updated);
-                                      updateStagePfc({ consent: updated });
-                                    }}
-                                    placeholder="e.g. Informed Surgical Consent - Cataract Phacoemulsification"
-                                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                    Short Summary / Subtitle
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={stageConsent.description || ""}
-                                    onChange={(e) => {
-                                      const updated = { ...stageConsent, description: e.target.value };
-                                      setStageConsent(updated);
-                                      updateStagePfc({ consent: updated });
-                                    }}
-                                    placeholder="e.g. Mandatory clinical authorization prior to entering the procedure area."
-                                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white"
-                                  />
-                                </div>
-
-                                <div>
-                                  <label className="block text-xs font-semibold text-slate-700 mb-1" style={{ fontFamily: 'DM Sans, sans-serif' }}>
-                                    Full Legal & Medical Authorization Text
-                                  </label>
-                                  <textarea
-                                    value={stageConsent.content}
-                                    onChange={(e) => {
-                                      const updated = { ...stageConsent, content: e.target.value };
-                                      setStageConsent(updated);
-                                      updateStagePfc({ consent: updated });
-                                    }}
-                                    placeholder="Enter the full clinical consent terms, procedure details, risks explained, and patient declaration..."
-                                    rows={5}
-                                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-purple-500 focus:bg-white font-mono leading-relaxed"
-                                  />
-                                </div>
-
-                                <div className="flex items-center justify-between pt-1">
-                                  <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer">
-                                    <input
-                                      type="checkbox"
-                                      checked={stageConsent.requiresSignature ?? true}
-                                      onChange={(e) => {
-                                        const updated = { ...stageConsent, requiresSignature: e.target.checked };
-                                        setStageConsent(updated);
-                                        updateStagePfc({ consent: updated });
-                                      }}
-                                      className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
-                                    />
-                                    <span className="font-medium">Require Digital Signature (patient signs on screen with finger or stylus)</span>
-                                  </label>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="p-4 rounded-xl bg-slate-50 text-center text-xs text-slate-500">
-                                Informed consent is currently disabled for this stage. Toggle the switch above to enable legal and surgical consent verification.
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Action footer */}
-                          <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                            <div className="flex items-center gap-2 text-xs text-slate-500">
-                              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                              <span>Live sync active for Patient Front companion app</span>
-                            </div>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={handleSaveStageFullConfig}
-                              className="bg-blue-600 hover:bg-blue-700 text-white shadow-xs"
-                            >
-                              Save All Stage Settings
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* AI Agent Tab */}
                       {activeTab === "ai_agent" && (

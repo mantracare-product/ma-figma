@@ -78,7 +78,17 @@ export interface PatientStageDocRequest {
   required?: boolean;
 }
 
+export interface PatientContentBlock {
+  id: string;
+  type: "html" | "text" | "advisory" | "checklist" | "consent";
+  title?: string;
+  content: string;
+}
+
 export interface PatientFacingStageContent {
+  visibleToPatient?: boolean;
+  htmlContent?: string;
+  customBlocks?: PatientContentBlock[];
   infoText?: string;
   instructions?: string[];
   badge?: string;
@@ -273,7 +283,7 @@ export const DEFAULT_INITIAL_PROCESSES: Process[] = [
     description: "Initial patient onboarding and verification process",
     assignedToUserId: 1,
     pipelineType: "OPD",
-    category: "patient_front",
+    category: "ai_calling",
     aiSettings: {
       platform: "OpenAI - GPT-4o",
       voiceSpeed: 1.0,
@@ -718,12 +728,30 @@ export function getStoredProcesses(): Process[] {
       }
     }
     parsed.forEach((p) => {
+      if (p.id === "1") {
+        p.category = "ai_calling";
+      }
       if (!p.category) {
-        if (p.id === "op-cataract" || p.id === "opd-oph" || p.id === "ipd-ward" || p.id === "1") {
+        if (p.id === "op-cataract" || p.id === "opd-oph" || p.id === "ipd-ward") {
           p.category = "patient_front";
         } else {
           p.category = "ai_calling";
         }
+      }
+      // Ensure calling processes never have visibleToPatient open
+      if (
+        p.category === "ai_calling" ||
+        p.id === "1" ||
+        p.id === "2" ||
+        p.id === "test-cycle" ||
+        p.id.startsWith("insurance") ||
+        p.id === "hr-eap"
+      ) {
+        p.stages.forEach((stg) => {
+          if (stg.patientFacingContent && stg.patientFacingContent.visibleToPatient) {
+            stg.patientFacingContent.visibleToPatient = false;
+          }
+        });
       }
     });
     // Ensure live dashboard default processes exist if missing
