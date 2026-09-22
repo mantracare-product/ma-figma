@@ -329,6 +329,13 @@ export interface ListFieldConfig {
 
 export type NewListSourceMode = "manual" | "option_list" | "advance_2" | "basic_list" | "advanced_list";
 
+export type {
+  AdvanceColumnType,
+  AdvanceListColumn,
+  AdvanceListRow,
+  AdvanceListDefinition,
+} from "../../lib/advanceListStore";
+
 export interface OptionListColumnConfig {
   columnId: string;
   columnName?: string;
@@ -345,6 +352,7 @@ export interface OptionListConfig {
 
 export interface NewListConfig {
   sourceMode: NewListSourceMode; // "manual" (Basic List) | "option_list" (Advanced List) | "advance_2" (Advance 2)
+  advanceListId?: string;        // ID of linked Advance List 2 definition
   manualType?: "single" | "multiple";
   optionList?: OptionListConfig;
   selectionMode?: "single" | "multiple";
@@ -588,7 +596,10 @@ export function isFieldMatchingOrg(
 
   // If specific processId is evaluated and field is assigned to specific processes
   if (processId && field.processIds && field.processIds.length > 0) {
-    if (!isProcessMatchingAssignment(field.processIds, processId)) return false;
+    if (isProcessMatchingAssignment(field.processIds, processId)) {
+      return true;
+    }
+    return false;
   }
 
   // If multi-rule scoping is present, check against rules
@@ -604,7 +615,7 @@ export function isFieldMatchingOrg(
 
       // If this rule is completely unconstrained, it matches everything
       if (!hasCat && !hasInd && !hasLoc) return true;
-      if (!org) return false;
+      if (!org) return true;
 
       if (hasCat) {
         if (!org.industryCategory) return false;
@@ -645,8 +656,8 @@ export function isFieldMatchingOrg(
   // If no scoping rules set on field, it is universally visible
   if (!hasCat && !hasInd && !hasLoc) return true;
 
-  // If scoped but no org context provided, do not show
-  if (!org) return false;
+  // If scoped but no org context provided, match by default
+  if (!org) return true;
 
   // Check Category
   if (hasCat) {
@@ -693,7 +704,10 @@ export function isSectionMatchingOrg(
 
   // If specific processId is evaluated and section is assigned to specific processes
   if (processId && section.processIds && section.processIds.length > 0) {
-    if (!isProcessMatchingAssignment(section.processIds, processId)) return false;
+    if (isProcessMatchingAssignment(section.processIds, processId)) {
+      return true;
+    }
+    return false;
   }
 
   // If multi-rule scoping is present, check against rules
@@ -708,7 +722,7 @@ export function isSectionMatchingOrg(
       const hasLoc = rLocs.length > 0;
 
       if (!hasCat && !hasInd && !hasLoc) return true;
-      if (!org) return false;
+      if (!org) return true;
 
       if (hasCat) {
         if (!org.industryCategory) return false;
@@ -747,7 +761,7 @@ export function isSectionMatchingOrg(
   const hasLoc = sLocs.length > 0;
 
   if (!hasCat && !hasInd && !hasLoc) return true;
-  if (!org) return false;
+  if (!org) return true;
 
   if (hasCat) {
     if (!org.industryCategory) return false;
@@ -1658,7 +1672,11 @@ interface FieldRegistryContextValue {
   removeFieldFromSection: (module: FieldModule, sectionId: string, fieldKey: string) => void;
 }
 
-const FieldRegistryContext = createContext<FieldRegistryContextValue | null>(null);
+const globalForContext = typeof window !== "undefined" ? (window as any) : (globalThis as any);
+const FieldRegistryContext: React.Context<FieldRegistryContextValue | null> =
+  globalForContext.__MANTRA_FIELD_REGISTRY_CONTEXT__ ||
+  (globalForContext.__MANTRA_FIELD_REGISTRY_CONTEXT__ = createContext<FieldRegistryContextValue | null>(null));
+
 
 function normalizeModuleKey(raw: any): Exclude<FieldModule, "deal"> {
   if (!raw || typeof raw !== "string") return "client";
@@ -2430,7 +2448,75 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
 export function useFieldRegistry(): FieldRegistryContextValue {
   const ctx = useContext(FieldRegistryContext);
   if (!ctx) {
-    throw new Error("useFieldRegistry must be used within a FieldRegistryProvider");
+    const customFields = loadCustomFieldsFromStorage();
+    const customSections = loadCustomSectionsFromStorage();
+    const normMod = (m: FieldModule): Exclude<FieldModule, "deal"> => (m === "deal" ? "process" : m);
+    const getSysFields = (module: FieldModule): FieldDefinition[] => {
+      const norm = normMod(module);
+      const seeds = SYSTEM_SEEDS[norm] || [];
+      const teamOptions = getLiveTeamMembers();
+      return seeds.map((f, index) => {
+        const isTeamSelect = f.key === "responsible" || f.key === "provider";
+        return {
+          ...f,
+          id: -(index + 1),
+          source: "system",
+          createdAt: 0,
+          options: isTeamSelect ? teamOptions : f.options,
+        };
+      }) as FieldDefinition[];
+    };
+    const getCustFields = (module: FieldModule): FieldDefinition[] => {
+      const norm = normMod(module);
+      const directFields = customFields[norm] || [];
+      const reusableFields: FieldDefinition[] = [];
+      (Object.keys(customFields) as (keyof typeof customFields)[]).forEach((mod) => {
+        if (mod !== norm) {
+          (customFields[mod] || []).forEach((f) => {
+            if (f.isReusable) {
+              const matchesModule = !f.reusableModules || f.reusableModules.length === 0 || f.reusableModules.includes(norm);
+              if (matchesModule && !directFields.some((df) => df.key === f.key) && !reusableFields.some((rf) => rf.key === f.key)) {
+                reusableFields.push({ ...f, module: norm });
+              }
+            }
+          });
+        }
+      });
+      return [...directFields, ...reusableFields];
+    };
+    const getSysSections = (module: FieldModule): SectionDefinition[] => {
+      const norm = normMod(module);
+      return (SYSTEM_SECTIONS[norm] || []).map((s) => ({
+        ...s,
+        source: "system",
+        createdAt: 0,
+      })) as SectionDefinition[];
+    };
+    const getCustSections = (module: FieldModule): SectionDefinition[] => {
+      const norm = normMod(module);
+      return customSections[norm] || [];
+    };
+
+    return {
+      getSystemFields: getSysFields,
+      getCustomFields: getCustFields,
+      getAllFields: (module: FieldModule) => [...getSysFields(module), ...getCustFields(module)],
+      getFieldsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
+        [...getSysFields(module), ...getCustFields(module)].filter((f) => isFieldMatchingOrg(f, org, processId)),
+      addCustomField: () => ({ id: Date.now(), key: "", label: "", module: "client", source: "custom", inputType: "text", createdAt: Date.now() }),
+      updateCustomField: () => {},
+      deleteCustomField: () => {},
+      getSystemSections: getSysSections,
+      getCustomSections: getCustSections,
+      getAllSections: (module: FieldModule) => [...getSysSections(module), ...getCustSections(module)],
+      getSectionsForOrg: (module: FieldModule, org?: OrgScopeFilter | null, processId?: string) =>
+        [...getSysSections(module), ...getCustSections(module)].filter((s) => isSectionMatchingOrg(s, org, processId)),
+      addCustomSection: () => ({ id: `sec-${Date.now()}`, title: "", module: "client", source: "custom", createdAt: Date.now(), fieldKeys: [] }),
+      updateCustomSection: () => {},
+      deleteCustomSection: () => {},
+      assignFieldToSection: () => {},
+      removeFieldFromSection: () => {},
+    };
   }
   return ctx;
 }

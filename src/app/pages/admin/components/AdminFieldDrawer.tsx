@@ -86,6 +86,17 @@ import {
   DEFAULT_MEDIA_PRESETS,
   MediaCategory,
 } from "../../../../lib/mediaFormatsStore";
+import {
+  AdvanceListDefinition,
+  AdvanceListColumn,
+  AdvanceListRow,
+  getStoredAdvanceLists,
+  getStoredAdvanceListById,
+  ADVANCE_LIST_STORE_EVENT,
+  generateSampleCsvContent,
+  downloadCsvFile,
+} from "../../../../lib/advanceListStore";
+import { AdvanceListDrawer } from "./AdvanceListDrawer";
 import { toast } from "sonner";
 
 // MODULE_OPTIONS values must EXACTLY match normalizeModuleKey() recognised strings.
@@ -1109,6 +1120,7 @@ interface FieldFormState {
   newListManualType: "single" | "multiple";
   newListSourceCompositeKey: string;
   newListColumnConfigs: OptionListColumnConfig[];
+  advanceListId: string;
   allowCustomOptions?: boolean;
 
   // CRM Bind configuration
@@ -1225,6 +1237,7 @@ function defaultForm(module: Exclude<FieldModule, "deal">, initialCategory: Prim
     newListManualType: "single",
     newListSourceCompositeKey: "",
     newListColumnConfigs: [],
+    advanceListId: "",
     // CRM Bind
     crmBindModule: "teamMember",
     crmBindSelectionMode: "single",
@@ -1359,6 +1372,7 @@ export function initFormFromField(f: FieldDefinition): FieldFormState {
     newListManualType: f.newListConfig?.manualType || (isMultiSelect ? "multiple" : "single"),
     newListSourceCompositeKey: f.newListConfig?.optionList?.sourceCompositeFieldKey || "",
     newListColumnConfigs: f.newListConfig?.optionList?.columns || [],
+    advanceListId: f.newListConfig?.advanceListId || "",
     // CRM Bind
     crmBindModule: f.crmBindConfig?.sourceModule || "teamMember",
     crmBindSelectionMode: f.crmBindConfig?.selectionMode || "single",
@@ -1477,6 +1491,62 @@ export function AdminFieldDrawer({
   const [csvImportModalOpen, setCsvImportModalOpen] = useState(false);
   const [allProcesses, setAllProcesses] = useState<Process[]>(getStoredProcesses);
   const [errors, setErrors] = useState<{ label?: string }>({});
+
+  // Advance List 2 State & Store Listener
+  const [advanceLists, setAdvanceLists] = useState<AdvanceListDefinition[]>(() => getStoredAdvanceLists());
+  const [advanceListDrawerOpen, setAdvanceListDrawerOpen] = useState(false);
+  const [advanceListEditingDef, setAdvanceListEditingDef] = useState<AdvanceListDefinition | null>(null);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e?.detail && Array.isArray(e.detail)) {
+        setAdvanceLists(e.detail);
+      } else {
+        setAdvanceLists(getStoredAdvanceLists());
+      }
+    };
+    window.addEventListener(ADVANCE_LIST_STORE_EVENT, handler);
+    return () => window.removeEventListener(ADVANCE_LIST_STORE_EVENT, handler);
+  }, []);
+
+  const selectedAdvanceListDef = useMemo(() => {
+    if (!form.advanceListId) return undefined;
+    return advanceLists.find((l) => l.id === form.advanceListId);
+  }, [advanceLists, form.advanceListId]);
+
+  const handleSelectAdvanceList = (listId: string) => {
+    const targetList = advanceLists.find((l) => l.id === listId);
+    if (!targetList) {
+      setForm((p) => ({
+        ...p,
+        advanceListId: "",
+        options: [],
+      }));
+      return;
+    }
+
+    const primaryCol = targetList.columns.find((c) => c.isPrimary) || targetList.columns[0];
+    const listOptions: FieldOption[] = (targetList.rows || []).map((row, idx) => {
+      const primaryVal = row.values[primaryCol?.id || ""];
+      const label = primaryVal !== undefined && primaryVal !== null && String(primaryVal).trim() !== ""
+        ? String(primaryVal)
+        : row.label || `Item #${idx + 1}`;
+
+      return {
+        id: row.id || Date.now() + idx,
+        label,
+        value: row.values,
+        index: idx + 1,
+        isDefault: Boolean(row.isDefault),
+      };
+    });
+
+    setForm((p) => ({
+      ...p,
+      advanceListId: listId,
+      options: listOptions,
+    }));
+  };
 
   const typePickerRef = useRef<HTMLDivElement>(null);
   const modulePickerRef = useRef<HTMLDivElement>(null);
@@ -2074,6 +2144,7 @@ export function AdminFieldDrawer({
       // New List Config
       newListConfig: form.primaryCategory === "new_list" ? {
         sourceMode: form.newListSourceMode,
+        advanceListId: form.newListSourceMode === "advance_2" ? form.advanceListId : undefined,
         manualType: form.selectionMode,
         selectionMode: form.selectionMode,
         allowSearch: form.allowSearch,
@@ -2199,9 +2270,22 @@ export function AdminFieldDrawer({
     form.newListSourceMode === "option_list" &&
     selectedCompositeColumns.length > 0;
 
+  const isAdvance2OptionList =
+    form.primaryCategory === "new_list" &&
+    form.newListSourceMode === "advance_2" &&
+    Boolean(selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0);
+
   const csvColumns: SubFieldConfig[] = useMemo(() => {
     if (isCompositeOptionList) {
       return selectedCompositeColumns;
+    }
+    if (isAdvance2OptionList && selectedAdvanceListDef) {
+      return selectedAdvanceListDef.columns.map((c) => ({
+        id: c.id,
+        name: c.name,
+        inputType: c.type === "number" ? "number" : "text",
+        placeholder: c.name,
+      }));
     }
     return [
       {
@@ -2211,14 +2295,17 @@ export function AdminFieldDrawer({
         placeholder: "e.g. Option 1",
       },
     ];
-  }, [isCompositeOptionList, selectedCompositeColumns]);
+  }, [isCompositeOptionList, selectedCompositeColumns, isAdvance2OptionList, selectedAdvanceListDef]);
 
   const csvModalTitle = useMemo(() => {
     if (isCompositeOptionList) {
       return selectedCompositeDef?.label || form.label || "Composite Options";
     }
+    if (isAdvance2OptionList && selectedAdvanceListDef) {
+      return selectedAdvanceListDef.name || form.label || "Advance List 2 Options";
+    }
     return form.label ? `${form.label} Options` : "List Options";
-  }, [isCompositeOptionList, selectedCompositeDef, form.label]);
+  }, [isCompositeOptionList, selectedCompositeDef, isAdvance2OptionList, selectedAdvanceListDef, form.label]);
 
   const inputCls = (err?: string) => `w-full px-3.5 py-2.5 bg-white border rounded-xl text-xs font-medium text-slate-800 transition-all ${err ? "border-red-300 focus:ring-2 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 hover:border-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"}`;
   const roCls = "border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed";
@@ -4308,23 +4395,359 @@ export function AdminFieldDrawer({
               )}
 
               {/* ─────────────────────────────────────────────────────────────
-                  MODE 3 — ADVANCE 2 PLACEHOLDER
+                  MODE 3 — ADVANCE 2 (Custom Schema Columns & CSV Dataset)
                  ───────────────────────────────────────────────────────────── */}
               {form.newListSourceMode === "advance_2" && (
-                <div className="p-6 bg-white border border-blue-200/80 rounded-xl text-center space-y-2.5 shadow-2xs">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center mx-auto shadow-md shadow-blue-500/20">
-                    <Layers className="w-6 h-6" />
+                <div className="space-y-4 pt-1">
+                  {/* Advance List Selector Card */}
+                  <div className="p-3.5 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>Advance List 2 <span className="text-red-500">*</span></span>
+                      </label>
+                      {!isReadOnly && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdvanceListEditingDef(null);
+                            setAdvanceListDrawerOpen(true);
+                          }}
+                          className="flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 hover:bg-indigo-100/70 border border-indigo-200/80 px-2 py-0.5 rounded-md cursor-pointer transition-colors"
+                        >
+                          <Plus className="w-3 h-3 stroke-[2.5]" />
+                          <span>Create New List</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {advanceLists.length > 0 ? (
+                      <div className="space-y-2">
+                        <AdminSelect
+                          value={form.advanceListId}
+                          disabled={isReadOnly}
+                          onChange={(val) => handleSelectAdvanceList(val)}
+                          placeholder="— Select an Advance List —"
+                          options={[
+                            { value: "", label: "— Select an Advance List —" },
+                            ...advanceLists.map((l) => ({
+                              value: l.id,
+                              label: l.name,
+                              subtitle: `${l.columns.length} columns • ${l.rows?.length || 0} rows`,
+                            })),
+                          ]}
+                        />
+
+                        {/* Connected List Details Card */}
+                        {form.advanceListId && selectedAdvanceListDef && (
+                          <div className="p-2.5 bg-indigo-50/60 border border-indigo-200/80 rounded-lg flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <div>
+                                <div className="text-xs font-bold text-slate-800">
+                                  {selectedAdvanceListDef.name}
+                                </div>
+                                <div className="text-[10px] text-slate-500">
+                                  {selectedAdvanceListDef.columns.length} columns (
+                                  {selectedAdvanceListDef.columns.map((c) => c.name).join(", ")})
+                                </div>
+                              </div>
+                            </div>
+
+                            {!isReadOnly && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setAdvanceListEditingDef(selectedAdvanceListDef);
+                                  setAdvanceListDrawerOpen(true);
+                                }}
+                                className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 hover:underline cursor-pointer flex items-center gap-1 shrink-0"
+                              >
+                                <span>Edit Schema</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 border border-slate-200 border-dashed rounded-xl text-center space-y-2.5">
+                        <p className="text-xs font-medium text-slate-600">No Advance Lists available yet.</p>
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setAdvanceListEditingDef(null);
+                              setAdvanceListDrawerOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+                            <span>Create New List</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-800">Advance 2 Mode</h4>
-                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                      Advance 2 configuration is active. Additional custom dataset rules and behaviors will be connected here.
-                    </p>
-                  </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-[11px] font-semibold">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Ready for custom functionality</span>
-                  </div>
+
+                  {/* Advance List Column Properties Matrix Preview */}
+                  {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-2.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Column Behavior Properties
+                        </span>
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-md font-medium">
+                          {selectedAdvanceListDef.columns.length} Columns
+                        </span>
+                      </div>
+
+                      <div className="border border-slate-200 rounded-lg overflow-x-auto">
+                        <table className="w-full min-w-[440px] text-left text-xs border-collapse">
+                          <thead>
+                            <tr className="bg-slate-100/80 border-b border-slate-200 text-[11px] font-bold text-slate-700">
+                              <th className="px-3 py-2 min-w-[140px]">Column Name</th>
+                              <th className="px-2 py-2 text-center w-24">Type</th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-blue-700">Primary</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-emerald-700">Editable</span>
+                              </th>
+                              <th className="px-2 py-2 text-center w-20">
+                                <span className="text-slate-600">Disable</span>
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {selectedAdvanceListDef.columns.map((col) => {
+                              return (
+                                <tr key={col.id} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="px-3 py-2">
+                                    <div className="font-semibold text-slate-800 text-xs">{col.name}</div>
+                                    <div className="text-[10px] font-mono text-slate-400">{col.id}</div>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    <span className="text-[10px] font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 uppercase">
+                                      {col.type}
+                                    </span>
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isPrimary ? (
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200">
+                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                        <span>Primary</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isEditable ? (
+                                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                        Yes
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                  <td className="px-2 py-2 text-center">
+                                    {col.isDisable ? (
+                                      <span className="text-[10px] font-bold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+                                        Locked
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-300">—</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Defined Option Items / Records for Advance List 2 */}
+                  {selectedAdvanceListDef && selectedAdvanceListDef.columns.length > 0 && (
+                    <div className="p-3 bg-white border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                          Defined Option Rows ({form.options.length})
+                        </span>
+
+                        {!isReadOnly && canClientAddOptions && (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setCsvImportModalOpen(true)}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-indigo-600 hover:text-indigo-700 cursor-pointer bg-indigo-50 hover:bg-indigo-100/70 border-indigo-200 transition-colors shadow-2xs"
+                              title="Import option rows from a CSV file (or download template)"
+                            >
+                              <Upload className="w-3 h-3" />
+                              <span>Import CSV</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newIdx = form.options.length + 1;
+                                const initialRowVals: Record<string, any> = {};
+                                selectedAdvanceListDef.columns.forEach((c) => {
+                                  initialRowVals[c.id] = c.type === "number" ? 0 : "";
+                                });
+                                setForm((p) => ({
+                                  ...p,
+                                  options: [
+                                    ...p.options,
+                                    {
+                                      id: Date.now() + newIdx,
+                                      label: "",
+                                      value: initialRowVals,
+                                      index: newIdx,
+                                    },
+                                  ],
+                                }));
+                              }}
+                              className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md border text-blue-600 hover:text-blue-700 cursor-pointer bg-blue-50 hover:bg-blue-100/70 border-blue-200 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3 h-3" /> Add Option Row
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {form.options.length === 0 ? (
+                        <div className="p-4 bg-white border border-slate-200 border-dashed rounded-xl text-xs text-slate-400 text-center">
+                          No option rows defined yet. Click &ldquo;+ Add Option Row&rdquo; or &ldquo;Import CSV&rdquo; above.
+                        </div>
+                      ) : (
+                        <div className="space-y-2.5 max-h-80 overflow-y-auto pr-1">
+                          {form.options.map((opt, optIdx) => {
+                            const primaryCol = selectedAdvanceListDef.columns.find((c) => c.isPrimary) || selectedAdvanceListDef.columns[0];
+                            const rowVals: Record<string, any> =
+                              typeof opt.value === "object" && opt.value !== null
+                                ? opt.value
+                                : { [primaryCol?.id || "col_1"]: opt.label || opt.value || "" };
+
+                            return (
+                              <div
+                                key={opt.id || optIdx}
+                                className={`p-3 bg-slate-50/60 border rounded-xl space-y-2 transition-colors ${
+                                  opt.isDefault ? "border-blue-300 bg-blue-50/20" : "border-slate-200 hover:border-slate-300"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded">
+                                      Row #{optIdx + 1}
+                                    </span>
+                                    {opt.isDefault && (
+                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200/80">
+                                        <Star className="w-2.5 h-2.5 fill-blue-500 text-blue-500" />
+                                        <span>Default Row</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {!isReadOnly && (
+                                    <div className="flex items-center gap-0.5">
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === 0}
+                                        onClick={() => moveOption(optIdx, -1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move up"
+                                      >
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        disabled={optIdx === form.options.length - 1}
+                                        onClick={() => moveOption(optIdx, 1)}
+                                        className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-20 cursor-pointer"
+                                        title="Move down"
+                                      >
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                      </button>
+                                      <OptionRowMenu
+                                        isDefault={opt.isDefault}
+                                        onToggleDefault={() => {
+                                          const isCurrentlyDefault = opt.isDefault;
+                                          if (isCurrentlyDefault) {
+                                            updateOption(optIdx, { isDefault: false });
+                                            if (form.defaultValue === opt.id || form.defaultValue === opt.value) {
+                                              setForm((p) => ({ ...p, defaultValue: undefined }));
+                                            }
+                                          } else {
+                                            if (form.selectionMode === "single") {
+                                              const updated = form.options.map((o, i) => ({
+                                                ...o,
+                                                isDefault: i === optIdx,
+                                              }));
+                                              setForm((p) => ({
+                                                ...p,
+                                                options: updated,
+                                                defaultValue: opt.id || opt.value,
+                                              }));
+                                            } else {
+                                              updateOption(optIdx, { isDefault: true });
+                                            }
+                                          }
+                                        }}
+                                        onDelete={() => removeOption(optIdx)}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                  {selectedAdvanceListDef.columns.map((col) => {
+                                    const isPrimary = col.isPrimary;
+                                    const currentVal = rowVals[col.id] ?? (isPrimary ? opt.label : "");
+
+                                    return (
+                                      <div key={col.id} className="space-y-1">
+                                        <label className="text-[10px] font-semibold text-slate-600 flex items-center justify-between">
+                                          <div className="flex items-center gap-1">
+                                            <span>{col.name}</span>
+                                            {isPrimary && (
+                                              <span className="text-[9px] bg-blue-100 text-blue-700 px-1 py-0.2 rounded font-normal">
+                                                Primary
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-[9px] font-mono text-slate-400 uppercase">{col.type}</span>
+                                        </label>
+                                        <input
+                                          type={col.type === "number" ? "number" : "text"}
+                                          value={currentVal}
+                                          disabled={isReadOnly}
+                                          placeholder={`${col.name}...`}
+                                          onChange={(e) => {
+                                            const rawVal = e.target.value;
+                                            const nextVal = col.type === "number" ? (rawVal === "" ? 0 : isNaN(parseFloat(rawVal)) ? 0 : parseFloat(rawVal)) : rawVal;
+                                            const nextVals = { ...rowVals, [col.id]: nextVal };
+                                            const primaryColId = primaryCol?.id || selectedAdvanceListDef.columns[0]?.id;
+                                            const updatedLabel = isPrimary ? String(nextVal) : (nextVals[primaryColId] || opt.label || String(nextVal));
+                                            updateOption(optIdx, {
+                                              label: updatedLabel,
+                                              value: nextVals,
+                                            });
+                                          }}
+                                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-indigo-500 font-medium text-slate-800"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -5165,6 +5588,24 @@ export function AdminFieldDrawer({
                 inheritedFieldKey: createdField.key,
               }));
             }
+          }}
+        />
+      )}
+      {/* Advance List 2 Drawer */}
+      {advanceListDrawerOpen && (
+        <AdvanceListDrawer
+          isOpen={advanceListDrawerOpen}
+          editingList={advanceListEditingDef}
+          zIndex={zIndex + 30}
+          onClose={() => {
+            setAdvanceListDrawerOpen(false);
+            setAdvanceListEditingDef(null);
+          }}
+          onSaved={(savedList) => {
+            setAdvanceListDrawerOpen(false);
+            setAdvanceListEditingDef(null);
+            setAdvanceLists(getStoredAdvanceLists());
+            handleSelectAdvanceList(savedList.id);
           }}
         />
       )}

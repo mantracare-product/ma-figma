@@ -319,13 +319,19 @@ export default function ProcessDetailDrawer({
     const customSecIds = new Set(customSecs.map((s) => s.id));
     const SYSTEM_SEC_IDS = new Set(["sec-client-details", "sec-process-info"]);
 
+    let allKnownProcessSecs: SectionDefinition[] = [];
+    try {
+      allKnownProcessSecs = getCustomSections("process");
+    } catch {}
+    const allKnownSecIds = new Set(allKnownProcessSecs.map((s) => s.id));
+
     let updatedSections = baseSections.filter((s) => {
       if (SYSTEM_SEC_IDS.has(s.id)) return true;
-      return customSecIds.has(s.id);
+      return customSecIds.has(s.id) || allKnownSecIds.has(s.id);
     });
 
     updatedSections = updatedSections.map((s) => {
-      const regSec = customSecs.find((cs) => cs.id === s.id);
+      const regSec = customSecs.find((cs) => cs.id === s.id) || allKnownProcessSecs.find((cs) => cs.id === s.id);
       if (!regSec) return s;
 
       const assignedFromFields = registryAllFields

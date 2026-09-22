@@ -37,7 +37,7 @@ import {
   Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
@@ -611,13 +611,18 @@ export default function DraggableOverviewSections({
       createdIn: "client",
     });
 
-    const newSection: OverviewSection = {
+    const newSection: OverviewSection & Partial<SectionDefinition> = {
       id: registered.id,
       title: registered.title,
       description: registered.description,
       iconName: (registered.iconName as any) || "layers",
       isCustom: true,
       fieldKeys: selectedInitialFields || [],
+      processIds: registered.processIds,
+      scopingRules: registered.scopingRules,
+      module: registered.module,
+      source: registered.source,
+      permissions: registered.permissions,
     };
     onSectionsChange([...sections, newSection]);
     setNewSectionTitle("");
@@ -1696,7 +1701,7 @@ export default function DraggableOverviewSections({
           isAdmin={false}
           onClose={() => setAddSectionModalOpen(false)}
           onSaved={(savedSection) => {
-            const newSection: OverviewSection = {
+            const newSection: OverviewSection & Partial<SectionDefinition> = {
               id: savedSection.id,
               title: savedSection.title,
               description: savedSection.description,
@@ -1704,6 +1709,10 @@ export default function DraggableOverviewSections({
               isCustom: true,
               fieldKeys: savedSection.fieldKeys || [],
               permissions: savedSection.permissions,
+              processIds: savedSection.processIds,
+              scopingRules: savedSection.scopingRules,
+              module: savedSection.module,
+              source: savedSection.source,
             };
             onSectionsChange([...sections, newSection]);
             setAddSectionModalOpen(false);

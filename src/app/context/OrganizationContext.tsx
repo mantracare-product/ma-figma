@@ -22,7 +22,10 @@ interface OrganizationContextType {
   setSessionOverride: (override: Partial<Organization> | null) => void;
 }
 
-const OrganizationContext = createContext<OrganizationContextType | undefined>(undefined);
+const globalForOrg = typeof window !== "undefined" ? (window as any) : (globalThis as any);
+const OrganizationContext: React.Context<OrganizationContextType | undefined> =
+  globalForOrg.__MANTRA_ORGANIZATION_CONTEXT__ ||
+  (globalForOrg.__MANTRA_ORGANIZATION_CONTEXT__ = createContext<OrganizationContextType | undefined>(undefined));
 
 const defaultOrganizations: Organization[] = [
   {
@@ -160,7 +163,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 export function useOrganization() {
   const context = useContext(OrganizationContext);
   if (context === undefined) {
-    throw new Error("useOrganization must be used within an OrganizationProvider");
+    return {
+      organizations: defaultOrganizations,
+      activeOrganization: defaultOrganizations[0],
+      setActiveOrganization: () => {},
+      addOrganization: () => {},
+      updateOrganization: () => {},
+      sessionOverride: null,
+      setSessionOverride: () => {},
+    };
   }
   return context;
 }
