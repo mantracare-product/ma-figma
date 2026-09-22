@@ -54,33 +54,14 @@ export function isFieldRequiredForStage(
 }
 
 /**
- * Checks whether a section requirement matches the given stage name.
- */
-export function isSectionRequiredForStage(
-  section: SectionDefinition,
-  stageName: string
-): boolean {
-  if (!section.required) return false;
-  if (!section.requiredStages || section.requiredStages.length === 0) {
-    return true;
-  }
-  if (section.requiredStages.includes("all")) return true;
-  if (!stageName) return true;
-  const targetLower = stageName.trim().toLowerCase();
-  return section.requiredStages.some(
-    (st) => st.trim().toLowerCase() === targetLower || st.trim().toLowerCase() === "all"
-  );
-}
-
-/**
  * Computes all missing required fields for a client in a specific process and stage.
+ * Note: Section-level requirements have been removed; validation is strictly per-field.
  */
 export function getMissingRequiredProcessFields({
   processId,
   processName,
   currentStageName,
   allFields,
-  allSections = [],
   fieldValues = {},
 }: {
   processId?: string;
@@ -103,7 +84,7 @@ export function getMissingRequiredProcessFields({
 
   const missingFieldsMap = new Map<string, MissingRequiredField>();
 
-  // 1. Check direct field requirements
+  // Check direct field requirements
   for (const f of processFields) {
     if (isFieldRequiredForStage(f, currentStageName)) {
       const val = fieldValues[f.key];
@@ -117,32 +98,6 @@ export function getMissingRequiredProcessFields({
     }
   }
 
-  // 2. Check section requirements (all fields inside a required section must be filled)
-  const applicableSections = allSections.filter((s) => {
-    if (s.module !== "process") return false;
-    if (!s.processIds || s.processIds.length === 0 || s.processIds.includes("all")) return true;
-    if (processId && isProcessMatchingAssignment(s.processIds, processId)) return true;
-    if (processName && isProcessMatchingAssignment(s.processIds, processName)) return true;
-    return false;
-  });
-
-  for (const sec of applicableSections) {
-    if (isSectionRequiredForStage(sec, currentStageName)) {
-      const keys = sec.fieldKeys || [];
-      for (const k of keys) {
-        const fieldDef = processFields.find((f) => f.key === k);
-        const val = fieldValues[k];
-        if (isFieldValueEmpty(val)) {
-          missingFieldsMap.set(k, {
-            key: k,
-            label: fieldDef?.label || k,
-            sectionTitle: sec.title,
-            sectionId: sec.id,
-          });
-        }
-      }
-    }
-  }
-
   return Array.from(missingFieldsMap.values());
 }
+

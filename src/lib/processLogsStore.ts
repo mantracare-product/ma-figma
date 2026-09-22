@@ -113,10 +113,45 @@ export function addProcessCallLog(entry: {
 export function updateProcessCallLogStage(clientId: string, processName: string, newStageName: string): void {
   const currentLogs = getStoredCallLogs();
   const updated = currentLogs.map((l) => {
-    if (l.clientId === clientId && l.process === processName) {
+    if (l.clientId === clientId && l.process.toLowerCase() === processName.toLowerCase()) {
       return { ...l, currentStage: newStageName };
     }
     return l;
   });
   saveCallLogs(updated);
+}
+
+export function updateProcessCallLogFields(
+  clientId: string,
+  processName: string,
+  fieldValues: Record<string, any>
+): void {
+  const currentLogs = getStoredCallLogs();
+  const existingIndex = currentLogs.findIndex(
+    (l) =>
+      (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+      l.process.toLowerCase() === processName.toLowerCase()
+  );
+  if (existingIndex >= 0) {
+    const updated = [...currentLogs];
+    updated[existingIndex] = { ...updated[existingIndex], ...fieldValues };
+    saveCallLogs(updated);
+  } else {
+    const newLog: CallLog & Record<string, any> = {
+      id: `CALL-${processName.toUpperCase().replace(/\s+/g, "-")}`,
+      client: clientId,
+      clientId: clientId,
+      type: "Outbound",
+      status: "In Progress",
+      process: processName,
+      currentStage: "Initial Stage",
+      duration: "0:00",
+      date: new Date().toISOString().replace("T", " ").substring(0, 16),
+      hasRecording: false,
+      hasTranscript: false,
+      hasScheduledCall: false,
+      ...fieldValues,
+    };
+    saveCallLogs([newLog, ...currentLogs]);
+  }
 }

@@ -55,8 +55,10 @@ import {
   useFieldRegistry,
   FieldDefinition,
   SectionDefinition,
+  isSectionMatchingOrg,
   SECTION_REGISTRY_EVENT,
   LEGACY_SECTION_REGISTRY_EVENT,
+  FIELD_REGISTRY_EVENT,
 } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
@@ -70,6 +72,8 @@ import {
   formatTimestamp,
 } from "../../../lib/activityEngine";
 import { getMissingRequiredProcessFields, MissingRequiredField } from "../../../lib/processFieldValidation";
+import { updateProcessCallLogFields, getStoredCallLogs, PROCESS_LOGS_STORE_EVENT } from "../../../lib/processLogsStore";
+import RequiredFieldsModal from "./RequiredFieldsModal";
 
 export interface ProcessDocument {
   id: string;
@@ -318,13 +322,19 @@ export default function ProcessDetailDrawer({
     const customSecIds = new Set(customSecs.map((s) => s.id));
     const SYSTEM_SEC_IDS = new Set(["sec-client-details", "sec-process-info"]);
 
+    let allKnownProcessSecs: SectionDefinition[] = [];
+    try {
+      allKnownProcessSecs = getCustomSections("process");
+    } catch {}
+    const allKnownSecIds = new Set(allKnownProcessSecs.map((s) => s.id));
+
     let updatedSections = baseSections.filter((s) => {
       if (SYSTEM_SEC_IDS.has(s.id)) return true;
-      return customSecIds.has(s.id);
+      return customSecIds.has(s.id) || allKnownSecIds.has(s.id);
     });
 
     updatedSections = updatedSections.map((s) => {
-      const regSec = customSecs.find((cs) => cs.id === s.id);
+      const regSec = customSecs.find((cs) => cs.id === s.id) || allKnownProcessSecs.find((cs) => cs.id === s.id);
       if (!regSec) return s;
 
       const assignedFromFields = registryAllFields
@@ -352,7 +362,11 @@ export default function ProcessDetailDrawer({
     });
 
     const existingSecIds = new Set(updatedSections.map((s) => s.id));
-    customSecs.forEach((regSec) => {
+    const allMatchingSecs = [
+      ...customSecs,
+      ...allKnownProcessSecs.filter((s) => isSectionMatchingOrg(s, activeOrganization, currentProcessId)),
+    ];
+    allMatchingSecs.forEach((regSec) => {
       if (!existingSecIds.has(regSec.id)) {
         const assignedFromFields = registryAllFields
           .filter((f) => f.sectionId === regSec.id)
@@ -403,10 +417,12 @@ export default function ProcessDetailDrawer({
 
     window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener("storage", handleSectionsUpdate);
     return () => {
       window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener("storage", handleSectionsUpdate);
     };
   }, [getSectionsForOrg, getFieldsForOrg, activeOrganization, currentProcessId, visibleFieldKeys]);
@@ -460,6 +476,62 @@ export default function ProcessDetailDrawer({
       });
   }, [dealFields, visibleFieldKeys, editedValues, log, client]);
 
+  const [localEditedValues, setLocalEditedValues] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    if (clientId && log?.process) {
+      try {
+        const currentLogs = getStoredCallLogs();
+        const found = currentLogs.find(
+          (l) =>
+            (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+            l.process.toLowerCase() === log.process.toLowerCase()
+        );
+        if (found) {
+          setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
+        }
+      } catch {}
+    }
+  }, [clientId, log?.process]);
+
+  useEffect(() => {
+    const handleLogsUpdate = () => {
+      if (clientId && log?.process) {
+        try {
+          const currentLogs = getStoredCallLogs();
+          const found = currentLogs.find(
+            (l) =>
+              (l.clientId === clientId || (l.client && clientId && l.client.toLowerCase() === clientId.toLowerCase())) &&
+              l.process.toLowerCase() === log.process.toLowerCase()
+          );
+          if (found) {
+            setLocalEditedValues((prev) => ({ ...prev, ...(found as any) }));
+          }
+        } catch {}
+      }
+    };
+
+    window.addEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+    window.addEventListener("ma_record_data_changed", handleLogsUpdate);
+    window.addEventListener("storage", handleLogsUpdate);
+    return () => {
+      window.removeEventListener(PROCESS_LOGS_STORE_EVENT, handleLogsUpdate);
+      window.removeEventListener("ma_record_data_changed", handleLogsUpdate);
+      window.removeEventListener("storage", handleLogsUpdate);
+    };
+  }, [clientId, log?.process]);
+
+  const handleFieldChangeInternal = (key: string, value: any) => {
+    setLocalEditedValues((prev) => ({ ...prev, [key]: value }));
+    if (clientId && log?.process) {
+      updateProcessCallLogFields(clientId, log.process, { [key]: value });
+    }
+    onFieldSave?.(key, value);
+    try {
+      window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+    } catch {}
+  };
+
   const processFieldValues = React.useMemo(() => {
     const vals: Record<string, any> = {
       ...(log as any),
@@ -483,7 +555,7 @@ export default function ProcessDetailDrawer({
         }
       });
     }
-    // Directly merge all editedValues so ANY field (custom or standard) immediately updates and preserves its typed value
+    // Directly merge all editedValues and local overrides so ANY field immediately updates and preserves its value
     if (editedValues && typeof editedValues === "object") {
       Object.entries(editedValues).forEach(([k, v]) => {
         if (v !== undefined) {
@@ -491,8 +563,15 @@ export default function ProcessDetailDrawer({
         }
       });
     }
+    if (localEditedValues && typeof localEditedValues === "object") {
+      Object.entries(localEditedValues).forEach(([k, v]) => {
+        if (v !== undefined) {
+          vals[k] = v;
+        }
+      });
+    }
     return vals;
-  }, [client, log, clientName, fields, editedValues]);
+  }, [client, log, clientName, fields, editedValues, localEditedValues]);
 
   // Compute active stages
   const [storedProcesses, setStoredProcesses] = useState<Process[]>(getStoredProcesses);
@@ -562,13 +641,38 @@ export default function ProcessDetailDrawer({
     return missingRequiredFields.map((f) => f.key);
   }, [missingRequiredFields]);
 
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    targetStageName: string;
+    targetStageIdx: number;
+    missingFields: MissingRequiredField[];
+  }>({
+    isOpen: false,
+    targetStageName: "",
+    targetStageIdx: 1,
+    missingFields: [],
+  });
+
   const handleStageClick = (newStageIdx: number) => {
-    if (newStageIdx > effectiveStageIdx && missingRequiredFields.length > 0) {
-      toast.error(
-        `Cannot move to next stage: Please fill all ${missingRequiredFields.length} required field(s) for "${currentStageName}" first.`
-      );
+    const targetStageName = activeStageList[newStageIdx - 1] || "";
+    const missingForTarget = getMissingRequiredProcessFields({
+      processId: currentProcessId,
+      processName: log?.process,
+      currentStageName: targetStageName,
+      allFields: allRegistryProcessFields,
+      fieldValues: processFieldValues,
+    });
+
+    if (missingForTarget.length > 0) {
+      setRequiredFieldsModalState({
+        isOpen: true,
+        targetStageName,
+        targetStageIdx: newStageIdx,
+        missingFields: missingForTarget,
+      });
       return;
     }
+
     onStageChange(newStageIdx);
   };
 
@@ -922,7 +1026,7 @@ export default function ProcessDetailDrawer({
                       sections={processSections}
                       onSectionsChange={setProcessSections}
                       fieldValues={processFieldValues}
-                      onFieldValueChange={onFieldSave}
+                      onFieldValueChange={handleFieldChangeInternal}
                       onNavigateToClient={(cId) => {
                         onClose();
                         navigate(`/clients/${cId}`);
@@ -982,6 +1086,7 @@ export default function ProcessDetailDrawer({
                     onClose={onCloseFieldManager}
                     onCreated={(newField) => {
                       onVisibleFieldKeysChange([...visibleFieldKeys, newField.key]);
+                      toast.success(`Field "${newField.label}" created and added to view`);
                     }}
                   />
                 )}
@@ -1103,6 +1208,34 @@ export default function ProcessDetailDrawer({
           </div>
         </div>
       </div>
+
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={clientName}
+        clientId={clientId}
+        processName={log?.process || ""}
+        targetStageName={requiredFieldsModalState.targetStageName}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={allRegistryProcessFields}
+        initialValues={processFieldValues}
+        onConfirm={(filledValues) => {
+          setLocalEditedValues((prev) => ({ ...prev, ...filledValues }));
+          if (clientId && log?.process) {
+            updateProcessCallLogFields(clientId, log.process, filledValues);
+          }
+          Object.entries(filledValues).forEach(([k, v]) => {
+            onFieldSave?.(k, v);
+          });
+          try {
+            window.dispatchEvent(new CustomEvent("ma_record_data_changed"));
+          } catch {}
+          onStageChange(requiredFieldsModalState.targetStageIdx);
+          setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+          toast.success(`Stage moved to ${requiredFieldsModalState.targetStageName} with required fields saved ✓`);
+        }}
+        zIndex={1000}
+      />
     </>
   );
 }

@@ -699,6 +699,8 @@ export default function AdminProcessTemplates() {
       type: "Outbound Call",
       status: "Completed",
       process: previewProcess.name,
+      processId: previewProcess.id,
+      processName: previewProcess.name,
       currentStage: currentStageName,
       duration: "4m 12s",
       date: "Apr 13, 2024, 2:50 PM",

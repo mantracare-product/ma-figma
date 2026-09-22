@@ -26,9 +26,10 @@ import ProcessDetailDrawer, { ActivityLogEntry } from "../components/deals/Proce
 import CallDetailDrawer from "../components/telephony/CallDetailDrawer";
 import { getActivityForProcess } from "../../lib/activityLog";
 import { getStoredCallLogs, saveCallLogs, PROCESS_LOGS_STORE_EVENT, updateProcessCallLogStage } from "../../lib/processLogsStore";
-import { getMissingRequiredProcessFields } from "../../lib/processFieldValidation";
+import { getMissingRequiredProcessFields, MissingRequiredField } from "../../lib/processFieldValidation";
 import { getStagesForProcess } from "../components/ui/ProcessStageSelect";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../lib/useProcessStore";
+import RequiredFieldsModal from "../components/deals/RequiredFieldsModal";
 
 interface CallLog {
   id: string;
@@ -373,6 +374,27 @@ export default function Deals() {
   const [showSearchModal, setShowSearchModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  const [requiredFieldsModalState, setRequiredFieldsModalState] = useState<{
+    isOpen: boolean;
+    clientName: string;
+    clientId: string;
+    processName: string;
+    processId?: string;
+    targetStageName: string;
+    missingFields: MissingRequiredField[];
+    initialValues: Record<string, any>;
+    onConfirm: (filledValues: Record<string, any>) => void;
+  }>({
+    isOpen: false,
+    clientName: "",
+    clientId: "",
+    processName: "",
+    targetStageName: "",
+    missingFields: [],
+    initialValues: {},
+    onConfirm: () => {},
+  });
 
   const [importMethod, setImportMethod] = useState<"csv" | "webhook">("csv");
   const [showWebhookInfo, setShowWebhookInfo] = useState(false);
@@ -2325,16 +2347,55 @@ export default function Deals() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
+                                          const clientObj = getClientObj(log.clientId, log.client);
+                                          const currentValues = {
+                                            client_name: log.client,
+                                            phone: clientObj?.phone || "9667283405",
+                                            email: clientObj?.email || "anshul@mantracare.com",
+                                            ...(clientObj || {}),
+                                            ...(log || {}),
+                                          };
+                                          const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
+                                          const missing = getMissingRequiredProcessFields({
+                                            processId: (log as any)?.processId,
+                                            processName: log.process,
+                                            currentStageName: stageName,
+                                            allFields: procFields,
+                                            fieldValues: currentValues,
+                                          });
+
+                                          if (missing.length > 0) {
+                                            setRequiredFieldsModalState({
+                                              isOpen: true,
+                                              clientName: log.client,
+                                              clientId: log.clientId,
+                                              processName: log.process,
+                                              processId: (log as any)?.processId,
+                                              targetStageName: stageName,
+                                              missingFields: missing,
+                                              initialValues: currentValues,
+                                              onConfirm: (filledValues) => {
+                                                const updatedLog = { ...log, ...filledValues, currentStage: stageName };
+                                                setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+                                                saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+                                                updateProcessCallLogStage(log.clientId, log.process, stageName);
+                                                setDeals((prev) =>
+                                                  prev.map((d) => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+                                                );
+                                                setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+                                                toast.success(`Stage moved to ${stageName} with required fields saved ✓`);
+                                              },
+                                            });
+                                            return;
+                                          }
+
                                           const updatedLog = { ...log, currentStage: stageName };
                                           setCallLogs(prev => prev.map(l => l.id === log.id ? updatedLog : l));
+                                          saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
                                           updateProcessCallLogStage(log.clientId, log.process, stageName);
-                                          
-                                          // Open ProcessDetailDrawer with the new stage so required fields are highlighted
-                                          setSelectedLogForView(updatedLog);
-                                          setViewDrawerTab("general");
-                                          setHistoryFilter("");
-                                          setShowViewDrawer(true);
-
+                                          setDeals(prev =>
+                                            prev.map(d => (d.clientName === log.client ? { ...d, stage: `${log.process}: ${stageName}` } : d))
+                                          );
                                           toast.success(`Stage moved to ${stageName} ✓`);
                                         }}
                                         onMouseEnter={() => setHoveredStageSegment({ logId: log.id, segIdx })}
@@ -2398,20 +2459,21 @@ export default function Deals() {
                         <td className="px-4 py-2.5 text-center whitespace-nowrap">
                           {(() => {
                             const clientObj = getClientObj(log.clientId, log.client);
+                            const currentValues = {
+                              client_name: log.client,
+                              phone: clientObj?.phone || "9667283405",
+                              email: clientObj?.email || "anshul@mantracare.com",
+                              ...(clientObj || {}),
+                              ...(log || {}),
+                            };
+                            const procFields = getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process);
 
                             const missing = getMissingRequiredProcessFields({
                               processId: (log as any)?.processId,
                               processName: log.process,
                               currentStageName: log.currentStage,
-                              allFields: getFieldsForOrg("process", activeOrganization, (log as any)?.processId || log.process),
-                              allSections: getSectionsForOrg("process", activeOrganization, (log as any)?.processId || log.process),
-                              fieldValues: {
-                                client_name: log.client,
-                                phone: clientObj?.phone || "9667283405",
-                                email: clientObj?.email || "anshul@mantracare.com",
-                                ...(clientObj || {}),
-                                ...(log || {}),
-                              },
+                              allFields: procFields,
+                              fieldValues: currentValues,
                             });
 
                             if (missing.length === 0) {
@@ -2424,13 +2486,26 @@ export default function Deals() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setSelectedLogForView(log);
-                                  setViewDrawerTab("general");
-                                  setHistoryFilter("");
-                                  setShowViewDrawer(true);
+                                  setRequiredFieldsModalState({
+                                    isOpen: true,
+                                    clientName: log.client,
+                                    clientId: log.clientId,
+                                    processName: log.process,
+                                    processId: (log as any)?.processId,
+                                    targetStageName: log.currentStage,
+                                    missingFields: missing,
+                                    initialValues: currentValues,
+                                    onConfirm: (filledValues) => {
+                                      const updatedLog = { ...log, ...filledValues };
+                                      setCallLogs((prev) => prev.map((l) => (l.id === log.id ? updatedLog : l)));
+                                      saveCallLogs(getStoredCallLogs().map((l) => (l.id === log.id ? updatedLog : l)));
+                                      setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+                                      toast.success(`Required fields updated successfully ✓`);
+                                    },
+                                  });
                                 }}
                                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 hover:border-red-300 transition-all cursor-pointer shadow-2xs hover:scale-105"
-                                title={`Click to review and fill ${missing.length} missing required field(s)`}
+                                title={`Click to fill ${missing.length} missing required field(s)`}
                               >
                                 <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
                                 <span>{missing.length}</span>
@@ -2721,38 +2796,72 @@ export default function Deals() {
                       e.currentTarget.style.borderStyle = 'solid';
                       if (draggedDealId) {
                         const targetDeal = deals.find((d) => d.id === draggedDealId);
-                        setDeals((prev) =>
-                          prev.map((d) =>
-                            d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
-                          )
-                        );
                         if (targetDeal) {
                           const procName = stage.category || targetDeal.stage.split(":")[0]?.trim() || "Patient Intake";
                           const stageClean = stage.label || stage.fullLabel.split(":")[1]?.trim() || stage.fullLabel;
                           const clientId = getClientIdByName(targetDeal.clientName);
-                          updateProcessCallLogStage(clientId, procName, stageClean);
-
-                          const matchingLog = callLogs.find((l) => l.client === targetDeal.clientName && l.process === procName) || {
-                            id: `deal-log-${targetDeal.id}`,
-                            client: targetDeal.clientName,
-                            clientId: clientId,
-                            process: procName,
-                            currentStage: stageClean,
-                            status: "In Progress",
-                            date: targetDeal.createdDate,
-                            type: "Outbound",
-                            duration: "0:00",
-                            hasRecording: false,
-                            hasTranscript: false,
-                            hasScheduledCall: false,
+                          const clientObj = getClientObj(clientId, targetDeal.clientName);
+                          const matchingLog = callLogs.find((l) => l.client === targetDeal.clientName && l.process === procName);
+                          const currentValues = {
+                            client_name: targetDeal.clientName,
+                            phone: clientObj?.phone || "9667283405",
+                            email: clientObj?.email || "anshul@mantracare.com",
+                            ...(clientObj || {}),
+                            ...(matchingLog || {}),
                           };
+                          const procFields = getFieldsForOrg("process", activeOrganization, (matchingLog as any)?.processId || procName);
+                          const missing = getMissingRequiredProcessFields({
+                            processId: (matchingLog as any)?.processId,
+                            processName: procName,
+                            currentStageName: stageClean,
+                            allFields: procFields,
+                            fieldValues: currentValues,
+                          });
 
-                          setSelectedLogForView({ ...matchingLog, currentStage: stageClean });
-                          setViewDrawerTab("general");
-                          setHistoryFilter("");
-                          setShowViewDrawer(true);
+                          if (missing.length > 0) {
+                            setRequiredFieldsModalState({
+                              isOpen: true,
+                              clientName: targetDeal.clientName,
+                              clientId: clientId,
+                              processName: procName,
+                              processId: (matchingLog as any)?.processId,
+                              targetStageName: stageClean,
+                              missingFields: missing,
+                              initialValues: currentValues,
+                              onConfirm: (filledValues) => {
+                                setDeals((prev) =>
+                                  prev.map((d) =>
+                                    d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
+                                  )
+                                );
+                                if (matchingLog) {
+                                  const updatedLog = { ...matchingLog, ...filledValues, currentStage: stageClean };
+                                  setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                                  saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                                }
+                                updateProcessCallLogStage(clientId, procName, stageClean);
+                                setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }));
+                                toast.success(`Deal moved to ${stage.fullLabel} with required fields saved ✓`);
+                              },
+                            });
+                            setDraggedDealId(null);
+                            return;
+                          }
+
+                          // No missing fields -> update directly
+                          setDeals((prev) =>
+                            prev.map((d) =>
+                              d.id === draggedDealId ? { ...d, stage: stage.fullLabel } : d
+                            )
+                          );
+                          updateProcessCallLogStage(clientId, procName, stageClean);
+                          if (matchingLog) {
+                            const updatedLog = { ...matchingLog, currentStage: stageClean };
+                            setCallLogs((prev) => prev.map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                            saveCallLogs(getStoredCallLogs().map((l) => (l.id === matchingLog.id ? updatedLog : l)));
+                          }
+                          toast.success(`Deal moved to ${stage.fullLabel} ✓`);
                         }
-                        toast.success(`Deal moved to ${stage.fullLabel}`);
                         setDraggedDealId(null);
                       }
                     }}
@@ -3948,6 +4057,19 @@ export default function Deals() {
           if (patch.activeFilterFields !== undefined) setActiveFilterFields(patch.activeFilterFields);
           if (patch.selectedAddFields !== undefined) setSelectedAddFields(patch.selectedAddFields);
         }}
+      />
+
+      <RequiredFieldsModal
+        isOpen={requiredFieldsModalState.isOpen}
+        onClose={() => setRequiredFieldsModalState((p) => ({ ...p, isOpen: false }))}
+        clientName={requiredFieldsModalState.clientName}
+        clientId={requiredFieldsModalState.clientId}
+        processName={requiredFieldsModalState.processName}
+        targetStageName={requiredFieldsModalState.targetStageName}
+        missingFields={requiredFieldsModalState.missingFields}
+        allFields={getFieldsForOrg("process", activeOrganization, requiredFieldsModalState.processId || requiredFieldsModalState.processName)}
+        initialValues={requiredFieldsModalState.initialValues}
+        onConfirm={requiredFieldsModalState.onConfirm}
       />
 
       <HowItWorksModal

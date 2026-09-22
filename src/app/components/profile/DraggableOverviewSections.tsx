@@ -37,7 +37,7 @@ import {
   Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFieldRegistry, FieldDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
@@ -57,10 +57,24 @@ export interface OverviewSection {
   id: string;
   title: string;
   description?: string;
-  iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag";
+  iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   isCustom?: boolean;
   fieldKeys: string[];
   permissions?: SectionPermissions;
+  processIds?: string[];
+  scopingRules?: ScopingRule[];
+  module?: FieldModule;
+  source?: "system" | "custom" | "template";
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+  required?: boolean;
+  requiredStages?: string[];
+  showAlways?: boolean;
+  userVisibility?: boolean;
+  visibleToUserIds?: string[];
+  isReusable?: boolean;
+  reusableModules?: FieldModule[];
 }
 
 export interface DraggableOverviewSectionsProps {
@@ -278,8 +292,9 @@ export default function DraggableOverviewSections({
     };
   }, []);
 
-  const activeProcessName = useMemo(() => {
+  const activeProcessIdent = useMemo(() => {
     return (
+      (log as any)?.processId ||
       log?.process ||
       log?.processName ||
       (selectedProcesses && selectedProcesses[0]) ||
@@ -289,13 +304,25 @@ export default function DraggableOverviewSections({
   }, [log, selectedProcesses, client]);
 
   const activeProcessObj = useMemo(() => {
-    if (!activeProcessName) return undefined;
+    if (!activeProcessIdent) return undefined;
+    const clean = activeProcessIdent.toLowerCase().trim();
+    const cleanSlug = clean.replace(/[^a-z0-9]/g, "");
     return allProcesses.find(
       (p) =>
-        p.name.toLowerCase() === activeProcessName.toLowerCase() ||
-        p.id === activeProcessName
+        p.id.toLowerCase() === clean ||
+        p.name.toLowerCase() === clean ||
+        (cleanSlug && p.id.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanSlug) ||
+        (cleanSlug && p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === cleanSlug)
     );
-  }, [allProcesses, activeProcessName]);
+  }, [allProcesses, activeProcessIdent]);
+
+  const activeProcessName = useMemo(() => {
+    return activeProcessObj?.name || (log as any)?.process || (log as any)?.processName || activeProcessIdent;
+  }, [activeProcessObj, log, activeProcessIdent]);
+
+  const activeProcessId = useMemo(() => {
+    return activeProcessObj?.id || (log as any)?.processId || activeProcessIdent;
+  }, [activeProcessObj, log, activeProcessIdent]);
 
   const activeProcessStages = useMemo(() => {
     if (!activeProcessObj || !activeProcessObj.stages) return undefined;
@@ -318,15 +345,37 @@ export default function DraggableOverviewSections({
 
   // All custom field definitions filtered by organization scope and process context
   const allRegistryFields = useMemo(() => {
-    const procId = activeProcessObj?.id || activeProcessName;
-    return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
-  }, [getAllFields, customFieldsModule, activeOrganization, activeProcessObj, activeProcessName]);
+    const procId = activeProcessId || activeProcessName;
+    const currentModuleFields = getAllFields(customFieldsModule);
+    const clientFields = customFieldsModule !== "client" ? getAllFields("client") : [];
+    const processFields = customFieldsModule !== "process" ? getAllFields("process") : [];
+    const combined = [...currentModuleFields, ...clientFields, ...processFields];
+    const uniqueKeys = new Set<string>();
+    const uniqueList: FieldDefinition[] = [];
+    combined.forEach((f) => {
+      if (!uniqueKeys.has(f.key)) {
+        uniqueKeys.add(f.key);
+        uniqueList.push(f);
+      }
+    });
+    return uniqueList.filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
+  }, [getAllFields, customFieldsModule, activeOrganization, activeProcessId, activeProcessName]);
 
   // All custom sections registered in current module filtered by organization scope and process context
   const allCustomSections = useMemo(() => {
-    const procId = activeProcessObj?.id || activeProcessName;
-    return getAllSections(customFieldsModule).filter((s) => isSectionMatchingOrg(s, activeOrganization, procId));
-  }, [getAllSections, customFieldsModule, activeOrganization, activeProcessObj, activeProcessName]);
+    const procId = activeProcessId || activeProcessName;
+    const currentModSecs = getAllSections(customFieldsModule);
+    const procSecs = customFieldsModule !== "process" ? getAllSections("process") : [];
+    const clientSecs = customFieldsModule !== "client" ? getAllSections("client") : [];
+    const combined = [...currentModSecs, ...procSecs, ...clientSecs];
+    const uniqueMap = new Map<string, SectionDefinition>();
+    combined.forEach((s) => {
+      if (!uniqueMap.has(s.id)) {
+        uniqueMap.set(s.id, s);
+      }
+    });
+    return Array.from(uniqueMap.values()).filter((s) => isSectionMatchingOrg(s, activeOrganization, procId));
+  }, [getAllSections, customFieldsModule, activeOrganization, activeProcessId, activeProcessName]);
 
   const allowedFieldKeys = useMemo(() => {
     return new Set(allRegistryFields.map((f) => f.key));
@@ -341,17 +390,18 @@ export default function DraggableOverviewSections({
 
   // Sections and their fields filtered strictly according to activeOrganization scope and showAlways settings
   const visibleSections = useMemo(() => {
-    const procId = activeProcessObj?.id || activeProcessName;
+    const procId = activeProcessId || activeProcessName;
     return sections
       .filter((sec) => {
         if (!sec.isCustom || SYSTEM_SEC_IDS.has(sec.id)) return true;
+        if (procId && sec.processIds && isProcessMatchingAssignment(sec.processIds, procId)) return true;
         return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization, procId);
       })
       .map((sec) => ({
         ...sec,
         fieldKeys: (sec.fieldKeys || []).filter((k) => {
           if (SYSTEM_FIELD_KEYS.has(k)) return true;
-          if (!allowedFieldKeys.has(k)) return false;
+          if (!allowedFieldKeys.has(k) && !userAddedFieldKeys.has(k)) return false;
 
           // If showAlways is false (turned off), do NOT show in section unless it has a value on this record or was added via + Add Field popup
           const regField = allRegistryFields.find((f) => f.key === k);
@@ -367,7 +417,7 @@ export default function DraggableOverviewSections({
           return true;
         }),
       }));
-  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessObj, activeProcessName, allRegistryFields, fieldValues, userAddedFieldKeys]);
+  }, [sections, matchingCustomSecIds, allowedFieldKeys, activeOrganization, SYSTEM_SEC_IDS, SYSTEM_FIELD_KEYS, activeProcessId, activeProcessName, allRegistryFields, fieldValues, userAddedFieldKeys]);
 
   // User custom option additions per field
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, string>>({});
@@ -611,13 +661,18 @@ export default function DraggableOverviewSections({
       createdIn: "client",
     });
 
-    const newSection: OverviewSection = {
+    const newSection: OverviewSection & Partial<SectionDefinition> = {
       id: registered.id,
       title: registered.title,
       description: registered.description,
       iconName: (registered.iconName as any) || "layers",
       isCustom: true,
       fieldKeys: selectedInitialFields || [],
+      processIds: registered.processIds,
+      scopingRules: registered.scopingRules,
+      module: registered.module,
+      source: registered.source,
+      permissions: registered.permissions,
     };
     onSectionsChange([...sections, newSection]);
     setNewSectionTitle("");
@@ -1654,11 +1709,11 @@ export default function DraggableOverviewSections({
       {/* ── Select Fields Modal ────────────────────────────────────────────── */}
       {fieldModalOpen && (
         <SelectFieldsModal
-          onlyModules={[customFieldsModule]}
+          onlyModules={customFieldsModule === "process" ? ["process", "client"] : [customFieldsModule]}
           initiallySelected={
             visibleSections.find((s) => s.id === targetSectionIdForField)?.fieldKeys || []
           }
-          activeProcessId={activeProcessObj?.id}
+          activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
           onClose={() => {
@@ -1673,7 +1728,7 @@ export default function DraggableOverviewSections({
       {createFieldModalOpen && (
         <CreateFieldModal
           lockModule={customFieldsModule}
-          activeProcessId={activeProcessObj?.id}
+          activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
           onClose={() => setCreateFieldModalOpen(false)}
@@ -1690,13 +1745,13 @@ export default function DraggableOverviewSections({
         <AdminSectionDrawer
           section={null}
           initialModule={customFieldsModule as Exclude<FieldModule, "deal">}
-          activeProcessId={activeProcessObj?.id}
+          activeProcessId={activeProcessId}
           activeProcessName={activeProcessName}
           processStages={activeProcessStages}
           isAdmin={false}
           onClose={() => setAddSectionModalOpen(false)}
           onSaved={(savedSection) => {
-            const newSection: OverviewSection = {
+            const newSection: OverviewSection & Partial<SectionDefinition> = {
               id: savedSection.id,
               title: savedSection.title,
               description: savedSection.description,
@@ -1704,6 +1759,10 @@ export default function DraggableOverviewSections({
               isCustom: true,
               fieldKeys: savedSection.fieldKeys || [],
               permissions: savedSection.permissions,
+              processIds: savedSection.processIds,
+              scopingRules: savedSection.scopingRules,
+              module: savedSection.module,
+              source: savedSection.source,
             };
             onSectionsChange([...sections, newSection]);
             setAddSectionModalOpen(false);

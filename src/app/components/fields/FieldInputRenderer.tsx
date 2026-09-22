@@ -34,6 +34,7 @@ import {
   getSuggestedPlaceholderForType,
   useFieldRegistry,
 } from "../../context/FieldRegistryContext";
+import { getStoredAdvanceListById, type AdvanceListColumn, type AdvanceListDefinition } from "../../../lib/advanceListStore";
 import { useCrmBindOptions } from "./useCrmBindOptions";
 import { useDynamicListOptions } from "./useDynamicListOptions";
 import { RichTextEditor } from "./RichTextEditor";
@@ -322,6 +323,8 @@ interface MultiSelectDropdownProps {
   isAdminDefault?: boolean;
   borderClass?: string;
   allowSearch?: boolean;
+  allowCustomOptions?: boolean;
+  onAddOption?: (newVal: string) => void;
 }
 
 function MultiSelectDropdown({
@@ -333,6 +336,8 @@ function MultiSelectDropdown({
   isAdminDefault = false,
   borderClass = "",
   allowSearch = false,
+  allowCustomOptions = false,
+  onAddOption,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -441,7 +446,7 @@ function MultiSelectDropdown({
         )}
 
         <div className="max-h-56 overflow-y-auto p-1.5 space-y-0.5">
-          {filteredOptions.length === 0 ? (
+          {filteredOptions.length === 0 && !allowCustomOptions ? (
             <div className="px-3 py-2 text-xs text-slate-400 italic">
               {searchQuery ? "No matching options" : "No options configured"}
             </div>
@@ -467,6 +472,25 @@ function MultiSelectDropdown({
                 </label>
               );
             })
+          )}
+
+          {/* Dynamic custom option addition */}
+          {allowCustomOptions && searchQuery.trim() && !options.some((o) => o.label.toLowerCase() === searchQuery.trim().toLowerCase() || String(o.value).toLowerCase() === searchQuery.trim().toLowerCase()) && (
+            <button
+              type="button"
+              onClick={() => {
+                const newVal = searchQuery.trim();
+                onAddOption?.(newVal);
+                if (!selected.includes(newVal)) {
+                  onChange([...selected, newVal]);
+                }
+                setSearchQuery("");
+              }}
+              className="w-full text-left px-3 py-2 rounded-lg text-xs transition-colors flex items-center gap-2 cursor-pointer select-none text-blue-600 hover:bg-blue-50 font-semibold border-t border-slate-100 mt-1"
+            >
+              <Plus className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Add &ldquo;{searchQuery.trim()}&rdquo; as new option</span>
+            </button>
           )}
         </div>
       </PopoverContent>
@@ -690,68 +714,571 @@ function NewListInputRenderer({
   const config = field?.newListConfig;
   const sourceMode = config?.sourceMode || "manual";
   const label = subField?.name || field?.label || "List";
+  const [localExtraOptions, setLocalExtraOptions] = useState<FieldOption[]>([]);
+
+  const handleAddLocalOption = (newOptVal: string) => {
+    if (!newOptVal.trim()) return;
+    const exists = localExtraOptions.some((o) => o.value.toLowerCase() === newOptVal.toLowerCase());
+    if (!exists) {
+      setLocalExtraOptions((prev) => [...prev, { id: `custom_${Date.now()}`, label: newOptVal.trim(), value: newOptVal.trim() }]);
+    }
+  };
 
   // ─────────────────────────────────────────────────────────────
-  // 1. MODE 1 — MANUAL LIST (Exact reuse of List manual options)
+  // 0. MODE 3 — ADVANCE 2 (Structured Advance List with Custom Columns)
   // ─────────────────────────────────────────────────────────────
-  if (sourceMode === "manual") {
-    const manualType = config?.manualType || (field?.selectionMode === "multiple" ? "multiple" : "single");
-    const options: FieldOption[] = field?.options || subField?.options || [];
+  if (sourceMode === "advance_2" || config?.advanceListId || (field as any)?.advanceListId) {
+    const advanceListId = config?.advanceListId || (field as any)?.advanceListId;
+    const advanceListDef = advanceListId ? getStoredAdvanceListById(advanceListId) : undefined;
+    const isMulti = field?.selectionMode === "multiple" || config?.selectionMode === "multiple";
+    const allowCustom = Boolean(config?.allowCustomOptions ?? field?.allowCustomOptions);
 
-    if (manualType === "open_list" || field?.listEntryType === "plain_text") {
-      const entries: string[] = Array.isArray(value) ? value.map(String) : [];
+    let rawOptions: FieldOption[] = field?.options && field.options.length > 0 ? [...field.options] : [];
+    if (rawOptions.length === 0 && advanceListDef && advanceListDef.rows.length > 0) {
+      const primaryCol = advanceListDef.columns.find((c) => c.isPrimary) || advanceListDef.columns[0];
+      rawOptions = advanceListDef.rows.map((r, idx) => ({
+        id: r.id || `adv_opt_${idx}`,
+        label: (primaryCol && r.values[primaryCol.id] !== undefined) ? String(r.values[primaryCol.id]) : r.label || `Option ${idx + 1}`,
+        value: r.values,
+        index: idx + 1,
+        isDefault: Boolean(r.isDefault),
+      }));
+    }
+    rawOptions = [...rawOptions, ...localExtraOptions];
+
+    const columns: AdvanceListColumn[] = advanceListDef?.columns && advanceListDef.columns.length > 0
+      ? advanceListDef.columns
+      : (rawOptions.length > 0 && typeof rawOptions[0].value === "object" && rawOptions[0].value !== null
+          ? Object.keys(rawOptions[0].value).map((k, i) => ({
+              id: k,
+              name: k.replace(/^col_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+              type: typeof (rawOptions[0].value as any)[k] === "number" ? ("number" as const) : ("string" as const),
+              isPrimary: i === 0,
+              isEditable: i !== 0,
+              isDisable: false,
+            }))
+          : []);
+
+    const primaryCol = columns.find((c) => c.isPrimary) || columns[0];
+    const primaryColId = primaryCol?.id || "label";
+    const primaryColName = primaryCol?.name || "Primary Option";
+
+    // Normalize selected items
+    const normalizedItems = (() => {
+      if (!value) return [];
+      const arr = Array.isArray(value) ? value : [value];
+      return arr.map((item) => {
+        if (typeof item === "object" && item !== null) {
+          const selectedId = item.selectedRowId ?? item.id ?? item.value ?? "";
+          const primaryVal = item.primaryValue ?? item.label ?? (primaryCol ? item[primaryCol.id] : "") ?? "";
+          const overrides = item.overrides || (typeof item.values === "object" ? item.values : item);
+          return { selectedRowId: String(selectedId || primaryVal), primaryValue: String(primaryVal), overrides };
+        }
+        return { selectedRowId: String(item), primaryValue: String(item), overrides: {} };
+      }).filter((item) => item.selectedRowId !== "" || item.primaryValue !== "");
+    })();
+
+    const handleSingleChange = (selectedVal: string) => {
+      if (!selectedVal) {
+        onChange(isAdminDefault ? undefined : null);
+        return;
+      }
+      const foundOpt = rawOptions.find((o) => o.label === selectedVal || String(o.id) === selectedVal || String(o.value) === selectedVal);
+      const optValues = typeof foundOpt?.value === "object" && foundOpt.value !== null ? foundOpt.value : {};
+      onChange({
+        selectedRowId: foundOpt?.id || selectedVal,
+        primaryValue: foundOpt?.label || selectedVal,
+        values: optValues,
+        overrides: {},
+      });
+    };
+
+    const handleMultiAdd = (selectedVal: string) => {
+      if (!selectedVal) return;
+      const exists = normalizedItems.some((it) => it.primaryValue === selectedVal || it.selectedRowId === selectedVal);
+      if (exists) return;
+      const foundOpt = rawOptions.find((o) => o.label === selectedVal || String(o.id) === selectedVal || String(o.value) === selectedVal);
+      const optValues = typeof foundOpt?.value === "object" && foundOpt.value !== null ? foundOpt.value : {};
+      const newItem = {
+        selectedRowId: String(foundOpt?.id || selectedVal),
+        primaryValue: String(foundOpt?.label || selectedVal),
+        values: optValues,
+        overrides: {},
+      };
+      onChange([...normalizedItems, newItem]);
+    };
+
+    const handleColumnOverride = (itemIdx: number, colId: string, newVal: any) => {
+      if (isMulti) {
+        const updated = [...normalizedItems];
+        const target = updated[itemIdx];
+        if (!target) return;
+        updated[itemIdx] = {
+          ...target,
+          overrides: { ...(target.overrides || {}), [colId]: newVal },
+        };
+        onChange(updated);
+      } else {
+        const current = normalizedItems[0] || { selectedRowId: "", primaryValue: "", overrides: {} };
+        onChange({
+          ...current,
+          overrides: { ...(current.overrides || {}), [colId]: newVal },
+        });
+      }
+    };
+
+    const renderAdvanceCard = (item: { selectedRowId: string; primaryValue: string; overrides?: Record<string, any> }, itemIdx: number) => {
+      const foundOpt = rawOptions.find(
+        (o) =>
+          String(o.id) === String(item.selectedRowId) ||
+          o.label === item.primaryValue ||
+          o.label === item.selectedRowId ||
+          (typeof o.value === "object" && o.value !== null && String((o.value as any)[primaryColId]) === item.primaryValue)
+      );
+      const rowValues: Record<string, any> = (typeof foundOpt?.value === "object" && foundOpt?.value !== null)
+        ? foundOpt.value
+        : (typeof item.overrides === "object" && item.overrides !== null ? item.overrides : {});
+
+      const displayPrimaryVal = item.primaryValue || foundOpt?.label || item.selectedRowId;
+
       return (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-1.5 min-h-[34px] p-2 bg-slate-50/70 border border-slate-200 rounded-lg">
-            {entries.length === 0 ? (
-              <span className="text-xs text-slate-400 italic">
-                {isAdminDefault ? "No default entries pre-seeded." : `No ${label.toLowerCase()} added yet.`}
-              </span>
-            ) : (
-              entries.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white border border-slate-300 text-slate-800 text-xs font-medium rounded-lg shadow-2xs"
-                >
-                  <span>{String(item)}</span>
-                  {!disabled && (
-                    <button
-                      type="button"
-                      onClick={() => onChange(entries.filter((_, i) => i !== idx))}
-                      className="text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
-              ))
+        <div
+          key={`${item.selectedRowId}_${itemIdx}`}
+          className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 hover:border-slate-300 transition-colors"
+        >
+          {/* Block Header */}
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+              <div className="min-w-0">
+                <span className="text-xs font-bold text-slate-800 truncate block">
+                  {displayPrimaryVal}
+                </span>
+                <span className="text-[10px] text-slate-400 block truncate">
+                  {primaryColName} {advanceListDef?.name ? `• ${advanceListDef.name}` : ""}
+                </span>
+              </div>
+            </div>
+
+            {!disabled && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isMulti) {
+                    onChange(normalizedItems.filter((_, i) => i !== itemIdx));
+                  } else {
+                    onChange(isAdminDefault ? undefined : null);
+                  }
+                }}
+                className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 cursor-pointer transition-colors shrink-0"
+                title="Remove selection"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
             )}
           </div>
-          {!disabled && (
-            <input
-              type="text"
-              placeholder={`+ Type ${label.toLowerCase()} and press Enter...`}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.target as HTMLInputElement).value.trim()) {
-                  e.preventDefault();
-                  const val = (e.target as HTMLInputElement).value.trim();
-                  if (!entries.includes(val)) {
-                    onChange([...entries, val]);
-                  }
-                  (e.target as HTMLInputElement).value = "";
-                }
-              }}
-              className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg outline-none focus:border-blue-500"
-            />
+
+          {/* Column-Wise Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+            {columns.map((col) => {
+              const isPrimary = Boolean(col.isPrimary);
+              const isColDisabled = Boolean(col.isDisable);
+              const isColEditable = Boolean(col.isEditable);
+
+              const baseVal = rowValues[col.id] !== undefined ? rowValues[col.id] : "";
+              const overrideVal = item.overrides?.[col.id];
+              const hasOverride = overrideVal !== undefined && overrideVal !== baseVal;
+              const currentVal = overrideVal !== undefined ? overrideVal : baseVal;
+
+              return (
+                <div key={col.id} className="space-y-1 bg-slate-50/70 p-2.5 rounded-lg border border-slate-100">
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
+                      <span className="truncate">{col.name}</span>
+                      {isPrimary && (
+                        <span className="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.2 rounded font-normal lowercase shrink-0">
+                          primary
+                        </span>
+                      )}
+                    </label>
+                    {isColDisabled && (
+                      <span className="text-[9px] text-slate-400 flex items-center gap-0.5 shrink-0" title="Locked by admin">
+                        <Lock className="w-2.5 h-2.5" />
+                      </span>
+                    )}
+                    {hasOverride && isColEditable && (
+                      <span className="text-[9px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Local override">
+                        <Edit3 className="w-2.5 h-2.5" />
+                      </span>
+                    )}
+                  </div>
+
+                  {isColDisabled || !isColEditable || disabled ? (
+                    <div className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-800 select-none truncate shadow-2xs min-h-[30px] flex items-center">
+                      {currentVal !== undefined && currentVal !== "" ? (
+                        String(currentVal)
+                      ) : (
+                        <span className="text-slate-300 italic font-normal">—</span>
+                      )}
+                    </div>
+                  ) : (
+                    <input
+                      type={col.type === "number" ? "number" : "text"}
+                      value={currentVal ?? ""}
+                      disabled={disabled}
+                      onChange={(e) => {
+                        const val = col.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value;
+                        handleColumnOverride(itemIdx, col.id, val);
+                      }}
+                      placeholder={`Enter ${col.name}...`}
+                      className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-2xs transition-all"
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+
+    if (isMulti) {
+      return (
+        <div className="space-y-3">
+          <AdminSelect
+            value=""
+            disabled={disabled}
+            onChange={(val) => handleMultiAdd(val)}
+            placeholder={isAdminDefault ? "— No Default (Empty) —" : `+ Add from ${label} (${primaryColName})...`}
+            options={[
+              { value: "", label: `+ Add from ${label}...` },
+              ...rawOptions.map((opt) => ({
+                value: opt.label || String(opt.value),
+                label: opt.label || String(opt.value),
+              })),
+            ]}
+            size="sm"
+            triggerClassName={borderClass}
+            allowSearch={config?.allowSearch}
+            allowCustomOptions={allowCustom}
+            onAddOption={(newVal) => {
+              handleAddLocalOption(newVal);
+              handleMultiAdd(newVal);
+            }}
+          />
+
+          {normalizedItems.length > 0 && (
+            <div className="space-y-2.5">
+              {normalizedItems.map((item, idx) => renderAdvanceCard(item, idx))}
+            </div>
           )}
         </div>
       );
     }
 
-    if (manualType === "multiple" || field?.selectionMode === "multiple" || config?.selectionMode === "multiple") {
+    // Single Select
+    const currentSingleVal = normalizedItems[0]?.primaryValue || (typeof value === "string" ? value : "");
+    return (
+      <div className="space-y-3">
+        <AdminSelect
+          value={currentSingleVal}
+          disabled={disabled}
+          onChange={handleSingleChange}
+          placeholder={isAdminDefault ? "— No Default (Empty) —" : (field?.placeholder || `Select ${label}...`)}
+          options={[
+            { value: "", label: "— Clear Selection —" },
+            ...rawOptions.map((opt) => {
+              let subtitle: string | undefined = undefined;
+              if (typeof opt.value === "object" && opt.value !== null) {
+                const entries = Object.entries(opt.value).filter(([k, v]) => String(v).trim() !== "" && String(v) !== opt.label);
+                if (entries.length > 0) {
+                  subtitle = entries.map(([k, v]) => String(v)).slice(0, 2).join(" • ");
+                }
+              }
+              return {
+                value: opt.label || String(opt.value),
+                label: opt.label || String(opt.value),
+                subtitle,
+              };
+            }),
+          ]}
+          size="sm"
+          triggerClassName={borderClass}
+          allowSearch={config?.allowSearch}
+          allowCustomOptions={allowCustom}
+          onAddOption={(newVal) => {
+            handleAddLocalOption(newVal);
+            handleSingleChange(newVal);
+          }}
+        />
+
+        {normalizedItems.length > 0 && normalizedItems[0] && renderAdvanceCard(normalizedItems[0], 0)}
+      </div>
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 1. MODE 1 — BASIC LIST (Manual Options)
+  // ─────────────────────────────────────────────────────────────
+  if (sourceMode === "manual" || sourceMode === "basic_list") {
+    const rawOptions: FieldOption[] = [...(field?.options || subField?.options || []), ...localExtraOptions];
+    const isMulti = field?.selectionMode === "multiple" || config?.selectionMode === "multiple";
+    const allowCustom = Boolean(config?.allowCustomOptions ?? field?.allowCustomOptions);
+
+    const hasStructuredOptions = rawOptions.some(
+      (o) => typeof o.value === "object" && o.value !== null && !Array.isArray(o.value)
+    );
+
+    if (hasStructuredOptions) {
+      const columns: AdvanceListColumn[] = (rawOptions.length > 0 && typeof rawOptions[0].value === "object" && rawOptions[0].value !== null)
+        ? Object.keys(rawOptions[0].value).map((k, i) => ({
+            id: k,
+            name: k.replace(/^col_/, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+            type: typeof (rawOptions[0].value as any)[k] === "number" ? ("number" as const) : ("string" as const),
+            isPrimary: i === 0,
+            isEditable: i !== 0,
+            isDisable: false,
+          }))
+        : [];
+
+      const primaryCol = columns.find((c) => c.isPrimary) || columns[0];
+      const primaryColId = primaryCol?.id || "label";
+
+      const normalizedItems = (() => {
+        if (!value) return [];
+        const arr = Array.isArray(value) ? value : [value];
+        return arr.map((item) => {
+          if (typeof item === "object" && item !== null) {
+            const selectedId = item.selectedRowId ?? item.id ?? item.value ?? "";
+            const primaryVal = item.primaryValue ?? item.label ?? (primaryCol ? item[primaryCol.id] : "") ?? "";
+            const overrides = item.overrides || (typeof item.values === "object" ? item.values : item);
+            return { selectedRowId: String(selectedId || primaryVal), primaryValue: String(primaryVal), overrides };
+          }
+          return { selectedRowId: String(item), primaryValue: String(item), overrides: {} };
+        }).filter((item) => item.selectedRowId !== "" || item.primaryValue !== "");
+      })();
+
+      const handleSingleChange = (selectedVal: string) => {
+        if (!selectedVal) {
+          onChange(isAdminDefault ? undefined : null);
+          return;
+        }
+        const foundOpt = rawOptions.find((o) => o.label === selectedVal || String(o.id) === selectedVal || String(o.value) === selectedVal);
+        const optValues = typeof foundOpt?.value === "object" && foundOpt.value !== null ? foundOpt.value : {};
+        onChange({
+          selectedRowId: foundOpt?.id || selectedVal,
+          primaryValue: foundOpt?.label || selectedVal,
+          values: optValues,
+          overrides: {},
+        });
+      };
+
+      const handleMultiAdd = (selectedVal: string) => {
+        if (!selectedVal) return;
+        const exists = normalizedItems.some((it) => it.primaryValue === selectedVal || it.selectedRowId === selectedVal);
+        if (exists) return;
+        const foundOpt = rawOptions.find((o) => o.label === selectedVal || String(o.id) === selectedVal || String(o.value) === selectedVal);
+        const optValues = typeof foundOpt?.value === "object" && foundOpt.value !== null ? foundOpt.value : {};
+        const newItem = {
+          selectedRowId: String(foundOpt?.id || selectedVal),
+          primaryValue: String(foundOpt?.label || selectedVal),
+          values: optValues,
+          overrides: {},
+        };
+        onChange([...normalizedItems, newItem]);
+      };
+
+      const handleColOverride = (itemIdx: number, colId: string, newVal: any) => {
+        if (isMulti) {
+          const updated = [...normalizedItems];
+          const target = updated[itemIdx];
+          if (!target) return;
+          updated[itemIdx] = {
+            ...target,
+            overrides: { ...(target.overrides || {}), [colId]: newVal },
+          };
+          onChange(updated);
+        } else {
+          const current = normalizedItems[0] || { selectedRowId: "", primaryValue: "", overrides: {} };
+          onChange({
+            ...current,
+            overrides: { ...(current.overrides || {}), [colId]: newVal },
+          });
+        }
+      };
+
+      const renderCard = (item: { selectedRowId: string; primaryValue: string; overrides?: Record<string, any> }, itemIdx: number) => {
+        const foundOpt = rawOptions.find(
+          (o) =>
+            String(o.id) === String(item.selectedRowId) ||
+            o.label === item.primaryValue ||
+            o.label === item.selectedRowId ||
+            (typeof o.value === "object" && o.value !== null && String((o.value as any)[primaryColId]) === item.primaryValue)
+        );
+        const rowValues: Record<string, any> = (typeof foundOpt?.value === "object" && foundOpt?.value !== null)
+          ? foundOpt.value
+          : (typeof item.overrides === "object" && item.overrides !== null ? item.overrides : {});
+
+        const displayPrimaryVal = item.primaryValue || foundOpt?.label || item.selectedRowId;
+
+        return (
+          <div
+            key={`${item.selectedRowId}_${itemIdx}`}
+            className="p-3.5 bg-white border border-slate-200 rounded-xl shadow-2xs space-y-3 hover:border-slate-300 transition-colors"
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0" />
+                <span className="text-xs font-bold text-slate-800 truncate block">
+                  {displayPrimaryVal}
+                </span>
+              </div>
+              {!disabled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isMulti) {
+                      onChange(normalizedItems.filter((_, i) => i !== itemIdx));
+                    } else {
+                      onChange(isAdminDefault ? undefined : null);
+                    }
+                  }}
+                  className="p-1 text-slate-400 hover:text-red-600 rounded-md hover:bg-red-50 cursor-pointer transition-colors shrink-0"
+                  title="Remove selection"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {columns.map((col) => {
+                const isPrimary = Boolean(col.isPrimary);
+                const isColDisabled = Boolean(col.isDisable);
+                const isColEditable = Boolean(col.isEditable);
+                const baseVal = rowValues[col.id] !== undefined ? rowValues[col.id] : "";
+                const overrideVal = item.overrides?.[col.id];
+                const hasOverride = overrideVal !== undefined && overrideVal !== baseVal;
+                const currentVal = overrideVal !== undefined ? overrideVal : baseVal;
+
+                return (
+                  <div key={col.id} className="space-y-1 bg-slate-50/70 p-2.5 rounded-lg border border-slate-100">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider truncate flex items-center gap-1">
+                        <span className="truncate">{col.name}</span>
+                        {isPrimary && (
+                          <span className="text-[9px] bg-blue-50 text-blue-700 px-1 py-0.2 rounded font-normal lowercase shrink-0">
+                            primary
+                          </span>
+                        )}
+                      </label>
+                      {hasOverride && isColEditable && (
+                        <span className="text-[9px] text-emerald-600 font-semibold flex items-center gap-0.5 shrink-0" title="Local override">
+                          <Edit3 className="w-2.5 h-2.5" />
+                        </span>
+                      )}
+                    </div>
+                    {isColDisabled || !isColEditable || disabled ? (
+                      <div className="px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-semibold text-slate-800 select-none truncate shadow-2xs min-h-[30px] flex items-center">
+                        {currentVal !== undefined && currentVal !== "" ? String(currentVal) : <span className="text-slate-300 italic font-normal">—</span>}
+                      </div>
+                    ) : (
+                      <input
+                        type={col.type === "number" ? "number" : "text"}
+                        value={currentVal ?? ""}
+                        disabled={disabled}
+                        onChange={(e) => {
+                          const val = col.type === "number" ? (e.target.value === "" ? "" : Number(e.target.value)) : e.target.value;
+                          handleColOverride(itemIdx, col.id, val);
+                        }}
+                        placeholder={`Enter ${col.name}...`}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-md text-xs font-medium text-slate-800 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 shadow-2xs transition-all"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      };
+
+      if (isMulti) {
+        return (
+          <div className="space-y-3">
+            <AdminSelect
+              value=""
+              disabled={disabled}
+              onChange={(val) => handleMultiAdd(val)}
+              placeholder={isAdminDefault ? "— No Default (Empty) —" : `+ Add from ${label}...`}
+              options={[
+                { value: "", label: `+ Add from ${label}...` },
+                ...rawOptions.map((opt) => ({
+                  value: opt.label || String(opt.value),
+                  label: opt.label || String(opt.value),
+                })),
+              ]}
+              size="sm"
+              triggerClassName={borderClass}
+              allowSearch={config?.allowSearch}
+              allowCustomOptions={allowCustom}
+              onAddOption={(newVal) => {
+                handleAddLocalOption(newVal);
+                handleMultiAdd(newVal);
+              }}
+            />
+            {normalizedItems.length > 0 && (
+              <div className="space-y-2.5">
+                {normalizedItems.map((item, idx) => renderCard(item, idx))}
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      const currentSingleVal = normalizedItems[0]?.primaryValue || (typeof value === "string" ? value : "");
+      return (
+        <div className="space-y-3">
+          <AdminSelect
+            value={currentSingleVal}
+            disabled={disabled}
+            onChange={handleSingleChange}
+            placeholder={isAdminDefault ? "— No Default (Empty) —" : (field?.placeholder || `Select ${label}...`)}
+            options={[
+              { value: "", label: "— Clear Selection —" },
+              ...rawOptions.map((opt) => {
+                let subtitle: string | undefined = undefined;
+                if (typeof opt.value === "object" && opt.value !== null) {
+                  const entries = Object.entries(opt.value).filter(([k, v]) => String(v).trim() !== "" && String(v) !== opt.label);
+                  if (entries.length > 0) {
+                    subtitle = entries.map(([k, v]) => String(v)).slice(0, 2).join(" • ");
+                  }
+                }
+                return {
+                  value: opt.label || String(opt.value),
+                  label: opt.label || String(opt.value),
+                  subtitle,
+                };
+              }),
+            ]}
+            size="sm"
+            triggerClassName={borderClass}
+            allowSearch={config?.allowSearch}
+            allowCustomOptions={allowCustom}
+            onAddOption={(newVal) => {
+              handleAddLocalOption(newVal);
+              handleSingleChange(newVal);
+            }}
+          />
+          {normalizedItems.length > 0 && normalizedItems[0] && renderCard(normalizedItems[0], 0)}
+        </div>
+      );
+    }
+
+    if (isMulti) {
       return (
         <MultiSelectDropdown
-          options={options}
+          options={rawOptions}
           value={value}
           onChange={onChange}
           disabled={disabled}
@@ -759,6 +1286,8 @@ function NewListInputRenderer({
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
           allowSearch={config?.allowSearch}
+          allowCustomOptions={allowCustom}
+          onAddOption={handleAddLocalOption}
         />
       );
     }
@@ -771,13 +1300,18 @@ function NewListInputRenderer({
         disabled={disabled}
         onChange={onChange}
         placeholder={isAdminDefault ? "— No Default (Empty) —" : (field?.placeholder || "Select an option...")}
-        options={options.map((opt) => ({
+        options={rawOptions.map((opt) => ({
           value: String(opt.value),
           label: opt.label || String(opt.value),
         }))}
         size="sm"
         triggerClassName={borderClass}
         allowSearch={config?.allowSearch}
+        allowCustomOptions={allowCustom}
+        onAddOption={(newVal) => {
+          handleAddLocalOption(newVal);
+          onChange(newVal);
+        }}
       />
     );
   }
@@ -1311,7 +1845,12 @@ export function FieldInputRenderer({
   // ─────────────────────────────────────────────────────────────
   // 1.5. NEW LIST (Manual List OR Option List with local overrides)
   // ─────────────────────────────────────────────────────────────
-  if (effectiveType === "new_list") {
+  if (
+    effectiveType === "new_list" ||
+    Boolean(field?.newListConfig) ||
+    Boolean((field as any)?.advanceListId) ||
+    (effectiveOptions.length > 0 && typeof effectiveOptions[0].value === "object" && effectiveOptions[0].value !== null && !Array.isArray(effectiveOptions[0].value))
+  ) {
     return (
       <NewListInputRenderer
         field={field}
@@ -1332,6 +1871,7 @@ export function FieldInputRenderer({
   // ─────────────────────────────────────────────────────────────
   if (effectiveType === "list_select" || effectiveType === "select" || effectiveType === "multiselect" || effectiveType === "list") {
     const isMultiple = subField?.selectionMode === "multiple" || field?.selectionMode === "multiple" || effectiveType === "multiselect";
+    const allowCustom = Boolean(effectiveListConfig?.allowCustomOptions ?? field?.allowCustomOptions);
 
     if (isMultiple) {
       return (
@@ -1344,6 +1884,7 @@ export function FieldInputRenderer({
           isAdminDefault={isAdminDefault}
           borderClass={borderClass}
           allowSearch={effectiveListConfig?.allowSearch}
+          allowCustomOptions={allowCustom}
         />
       );
     }
@@ -1364,6 +1905,10 @@ export function FieldInputRenderer({
         size="sm"
         triggerClassName={borderClass}
         allowSearch={effectiveListConfig?.allowSearch}
+        allowCustomOptions={allowCustom}
+        onAddOption={(newVal) => {
+          onChange(newVal);
+        }}
       />
     );
   }
