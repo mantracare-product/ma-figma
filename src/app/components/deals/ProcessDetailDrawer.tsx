@@ -360,7 +360,11 @@ export default function ProcessDetailDrawer({
     });
 
     const existingSecIds = new Set(updatedSections.map((s) => s.id));
-    customSecs.forEach((regSec) => {
+    const allMatchingSecs = [
+      ...customSecs,
+      ...allKnownProcessSecs.filter((s) => isSectionMatchingOrg(s, activeOrganization, currentProcessId)),
+    ];
+    allMatchingSecs.forEach((regSec) => {
       if (!existingSecIds.has(regSec.id)) {
         const assignedFromFields = registryAllFields
           .filter((f) => f.sectionId === regSec.id)
@@ -411,10 +415,12 @@ export default function ProcessDetailDrawer({
 
     window.addEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+    window.addEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
     window.addEventListener("storage", handleSectionsUpdate);
     return () => {
       window.removeEventListener(SECTION_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener(LEGACY_SECTION_REGISTRY_EVENT, handleSectionsUpdate);
+      window.removeEventListener(FIELD_REGISTRY_EVENT, handleSectionsUpdate);
       window.removeEventListener("storage", handleSectionsUpdate);
     };
   }, [getSectionsForOrg, getFieldsForOrg, activeOrganization, currentProcessId, visibleFieldKeys]);

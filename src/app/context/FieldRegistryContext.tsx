@@ -526,22 +526,25 @@ const SYSTEM_SECTION_IDS = new Set([
  * Handles bidirectional resolution using stored processes (e.g. template ID 'proc-123' <-> name 'Cardiology').
  */
 export function isProcessMatchingAssignment(
-  assignedProcessIds?: string[],
-  targetProcessIdentifier?: string
+  assignedProcessIds: string[],
+  targetProcessIdOrName: string
 ): boolean {
-  if (!assignedProcessIds || assignedProcessIds.length === 0 || assignedProcessIds.includes("all")) {
-    return true;
-  }
-  if (!targetProcessIdentifier) return true;
+  if (!assignedProcessIds || assignedProcessIds.length === 0) return true;
+  if (!targetProcessIdOrName) return true;
 
-  const targetClean = targetProcessIdentifier.trim().toLowerCase();
+  const targetClean = targetProcessIdOrName.trim().toLowerCase();
   if (targetClean === "all" || targetClean === "*") return true;
+  const targetSlug = targetClean.replace(/[^a-z0-9]/g, "");
 
-  // 1. Direct match with ID or Name
+  // 1. Direct match with ID, Name, or Slug
   if (
-    assignedProcessIds.some(
-      (id) => id.trim().toLowerCase() === targetClean || id.trim().toLowerCase() === "all"
-    )
+    assignedProcessIds.some((id) => {
+      const clean = id.trim().toLowerCase();
+      if (clean === "all" || clean === "*") return true;
+      if (clean === targetClean) return true;
+      if (targetSlug && clean.replace(/[^a-z0-9]/g, "") === targetSlug) return true;
+      return false;
+    })
   ) {
     return true;
   }
@@ -553,30 +556,51 @@ export function isProcessMatchingAssignment(
   } catch {}
 
   const targetProc = stored.find(
-    (p) => p.id.trim().toLowerCase() === targetClean || p.name.trim().toLowerCase() === targetClean
+    (p) =>
+      p.id.trim().toLowerCase() === targetClean ||
+      p.name.trim().toLowerCase() === targetClean ||
+      (targetSlug && p.id.toLowerCase().replace(/[^a-z0-9]/g, "") === targetSlug) ||
+      (targetSlug && p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === targetSlug)
   );
 
   for (const assignedId of assignedProcessIds) {
     const cleanAssigned = assignedId.trim().toLowerCase();
-    if (cleanAssigned === "all") return true;
+    if (cleanAssigned === "all" || cleanAssigned === "*") return true;
     if (cleanAssigned === targetClean) return true;
+    const assignedSlug = cleanAssigned.replace(/[^a-z0-9]/g, "");
+    if (targetSlug && assignedSlug === targetSlug) return true;
 
     if (targetProc) {
       if (
         targetProc.id.trim().toLowerCase() === cleanAssigned ||
-        targetProc.name.trim().toLowerCase() === cleanAssigned
+        targetProc.name.trim().toLowerCase() === cleanAssigned ||
+        (assignedSlug && targetProc.id.toLowerCase().replace(/[^a-z0-9]/g, "") === assignedSlug) ||
+        (assignedSlug && targetProc.name.toLowerCase().replace(/[^a-z0-9]/g, "") === assignedSlug)
       ) {
         return true;
       }
     }
 
     const assignedProc = stored.find(
-      (p) => p.id.trim().toLowerCase() === cleanAssigned || p.name.trim().toLowerCase() === cleanAssigned
+      (p) =>
+        p.id.trim().toLowerCase() === cleanAssigned ||
+        p.name.trim().toLowerCase() === cleanAssigned ||
+        (assignedSlug && p.id.toLowerCase().replace(/[^a-z0-9]/g, "") === assignedSlug) ||
+        (assignedSlug && p.name.toLowerCase().replace(/[^a-z0-9]/g, "") === assignedSlug)
     );
     if (assignedProc) {
       if (
         assignedProc.id.trim().toLowerCase() === targetClean ||
-        assignedProc.name.trim().toLowerCase() === targetClean
+        assignedProc.name.trim().toLowerCase() === targetClean ||
+        (targetSlug && assignedProc.id.toLowerCase().replace(/[^a-z0-9]/g, "") === targetSlug) ||
+        (targetSlug && assignedProc.name.toLowerCase().replace(/[^a-z0-9]/g, "") === targetSlug)
+      ) {
+        return true;
+      }
+      if (
+        targetProc &&
+        (assignedProc.id === targetProc.id ||
+          assignedProc.name.toLowerCase() === targetProc.name.toLowerCase())
       ) {
         return true;
       }
@@ -594,13 +618,11 @@ export function isFieldMatchingOrg(
   if (!field) return true;
   if (field.source === "system" || (field.id !== undefined && field.id < 0) || (field.key && SYSTEM_FIELD_KEYS.has(field.key))) return true;
 
-  // If field is assigned to specific process(es), enforce strict process matching
+  // If field is assigned to specific process(es), enforce strict process matching when process context is present
   if (field.processIds && field.processIds.length > 0) {
     const isAll = field.processIds.includes("all") || field.processIds.includes("*");
-    if (!isAll) {
-      if (!processId) {
-        if (field.module === "process") return false;
-      } else if (!isProcessMatchingAssignment(field.processIds, processId)) {
+    if (!isAll && processId) {
+      if (!isProcessMatchingAssignment(field.processIds, processId)) {
         return false;
       }
     }
@@ -706,13 +728,11 @@ export function isSectionMatchingOrg(
   if (!section) return true;
   if (section.source === "system" || (section as any).isCustom === false || SYSTEM_SECTION_IDS.has(section.id)) return true;
 
-  // If section is assigned to specific process(es), enforce strict process matching
+  // If section is assigned to specific process(es), enforce strict process matching when process context is present
   if (section.processIds && section.processIds.length > 0) {
     const isAll = section.processIds.includes("all") || section.processIds.includes("*");
-    if (!isAll) {
-      if (!processId) {
-        if (section.module === "process") return false;
-      } else if (!isProcessMatchingAssignment(section.processIds, processId)) {
+    if (!isAll && processId) {
+      if (!isProcessMatchingAssignment(section.processIds, processId)) {
         return false;
       }
     }
