@@ -262,12 +262,27 @@ export default function PatientFrontHome({
   const isInSurgery = currentStageId === "cat-4";
   const isRecovery = currentStageId === "cat-5";
 
-  // Filter out stages explicitly set as internal-only (visibleToPatient === false)
+  // Filter out stages explicitly set as internal-only (visibleToPatient === false) and preserve chronological clinical order
   const patientVisibleStages = useMemo(() => {
     const visible = processStagesList.filter(
       (s) => s.patientFacingContent?.visibleToPatient !== false
     );
-    return visible.length > 0 ? visible : processStagesList;
+    const orderMap: Record<string, number> = {
+      "cat-1": 1,
+      "cat-2": 2,
+      "cat-3": 3,
+      "cat-4": 4,
+      "cat-5": 5,
+    };
+    const list = visible.length > 0 ? visible : processStagesList;
+    return [...list].sort((a, b) => {
+      const ordA = orderMap[a.id];
+      const ordB = orderMap[b.id];
+      if (ordA !== undefined && ordB !== undefined) {
+        return ordA - ordB;
+      }
+      return 0;
+    });
   }, [processStagesList]);
 
   // Current active stage object

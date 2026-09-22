@@ -727,6 +727,24 @@ export function getStoredProcesses(): Process[] {
         return updated;
       }
     }
+    // Ensure Cataract Surgery stages are always in proper chronological order (cat-1, cat-2, cat-3, cat-4, cat-5)
+    if (cataract && cataract.stages) {
+      const orderMap: Record<string, number> = {
+        "cat-1": 1,
+        "cat-2": 2,
+        "cat-3": 3,
+        "cat-4": 4,
+        "cat-5": 5,
+      };
+      const isDisordered = cataract.stages.some((s, idx) => {
+        const expected = orderMap[s.id];
+        return expected !== undefined && expected !== idx + 1;
+      });
+      if (isDisordered) {
+        cataract.stages.sort((a, b) => (orderMap[a.id] ?? 99) - (orderMap[b.id] ?? 99));
+        localStorage.setItem(PROCESSES_STORAGE_KEY, JSON.stringify(parsed));
+      }
+    }
     parsed.forEach((p) => {
       if (p.id === "1") {
         p.category = "ai_calling";
