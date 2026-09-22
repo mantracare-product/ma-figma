@@ -37,7 +37,7 @@ import {
   Eraser,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, SectionPermissions, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
+import { useFieldRegistry, FieldDefinition, SectionDefinition, FieldModule, isFieldMatchingOrg, isSectionMatchingOrg, isProcessMatchingAssignment, SectionPermissions, ScopingRule, CURRENCY_SYMBOLS } from "../../context/FieldRegistryContext";
 import { useOrganization } from "../../context/OrganizationContext";
 import { getStoredProcesses, Process, PROCESS_STORE_EVENT } from "../../../lib/useProcessStore";
 import { SelectFieldsModal, CreateFieldModal } from "../help/FieldManager";
@@ -57,10 +57,24 @@ export interface OverviewSection {
   id: string;
   title: string;
   description?: string;
-  iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag";
+  iconName?: "user" | "briefcase" | "workflow" | "layers" | "file-text" | "settings" | "sparkles" | "shield" | "tag" | "table" | "list" | "calendar" | "phone";
   isCustom?: boolean;
   fieldKeys: string[];
   permissions?: SectionPermissions;
+  processIds?: string[];
+  scopingRules?: ScopingRule[];
+  module?: FieldModule;
+  source?: "system" | "custom" | "template";
+  industryCategory?: string;
+  industry?: string;
+  locations?: string[];
+  required?: boolean;
+  requiredStages?: string[];
+  showAlways?: boolean;
+  userVisibility?: boolean;
+  visibleToUserIds?: string[];
+  isReusable?: boolean;
+  reusableModules?: FieldModule[];
 }
 
 export interface DraggableOverviewSectionsProps {
@@ -380,6 +394,7 @@ export default function DraggableOverviewSections({
     return sections
       .filter((sec) => {
         if (!sec.isCustom || SYSTEM_SEC_IDS.has(sec.id)) return true;
+        if (procId && sec.processIds && isProcessMatchingAssignment(sec.processIds, procId)) return true;
         return matchingCustomSecIds.has(sec.id) || isSectionMatchingOrg(sec as any, activeOrganization, procId);
       })
       .map((sec) => ({

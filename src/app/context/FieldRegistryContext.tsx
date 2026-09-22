@@ -625,6 +625,7 @@ export function isFieldMatchingOrg(
       if (!isProcessMatchingAssignment(field.processIds, processId)) {
         return false;
       }
+      return true;
     }
   }
 
@@ -735,6 +736,7 @@ export function isSectionMatchingOrg(
       if (!isProcessMatchingAssignment(section.processIds, processId)) {
         return false;
       }
+      return true;
     }
   }
 
