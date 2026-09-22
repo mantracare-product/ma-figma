@@ -2062,7 +2062,11 @@ export function AdminFieldDrawer({
       visibleToUserIds: !isAdmin && form.userVisibility !== false && form.visibleToUserIds.length > 0 ? form.visibleToUserIds : undefined,
       sectionId: form.sectionId || undefined,
       scopingRules: form.scopingRules.length > 0 ? form.scopingRules : undefined,
-      processIds: (form.selectedModules.includes("process") || form.module === "process") ? (form.processIds.length > 0 ? form.processIds : (activeProcessId ? [activeProcessId] : undefined)) : undefined,
+      processIds: (form.selectedModules.includes("process") || form.module === "process")
+        ? (form.processIds && form.processIds.length > 0
+            ? form.processIds
+            : (activeProcessId ? [activeProcessId] : (activeProcessName ? [activeProcessName] : undefined)))
+        : undefined,
       isReusable: additionalModules.length > 0,
       reusableModules: additionalModules.length > 0 ? additionalModules : undefined,
       permissions: form.permissions,

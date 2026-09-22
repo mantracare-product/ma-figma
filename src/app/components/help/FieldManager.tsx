@@ -154,8 +154,9 @@ export function SelectFieldsModal({
 
   // Compile all fields grouped by module, strictly obeying activeOrganization scope
   const groupedFieldsList = targetModules.map(module => {
+    const procId = activeProcessId || activeProcessName;
     const fields = getAllFields(module).filter(f =>
-      isFieldMatchingOrg(f, activeOrganization) &&
+      isFieldMatchingOrg(f, activeOrganization, procId) &&
       f.label.toLowerCase().includes(fieldSearchQuery.toLowerCase())
     );
     return {

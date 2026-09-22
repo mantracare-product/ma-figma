@@ -2343,11 +2343,16 @@ export function FieldRegistryProvider({ children }: { children: ReactNode }) {
   const getSectionsForOrg = (module: FieldModule, org?: OrgScopeFilter | null, processId?: string): SectionDefinition[] => {
     const all = getAllSections(module);
     const matchedSections = all.filter((s) => isSectionMatchingOrg(s, org, processId));
-    const allowedFieldKeys = new Set(getFieldsForOrg(module, org, processId).map((f) => f.key));
+    const allKnownFields = [
+      ...getAllFields(module),
+      ...(module !== "client" ? getAllFields("client") : []),
+      ...(module !== "process" ? getAllFields("process") : []),
+    ];
+    const allowedFieldKeys = new Set(allKnownFields.filter((f) => isFieldMatchingOrg(f, org, processId)).map((f) => f.key));
 
     return matchedSections.map((s) => ({
       ...s,
-      fieldKeys: (s.fieldKeys || []).filter((k) => allowedFieldKeys.has(k)),
+      fieldKeys: (s.fieldKeys || []).filter((k) => SYSTEM_FIELD_KEYS.has(k) || allowedFieldKeys.has(k)),
     }));
   };
 

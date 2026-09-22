@@ -319,7 +319,19 @@ export default function DraggableOverviewSections({
   // All custom field definitions filtered by organization scope and process context
   const allRegistryFields = useMemo(() => {
     const procId = activeProcessObj?.id || activeProcessName;
-    return getAllFields(customFieldsModule).filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
+    const currentModuleFields = getAllFields(customFieldsModule);
+    const clientFields = customFieldsModule !== "client" ? getAllFields("client") : [];
+    const processFields = customFieldsModule !== "process" ? getAllFields("process") : [];
+    const combined = [...currentModuleFields, ...clientFields, ...processFields];
+    const uniqueKeys = new Set<string>();
+    const uniqueList: FieldDefinition[] = [];
+    combined.forEach((f) => {
+      if (!uniqueKeys.has(f.key)) {
+        uniqueKeys.add(f.key);
+        uniqueList.push(f);
+      }
+    });
+    return uniqueList.filter((f) => isFieldMatchingOrg(f, activeOrganization, procId));
   }, [getAllFields, customFieldsModule, activeOrganization, activeProcessObj, activeProcessName]);
 
   // All custom sections registered in current module filtered by organization scope and process context
@@ -351,7 +363,7 @@ export default function DraggableOverviewSections({
         ...sec,
         fieldKeys: (sec.fieldKeys || []).filter((k) => {
           if (SYSTEM_FIELD_KEYS.has(k)) return true;
-          if (!allowedFieldKeys.has(k)) return false;
+          if (!allowedFieldKeys.has(k) && !userAddedFieldKeys.has(k)) return false;
 
           // If showAlways is false (turned off), do NOT show in section unless it has a value on this record or was added via + Add Field popup
           const regField = allRegistryFields.find((f) => f.key === k);
